@@ -5,10 +5,11 @@ import { connection } from './core/connection';
 import { getAccessibilitySnapshot, getCapabilities } from './core/device';
 import type { AccessibilityNode, Capabilities, WsStatusPayload } from './core/types';
 
-const DEFAULT_URL = 'wss://vps.my-tailnet.ts.net/mobile';
+const DEFAULT_URL = 'ws://10.10.20.10:8080/ws';
 
 function App(): React.JSX.Element {
   const [url, setUrl] = useState(DEFAULT_URL);
+  const [sendText, setSendText] = useState('');
   const [status, setStatus] = useState<WsStatusPayload>({ state: 'idle' });
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [snapshotNodes, setSnapshotNodes] = useState<number | null>(null);
@@ -42,6 +43,14 @@ function App(): React.JSX.Element {
     }
   }
 
+  function send() {
+    const text = sendText.trim();
+    if (!text) return;
+    connection.send(text);
+    pushLog(`out: ${text}`);
+    setSendText('');
+  }
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe}>
@@ -67,6 +76,19 @@ function App(): React.JSX.Element {
           </View>
 
           <Text style={styles.status}>state: {status.state}{status.attempts ? ` (retry ${status.attempts})` : ''}</Text>
+
+          <View style={styles.row}>
+            <TextInput
+              style={[styles.input, styles.sendInput]}
+              value={sendText}
+              onChangeText={setSendText}
+              onSubmitEditing={send}
+              placeholder="message a envoyer"
+            />
+            <View style={styles.sendButton}>
+              <Button title="Send" onPress={send} disabled={status.state !== 'connected'} />
+            </View>
+          </View>
 
           <View style={styles.row}>
             <View style={styles.button}>
@@ -107,6 +129,8 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: 12 },
   button: { flex: 1 },
+  sendInput: { flex: 1 },
+  sendButton: { justifyContent: 'center' },
   status: { fontSize: 13, color: '#555' },
   log: { flex: 1, backgroundColor: '#f6f6f6', borderRadius: 8, padding: 8 },
   logLine: { fontSize: 12, fontFamily: 'monospace', marginBottom: 2 },
