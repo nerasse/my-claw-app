@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { connection } from './core/connection';
-import { getAccessibilitySnapshot, getCapabilities } from './core/device';
+import { getAccessibilitySnapshot, getCapabilities, getDeviceInfo, type DeviceInfo } from './core/device';
 import type { AccessibilityNode, Capabilities, WsStatusPayload } from './core/types';
 
-const DEFAULT_URL = 'ws://10.10.20.10:8080/ws';
+const DEFAULT_URL = 'ws://10.10.20.10:8080/mobile';
 
 function App(): React.JSX.Element {
   const [url, setUrl] = useState(DEFAULT_URL);
@@ -13,6 +13,7 @@ function App(): React.JSX.Element {
   const [status, setStatus] = useState<WsStatusPayload>({ state: 'idle' });
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [snapshotNodes, setSnapshotNodes] = useState<number | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [log, setLog] = useState<string[]>([]);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ function App(): React.JSX.Element {
     });
     const offMessage = connection.onMessage(text => pushLog(`in: ${text}`));
     getCapabilities().then(setCaps).catch(() => pushLog('capabilities unavailable'));
+    getDeviceInfo().then(setDeviceInfo).catch(() => pushLog('device info unavailable'));
     connection.getState().then(state => setStatus({ state }));
     return () => {
       offState();
@@ -56,6 +58,14 @@ function App(): React.JSX.Element {
       <SafeAreaView style={styles.safe}>
         <View style={styles.container}>
           <Text style={styles.title}>MyClaw</Text>
+
+          {deviceInfo && (
+            <View style={styles.deviceCard}>
+              <Text style={styles.logLine}>device: {deviceInfo.deviceId}</Text>
+              <Text style={styles.logLine} selectable>token: {deviceInfo.token}</Text>
+              <Text style={styles.status}>copier ces valeurs dans channels.mobile.devices de config.json</Text>
+            </View>
+          )}
 
           <TextInput
             style={styles.input}
@@ -132,6 +142,7 @@ const styles = StyleSheet.create({
   sendInput: { flex: 1 },
   sendButton: { justifyContent: 'center' },
   status: { fontSize: 13, color: '#555' },
+  deviceCard: { backgroundColor: '#eef3ff', borderRadius: 8, padding: 10, gap: 2 },
   log: { flex: 1, backgroundColor: '#f6f6f6', borderRadius: 8, padding: 8 },
   logLine: { fontSize: 12, fontFamily: 'monospace', marginBottom: 2 },
 });

@@ -48,6 +48,15 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   @ReactMethod
+  fun getDeviceInfo(promise: Promise) {
+    val (deviceId, token) = DeviceCredentials.info(reactContext)
+    val map = Arguments.createMap()
+    map.putString("deviceId", deviceId)
+    map.putString("token", token)
+    promise.resolve(map)
+  }
+
+  @ReactMethod
   fun getCapabilities(promise: Promise) {
     val caps = Arguments.createMap()
     caps.putBoolean("accessibility", ClawAccessibilityService.instance() != null)

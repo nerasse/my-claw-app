@@ -101,7 +101,9 @@ class ClawConnectionService : Service() {
     val url = targetUrl ?: getSharedPreferences("claw_connection", Context.MODE_PRIVATE).getString(EXTRA_URL, null) ?: return
     state = "connecting"
     emitState(null, 0)
-    val request = Request.Builder().url(url).build()
+    val deviceId = DeviceCredentials.deviceId(this)
+    val token = DeviceCredentials.token(this)
+    val request = Request.Builder().url(DeviceCredentials.appendToUrl(url, deviceId, token)).build()
     webSocket = client.newWebSocket(
       request,
       object : WebSocketListener() {
