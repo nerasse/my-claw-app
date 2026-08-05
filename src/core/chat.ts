@@ -94,6 +94,10 @@ class ChatStoreImpl {
     if (!this.streams.has(id)) return;
     const finalText = this.streams.get(id) ?? '';
     this.streams.delete(id);
+    if (!finalText.trim()) {
+      this.removeItem(threadId, id);
+      return;
+    }
     this.patch(threadId, id, { text: finalText, streaming: false });
   }
 
@@ -149,6 +153,13 @@ class ChatStoreImpl {
     const items = this.threads.get(threadId);
     if (!items) return;
     this.threads.set(threadId, items.map(item => (item.id === id ? { ...item, ...patch } : item)));
+    this.emit();
+  }
+
+  private removeItem(threadId: string, id: string): void {
+    const items = this.threads.get(threadId);
+    if (!items) return;
+    this.threads.set(threadId, items.filter(item => item.id !== id));
     this.emit();
   }
 
