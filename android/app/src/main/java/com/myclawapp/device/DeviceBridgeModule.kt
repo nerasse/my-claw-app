@@ -1,5 +1,6 @@
 package com.myclawapp.device
 
+import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
@@ -12,6 +13,11 @@ import com.facebook.react.bridge.ReadableMap
 class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule() {
 
   override fun getName(): String = "DeviceBridge"
+
+  companion object {
+    // App settings only (theme, server url, last thread). Credentials stay in the Keystore.
+    private const val PREFS_NAME = "claw_prefs"
+  }
 
   override fun initialize() {
     DeviceBus.attach(reactContext)
@@ -38,8 +44,19 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   @ReactMethod
-  fun sendMessage(text: String) {
-    ClawConnectionService.send(text)
+  fun sendMessage(text: String, promise: Promise) {
+    promise.resolve(ClawConnectionService.send(text))
+  }
+
+  @ReactMethod
+  fun pendingCount(promise: Promise) {
+    promise.resolve(ClawConnectionService.pendingCount())
+  }
+
+  @ReactMethod
+  fun clearOutbox(promise: Promise) {
+    ClawConnectionService.clearOutbox()
+    promise.resolve(null)
   }
 
   @ReactMethod
@@ -54,6 +71,24 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     map.putString("deviceId", deviceId)
     map.putString("token", token)
     promise.resolve(map)
+  }
+
+  @ReactMethod
+  fun prefsGetAll(promise: Promise) {
+    val prefs = reactContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val map = Arguments.createMap()
+    for ((key, value) in prefs.all) {
+      if (value is String) map.putString(key, value)
+    }
+    promise.resolve(map)
+  }
+
+  @ReactMethod
+  fun prefsSet(key: String, value: String?, promise: Promise) {
+    val editor = reactContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+    if (value == null) editor.remove(key) else editor.putString(key, value)
+    editor.apply()
+    promise.resolve(null)
   }
 
   @ReactMethod

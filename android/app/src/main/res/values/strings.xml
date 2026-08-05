@@ -1,10 +1,10 @@
 <resources>
     <string name="app_name">MyClaw</string>
     <string name="accessibility_service_label">MyClaw control</string>
-    <string name="accessibility_service_description">Permet à l\'agent my-claw de lire l\'écran et d\'interagir avec l\'interface quand tu le demandes. Aucune action n\'est exécutée sans ton approbation.</string>
+    <string name="accessibility_service_description">Lets the my-claw agent read the screen and interact with the interface when you ask it to. No action is taken without your approval.</string>
     <string name="notification_listener_label">MyClaw notifications</string>
-    <string name="notification_listener_description">Permet à l\'agent my-claw de voir les notifications entrantes sur ton téléphone.</string>
-    <string name="connection_channel_name">Connexion my-claw</string>
-    <string name="connection_notification_title">my-claw connecté</string>
-    <string name="connection_notification_text">La connexion avec ton agent est active.</string>
+    <string name="notification_listener_description">Lets the my-claw agent see incoming notifications on your phone.</string>
+    <string name="connection_channel_name">my-claw connection</string>
+    <string name="connection_notification_title">my-claw connected</string>
+    <string name="connection_notification_text">The connection to your agent is active.</string>
 </resources>

@@ -1,48 +1,48 @@
 # MyClaw App
 
-Application Android companion pour [my-claw](https://git.kssimi.fr/claw/my-claw), agent AI self-hosted. Premier canal mobile: chat + outils de contrôle du téléphone.
+Android companion app for [my-claw](https://git.kssimi.fr/claw/my-claw), a self-hosted AI agent. First mobile channel: chat + phone control tools.
 
 ## Stack
 
 - React Native 0.86 (bare, TypeScript)
-- Couche native Kotlin pour Android: `AccessibilityService`, `NotificationListenerService`, service foreground avec connexion WebSocket sécurisée (OkHttp)
+- Native Kotlin layer for Android: `AccessibilityService`, `NotificationListenerService`, foreground service with a secure WebSocket connection (OkHttp)
 
 ## Architecture
 
 ```text
 src/
 ├── core/
-│   ├── types.ts        # Types du protocole partagé avec my-claw
-│   ├── connection.ts   # Connexion WSS au backend (reconnexion auto, heartbeat)
-│   └── device.ts       # Pont natif: capacités, accessibility, notifications
-└── App.tsx             # UI minimale de test (connect, snapshot, log)
+│   ├── types.ts        # Protocol types shared with my-claw
+│   ├── connection.ts   # WSS connection to the backend (auto reconnect, heartbeat)
+│   └── device.ts       # Native bridge: capabilities, accessibility, notifications
+└── App.tsx             # Providers only (theme, safe area) around the app shell
 
 android/app/src/main/java/com/myclawapp/device/
-├── DeviceBridgeModule.kt    # Module React Native -> Kotlin
-├── DeviceBus.kt             # Pont d'événements Kotlin -> JS
-├── ClawConnectionService.kt # Service foreground + WebSocket OkHttp
+├── DeviceBridgeModule.kt    # React Native -> Kotlin module
+├── DeviceBus.kt             # Kotlin -> JS event bridge
+├── ClawConnectionService.kt # Foreground service + OkHttp WebSocket
 ├── ClawAccessibilityService.kt
 ├── ClawNotificationListener.kt
 └── DevicePackage.kt
 ```
 
-La connexion est sortante (téléphone -> VPS) via WebSocket sécurisé, ce qui évite d'exposer de port public. Le service foreground maintient la connexion quand l'app passe en arrière-plan.
+The connection is outbound (phone -> VPS) over a secure WebSocket, which avoids exposing a public port. The foreground service keeps the connection alive while the app is in the background.
 
 ## Dev
 
 ```bash
 npm install
-npm run android   # avec un appareil connecté (USB ou adb sans fil)
+npm run android   # with a device connected (USB or wireless adb)
 npm run lint
 npm test
 ```
 
-Pour se connecter au serveur de dev Metro depuis un téléphone distant: voir `docs` de my-claw (workflow Tailscale: `npx react-native start --host <ip-tailscale>` puis configurer `Dev Settings -> Debug server host & port`).
+To connect to the Metro dev server from a remote phone: see the my-claw `docs` (Tailscale workflow: `npx react-native start --host <tailscale-ip>` then set `Dev Settings -> Debug server host & port`).
 
-## Permissions Android
+## Android permissions
 
-- `AccessibilityService`: lecture d'écran + actions (activé manuellement dans les réglages Android)
-- `NotificationListenerService`: notifications entrantes (activé manuellement dans les réglages Android)
-- Service foreground + notifications: maintien de la connexion en arrière-plan
+- `AccessibilityService`: screen reading + actions (enabled manually in Android settings)
+- `NotificationListenerService`: incoming notifications (enabled manually in Android settings)
+- Foreground service + notifications: keeps the connection alive in the background
 
-Aucune action n'est exécutée sans approbation explicite de l'utilisateur dans l'app.
+No action is taken without the user's explicit approval in the app.

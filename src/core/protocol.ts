@@ -48,12 +48,26 @@ export interface StreamAbortFrame {
   error?: string;
 }
 
-export interface HistoryEntry {
+export interface ToolCallPayload {
   id: string;
-  role: 'user' | 'assistant';
-  text: string;
+  name: string;
+  args: Record<string, unknown>;
+  durationMs?: number;
+  ok: boolean;
+  output: string;
+  truncated: boolean;
+}
+
+export interface ToolCallFrame extends ToolCallPayload {
+  type: 'chat.tool';
+  threadId: string;
+  turnId: string;
   ts: string;
 }
+
+export type HistoryEntry =
+  | { id: string; role: 'user' | 'assistant'; text: string; ts: string }
+  | ({ role: 'tool'; ts: string } & ToolCallPayload);
 
 export interface ChatHistoryFrame {
   type: 'chat.history';
@@ -95,6 +109,7 @@ export type ServerFrame =
   | StreamDeltaFrame
   | StreamDoneFrame
   | StreamAbortFrame
+  | ToolCallFrame
   | ChatHistoryFrame
   | SessionListResultFrame
   | ApprovalRequestFrame
@@ -106,6 +121,7 @@ const FRAME_TYPES = new Set([
   'chat.stream.delta',
   'chat.stream.done',
   'chat.stream.abort',
+  'chat.tool',
   'chat.history',
   'session.list.result',
   'approval.request',

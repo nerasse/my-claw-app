@@ -1,0 +1,322 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BackHandler, KeyboardAvoidingView, Platform, StatusBar, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Clipboard from '@react-native-clipboard/clipboard';
+import { connection } from '../core/connection';
+import { chatStore, useChatItems, useUnreadThreads, type TextItem } from '../core/chat';
+import { sessionStore, useSessions } from '../core/sessions';
+import { prefs } from '../core/prefs';
+import {
+  encodeChatSend,
+  encodeSessionArchive,
+  encodeSessionDelete,
+  encodeSessionHistory,
+  encodeSessionList,
+  type SessionSummary,
+} from '../core/protocol';
+import { getDeviceInfo, type DeviceInfo } from '../core/device';
+import type { WsStatusPayload } from '../core/types';
+import { httpOrigin, uuid } from '../core/utils';
+import { ChatScreen } from './ChatScreen';
+import { SettingsScreen } from './SettingsScreen';
+import { Drawer } from './Drawer';
+import { BubbleMenu, type BubbleMenuAction } from '../components/BubbleMenu';
+import { space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { useThemeControl } from '../theme/ThemeProvider';
+
+const HISTORY_LIMIT = 50;
+
+export function AppShell(): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const { palette, dark } = useTheme();
+  const themeControl = useThemeControl();
+
+  const [url, setUrl] = useState(prefs.get().serverUrl);
+  const [status, setStatus] = useState<WsStatusPayload>({ state: 'idle' });
+  const [pending, setPending] = useState(0);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [activeThread, setActiveThread] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
+  const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
+
+  const items = useChatItems(activeThread);
+  const sessions = useSessions();
+  const unread = useUnreadThreads();
+  const mediaBase = useMemo(() => httpOrigin(url), [url]);
+
+  // Frame handlers run outside React: they need the thread on screen right now, not the one
+  // captured when the listener was registered.
+  const activeThreadRef = useRef<string | null>(null);
+  const selectThread = useCallback((threadId: string | null) => {
+    activeThreadRef.current = threadId;
+    setActiveThread(threadId);
+    prefs.set('lastThreadId', threadId);
+  }, []);
+
+  const openThread = useCallback(
+    (threadId: string) => {
+      selectThread(threadId);
+      chatStore.markRead(threadId);
+      setDrawerOpen(false);
+      setSettingsOpen(false);
+      connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
+    },
+    [selectThread],
+  );
+
+  const newThread = useCallback(() => {
+    selectThread(uuid());
+    setDrawerOpen(false);
+    setSettingsOpen(false);
+  }, [selectThread]);
+
+  useEffect(() => {
+    /** Activity in a thread the user is not reading: badge it and make sure it is listed. */
+    const noteActivity = (threadId: string, text: string): void => {
+      if (threadId === activeThreadRef.current) return;
+      chatStore.markUnread(threadId);
+      sessionStore.ensure(threadId, text);
+    };
+
+    const offState = connection.onState(next => {
+      setStatus(next);
+      if (next.state === 'connected') connection.send(encodeSessionList());
+    });
+    const offPending = connection.onPending(setPending);
+
+    const offFrame = connection.onFrame(frame => {
+      switch (frame.type) {
+        case 'chat.message':
+          chatStore.addAgentMessage(frame.threadId, frame.id, frame.text, frame.attachments, frame.replyToId);
+          noteActivity(frame.threadId, frame.text);
+          break;
+        case 'chat.stream.start':
+          chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
+          noteActivity(frame.threadId, '');
+          break;
+        case 'chat.stream.delta':
+          chatStore.appendDelta(frame.threadId, frame.id, frame.text);
+          break;
+        case 'chat.stream.done':
+          chatStore.endStream(frame.threadId, frame.id);
+          break;
+        case 'chat.stream.abort':
+          chatStore.abortStream(frame.threadId, frame.id, frame.error);
+          break;
+        case 'chat.tool':
+          chatStore.addToolCall(frame.threadId, {
+            id: frame.id,
+            name: frame.name,
+            args: frame.args,
+            durationMs: frame.durationMs,
+            ok: frame.ok,
+            output: frame.output,
+            truncated: frame.truncated,
+          });
+          break;
+        case 'session.list.result':
+          sessionStore.replace(frame.sessions);
+          // Land straight in a conversation instead of an empty screen.
+          if (!activeThreadRef.current) {
+            const first = frame.sessions[0];
+            if (first) openThread(first.threadId);
+            else selectThread(uuid());
+          }
+          break;
+        case 'chat.history':
+          chatStore.seedHistory(frame.threadId, frame.messages);
+          chatStore.markRead(frame.threadId);
+          break;
+        case 'error':
+          if (activeThreadRef.current) {
+            chatStore.addAgentMessage(activeThreadRef.current, `err-${Date.now()}`, `error: ${frame.message}`, []);
+          }
+          break;
+        case 'approval.request':
+          break;
+      }
+    });
+
+    // Settings first: the stored server address and last thread decide what we connect to and
+    // what the user sees on the first frame.
+    prefs.hydrate().then(stored => {
+      setUrl(stored.serverUrl);
+      if (stored.lastThreadId) openThread(stored.lastThreadId);
+      return connection.getState().then(state => {
+        setStatus({ state });
+        if (state !== 'connected' && state !== 'connecting') connection.connect(stored.serverUrl);
+        connection.send(encodeSessionList());
+      });
+    });
+
+    getDeviceInfo().then(setDeviceInfo).catch(() => {});
+    connection.pendingCount().then(setPending).catch(() => {});
+
+    return () => {
+      offState();
+      offFrame();
+      offPending();
+    };
+  }, [openThread, selectThread]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (bubbleMenu || threadMenu) {
+        setBubbleMenu(null);
+        setThreadMenu(null);
+        return true;
+      }
+      if (drawerOpen) {
+        setDrawerOpen(false);
+        return true;
+      }
+      if (settingsOpen) {
+        setSettingsOpen(false);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [bubbleMenu, drawerOpen, settingsOpen, threadMenu]);
+
+  const sendChat = useCallback(
+    async (text: string) => {
+      const threadId = activeThreadRef.current ?? uuid();
+      if (!activeThreadRef.current) selectThread(threadId);
+      const id = uuid();
+      chatStore.addUserMessage(threadId, id, text);
+      sessionStore.ensure(threadId, text);
+      const delivered = await connection.send(encodeChatSend(id, text, threadId));
+      if (!delivered) chatStore.markSendFailed(threadId, id);
+    },
+    [selectThread],
+  );
+
+  const changeUrl = useCallback((next: string) => {
+    setUrl(next);
+    prefs.set('serverUrl', next);
+  }, []);
+
+  const dropThread = useCallback(
+    (threadId: string, frame: string) => {
+      connection.send(frame);
+      chatStore.clearThread(threadId);
+      sessionStore.remove(threadId);
+      if (activeThreadRef.current === threadId) selectThread(null);
+      setThreadMenu(null);
+      connection.send(encodeSessionList());
+    },
+    [selectThread],
+  );
+
+  const threadActions: BubbleMenuAction[] = threadMenu
+    ? [
+        { label: 'Archive', onPress: () => dropThread(threadMenu.threadId, encodeSessionArchive(threadMenu.threadId)) },
+        {
+          label: 'Delete',
+          danger: true,
+          onPress: () => dropThread(threadMenu.threadId, encodeSessionDelete(threadMenu.threadId)),
+        },
+      ]
+    : [];
+
+  const title = (activeThread ? sessionStore.titleOf(activeThread) : null) ?? 'new conversation';
+  const offline = status.state !== 'connected';
+  const subtitle = [
+    offline ? status.state : 'connected',
+    pending > 0 ? `${pending} pending` : null,
+    items.length > 0 ? `${items.length} items` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const hint = offline
+    ? pending > 0
+      ? `offline · ${pending} message(s) will send on reconnect`
+      : 'offline · message will send on reconnect'
+    : undefined;
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} backgroundColor={palette.bg} />
+      <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.container}>
+          {settingsOpen ? (
+            <SettingsScreen
+              url={url}
+              onUrlChange={changeUrl}
+              themeMode={themeControl.mode}
+              onThemeModeChange={themeControl.setMode}
+              status={status}
+              pending={pending}
+              deviceInfo={deviceInfo}
+              onConnect={() => connection.connect(url)}
+              onDisconnect={() => connection.disconnect()}
+              onClearOutbox={() => {
+                connection.clearOutbox();
+                setPending(0);
+              }}
+              onBack={() => setSettingsOpen(false)}
+            />
+          ) : (
+            <ChatScreen
+              title={title}
+              subtitle={subtitle}
+              connectionState={status.state}
+              items={items}
+              mediaBase={mediaBase}
+              deviceInfo={deviceInfo}
+              hint={hint}
+              onOpenDrawer={() => setDrawerOpen(true)}
+              onSend={sendChat}
+              onBubbleMenu={setBubbleMenu}
+            />
+          )}
+        </View>
+      </KeyboardAvoidingView>
+
+      <Drawer
+        open={drawerOpen}
+        sessions={sessions}
+        unread={unread}
+        activeThread={activeThread}
+        connectionState={status.state}
+        pending={pending}
+        onClose={() => setDrawerOpen(false)}
+        onOpenThread={openThread}
+        onNewThread={newThread}
+        onThreadMenu={setThreadMenu}
+        onOpenSettings={() => {
+          setDrawerOpen(false);
+          setSettingsOpen(true);
+        }}
+      />
+
+      {bubbleMenu ? (
+        <BubbleMenu
+          preview={bubbleMenu.text}
+          actions={[
+            {
+              label: 'Copy text',
+              onPress: () => {
+                Clipboard.setString(bubbleMenu.text);
+                setBubbleMenu(null);
+              },
+            },
+          ]}
+          onClose={() => setBubbleMenu(null)}
+        />
+      ) : null}
+
+      {threadMenu ? (
+        <BubbleMenu preview={threadMenu.title} actions={threadActions} onClose={() => setThreadMenu(null)} />
+      ) : null}
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (palette: Palette) => ({
+  safe: { flex: 1, backgroundColor: palette.bg },
+  container: { flex: 1, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.sm },
+});

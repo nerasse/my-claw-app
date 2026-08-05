@@ -1,11 +1,11 @@
 const PORT = 8080;
 
-const server = Bun.serve({
+Bun.serve({
   port: PORT,
-  fetch(req, server) {
+  fetch(req, srv) {
     const url = new URL(req.url);
     if (url.pathname !== "/ws") return new Response("my-claw ws echo - use ws://<host>:" + PORT + "/ws", { headers: { "content-type": "text/plain" } });
-    if (server.upgrade(req)) return;
+    if (srv.upgrade(req)) return;
     return new Response("upgrade failed", { status: 400 });
   },
   websocket: {

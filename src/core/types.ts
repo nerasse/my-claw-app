@@ -5,6 +5,8 @@ export interface WsStatusPayload {
   url?: string;
   reason?: string;
   attempts?: number;
+  /** Frames waiting in the native outbox for the next reconnect. */
+  pending?: number;
 }
 
 export interface Capabilities {

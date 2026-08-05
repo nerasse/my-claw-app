@@ -41,6 +41,7 @@ class ClawConnectionService : Service() {
     private const val CHANNEL_ID = "claw_connection"
     private const val NOTIFICATION_ID = 1001
     private const val MAX_RECONNECT_DELAY_MS = 30_000L
+    private const val OUTBOX_CAPACITY = 200
 
     @Volatile
     private var state = "idle"
@@ -48,10 +49,40 @@ class ClawConnectionService : Service() {
     @Volatile
     private var instance: ClawConnectionService? = null
 
+    /**
+     * Frames typed while the socket is down. Static so a frame queued before the service is
+     * even started survives, and drained in order on the next onOpen. Bounded: a phone left
+     * offline for a day must not grow the heap without limit.
+     */
+    private val outbox = ArrayDeque<String>()
+
     fun state(): String = state
 
-    fun send(text: String) {
-      instance?.webSocket?.send(text)
+    fun pendingCount(): Int = synchronized(outbox) { outbox.size }
+
+    /** Returns false only when the frame could be neither sent nor queued: the caller must surface it. */
+    fun send(text: String): Boolean {
+      val ws = instance?.webSocket
+      if (ws != null && state == "connected" && ws.send(text)) return true
+      synchronized(outbox) {
+        if (outbox.size >= OUTBOX_CAPACITY) return false
+        outbox.addLast(text)
+      }
+      instance?.emitOutboxSize()
+      return true
+    }
+
+    fun clearOutbox() {
+      synchronized(outbox) { outbox.clear() }
+      instance?.emitOutboxSize()
+    }
+
+    private fun drainOutbox(ws: WebSocket): Boolean {
+      while (true) {
+        val next = synchronized(outbox) { outbox.firstOrNull() } ?: return true
+        if (!ws.send(next)) return false
+        synchronized(outbox) { if (outbox.firstOrNull() === next) outbox.removeFirst() }
+      }
     }
   }
 
@@ -110,7 +141,9 @@ class ClawConnectionService : Service() {
         override fun onOpen(ws: WebSocket, response: Response) {
           reconnectAttempts = 0
           state = "connected"
+          drainOutbox(ws)
           emitState(null, 0)
+          emitOutboxSize()
         }
 
         override fun onMessage(ws: WebSocket, text: String) {
@@ -169,7 +202,14 @@ class ClawConnectionService : Service() {
     targetUrl?.let { payload.putString("url", it) }
     reason?.let { payload.putString("reason", it) }
     if (attempts > 0) payload.putInt("attempts", attempts)
+    payload.putInt("pending", pendingCount())
     DeviceBus.emit("claw:ws:state", payload)
+  }
+
+  private fun emitOutboxSize() {
+    val payload = Arguments.createMap()
+    payload.putInt("pending", pendingCount())
+    DeviceBus.emit("claw:ws:outbox", payload)
   }
 
   private fun createChannel() {

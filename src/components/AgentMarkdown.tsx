@@ -1,37 +1,58 @@
 import React, { useMemo } from 'react';
-import { Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
+import { font, space, useTheme, type Palette } from '../theme';
 
-const agentStyles: MarkedStyles = {
-  text: { fontSize: 15, color: '#111', lineHeight: 21, flexShrink: 1 },
-  paragraph: { marginVertical: 3, flexShrink: 1 },
-  strong: { fontWeight: '700', color: '#111' },
-  em: { fontStyle: 'italic' },
-  strikethrough: { textDecorationLine: 'line-through' },
-  h1: { fontSize: 20, fontWeight: '700', color: '#111', marginTop: 10, marginBottom: 4 },
-  h2: { fontSize: 18, fontWeight: '700', color: '#111', marginTop: 10, marginBottom: 4 },
-  h3: { fontSize: 16, fontWeight: '600', color: '#111', marginTop: 8, marginBottom: 3 },
-  h4: { fontSize: 15, fontWeight: '600', color: '#111', marginTop: 6, marginBottom: 2 },
-  link: { color: '#0a5cff', textDecorationLine: 'underline' },
-  codespan: { fontFamily: 'monospace', fontSize: 13, color: '#111', backgroundColor: '#e6e6e6', borderRadius: 4, paddingHorizontal: 3, paddingVertical: 1, overflow: 'hidden' },
-  code: { backgroundColor: '#f2f2f2', borderRadius: 8, marginVertical: 6, padding: 10, flexShrink: 1 },
-  blockquote: { borderLeftWidth: 3, borderLeftColor: '#cccccc', paddingLeft: 10, marginVertical: 6, flexShrink: 1 },
-  hr: { marginVertical: 10 },
-  list: { marginVertical: 3, flexShrink: 1 },
-  li: { fontSize: 15, color: '#111', lineHeight: 21 },
-  table: { marginVertical: 6, flexShrink: 1 },
-  tableRow: { borderBottomWidth: 1, borderBottomColor: '#ddd' },
-  tableCell: { padding: 6, borderWidth: 1, borderColor: '#ddd' },
-  image: { width: 200, height: 200, borderRadius: 8, marginVertical: 6 },
-};
+function markedStyles(palette: Palette): MarkedStyles {
+  return {
+    text: { fontSize: font.body, color: palette.text, lineHeight: 19, flexShrink: 1 },
+    paragraph: { marginVertical: 2, flexShrink: 1 },
+    strong: { fontWeight: '700', color: palette.text },
+    em: { fontStyle: 'italic' },
+    strikethrough: { textDecorationLine: 'line-through' },
+    h1: { fontSize: 18, fontWeight: '700', color: palette.text, marginTop: space.sm, marginBottom: space.xs },
+    h2: { fontSize: 16, fontWeight: '700', color: palette.text, marginTop: space.sm, marginBottom: space.xs },
+    h3: { fontSize: 15, fontWeight: '600', color: palette.text, marginTop: space.sm, marginBottom: 2 },
+    h4: { fontSize: font.body, fontWeight: '600', color: palette.text, marginTop: space.xs, marginBottom: 2 },
+    link: { color: palette.accent, textDecorationLine: 'underline' },
+    codespan: {
+      fontFamily: 'monospace',
+      fontSize: font.meta,
+      color: palette.text,
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 4,
+      paddingHorizontal: 3,
+      overflow: 'hidden',
+    },
+    code: { backgroundColor: palette.codeBg, borderRadius: 6, marginVertical: space.xs, padding: space.sm, flexShrink: 1 },
+    blockquote: {
+      borderLeftWidth: 2,
+      borderLeftColor: palette.border,
+      paddingLeft: space.sm,
+      marginVertical: space.xs,
+      flexShrink: 1,
+    },
+    hr: { marginVertical: space.sm, borderBottomColor: palette.border },
+    list: { marginVertical: 2, flexShrink: 1 },
+    li: { fontSize: font.body, color: palette.text, lineHeight: 19 },
+    table: { marginVertical: space.xs, flexShrink: 1 },
+    tableRow: { borderBottomWidth: 1, borderBottomColor: palette.border },
+    tableCell: { padding: space.xs, borderWidth: 1, borderColor: palette.border },
+    image: { width: 200, height: 200, borderRadius: 6, marginVertical: space.xs },
+  };
+}
 
 // The default renderer puts code blocks in a horizontal ScrollView (lines never wrap and the
 // block looks cut on a phone). Chat bubbles render better with wrapped monospace text.
 class WrappingRenderer extends Renderer {
+  constructor(private codeColor: string) {
+    super();
+  }
+
   code(text: string, _language?: string, containerStyle?: ViewStyle, textStyle?: TextStyle) {
     return (
       <View key={this.getKey()} style={containerStyle}>
-        <Text selectable style={[textStyle, { fontFamily: 'monospace', fontSize: 13, lineHeight: 19, color: '#111' }]}>
+        <Text selectable style={[textStyle, styles.code, { color: this.codeColor }]}>
           {text}
         </Text>
       </View>
@@ -40,7 +61,14 @@ class WrappingRenderer extends Renderer {
 }
 
 export function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
-  const renderer = useMemo(() => new WrappingRenderer(), []);
-  const elements = useMarkdown(text, { styles: agentStyles, renderer });
-  return <View style={{ flexShrink: 1 }}>{elements}</View>;
+  const { palette } = useTheme();
+  const renderer = useMemo(() => new WrappingRenderer(palette.text), [palette.text]);
+  const mdStyles = useMemo(() => markedStyles(palette), [palette]);
+  const elements = useMarkdown(text, { styles: mdStyles, renderer });
+  return <View style={styles.wrap}>{elements}</View>;
 }
+
+const styles = StyleSheet.create({
+  code: { fontFamily: 'monospace', fontSize: font.meta, lineHeight: 17 },
+  wrap: { flexShrink: 1 },
+});
