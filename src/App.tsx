@@ -39,6 +39,7 @@ function App(): React.JSX.Element {
   const [status, setStatus] = useState<WsStatusPayload>({ state: 'idle' });
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [threads, setThreads] = useState<SessionSummary[]>([]);
   const [itemsVersion, setItemsVersion] = useState(0);
   const [threadsVersion, setThreadsVersion] = useState(0);
@@ -101,7 +102,12 @@ function App(): React.JSX.Element {
     });
     const offStore = chatStore.subscribe(() => setItemsVersion(v => v + 1));
     getDeviceInfo().then(setDeviceInfo).catch(() => {});
-    connection.getState().then(state => setStatus({ state }));
+    connection.getState().then(state => {
+      setStatus({ state });
+      if (state !== 'connected' && state !== 'connecting') {
+        connection.connect(DEFAULT_URL);
+      }
+    });
     return () => {
       offState();
       offFrame();
@@ -181,35 +187,23 @@ function App(): React.JSX.Element {
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe}>
         <View style={styles.container}>
-          <Text style={styles.title}>MyClaw</Text>
-
-          <TextInput
-            style={styles.input}
-            value={url}
-            onChangeText={setUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="wss://server/mobile"
-          />
-          <View style={styles.row}>
-            <View style={styles.button}>
-              <Button title="Connect" onPress={() => connection.connect(url)} disabled={status.state === 'connecting' || connected} />
-            </View>
-            <View style={styles.button}>
-              <Button title="Disconnect" onPress={() => connection.disconnect()} disabled={!connected && status.state !== 'connecting'} />
-            </View>
-          </View>
-          <Text style={styles.status}>
-            state: {status.state}
-            {status.attempts ? ` (retry ${status.attempts})` : ''}
-          </Text>
-          {deviceInfo && (
-            <Text style={styles.status} selectable>
-              {deviceInfo.deviceId} | token: {deviceInfo.token}
+          <View style={styles.header}>
+            <Text style={styles.title}>MyClaw</Text>
+            <Text style={styles.headerAction} onPress={() => setSettingsOpen(v => !v)}>
+              {settingsOpen ? 'Fermer' : 'Parametres'}
             </Text>
-          )}
+          </View>
 
-          {activeThread ? (
+          {settingsOpen ? (
+            <SettingsView
+              url={url}
+              setUrl={setUrl}
+              status={status}
+              deviceInfo={deviceInfo}
+              onConnect={() => connection.connect(url)}
+              onDisconnect={() => connection.disconnect()}
+            />
+          ) : activeThread ? (
             <ChatView
               threadId={activeThread}
               title={threadTitles[activeThread] ?? '(nouvelle conversation)'}
@@ -256,6 +250,64 @@ function App(): React.JSX.Element {
         </View>
       </SafeAreaView>
     </SafeAreaProvider>
+  );
+}
+
+function SettingsView({
+  url,
+  setUrl,
+  status,
+  deviceInfo,
+  onConnect,
+  onDisconnect,
+}: {
+  url: string;
+  setUrl: (u: string) => void;
+  status: WsStatusPayload;
+  deviceInfo: DeviceInfo | null;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}): React.JSX.Element {
+  const connected = status.state === 'connected';
+  return (
+    <View style={styles.settings}>
+      <Text style={styles.sectionLabel}>Serveur</Text>
+      <TextInput
+        style={styles.input}
+        value={url}
+        onChangeText={setUrl}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="wss://server/mobile"
+      />
+      <View style={styles.row}>
+        <View style={styles.button}>
+          <Button title="Connect" onPress={onConnect} disabled={status.state === 'connecting' || connected} />
+        </View>
+        <View style={styles.button}>
+          <Button title="Disconnect" onPress={onDisconnect} disabled={!connected && status.state !== 'connecting'} />
+        </View>
+      </View>
+      <Text style={styles.status}>
+        state: {status.state}
+        {status.attempts ? ` (retry ${status.attempts})` : ''}
+      </Text>
+
+      <Text style={styles.sectionLabel}>Appareil (pairing)</Text>
+      {deviceInfo ? (
+        <>
+          <Text style={styles.status} selectable>
+            device: {deviceInfo.deviceId}
+          </Text>
+          <Text style={styles.status} selectable>
+            token: {deviceInfo.token}
+          </Text>
+          <Text style={styles.status}>a coller dans channels.mobile.devices du serveur</Text>
+        </>
+      ) : (
+        <Text style={styles.status}>appareil non initialise</Text>
+      )}
+    </View>
   );
 }
 
@@ -383,7 +435,11 @@ function formatDate(iso: string): string {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#fff' },
   container: { flex: 1, padding: 16, gap: 10 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 22, fontWeight: '700' },
+  headerAction: { fontSize: 14, color: '#0a5cff', fontWeight: '600' },
+  settings: { gap: 10 },
+  sectionLabel: { fontSize: 13, color: '#888', fontWeight: '600', textTransform: 'uppercase', marginTop: 6 },
   chatTitle: { flex: 1, fontSize: 17, lineHeight: 34 },
   input: {
     borderWidth: 1,

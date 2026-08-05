@@ -98,7 +98,18 @@ class ChatStoreImpl {
   }
 
   abortStream(threadId: string, id: string, error?: string): void {
-    if (!this.streams.has(id)) return;
+    if (!this.streams.has(id)) {
+      this.append(threadId, {
+        id,
+        role: 'agent',
+        text: '',
+        attachments: [],
+        streaming: false,
+        error: error ?? 'interrompu',
+        ts: Date.now(),
+      });
+      return;
+    }
     this.streams.delete(id);
     this.patch(threadId, id, { streaming: false, error });
   }
