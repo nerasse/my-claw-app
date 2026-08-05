@@ -118,6 +118,51 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     }
   }
 
+  /**
+   * Copies a picked file (content:// from the gallery or Photo Picker, or file://) into the
+   * cache and returns a file:// uri. RN's fetch cannot read content:// uris, so every
+   * attachment goes through here before the upload reads it.
+   */
+  @ReactMethod
+  fun prepareFile(uri: String, promise: Promise) {
+    try {
+      val parsed = Uri.parse(uri)
+      if (parsed.scheme == "file") {
+        val map = Arguments.createMap()
+        map.putString("uri", parsed.toString())
+        map.putDouble("size", File(parsed.path ?: "").length().toDouble())
+        promise.resolve(map)
+        return
+      }
+      val resolver = reactContext.contentResolver
+      var name = "file"
+      var size = 0L
+      resolver.query(parsed, null, null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+          val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+          if (nameIdx >= 0) cursor.getString(nameIdx)?.let { name = it }
+          val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+          if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) size = cursor.getLong(sizeIdx)
+        }
+      }
+      val input = resolver.openInputStream(parsed)
+        ?: run {
+          promise.reject("OPEN_FAILED", "cannot open uri")
+          return
+        }
+      val cached = File(reactContext.cacheDir, "prep_${System.currentTimeMillis()}_${ThreadLocalRandom.current().nextLong().toString(16)}")
+      cached.outputStream().use { out -> input.copyTo(out) }
+      input.close()
+      val map = Arguments.createMap()
+      map.putString("uri", Uri.fromFile(cached).toString())
+      map.putString("name", name)
+      map.putDouble("size", size.toDouble())
+      promise.resolve(map)
+    } catch (e: Exception) {
+      promise.reject("PREPARE_FAILED", e.message ?: "prepare failed")
+    }
+  }
+
   @ReactMethod
   fun connect(url: String) {
     val intent = Intent(reactContext, ClawConnectionService::class.java)

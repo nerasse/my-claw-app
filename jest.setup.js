@@ -54,6 +54,7 @@ jest.mock('./src/core/nativeBridge', () => ({
     prefsGetAll: jest.fn(() => Promise.resolve({})),
     prefsSet: jest.fn(() => Promise.resolve()),
     pickFile: jest.fn(() => Promise.resolve([])),
+    prepareFile: jest.fn(uri => Promise.resolve({ uri, name: 'file', size: 0 })),
   },
   deviceEvents: require('react-native').DeviceEventEmitter,
 }));

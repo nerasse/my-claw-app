@@ -91,6 +91,17 @@ function pressLabel(tree: Tree, label: string): Promise<void> {
   });
 }
 
+function pressText(tree: Tree, text: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    const targets = tree.root.findAll(
+      node => node.props.children === text && typeof node.props.onPress === 'function',
+      { deep: true },
+    );
+    const target = targets[0] ?? tree.root.find(node => node.props.children === text);
+    target.props.onPress();
+  });
+}
+
 test('typing "/" opens the slash-menu, filters live, and inserts on tap', async () => {
   const tree = await renderWithHistory();
 
@@ -115,6 +126,27 @@ test('typing "/" opens the slash-menu, filters live, and inserts on tap', async 
   });
   expect(inputOf(tree).props.value).toBe('/model ');
   expect(textsOf(tree)).not.toContain('Show or change current model');
+
+  await unmount(tree);
+});
+
+test('a gallery photo (content:// uri) is copied to the cache before staging', async () => {
+  const { launchImageLibrary } = require('react-native-image-picker');
+  const tree = await renderWithHistory();
+
+  await pressLabel(tree, 'Add attachment');
+  await pressText(tree, 'Photo from gallery');
+
+  const callback = launchImageLibrary.mock.calls.at(-1)[1];
+  await ReactTestRenderer.act(async () => {
+    callback({
+      didCancel: false,
+      assets: [{ uri: 'content://media/external/images/42', fileName: 'photo.jpg', type: 'image/jpeg', fileSize: 1234 }],
+    });
+  });
+
+  await waitFor(() => stringsOf(tree).includes('photo.jpg'));
+  expect(deviceBridge.prepareFile).toHaveBeenCalledWith('content://media/external/images/42');
 
   await unmount(tree);
 });

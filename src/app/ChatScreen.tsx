@@ -103,10 +103,26 @@ export function ChatScreen({
     inCommandRef.current = inCommand;
   }, [draft]);
 
-  const addAssets = useCallback((assets: Array<{ uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }>) => {
-    const picked = assets.map(pickAssetToPending).filter((item): item is PendingAttachment => item !== null);
-    if (picked.length > 0) {
-      setAttachments(current => [...current, ...picked]);
+  const addAssets = useCallback(async (assets: Array<{ uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }>) => {
+    const prepared: PendingAttachment[] = [];
+    for (const asset of assets) {
+      const pending = pickAssetToPending(asset);
+      if (!pending) continue;
+      // content:// uris (gallery, Photo Picker) are unreadable by RN fetch: copy to the cache
+      // through the bridge so the upload can read them.
+      if (!pending.uri.startsWith('file://')) {
+        try {
+          const copy = await deviceBridge.prepareFile(pending.uri);
+          pending.uri = copy.uri;
+          if (!pending.sizeBytes && copy.size > 0) pending.sizeBytes = copy.size;
+        } catch {
+          // Keep the original uri; the upload will surface a readable error.
+        }
+      }
+      prepared.push(pending);
+    }
+    if (prepared.length > 0) {
+      setAttachments(current => [...current, ...prepared]);
     }
   }, []);
 

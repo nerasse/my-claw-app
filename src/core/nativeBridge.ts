@@ -35,6 +35,8 @@ export interface DeviceBridgeNative {
   prefsGetAll(): Promise<Record<string, string>>;
   prefsSet(key: string, value: string | null): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
+  /** Copies a content:// or file:// uri into the cache and returns a readable file:// uri. */
+  prepareFile(uri: string): Promise<{ uri: string; name: string; size: number }>;
 }
 
 const native = NativeModules.DeviceBridge as DeviceBridgeNative | undefined;
@@ -58,6 +60,7 @@ export const deviceBridge: DeviceBridgeNative = {
   prefsGetAll: () => native?.prefsGetAll() ?? Promise.resolve({}),
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
+  prepareFile: uri => native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),
 };
 
 export const deviceEvents = DeviceEventEmitter;
