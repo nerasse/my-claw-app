@@ -12,6 +12,7 @@ import {
   type SessionSummary,
 } from './core/protocol';
 import { getDeviceInfo, type DeviceInfo } from './core/device';
+import { MarkdownBubble } from './components/AgentMarkdown';
 import type { WsStatusPayload } from './core/types';
 
 const DEFAULT_URL = 'ws://10.10.20.10:8080/mobile';
@@ -443,18 +444,21 @@ function ChatView({
     </>
   );
 }
-
-function Bubble({ item, mediaBase, deviceInfo }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null }): React.JSX.Element {  const agent = item.role === 'agent';
-  const cursor = item.streaming ? '▍' : '';
+function Bubble({ item, mediaBase, deviceInfo }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null }): React.JSX.Element {
+  const agent = item.role === 'agent';
   return (
     <View style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
       {item.attachments.map(att => (
         <AttachmentView key={att.id} att={att} mediaBase={mediaBase} deviceInfo={deviceInfo} />
       ))}
       {item.text ? (
-        <Text selectable style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{item.text}{cursor}</Text>
+        agent ? (
+          <MarkdownBubble text={item.text} streaming={item.streaming} />
+        ) : (
+          <Text selectable style={[styles.bubbleText, styles.bubbleTextUser]}>{item.text}{item.streaming ? '▍' : ''}</Text>
+        )
       ) : item.streaming ? (
-        <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{cursor}</Text>
+        <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>▍</Text>
       ) : null}
       {item.error ? <Text selectable style={styles.bubbleError}>{item.error}</Text> : null}
     </View>
