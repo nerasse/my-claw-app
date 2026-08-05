@@ -3,8 +3,10 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
+import { DeviceEventEmitter } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
+import { commandStore } from '../src/core/commands';
 import { darkPalette, lightPalette } from '../src/theme/palettes';
 import type { HistoryEntry } from '../src/core/protocol';
 import { renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
@@ -39,8 +41,76 @@ async function renderWithHistory(): Promise<Tree> {
 
 beforeEach(() => {
   chatStore.clearAll();
+  commandStore.replace([
+    { name: 'status', description: 'Session diagnostics: context, tokens, cost' },
+    { name: 'model', description: 'Show or change current model' },
+    { name: 'help', description: 'List available commands' },
+  ]);
   // The stored thread is what the shell reopens, so the seeded history is the one on screen.
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
+});
+
+function inputOf(tree: Tree): ReactTestRenderer.ReactTestInstance {
+  return tree.root.find(node => String(node.type) === 'TextInput' && node.props.placeholder === 'message');
+}
+
+function typeInto(tree: Tree, text: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    inputOf(tree).props.onChangeText(text);
+  });
+}
+
+test('typing "/" opens the slash-menu, filters live, and inserts on tap', async () => {
+  const tree = await renderWithHistory();
+
+  // Entering command mode refetches the catalog from the server.
+  await typeInto(tree, '/');
+  expect(bridge.sendMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'commands.list' }));
+
+  await waitFor(() => textsOf(tree).includes('Session diagnostics: context, tokens, cost'));
+  expect(textsOf(tree)).toContain('Show or change current model');
+  expect(textsOf(tree)).toContain('List available commands');
+
+  // Live filtering: "mo" keeps only model.
+  await typeInto(tree, '/mo');
+  await waitFor(() => !textsOf(tree).includes('Session diagnostics: context, tokens, cost'));
+  expect(textsOf(tree)).toContain('Show or change current model');
+  expect(textsOf(tree)).not.toContain('List available commands');
+
+  // Tapping a command inserts it with a trailing space, closing the menu.
+  const item = tree.root.find(node => node.props.accessibilityLabel?.startsWith('Command model'));
+  await ReactTestRenderer.act(async () => {
+    item.props.onPress();
+  });
+  expect(inputOf(tree).props.value).toBe('/model ');
+  expect(textsOf(tree)).not.toContain('Show or change current model');
+
+  await unmount(tree);
+});
+
+test('a server-published command appears on the next input without a release', async () => {
+  const tree = await renderWithHistory();
+
+  await typeInto(tree, '/');
+  await waitFor(() => textsOf(tree).includes('Session diagnostics: context, tokens, cost'));
+
+  // The server ships a new catalog while the menu is open; the next input shows it.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'commands.list.result',
+        commands: [
+          { name: 'status', description: 'Session diagnostics: context, tokens, cost' },
+          { name: 'brandnew', description: 'Shipped by the server just now' },
+        ],
+      }),
+    });
+  });
+  await typeInto(tree, '/b');
+  await waitFor(() => textsOf(tree).includes('Shipped by the server just now'));
+  expect(textsOf(tree)).not.toContain('Show or change current model');
+
+  await unmount(tree);
 });
 
 test('a tool card starts collapsed and reveals arguments and output on tap', async () => {

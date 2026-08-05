@@ -5,6 +5,9 @@ import { ToolCard } from '../components/ToolCard';
 import { Composer } from '../components/Composer';
 import type { ChatItem, TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
+import { connection } from '../core/connection';
+import { useCommands } from '../core/commands';
+import { encodeCommandsList } from '../core/protocol';
 import type { WsState } from '../core/types';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -64,12 +67,22 @@ export function ChatScreen({
   const listRef = useRef<FlatList<ChatItem>>(null);
   const [draft, setDraft] = useState('');
   const [atBottom, setAtBottom] = useState(true);
+  const commands = useCommands();
+  const inCommandRef = useRef(false);
 
   useEffect(() => {
     if (!atBottom) return;
     const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 40);
     return () => clearTimeout(timer);
   }, [items, atBottom]);
+
+  // Re-fetch the catalog every time the user starts a command: a command added on the server
+  // is visible on the next "/" without an app release.
+  useEffect(() => {
+    const inCommand = draft.trim().startsWith('/');
+    if (inCommand && !inCommandRef.current) connection.send(encodeCommandsList());
+    inCommandRef.current = inCommand;
+  }, [draft]);
 
   const submit = useCallback(() => {
     const text = draft.trim();
@@ -120,6 +133,7 @@ export function ChatScreen({
             onChange={setDraft}
             onSend={submit}
             hint={hint}
+            commands={commands}
           />
         </View>
       ) : (
@@ -170,7 +184,7 @@ export function ChatScreen({
         ) : null}
         </View>
 
-        <Composer value={draft} onChange={setDraft} onSend={submit} hint={hint} />
+        <Composer value={draft} onChange={setDraft} onSend={submit} hint={hint} commands={commands} />
         </>
       )}
     </View>

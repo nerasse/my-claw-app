@@ -1,5 +1,6 @@
 import {
   encodeChatSend,
+  encodeCommandsList,
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
@@ -18,6 +19,7 @@ describe('parseServerFrame', () => {
       { type: 'chat.tool', id: 'a:tool:1', threadId: 't', turnId: 'a', name: 'bash', args: {}, ok: true, output: '', truncated: false, ts: 'iso' },
       { type: 'chat.history', threadId: 't', messages: [] },
       { type: 'session.list.result', sessions: [] },
+      { type: 'commands.list.result', commands: [{ name: 'status', description: 'diag' }] },
       { type: 'approval.request', id: 'a', threadId: 't', toolName: 'bash', args: {}, expiresAt: 1 },
       { type: 'error', message: 'x' },
     ];
@@ -64,6 +66,7 @@ describe('encoders', () => {
       threadId: 'thread1',
     });
     expect(JSON.parse(encodeSessionList())).toEqual({ type: 'session.list' });
+    expect(JSON.parse(encodeCommandsList())).toEqual({ type: 'commands.list' });
     expect(JSON.parse(encodeSessionHistory('t', 10))).toEqual({ type: 'session.history', threadId: 't', limit: 10 });
     expect(JSON.parse(encodeSessionHistory('t'))).toMatchObject({ limit: 50 });
     expect(JSON.parse(encodeSessionArchive('t'))).toEqual({ type: 'session.archive', threadId: 't' });

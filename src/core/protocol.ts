@@ -83,6 +83,11 @@ export interface SessionSummary {
   lastActiveAt: string;
 }
 
+export interface CommandsListResultFrame {
+  type: 'commands.list.result';
+  commands: Array<{ name: string; description: string }>;
+}
+
 export interface SessionListResultFrame {
   type: 'session.list.result';
   sessions: SessionSummary[];
@@ -112,6 +117,7 @@ export type ServerFrame =
   | ToolCallFrame
   | ChatHistoryFrame
   | SessionListResultFrame
+  | CommandsListResultFrame
   | ApprovalRequestFrame
   | ErrorFrame;
 
@@ -124,6 +130,7 @@ const FRAME_TYPES = new Set([
   'chat.tool',
   'chat.history',
   'session.list.result',
+  'commands.list.result',
   'approval.request',
   'error',
 ]);
@@ -149,6 +156,10 @@ export function encodeChatSend(id: string, text: string, threadId: string): stri
 
 export function encodeSessionList(): string {
   return JSON.stringify({ type: 'session.list' });
+}
+
+export function encodeCommandsList(): string {
+  return JSON.stringify({ type: 'commands.list' });
 }
 
 export function encodeSessionHistory(threadId: string, limit = 50): string {

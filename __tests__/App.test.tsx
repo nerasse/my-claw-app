@@ -35,3 +35,24 @@ test('the settings expose the three theme modes', async () => {
   expect(labels).toContain('Server address');
   await unmount(tree);
 });
+
+test('the token is masked by default and can be revealed or copied whole', async () => {
+  const tree = await renderApp();
+  await press(tree, 'Open conversations');
+  await press(tree, 'Open settings');
+
+  // Masked: only the last four characters are visible, never the full value.
+  expect(textsOf(tree).join('|')).not.toContain('token-test');
+  expect(textsOf(tree).join('|')).toContain('••••••test');
+
+  await press(tree, 'Show token');
+  expect(textsOf(tree).join('|')).toContain('token-test');
+
+  await press(tree, 'Copy device and token');
+  const Clipboard = require('@react-native-clipboard/clipboard').default;
+  expect(Clipboard.setString).toHaveBeenCalledWith('device: dev-test\ntoken: token-test');
+
+  await press(tree, 'Hide token');
+  expect(textsOf(tree).join('|')).not.toContain('token-test');
+  await unmount(tree);
+});

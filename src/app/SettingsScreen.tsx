@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import type { DeviceInfo } from '../core/device';
 import type { WsStatusPayload } from '../core/types';
 import type { ThemeMode } from '../core/prefs';
@@ -10,6 +11,11 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
   { mode: 'light', label: 'Light' },
   { mode: 'dark', label: 'Dark' },
 ];
+
+/** Keeps the last four characters visible so the pair can be recognized, nothing more. */
+function maskToken(token: string): string {
+  return `${'•'.repeat(Math.max(token.length - 4, 0))}${token.slice(-4)}`;
+}
 
 export function SettingsScreen({
   url,
@@ -39,6 +45,7 @@ export function SettingsScreen({
   const styles = useThemedStyles(createStyles);
   const { palette, dark } = useTheme();
   const connected = status.state === 'connected';
+  const [showToken, setShowToken] = useState(false);
 
   return (
     <View style={styles.screen}>
@@ -144,10 +151,27 @@ export function SettingsScreen({
                 </View>
                 <View style={styles.kv}>
                   <Text style={styles.key}>token</Text>
-                  <Text style={[styles.value, styles.mono]} selectable>
-                    {deviceInfo.token}
+                  <Text style={[styles.value, styles.mono]} selectable={showToken}>
+                    {showToken ? deviceInfo.token : maskToken(deviceInfo.token)}
                   </Text>
+                  <Pressable
+                    onPress={() => setShowToken(value => !value)}
+                    hitSlop={8}
+                    style={styles.toggle}
+                    accessibilityRole="button"
+                    accessibilityLabel={showToken ? 'Hide token' : 'Show token'}>
+                    <Text style={styles.toggleText}>{showToken ? 'hide' : 'show'}</Text>
+                  </Pressable>
                 </View>
+                <Pressable
+                  style={[styles.button, styles.buttonGhost]}
+                  onPress={() =>
+                    Clipboard.setString(`device: ${deviceInfo.deviceId}\ntoken: ${deviceInfo.token}`)
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy device and token">
+                  <Text style={[styles.buttonText, styles.buttonGhostText]}>Copy device & token</Text>
+                </Pressable>
                 <Text style={styles.hint}>paste into channels.mobile.devices on the server</Text>
               </>
             ) : (
@@ -236,4 +260,11 @@ const createStyles = (palette: Palette) => ({
   key: { width: 90, fontSize: font.meta, color: palette.textFaint },
   value: { flex: 1, fontSize: font.meta, color: palette.text },
   mono: { fontFamily: 'monospace', fontSize: font.small },
+  toggle: { paddingVertical: 2, paddingHorizontal: space.xs },
+  toggleText: {
+    fontSize: font.small,
+    color: palette.accent,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.4,
+  },
 });

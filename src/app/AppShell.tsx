@@ -5,9 +5,11 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { connection } from '../core/connection';
 import { chatStore, useChatItems, useUnreadThreads, type TextItem } from '../core/chat';
 import { sessionStore, useSessions } from '../core/sessions';
+import { commandStore } from '../core/commands';
 import { prefs } from '../core/prefs';
 import {
   encodeChatSend,
+  encodeCommandsList,
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
@@ -87,7 +89,10 @@ export function AppShell(): React.JSX.Element {
 
     const offState = connection.onState(next => {
       setStatus(next);
-      if (next.state === 'connected') connection.send(encodeSessionList());
+      if (next.state === 'connected') {
+        connection.send(encodeSessionList());
+        connection.send(encodeCommandsList());
+      }
     });
     const offPending = connection.onPending(setPending);
 
@@ -129,6 +134,9 @@ export function AppShell(): React.JSX.Element {
             if (first) openThread(first.threadId);
             else selectThread(uuid());
           }
+          break;
+        case 'commands.list.result':
+          commandStore.replace(frame.commands);
           break;
         case 'chat.history':
           chatStore.seedHistory(frame.threadId, frame.messages);
