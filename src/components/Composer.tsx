@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
+import type { PendingAttachment } from '../core/upload';
+import { formatBytes } from '../core/utils';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 export function Composer({
@@ -13,6 +15,11 @@ export function Composer({
   autoFocus,
   commands,
   onCommandEntered,
+  attachments,
+  onPickAttachment,
+  onRemoveAttachment,
+  uploading,
+  uploadError,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -27,6 +34,13 @@ export function Composer({
   commands?: CommandDef[];
   /** The user picked a command from the slash-menu. */
   onCommandEntered?: (command: string) => void;
+  /** Files staged for the next message. */
+  attachments?: PendingAttachment[];
+  /** Opens the attachment picker sheet. */
+  onPickAttachment?: () => void;
+  onRemoveAttachment?: (id: string) => void;
+  uploading?: boolean;
+  uploadError?: string | null;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -89,7 +103,38 @@ export function Composer({
       ) : null}
 
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {uploadError ? <Text style={styles.uploadError}>{uploadError}</Text> : null}
+      {attachments && attachments.length > 0 ? (
+        <View style={styles.chips}>
+          {attachments.map(attachment => (
+            <View key={attachment.id} style={styles.chip}>
+              <Text style={styles.chipText} numberOfLines={1}>
+                {attachment.filename}
+                {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
+              </Text>
+              {onRemoveAttachment ? (
+                <Pressable
+                  onPress={() => onRemoveAttachment(attachment.id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove attachment ${attachment.filename}`}>
+                  <Text style={styles.chipRemove}>✕</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
       <View style={styles.row}>
+        {onPickAttachment ? (
+          <Pressable
+            style={[styles.attach, hero && styles.sendHero]}
+            onPress={onPickAttachment}
+            accessibilityRole="button"
+            accessibilityLabel="Add attachment">
+            <Text style={[styles.attachGlyph, uploading && styles.attachBusy]}>{uploading ? '…' : '＋'}</Text>
+          </Pressable>
+        ) : null}
         <TextInput
           style={[styles.input, hero && styles.inputHero]}
           value={value}
@@ -145,6 +190,32 @@ const createStyles = (palette: Palette) => ({
   menuName: { fontSize: font.meta, fontFamily: 'monospace', color: palette.accent, fontWeight: '600' as const },
   menuDesc: { fontSize: font.small, color: palette.textMuted, lineHeight: 15 },
   row: { flexDirection: 'row' as const, alignItems: 'flex-end' as const, gap: space.sm },
+  attach: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  attachGlyph: { fontSize: 20, lineHeight: 24, color: palette.accent },
+  attachBusy: { color: palette.textFaint },
+  chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.xs },
+  chip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    maxWidth: '90%' as const,
+    backgroundColor: palette.accentSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 4,
+  },
+  chipText: { flexShrink: 1, fontSize: font.small, color: palette.text },
+  chipRemove: { fontSize: font.meta, lineHeight: 15, color: palette.textMuted },
+  uploadError: { fontSize: font.small, color: palette.danger, paddingHorizontal: space.xs },
   input: {
     flex: 1,
     maxHeight: 112,

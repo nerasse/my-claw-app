@@ -39,6 +39,25 @@ async function renderWithHistory(): Promise<Tree> {
   return tree;
 }
 
+/** Collects every string inside props.children, including array children. */
+function stringsOf(tree: Tree): string[] {
+  const out: string[] = [];
+  const walk = (node: ReactTestRenderer.ReactTestInstance): void => {
+    const collect = (value: unknown): void => {
+      if (typeof value === 'string') out.push(value);
+      else if (Array.isArray(value)) value.forEach(collect);
+    };
+    collect(node.props.children);
+    for (const child of node.children) {
+      if (child && typeof child === 'object' && 'props' in (child as object)) {
+        walk(child as ReactTestRenderer.ReactTestInstance);
+      }
+    }
+  };
+  walk(tree.root);
+  return out;
+}
+
 beforeEach(() => {
   chatStore.clearAll();
   commandStore.replace([
@@ -57,6 +76,18 @@ function inputOf(tree: Tree): ReactTestRenderer.ReactTestInstance {
 function typeInto(tree: Tree, text: string): Promise<void> {
   return ReactTestRenderer.act(async () => {
     inputOf(tree).props.onChangeText(text);
+  });
+}
+
+function pressLabel(tree: Tree, label: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    // Composite and host instances duplicate the props; press the one that can react.
+    const targets = tree.root.findAll(
+      node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
+      { deep: true },
+    );
+    const target = targets[0] ?? tree.root.find(node => node.props.accessibilityLabel === label);
+    target.props.onPress();
   });
 }
 
@@ -84,6 +115,47 @@ test('typing "/" opens the slash-menu, filters live, and inserts on tap', async 
   });
   expect(inputOf(tree).props.value).toBe('/model ');
   expect(textsOf(tree)).not.toContain('Show or change current model');
+
+  await unmount(tree);
+});
+
+test('the attach button opens the picker sheet and the sheet closes on cancel', async () => {
+  const tree = await renderWithHistory();
+
+  await pressLabel(tree, 'Add attachment');
+  expect(textsOf(tree)).toContain('Photo from gallery');
+  expect(textsOf(tree)).toContain('Take a photo');
+  expect(textsOf(tree)).toContain('File');
+
+  await pressLabel(tree, 'Close menu');
+  expect(textsOf(tree)).not.toContain('Photo from gallery');
+  await unmount(tree);
+});
+
+test('the session file explorer lists files with sizes and deletes them', async () => {
+  const tree = await renderWithHistory();
+
+  await pressLabel(tree, 'Session files');
+  await waitFor(() => textsOf(tree).includes('Session files'));
+
+  // The server answers with the file list.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'files.list.result',
+        threadId: THREAD,
+        files: [{ id: 'f1', filename: 'note.pdf', type: 'file', mimeType: 'application/pdf', sizeBytes: 5120, ts: '2026-01-01T10:00:00.000Z' }],
+        totalBytes: 5120,
+      }),
+    });
+  });
+  await waitFor(() => textsOf(tree).includes('note.pdf'));
+  expect(stringsOf(tree)).toContain('5.0 KB');
+
+  await pressLabel(tree, 'Delete file note.pdf');
+  expect(bridge.sendMessage).toHaveBeenCalledWith(
+    JSON.stringify({ type: 'files.delete', threadId: THREAD, id: 'f1' }),
+  );
 
   await unmount(tree);
 });

@@ -1,6 +1,8 @@
 import {
   encodeChatSend,
   encodeCommandsList,
+  encodeFileDelete,
+  encodeFilesList,
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
@@ -20,6 +22,7 @@ describe('parseServerFrame', () => {
       { type: 'chat.history', threadId: 't', messages: [] },
       { type: 'session.list.result', sessions: [] },
       { type: 'commands.list.result', commands: [{ name: 'status', description: 'diag' }] },
+      { type: 'files.list.result', threadId: 't', files: [{ id: 'f1', filename: 'a.pdf', type: 'file', mimeType: 'application/pdf', sizeBytes: 4, ts: 'iso' }], totalBytes: 4 },
       { type: 'approval.request', id: 'a', threadId: 't', toolName: 'bash', args: {}, expiresAt: 1 },
       { type: 'error', message: 'x' },
     ];
@@ -65,8 +68,17 @@ describe('encoders', () => {
       text: 'hi',
       threadId: 'thread1',
     });
+    expect(JSON.parse(encodeChatSend('id2', 'hi', 'thread1', [{ id: 'f1', type: 'image' }]))).toEqual({
+      type: 'chat.send',
+      id: 'id2',
+      text: 'hi',
+      threadId: 'thread1',
+      attachments: [{ id: 'f1', type: 'image' }],
+    });
     expect(JSON.parse(encodeSessionList())).toEqual({ type: 'session.list' });
     expect(JSON.parse(encodeCommandsList())).toEqual({ type: 'commands.list' });
+    expect(JSON.parse(encodeFilesList('t'))).toEqual({ type: 'files.list', threadId: 't' });
+    expect(JSON.parse(encodeFileDelete('t', 'f1'))).toEqual({ type: 'files.delete', threadId: 't', id: 'f1' });
     expect(JSON.parse(encodeSessionHistory('t', 10))).toEqual({ type: 'session.history', threadId: 't', limit: 10 });
     expect(JSON.parse(encodeSessionHistory('t'))).toMatchObject({ limit: 50 });
     expect(JSON.parse(encodeSessionArchive('t'))).toEqual({ type: 'session.archive', threadId: 't' });

@@ -11,6 +11,13 @@ export interface DeviceCapabilities {
   wssConnection: boolean;
 }
 
+export interface PickedFile {
+  uri: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
 /**
  * Single typed door to the Kotlin module. Everything else imports this instead of
  * NativeModules, so tests can mock one file and a renamed native method breaks
@@ -27,6 +34,7 @@ export interface DeviceBridgeNative {
   getCapabilities(): Promise<DeviceCapabilities>;
   prefsGetAll(): Promise<Record<string, string>>;
   prefsSet(key: string, value: string | null): Promise<void>;
+  pickFile(): Promise<PickedFile[]>;
 }
 
 const native = NativeModules.DeviceBridge as DeviceBridgeNative | undefined;
@@ -49,6 +57,7 @@ export const deviceBridge: DeviceBridgeNative = {
     Promise.resolve({ accessibility: false, notificationListener: false, wssConnection: false }),
   prefsGetAll: () => native?.prefsGetAll() ?? Promise.resolve({}),
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
+  pickFile: () => native?.pickFile() ?? Promise.resolve([]),
 };
 
 export const deviceEvents = DeviceEventEmitter;

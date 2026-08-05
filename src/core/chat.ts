@@ -111,8 +111,8 @@ class ChatStoreImpl {
     this.emit();
   }
 
-  addUserMessage(threadId: string, id: string, text: string): void {
-    this.append(threadId, { kind: 'text', id, role: 'user', text, attachments: [], streaming: false, ts: Date.now() });
+  addUserMessage(threadId: string, id: string, text: string, attachments: AttachmentMeta[] = []): void {
+    this.append(threadId, { kind: 'text', id, role: 'user', text, attachments, streaming: false, ts: Date.now() });
   }
 
   /** The native outbox could neither send nor queue the frame: say so on the bubble. */

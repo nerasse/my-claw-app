@@ -8,6 +8,21 @@ export interface AttachmentMeta {
   height?: number;
   durationMs?: number;
   audioAsVoice?: boolean;
+  /** Local file preview for attachments that have not left the phone yet. */
+  uri?: string;
+}
+
+export interface AttachmentRef {
+  id: string;
+  type: AttachmentMeta['type'];
+}
+
+export interface ChatSendPayload {
+  type: 'chat.send';
+  id: string;
+  text: string;
+  threadId: string;
+  attachments?: AttachmentRef[];
 }
 
 export interface ChatMessageFrame {
@@ -88,6 +103,22 @@ export interface CommandsListResultFrame {
   commands: Array<{ name: string; description: string }>;
 }
 
+export interface SessionFileMeta {
+  id: string;
+  filename: string;
+  type: 'image' | 'audio' | 'video' | 'file';
+  mimeType: string;
+  sizeBytes: number;
+  ts: string;
+}
+
+export interface FilesListResultFrame {
+  type: 'files.list.result';
+  threadId: string;
+  files: SessionFileMeta[];
+  totalBytes: number;
+}
+
 export interface SessionListResultFrame {
   type: 'session.list.result';
   sessions: SessionSummary[];
@@ -118,6 +149,7 @@ export type ServerFrame =
   | ChatHistoryFrame
   | SessionListResultFrame
   | CommandsListResultFrame
+  | FilesListResultFrame
   | ApprovalRequestFrame
   | ErrorFrame;
 
@@ -131,6 +163,7 @@ const FRAME_TYPES = new Set([
   'chat.history',
   'session.list.result',
   'commands.list.result',
+  'files.list.result',
   'approval.request',
   'error',
 ]);
@@ -150,8 +183,10 @@ export function parseServerFrame(raw: string): ServerFrame | null {
   }
 }
 
-export function encodeChatSend(id: string, text: string, threadId: string): string {
-  return JSON.stringify({ type: 'chat.send', id, text, threadId });
+export function encodeChatSend(id: string, text: string, threadId: string, attachments?: AttachmentRef[]): string {
+  return JSON.stringify(attachments?.length
+    ? { type: 'chat.send', id, text, threadId, attachments }
+    : { type: 'chat.send', id, text, threadId });
 }
 
 export function encodeSessionList(): string {
@@ -160,6 +195,14 @@ export function encodeSessionList(): string {
 
 export function encodeCommandsList(): string {
   return JSON.stringify({ type: 'commands.list' });
+}
+
+export function encodeFilesList(threadId: string): string {
+  return JSON.stringify({ type: 'files.list', threadId });
+}
+
+export function encodeFileDelete(threadId: string, id: string): string {
+  return JSON.stringify({ type: 'files.delete', threadId, id });
 }
 
 export function encodeSessionHistory(threadId: string, limit = 50): string {

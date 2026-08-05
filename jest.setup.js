@@ -33,7 +33,12 @@ jest.mock('react-native-svg', () => {
   return { __esModule: true, default: stub(), Svg: stub(), Path: stub() };
 });
 
-// DeviceEventEmitter stays real so tests can push frames through the actual listener path.
+jest.mock('react-native-image-picker', () => ({
+  launchCamera: jest.fn((_options, callback) => callback({ didCancel: true })),
+  launchImageLibrary: jest.fn((_options, callback) => callback({ didCancel: true })),
+}));
+
+// The SAF file picker lives in our own Kotlin bridge, like the rest of the native modules.
 jest.mock('./src/core/nativeBridge', () => ({
   deviceBridge: {
     connect: jest.fn(),
@@ -48,6 +53,7 @@ jest.mock('./src/core/nativeBridge', () => ({
     ),
     prefsGetAll: jest.fn(() => Promise.resolve({})),
     prefsSet: jest.fn(() => Promise.resolve()),
+    pickFile: jest.fn(() => Promise.resolve([])),
   },
   deviceEvents: require('react-native').DeviceEventEmitter,
 }));

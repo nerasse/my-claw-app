@@ -26,6 +26,12 @@ export function formatDate(iso: string): string {
     : date.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' });
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function formatDuration(ms?: number): string {
   if (typeof ms !== 'number') return '';
   if (ms < 1000) return `${ms}ms`;

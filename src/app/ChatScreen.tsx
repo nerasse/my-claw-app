@@ -1,17 +1,30 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, Text, View, type ViewStyle } from 'react-native';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
 import { Composer } from '../components/Composer';
+import { BubbleMenu } from '../components/BubbleMenu';
 import type { ChatItem, TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
+import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
-import { encodeCommandsList } from '../core/protocol';
+import { encodeCommandsList, type AttachmentMeta } from '../core/protocol';
+import { uploadMedia, type PendingAttachment } from '../core/upload';
+import { uuid } from '../core/utils';
 import type { WsState } from '../core/types';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 const GROUP_WINDOW_MS = 120_000;
+
+function pickAssetToPending(asset: { uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }): PendingAttachment | null {
+  if (!asset.uri) return null;
+  const filename = asset.fileName ?? `photo-${Date.now()}.jpg`;
+  const mimeType = asset.type ?? 'application/octet-stream';
+  const type: AttachmentMeta['type'] = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'file';
+  return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
+}
 
 function statusColor(state: WsState, styles: ReturnType<typeof createStyles>): ViewStyle | null {
   switch (state) {
@@ -46,6 +59,7 @@ export function ChatScreen({
   autoFocusHero,
   onOpenDrawer,
   onStatusPress,
+  onFilesPress,
   onSend,
   onBubbleMenu,
 }: {
@@ -60,7 +74,8 @@ export function ChatScreen({
   autoFocusHero: boolean;
   onOpenDrawer: () => void;
   onStatusPress: () => void;
-  onSend: (text: string) => void;
+  onFilesPress: () => void;
+  onSend: (text: string, attachments?: Array<{ id: string; type: AttachmentMeta['type']; uri?: string }>) => void;
   onBubbleMenu: (item: TextItem) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -69,6 +84,10 @@ export function ChatScreen({
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
   const inCommandRef = useRef(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!atBottom) return;
@@ -84,12 +103,74 @@ export function ChatScreen({
     inCommandRef.current = inCommand;
   }, [draft]);
 
+  const addAssets = useCallback((assets: Array<{ uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }>) => {
+    const picked = assets.map(pickAssetToPending).filter((item): item is PendingAttachment => item !== null);
+    if (picked.length > 0) {
+      setAttachments(current => [...current, ...picked]);
+    }
+  }, []);
+
+  const pickPhotos = useCallback(() => {
+    setAttachOpen(false);
+    launchImageLibrary({ mediaType: 'photo', selectionLimit: 0, quality: 0.8 }, result => {
+      if (!result.didCancel && result.assets) addAssets(result.assets);
+    });
+  }, [addAssets]);
+
+  const takePhoto = useCallback(() => {
+    setAttachOpen(false);
+    launchCamera({ mediaType: 'photo', saveToPhotos: true, quality: 0.8 }, result => {
+      if (!result.didCancel && result.assets) addAssets(result.assets);
+    });
+  }, [addAssets]);
+
+  const pickFiles = useCallback(() => {
+    setAttachOpen(false);
+    deviceBridge
+      .pickFile()
+      .then(files => {
+        addAssets(
+          files.map(file => ({
+            uri: file.uri,
+            fileName: file.name,
+            type: file.type,
+            fileSize: file.size || undefined,
+          })),
+        );
+      })
+      .catch(() => {});
+  }, [addAssets]);
+
   const submit = useCallback(() => {
     const text = draft.trim();
-    if (!text) return;
-    onSend(text);
+    if (!text && attachments.length === 0) return;
+    if (attachments.length > 0) {
+      if (!deviceInfo) {
+        setUploadError('device not initialized');
+        return;
+      }
+      setUploading(true);
+      setUploadError(null);
+      (async () => {
+        try {
+          const refs: Array<{ id: string; type: AttachmentMeta['type']; uri?: string }> = [];
+          for (const attachment of attachments) {
+            const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, attachment);
+            refs.push({ id: uploaded.id, type: uploaded.type, uri: attachment.uri });
+          }
+          setAttachments([]);
+          onSend(text, refs);
+        } catch (err) {
+          setUploadError(err instanceof Error ? err.message : 'upload failed');
+        } finally {
+          setUploading(false);
+        }
+      })();
+    } else {
+      onSend(text);
+    }
     setDraft('');
-  }, [draft, onSend]);
+  }, [attachments, deviceInfo, draft, mediaBase, onSend, threadId]);
 
   const empty = items.length === 0;
 
@@ -119,6 +200,13 @@ export function ChatScreen({
           accessibilityLabel={`Connection status: ${connectionState}`}>
           <View style={[styles.statusDot, statusColor(connectionState, styles)]} />
         </Pressable>
+        <Pressable
+          onPress={onFilesPress}
+          style={styles.filesButton}
+          accessibilityRole="button"
+          accessibilityLabel="Session files">
+          <Text style={styles.filesGlyph}>🗂</Text>
+        </Pressable>
       </View>
 
       {empty ? (
@@ -134,6 +222,11 @@ export function ChatScreen({
             onSend={submit}
             hint={hint}
             commands={commands}
+            attachments={attachments}
+            onPickAttachment={() => setAttachOpen(true)}
+            onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+            uploading={uploading}
+            uploadError={uploadError}
           />
         </View>
       ) : (
@@ -184,9 +277,32 @@ export function ChatScreen({
         ) : null}
         </View>
 
-        <Composer value={draft} onChange={setDraft} onSend={submit} hint={hint} commands={commands} />
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSend={submit}
+          hint={hint}
+          commands={commands}
+          attachments={attachments}
+          onPickAttachment={() => setAttachOpen(true)}
+          onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+          uploading={uploading}
+          uploadError={uploadError}
+        />
         </>
       )}
+
+      {attachOpen ? (
+        <BubbleMenu
+          preview="add to this message"
+          actions={[
+            { label: 'Photo from gallery', onPress: pickPhotos },
+            { label: 'Take a photo', onPress: takePhoto },
+            { label: 'File', onPress: pickFiles },
+          ]}
+          onClose={() => setAttachOpen(false)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -214,6 +330,15 @@ const createStyles = (palette: Palette) => ({
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
   statusButton: { padding: 2 },
+  filesButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  filesGlyph: { fontSize: 17, lineHeight: 20 },
   statusDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1, borderColor: palette.surface },
   statusOk: { backgroundColor: palette.ok },
   statusOff: { backgroundColor: palette.textFaint },

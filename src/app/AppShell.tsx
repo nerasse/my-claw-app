@@ -10,10 +10,14 @@ import { prefs } from '../core/prefs';
 import {
   encodeChatSend,
   encodeCommandsList,
+  encodeFileDelete,
+  encodeFilesList,
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
   encodeSessionList,
+  type AttachmentMeta,
+  type SessionFileMeta,
   type SessionSummary,
 } from '../core/protocol';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
@@ -21,6 +25,7 @@ import type { WsStatusPayload } from '../core/types';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
+import { FilesScreen } from './FilesScreen';
 import { Drawer } from './Drawer';
 import { BubbleMenu, type BubbleMenuAction } from '../components/BubbleMenu';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -40,6 +45,9 @@ export function AppShell(): React.JSX.Element {
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
+  const [filesTotal, setFilesTotal] = useState(0);
   const [autoFocusHero, setAutoFocusHero] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
@@ -138,6 +146,10 @@ export function AppShell(): React.JSX.Element {
         case 'commands.list.result':
           commandStore.replace(frame.commands);
           break;
+        case 'files.list.result':
+          setSessionFiles(frame.files);
+          setFilesTotal(frame.totalBytes);
+          break;
         case 'chat.history':
           chatStore.seedHistory(frame.threadId, frame.messages);
           chatStore.markRead(frame.threadId);
@@ -195,17 +207,33 @@ export function AppShell(): React.JSX.Element {
   }, [bubbleMenu, drawerOpen, settingsOpen, threadMenu]);
 
   const sendChat = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: Array<{ id: string; type: AttachmentMeta['type']; uri?: string }>) => {
       const threadId = activeThreadRef.current ?? uuid();
       if (!activeThreadRef.current) selectThread(threadId);
       const id = uuid();
-      chatStore.addUserMessage(threadId, id, text);
-      sessionStore.ensure(threadId, text);
-      const delivered = await connection.send(encodeChatSend(id, text, threadId));
+      chatStore.addUserMessage(
+        threadId,
+        id,
+        text,
+        attachments?.map(attachment => ({
+          id: attachment.id,
+          type: attachment.type,
+          uri: attachment.uri,
+        })) ?? [],
+      );
+      sessionStore.ensure(threadId, text || '(attachment)');
+      const delivered = await connection.send(encodeChatSend(id, text, threadId, attachments));
       if (!delivered) chatStore.markSendFailed(threadId, id);
     },
     [selectThread],
   );
+
+  const openFiles = useCallback(() => {
+    const threadId = activeThreadRef.current;
+    if (!threadId) return;
+    setFilesOpen(true);
+    connection.send(encodeFilesList(threadId));
+  }, []);
 
   const changeUrl = useCallback((next: string) => {
     setUrl(next);
@@ -272,6 +300,17 @@ export function AppShell(): React.JSX.Element {
               }}
               onBack={() => setSettingsOpen(false)}
             />
+          ) : filesOpen ? (
+            <FilesScreen
+              mediaBase={mediaBase}
+              deviceInfo={deviceInfo}
+              files={sessionFiles}
+              totalBytes={filesTotal}
+              onBack={() => setFilesOpen(false)}
+              onDelete={id => {
+                if (activeThread) connection.send(encodeFileDelete(activeThread, id));
+              }}
+            />
           ) : (
             <ChatScreen
               threadId={activeThread ?? ''}
@@ -288,6 +327,7 @@ export function AppShell(): React.JSX.Element {
                 setSettingsOpen(true);
                 setAutoFocusHero(false);
               }}
+              onFilesPress={openFiles}
               onSend={sendChat}
               onBubbleMenu={setBubbleMenu}
             />

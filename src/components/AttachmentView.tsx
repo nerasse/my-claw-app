@@ -14,7 +14,7 @@ export function AttachmentView({
   deviceInfo: DeviceInfo | null;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const uri = deviceInfo ? `${mediaBase}/media/${att.id}?device=${deviceInfo.deviceId}&token=${deviceInfo.token}` : '';
+  const uri = att.uri ?? (deviceInfo ? `${mediaBase}/media/${att.id}?device=${deviceInfo.deviceId}&token=${deviceInfo.token}` : '');
   if (att.type === 'image' && uri) {
     return (
       <Image
