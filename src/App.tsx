@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Button, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { connection } from './core/connection';
 import { chatStore, type ChatItem } from './core/chat';
@@ -43,12 +43,19 @@ function App(): React.JSX.Element {
   const [threads, setThreads] = useState<SessionSummary[]>([]);
   const [itemsVersion, setItemsVersion] = useState(0);
   const [threadsVersion, setThreadsVersion] = useState(0);
+  const [atBottom, setAtBottom] = useState(true);
   const listRef = useRef<FlatList<ChatItem>>(null);
   const activeThreadRef = useRef<string | null>(null);
   const threadsRef = useRef<SessionSummary[]>([]);
   const connected = status.state === 'connected';
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
   const items = useMemo(() => (activeThread ? chatStore.getItems(activeThread) : []), [itemsVersion, activeThread]);
+
+  useEffect(() => {
+    if (!atBottom || !activeThread) return;
+    const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 40);
+    return () => clearTimeout(timer);
+  }, [itemsVersion, activeThread, atBottom]);
   const threadTitles = useMemo(() => {
     const titles: Record<string, string> = {};
     for (const t of threads) {
@@ -187,7 +194,10 @@ function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe}>
-        <View style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.safe}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.title}>MyClaw</Text>
             <Text style={styles.headerAction} onPress={() => setSettingsOpen(v => !v)}>
@@ -210,6 +220,8 @@ function App(): React.JSX.Element {
               title={threadTitles[activeThread] ?? '(nouvelle conversation)'}
               items={items}
               listRef={listRef}
+              atBottom={atBottom}
+              setAtBottom={setAtBottom}
               sendText={sendText}
               setSendText={setSendText}
               onSend={sendChat}
@@ -248,7 +260,8 @@ function App(): React.JSX.Element {
               />
             </>
           )}
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -338,6 +351,8 @@ function ChatView({
   title,
   items,
   listRef,
+  atBottom,
+  setAtBottom,
   sendText,
   setSendText,
   onSend,
@@ -350,6 +365,8 @@ function ChatView({
   title: string;
   items: ChatItem[];
   listRef: React.RefObject<FlatList<ChatItem> | null>;
+  atBottom: boolean;
+  setAtBottom: (v: boolean) => void;
   sendText: string;
   setSendText: (t: string) => void;
   onSend: () => void;
@@ -373,7 +390,15 @@ function ChatView({
         style={styles.list}
         data={items}
         keyExtractor={item => `${threadId}-${item.id}`}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => {
+          if (atBottom) listRef.current?.scrollToEnd({ animated: false });
+        }}
+        onScroll={event => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
+          if (nearBottom !== atBottom) setAtBottom(nearBottom);
+        }}
+        scrollEventThrottle={16}
         renderItem={({ item }) => <Bubble item={item} mediaBase={mediaBase} deviceInfo={deviceInfo} />}
       />
       <View style={styles.row}>
@@ -392,8 +417,7 @@ function ChatView({
   );
 }
 
-function Bubble({ item, mediaBase, deviceInfo }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null }): React.JSX.Element {
-  const agent = item.role === 'agent';
+function Bubble({ item, mediaBase, deviceInfo }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null }): React.JSX.Element {  const agent = item.role === 'agent';
   const cursor = item.streaming ? '▍' : '';
   return (
     <View style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
