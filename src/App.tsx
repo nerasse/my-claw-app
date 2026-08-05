@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackHandler, Button, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { connection } from './core/connection';
 import { chatStore, type ChatItem } from './core/chat';
@@ -46,6 +46,7 @@ function App(): React.JSX.Element {
   const [atBottom, setAtBottom] = useState(true);
   const listRef = useRef<FlatList<ChatItem>>(null);
   const activeThreadRef = useRef<string | null>(null);
+  const settingsOpenRef = useRef(false);
   const threadsRef = useRef<SessionSummary[]>([]);
   const connected = status.state === 'connected';
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
@@ -191,6 +192,27 @@ function App(): React.JSX.Element {
     }
   }
 
+  function closeThread() {
+    activeThreadRef.current = null;
+    setActiveThread(null);
+    refreshList();
+  }
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (activeThreadRef.current) {
+        closeThread();
+        return true;
+      }
+      if (settingsOpenRef.current) {
+        setSettingsOpen(false);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe}>
@@ -200,7 +222,12 @@ function App(): React.JSX.Element {
           <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.title}>MyClaw</Text>
-            <Text style={styles.headerAction} onPress={() => setSettingsOpen(v => !v)}>
+            <Text style={styles.headerAction} onPress={() => {
+              setSettingsOpen(v => {
+                settingsOpenRef.current = !v;
+                return !v;
+              });
+            }}>
               {settingsOpen ? 'Fermer' : 'Parametres'}
             </Text>
           </View>
@@ -425,11 +452,11 @@ function Bubble({ item, mediaBase, deviceInfo }: { item: ChatItem; mediaBase: st
         <AttachmentView key={att.id} att={att} mediaBase={mediaBase} deviceInfo={deviceInfo} />
       ))}
       {item.text ? (
-        <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{item.text}{cursor}</Text>
+        <Text selectable style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{item.text}{cursor}</Text>
       ) : item.streaming ? (
         <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{cursor}</Text>
       ) : null}
-      {item.error ? <Text style={styles.bubbleError}>{item.error}</Text> : null}
+      {item.error ? <Text selectable style={styles.bubbleError}>{item.error}</Text> : null}
     </View>
   );
 }
