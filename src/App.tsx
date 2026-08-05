@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Button, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackHandler, Button, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import Clipboard from '@react-native-clipboard/clipboard';
 import { connection } from './core/connection';
 import { chatStore, type ChatItem } from './core/chat';
 import {
@@ -12,7 +13,7 @@ import {
   type SessionSummary,
 } from './core/protocol';
 import { getDeviceInfo, type DeviceInfo } from './core/device';
-import { MarkdownBubble } from './components/AgentMarkdown';
+import { AgentMarkdown } from './components/AgentMarkdown';
 import type { WsStatusPayload } from './core/types';
 
 const DEFAULT_URL = 'ws://10.10.20.10:8080/mobile';
@@ -45,6 +46,7 @@ function App(): React.JSX.Element {
   const [itemsVersion, setItemsVersion] = useState(0);
   const [threadsVersion, setThreadsVersion] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
+  const [menuItem, setMenuItem] = useState<ChatItem | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
   const activeThreadRef = useRef<string | null>(null);
   const settingsOpenRef = useRef(false);
@@ -193,6 +195,11 @@ function App(): React.JSX.Element {
     }
   }
 
+  function copyBubble(item: ChatItem) {
+    Clipboard.setString(item.text);
+    setMenuItem(null);
+  }
+
   function closeThread() {
     activeThreadRef.current = null;
     setActiveThread(null);
@@ -261,6 +268,7 @@ function App(): React.JSX.Element {
               mediaBase={mediaBase}
               deviceInfo={deviceInfo}
               connected={connected}
+              onLongPressItem={item => setMenuItem(item)}
             />
           ) : (
             <>
@@ -290,6 +298,22 @@ function App(): React.JSX.Element {
           )}
           </View>
         </KeyboardAvoidingView>
+        {menuItem && (
+          <View style={styles.menuBackdrop}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuItem(null)} />
+            <View style={styles.menuSheet}>
+              <Text style={styles.menuPreview} numberOfLines={2}>
+                {menuItem.text}
+              </Text>
+              <Text style={styles.menuAction} onPress={() => copyBubble(menuItem)}>
+                Copier le texte
+              </Text>
+              <Text style={styles.menuAction} onPress={() => setMenuItem(null)}>
+                Fermer
+              </Text>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -388,6 +412,7 @@ function ChatView({
   mediaBase,
   deviceInfo,
   connected,
+  onLongPressItem,
 }: {
   threadId: string;
   title: string;
@@ -402,6 +427,7 @@ function ChatView({
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
   connected: boolean;
+  onLongPressItem: (item: ChatItem) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -427,7 +453,14 @@ function ChatView({
           if (nearBottom !== atBottom) setAtBottom(nearBottom);
         }}
         scrollEventThrottle={16}
-        renderItem={({ item }) => <Bubble item={item} mediaBase={mediaBase} deviceInfo={deviceInfo} />}
+        renderItem={({ item }) => (
+          <Bubble
+            item={item}
+            mediaBase={mediaBase}
+            deviceInfo={deviceInfo}
+            onLongPress={() => onLongPressItem(item)}
+          />
+        )}
       />
       <View style={styles.row}>
         <TextInput
@@ -444,23 +477,25 @@ function ChatView({
     </>
   );
 }
-function Bubble({ item, mediaBase, deviceInfo }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null }): React.JSX.Element {
+function Bubble({ item, mediaBase, deviceInfo, onLongPress }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null; onLongPress: () => void }): React.JSX.Element {
   const agent = item.role === 'agent';
   return (
-    <View style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
-      {item.attachments.map(att => (
-        <AttachmentView key={att.id} att={att} mediaBase={mediaBase} deviceInfo={deviceInfo} />
-      ))}
-      {item.text ? (
-        agent ? (
-          <MarkdownBubble text={item.text} streaming={item.streaming} />
-        ) : (
-          <Text selectable style={[styles.bubbleText, styles.bubbleTextUser]}>{item.text}{item.streaming ? '▍' : ''}</Text>
-        )
-      ) : item.streaming ? (
-        <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>▍</Text>
-      ) : null}
-      {item.error ? <Text selectable style={styles.bubbleError}>{item.error}</Text> : null}
+    <View style={[styles.bubbleRow, agent ? styles.bubbleRowAgent : styles.bubbleRowUser]}>
+      <Pressable onLongPress={onLongPress} delayLongPress={400} style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
+        {item.attachments.map(att => (
+          <AttachmentView key={att.id} att={att} mediaBase={mediaBase} deviceInfo={deviceInfo} />
+        ))}
+        {item.text ? (
+          agent ? (
+            <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
+          ) : (
+            <Text selectable style={[styles.bubbleText, styles.bubbleTextUser]}>{item.text}{item.streaming ? '▍' : ''}</Text>
+          )
+        ) : item.streaming ? (
+          <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>▍</Text>
+        ) : null}
+        {item.error ? <Text selectable style={styles.bubbleError}>{item.error}</Text> : null}
+      </Pressable>
     </View>
   );
 }
@@ -517,9 +552,15 @@ const styles = StyleSheet.create({
   threadMeta: { fontSize: 12, color: '#777', marginTop: 2 },
   threadAction: { fontSize: 13, color: '#0a5cff' },
   threadActionDanger: { color: '#b00020' },
-  bubble: { borderRadius: 12, padding: 10, marginBottom: 8, maxWidth: '85%' },
-  bubbleUser: { alignSelf: 'flex-end', backgroundColor: '#0a5cff' },
-  bubbleAgent: { alignSelf: 'flex-start', backgroundColor: '#f0f0f0' },
+  bubbleRow: { width: '100%', flexDirection: 'row', marginBottom: 8 },
+  bubbleRowUser: { justifyContent: 'flex-end' },
+  bubbleRowAgent: { justifyContent: 'flex-start' },
+  bubble: { maxWidth: '85%', borderRadius: 12, padding: 10 },
+  bubbleUser: { backgroundColor: '#0a5cff' },
+  bubbleAgent: { backgroundColor: '#f0f0f0' },
+  menuBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },  menuSheet: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 28, gap: 12 },
+  menuPreview: { fontSize: 14, color: '#666', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 10 },
+  menuAction: { fontSize: 16, color: '#111', paddingVertical: 6 },
   bubbleText: { fontSize: 15, color: '#111' },
   bubbleTextUser: { color: '#fff' },
   bubbleError: { fontSize: 13, color: '#b00020', marginTop: 4 },
