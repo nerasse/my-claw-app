@@ -2,13 +2,12 @@
  * @format
  */
 
-import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import App from '../src/App';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { darkPalette, lightPalette } from '../src/theme/palettes';
 import type { HistoryEntry } from '../src/core/protocol';
+import { renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-ui';
@@ -29,25 +28,18 @@ const history: HistoryEntry[] = [
   { id: 'h-2', role: 'assistant', text: 'the command replied', ts: '2026-01-01T10:00:02.000Z' },
 ];
 
-function textsOf(tree: ReactTestRenderer.ReactTestRenderer): string[] {
-  return tree.root
-    .findAll(node => typeof node.props.children === 'string', { deep: true })
-    .map(node => node.props.children as string);
-}
-
-async function renderWithHistory(): Promise<ReactTestRenderer.ReactTestRenderer> {
-  let tree!: ReactTestRenderer.ReactTestRenderer;
-  await ReactTestRenderer.act(async () => {
-    tree = ReactTestRenderer.create(<App />);
-  });
+async function renderWithHistory(): Promise<Tree> {
+  const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.seedHistory(THREAD, history);
   });
+  await waitFor(() => textsOf(tree).includes('bash'));
   return tree;
 }
 
 beforeEach(() => {
   chatStore.clearAll();
+  // The stored thread is what the shell reopens, so the seeded history is the one on screen.
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
 });
 
@@ -55,7 +47,6 @@ test('a tool card starts collapsed and reveals arguments and output on tap', asy
   const tree = await renderWithHistory();
 
   // Collapsed: name plus a one-line argument preview, no output block.
-  expect(textsOf(tree)).toContain('bash');
   expect(textsOf(tree)).toContain('echo hello');
   expect(textsOf(tree)).not.toContain('arguments');
 
@@ -67,14 +58,14 @@ test('a tool card starts collapsed and reveals arguments and output on tap', asy
   await ReactTestRenderer.act(async () => {
     card.props.onPress();
   });
+  await waitFor(() => textsOf(tree).includes('arguments'));
 
   const shown = textsOf(tree).join('|');
   expect(shown).toContain('hello');
   expect(shown).toContain('"command"');
-  expect(textsOf(tree)).toContain('arguments');
   expect(textsOf(tree)).toContain('copy');
 
-  await ReactTestRenderer.act(async () => tree.unmount());
+  await unmount(tree);
 });
 
 test('the stored dark mode paints the shell dark', async () => {
@@ -88,7 +79,7 @@ test('the stored dark mode paints the shell dark', async () => {
   }
   expect(backgrounds).toContain(darkPalette.bg);
   expect(backgrounds).not.toContain(lightPalette.bg);
-  await ReactTestRenderer.act(async () => tree.unmount());
+  await unmount(tree);
 });
 
 test('bubbles stay compact: agent text sits in a tight bubble', async () => {
@@ -107,5 +98,5 @@ test('bubbles stay compact: agent text sits in a tight bubble', async () => {
   );
   expect(paddings.length).toBeGreaterThan(0);
   expect(Math.max(...paddings)).toBeLessThanOrEqual(8);
-  await ReactTestRenderer.act(async () => tree.unmount());
+  await unmount(tree);
 });
