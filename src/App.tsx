@@ -1,16 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Button, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { connection } from './core/connection';
 import { chatStore, type ChatItem } from './core/chat';
-import { encodeChatSend } from './core/protocol';
-import { getAccessibilitySnapshot, getCapabilities, getDeviceInfo, type DeviceInfo } from './core/device';
-import type { AccessibilityNode, Capabilities, WsStatusPayload } from './core/types';
+import {
+  encodeChatSend,
+  encodeSessionArchive,
+  encodeSessionDelete,
+  encodeSessionHistory,
+  encodeSessionList,
+  type SessionSummary,
+} from './core/protocol';
+import { getDeviceInfo, type DeviceInfo } from './core/device';
+import type { WsStatusPayload } from './core/types';
 
 const DEFAULT_URL = 'ws://10.10.20.10:8080/mobile';
-const MAX_LOG_LINES = 100;
-
-type Tab = 'chat' | 'console';
 
 function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -33,90 +37,144 @@ function App(): React.JSX.Element {
   const [url, setUrl] = useState(DEFAULT_URL);
   const [sendText, setSendText] = useState('');
   const [status, setStatus] = useState<WsStatusPayload>({ state: 'idle' });
-  const [caps, setCaps] = useState<Capabilities | null>(null);
-  const [snapshotNodes, setSnapshotNodes] = useState<number | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
-  const [tab, setTab] = useState<Tab>('chat');
+  const [activeThread, setActiveThread] = useState<string | null>(null);
+  const [threads, setThreads] = useState<SessionSummary[]>([]);
   const [itemsVersion, setItemsVersion] = useState(0);
-  const [log, setLog] = useState<string[]>([]);
+  const [threadsVersion, setThreadsVersion] = useState(0);
   const listRef = useRef<FlatList<ChatItem>>(null);
-  const items = useMemo(() => chatStore.getItems(), [itemsVersion]);
+  const activeThreadRef = useRef<string | null>(null);
+  const threadsRef = useRef<SessionSummary[]>([]);
   const connected = status.state === 'connected';
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
+  const items = useMemo(() => (activeThread ? chatStore.getItems(activeThread) : []), [itemsVersion, activeThread]);
+  const threadTitles = useMemo(() => {
+    const titles: Record<string, string> = {};
+    for (const t of threads) {
+      titles[t.threadId] = t.title;
+    }
+    return titles;
+  }, [threadsVersion]);
 
   useEffect(() => {
     const offState = connection.onState(state => {
       setStatus(state);
-      pushLog(`ws: ${state.state}${state.reason ? ` (${state.reason})` : ''}`);
+      if (state.state === 'connected') {
+        refreshList();
+      }
     });
-    const offMessage = connection.onMessage(text => pushLog(`in: ${text}`));
     const offFrame = connection.onFrame(frame => {
       switch (frame.type) {
         case 'chat.message':
-          chatStore.addAgentMessage(frame.id, frame.text, frame.attachments, frame.replyToId);
+          chatStore.addAgentMessage(frame.threadId, frame.id, frame.text, frame.attachments, frame.replyToId);
+          noteActivity(frame.threadId, frame.text);
           break;
         case 'chat.stream.start':
-          chatStore.startStream(frame.id, frame.replyToId);
+          chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
           break;
         case 'chat.stream.delta':
-          chatStore.appendDelta(frame.id, frame.text);
+          chatStore.appendDelta(frame.threadId, frame.id, frame.text);
           break;
         case 'chat.stream.done':
-          chatStore.endStream(frame.id);
+          chatStore.endStream(frame.threadId, frame.id);
           break;
         case 'chat.stream.abort':
-          chatStore.abortStream(frame.id, frame.error);
+          chatStore.abortStream(frame.threadId, frame.id, frame.error);
+          break;
+        case 'session.list.result':
+          threadsRef.current = frame.sessions;
+          setThreads(frame.sessions);
+          setThreadsVersion(v => v + 1);
+          break;
+        case 'chat.history':
+          chatStore.seedHistory(frame.threadId, frame.messages);
+          chatStore.markRead(frame.threadId);
           break;
         case 'approval.request':
-          pushLog(`approval needed: ${frame.toolName} (pas encore gere, M3)`);
           break;
         case 'error':
-          pushLog(`server error: ${frame.message}`);
+          if (activeThreadRef.current) {
+            chatStore.addAgentMessage(activeThreadRef.current, `err-${Date.now()}`, `erreur: ${frame.message}`, [], undefined);
+          }
           break;
       }
     });
     const offStore = chatStore.subscribe(() => setItemsVersion(v => v + 1));
-    getCapabilities().then(setCaps).catch(() => pushLog('capabilities unavailable'));
-    getDeviceInfo().then(setDeviceInfo).catch(() => pushLog('device info unavailable'));
+    getDeviceInfo().then(setDeviceInfo).catch(() => {});
     connection.getState().then(state => setStatus({ state }));
     return () => {
       offState();
-      offMessage();
       offFrame();
       offStore();
     };
   }, []);
 
-  function pushLog(line: string) {
-    setLog(prev => [...prev, line].slice(-MAX_LOG_LINES));
+  function refreshList() {
+    connection.send(encodeSessionList());
   }
 
-  async function snapshot() {
-    try {
-      const root = await getAccessibilitySnapshot();
-      setSnapshotNodes(root === null ? 0 : countNodes(root));
-      pushLog(root === null ? 'accessibility: no window' : 'accessibility: snapshot ok');
-    } catch (err) {
-      pushLog(`accessibility: ${String(err)}`);
+  function noteActivity(threadId: string, text: string) {
+    if (threadId !== activeThreadRef.current) {
+      chatStore.markRead(threadId);
+      if (!threadsRef.current.some(t => t.threadId === threadId)) {
+        threadsRef.current = [
+          {
+            threadId,
+            title: titleFromText(text),
+            messageCount: 0,
+            createdAt: new Date().toISOString(),
+            lastActiveAt: new Date().toISOString(),
+          },
+          ...threadsRef.current,
+        ];
+        setThreads(threadsRef.current);
+      }
     }
+  }
+
+  function openThread(threadId: string) {
+    activeThreadRef.current = threadId;
+    setActiveThread(threadId);
+    chatStore.markRead(threadId);
+    connection.send(encodeSessionHistory(threadId, 50));
+  }
+
+  function newThread() {
+    const threadId = uuid();
+    activeThreadRef.current = threadId;
+    setActiveThread(threadId);
+    connection.send(encodeSessionHistory(threadId, 50));
   }
 
   function sendChat() {
     const text = sendText.trim();
-    if (!text) return;
+    if (!text || !activeThread) return;
     const id = uuid();
-    connection.send(encodeChatSend(id, text));
-    chatStore.addUserMessage(id, text);
-    pushLog(`out: ${text}`);
+    connection.send(encodeChatSend(id, text, activeThread));
+    chatStore.addUserMessage(activeThread, id, text);
     setSendText('');
   }
 
-  function sendRaw() {
-    const text = sendText.trim();
-    if (!text) return;
-    connection.send(text);
-    pushLog(`out: ${text}`);
-    setSendText('');
+  function archiveThread(threadId: string) {
+    connection.send(encodeSessionArchive(threadId));
+    chatStore.clearThread(threadId);
+    threadsRef.current = threadsRef.current.filter(t => t.threadId !== threadId);
+    setThreads(threadsRef.current);
+    if (activeThreadRef.current === threadId) {
+      activeThreadRef.current = null;
+      setActiveThread(null);
+    }
+  }
+
+  function deleteThread(threadId: string) {
+    connection.send(encodeSessionDelete(threadId));
+    chatStore.clearThread(threadId);
+    threadsRef.current = threadsRef.current.filter(t => t.threadId !== threadId);
+    setThreads(threadsRef.current);
+    if (activeThreadRef.current === threadId) {
+      activeThreadRef.current = null;
+      setActiveThread(null);
+    }
   }
 
   return (
@@ -140,11 +198,7 @@ function App(): React.JSX.Element {
             <View style={styles.button}>
               <Button title="Disconnect" onPress={() => connection.disconnect()} disabled={!connected && status.state !== 'connecting'} />
             </View>
-            <View style={styles.button}>
-              <Button title="Clear" onPress={() => chatStore.clear()} />
-            </View>
           </View>
-
           <Text style={styles.status}>
             state: {status.state}
             {status.attempts ? ` (retry ${status.attempts})` : ''}
@@ -155,75 +209,133 @@ function App(): React.JSX.Element {
             </Text>
           )}
 
-          <View style={styles.tabs}>
-            <Text style={[styles.tab, tab === 'chat' && styles.tabActive]} onPress={() => setTab('chat')}>
-              Chat
-            </Text>
-            <Text style={[styles.tab, tab === 'console' && styles.tabActive]} onPress={() => setTab('console')}>
-              Console
-            </Text>
-          </View>
-
-          {tab === 'chat' ? (
-            <>
-              <FlatList
-                ref={listRef}
-                style={styles.list}
-                data={items}
-                keyExtractor={item => item.id}
-                onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-                renderItem={({ item }) => (
-                  <Bubble item={item} mediaBase={mediaBase} deviceInfo={deviceInfo} />
-                )}
-              />
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, styles.sendInput]}
-                  value={sendText}
-                  onChangeText={setSendText}
-                  onSubmitEditing={sendChat}
-                  placeholder="message a l'agent"
-                />
-                <View style={styles.sendButton}>
-                  <Button title="Send" onPress={sendChat} disabled={!connected} />
-                </View>
-              </View>
-            </>
+          {activeThread ? (
+            <ChatView
+              threadId={activeThread}
+              title={threadTitles[activeThread] ?? '(nouvelle conversation)'}
+              items={items}
+              listRef={listRef}
+              sendText={sendText}
+              setSendText={setSendText}
+              onSend={sendChat}
+              onBack={() => {
+                activeThreadRef.current = null;
+                setActiveThread(null);
+                refreshList();
+              }}
+              mediaBase={mediaBase}
+              deviceInfo={deviceInfo}
+              connected={connected}
+            />
           ) : (
             <>
               <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, styles.sendInput]}
-                  value={sendText}
-                  onChangeText={setSendText}
-                  onSubmitEditing={sendRaw}
-                  placeholder="texte brut (mode console)"
-                />
-                <View style={styles.sendButton}>
-                  <Button title="Send" onPress={sendRaw} disabled={!connected} />
-                </View>
-              </View>
-              <View style={styles.row}>
                 <View style={styles.button}>
-                  <Button title="Snapshot" onPress={snapshot} />
+                  <Button title="Nouvelle conversation" onPress={newThread} disabled={!connected} />
+                </View>
+                <View style={styles.button}>
+                  <Button title="Actualiser" onPress={refreshList} disabled={!connected} />
                 </View>
               </View>
-              {caps && (
-                <Text style={styles.status}>
-                  accessibility: {caps.accessibility ? 'on' : 'off'} | notifications: {caps.notificationListener ? 'on' : 'off'}
-                  {snapshotNodes !== null ? ` | nodes: ${snapshotNodes}` : ''}
-                </Text>
-              )}
-              <ScrollView style={styles.log}>
-                {log.map((line, i) => (
-                  <Text key={i} style={styles.logLine}>{line}</Text>
-                ))}
-              </ScrollView>
+              <FlatList
+                style={styles.list}
+                data={threads}
+                keyExtractor={item => item.threadId}
+                renderItem={({ item }) => (
+                  <ThreadRow
+                    item={item}
+                    unread={chatStore.isUnread(item.threadId)}
+                    onOpen={() => openThread(item.threadId)}
+                    onArchive={() => archiveThread(item.threadId)}
+                    onDelete={() => deleteThread(item.threadId)}
+                  />
+                )}
+              />
             </>
           )}
         </View>
       </SafeAreaView>
     </SafeAreaProvider>
+  );
+}
+
+function ThreadRow({ item, unread, onOpen, onArchive, onDelete }: { item: SessionSummary; unread: boolean; onOpen: () => void; onArchive: () => void; onDelete: () => void }): React.JSX.Element {
+  return (
+    <View style={styles.threadRow}>
+      <View style={styles.threadMain} onTouchEnd={onOpen}>
+        <Text style={[styles.threadTitle, unread && styles.threadTitleUnread]} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <Text style={styles.threadMeta}>
+          {item.messageCount} msg | {formatDate(item.lastActiveAt)}
+        </Text>
+      </View>
+      <Text style={styles.threadAction} onPress={onArchive}>
+        archiver
+      </Text>
+      <Text style={[styles.threadAction, styles.threadActionDanger]} onPress={onDelete}>
+        supprimer
+      </Text>
+    </View>
+  );
+}
+
+function ChatView({
+  threadId,
+  title,
+  items,
+  listRef,
+  sendText,
+  setSendText,
+  onSend,
+  onBack,
+  mediaBase,
+  deviceInfo,
+  connected,
+}: {
+  threadId: string;
+  title: string;
+  items: ChatItem[];
+  listRef: React.RefObject<FlatList<ChatItem> | null>;
+  sendText: string;
+  setSendText: (t: string) => void;
+  onSend: () => void;
+  onBack: () => void;
+  mediaBase: string;
+  deviceInfo: DeviceInfo | null;
+  connected: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      <View style={styles.row}>
+        <View style={styles.button}>
+          <Button title="< Retour" onPress={onBack} />
+        </View>
+        <Text style={[styles.title, styles.chatTitle]} numberOfLines={1}>
+          {title}
+        </Text>
+      </View>
+      <FlatList
+        ref={listRef}
+        style={styles.list}
+        data={items}
+        keyExtractor={item => `${threadId}-${item.id}`}
+        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        renderItem={({ item }) => <Bubble item={item} mediaBase={mediaBase} deviceInfo={deviceInfo} />}
+      />
+      <View style={styles.row}>
+        <TextInput
+          style={[styles.input, styles.sendInput]}
+          value={sendText}
+          onChangeText={setSendText}
+          onSubmitEditing={onSend}
+          placeholder="message a l'agent"
+        />
+        <View style={styles.sendButton}>
+          <Button title="Send" onPress={onSend} disabled={!connected} />
+        </View>
+      </View>
+    </>
   );
 }
 
@@ -235,7 +347,11 @@ function Bubble({ item, mediaBase, deviceInfo }: { item: ChatItem; mediaBase: st
       {item.attachments.map(att => (
         <AttachmentView key={att.id} att={att} mediaBase={mediaBase} deviceInfo={deviceInfo} />
       ))}
-      {item.text ? <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{item.text}{cursor}</Text> : item.streaming ? <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{cursor}</Text> : null}
+      {item.text ? (
+        <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{item.text}{cursor}</Text>
+      ) : item.streaming ? (
+        <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>{cursor}</Text>
+      ) : null}
       {item.error ? <Text style={styles.bubbleError}>{item.error}</Text> : null}
     </View>
   );
@@ -254,14 +370,21 @@ function AttachmentView({ att, mediaBase, deviceInfo }: { att: { id: string; typ
   );
 }
 
-function countNodes(node: AccessibilityNode): number {
-  return 1 + node.children.reduce((sum, child) => sum + countNodes(child), 0);
+function titleFromText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').slice(0, 60);
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#fff' },
   container: { flex: 1, padding: 16, gap: 10 },
   title: { fontSize: 22, fontWeight: '700' },
+  chatTitle: { flex: 1, fontSize: 17, lineHeight: 34 },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -269,15 +392,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  row: { flexDirection: 'row', gap: 12 },
+  row: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   button: { flex: 1 },
   sendInput: { flex: 1 },
   sendButton: { justifyContent: 'center' },
   status: { fontSize: 13, color: '#555' },
-  tabs: { flexDirection: 'row', gap: 16, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 6 },
-  tab: { fontSize: 16, color: '#888', fontWeight: '600' },
-  tabActive: { color: '#0a5cff' },
   list: { flex: 1 },
+  threadRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#eee', paddingVertical: 10, gap: 10 },
+  threadMain: { flex: 1 },
+  threadTitle: { fontSize: 15, color: '#111' },
+  threadTitleUnread: { fontWeight: '700', color: '#0a5cff' },
+  threadMeta: { fontSize: 12, color: '#777', marginTop: 2 },
+  threadAction: { fontSize: 13, color: '#0a5cff' },
+  threadActionDanger: { color: '#b00020' },
   bubble: { borderRadius: 12, padding: 10, marginBottom: 8, maxWidth: '85%' },
   bubbleUser: { alignSelf: 'flex-end', backgroundColor: '#0a5cff' },
   bubbleAgent: { alignSelf: 'flex-start', backgroundColor: '#f0f0f0' },
@@ -287,8 +414,6 @@ const styles = StyleSheet.create({
   attachmentImage: { width: 200, height: 200, borderRadius: 8, marginBottom: 6, backgroundColor: '#ddd' },
   attachmentChip: { alignSelf: 'flex-start', backgroundColor: '#e3e8f5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6 },
   attachmentChipText: { fontSize: 12, color: '#334' },
-  log: { flex: 1, backgroundColor: '#f6f6f6', borderRadius: 8, padding: 8 },
-  logLine: { fontSize: 12, fontFamily: 'monospace', marginBottom: 2 },
 });
 
 export default App;
