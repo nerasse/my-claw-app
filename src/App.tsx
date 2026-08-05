@@ -107,6 +107,7 @@ function App(): React.JSX.Element {
       if (state !== 'connected' && state !== 'connecting') {
         connection.connect(DEFAULT_URL);
       }
+      refreshList();
     });
     return () => {
       offState();
