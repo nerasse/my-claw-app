@@ -458,7 +458,7 @@ function ChatView({
             item={item}
             mediaBase={mediaBase}
             deviceInfo={deviceInfo}
-            onLongPress={() => onLongPressItem(item)}
+            onMenu={() => onLongPressItem(item)}
           />
         )}
       />
@@ -477,11 +477,11 @@ function ChatView({
     </>
   );
 }
-function Bubble({ item, mediaBase, deviceInfo, onLongPress }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null; onLongPress: () => void }): React.JSX.Element {
+function Bubble({ item, mediaBase, deviceInfo, onMenu }: { item: ChatItem; mediaBase: string; deviceInfo: DeviceInfo | null; onMenu: () => void }): React.JSX.Element {
   const agent = item.role === 'agent';
   return (
     <View style={[styles.bubbleRow, agent ? styles.bubbleRowAgent : styles.bubbleRowUser]}>
-      <Pressable onLongPress={onLongPress} delayLongPress={400} style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
+      <View style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
         {item.attachments.map(att => (
           <AttachmentView key={att.id} att={att} mediaBase={mediaBase} deviceInfo={deviceInfo} />
         ))}
@@ -495,7 +495,13 @@ function Bubble({ item, mediaBase, deviceInfo, onLongPress }: { item: ChatItem; 
           <Text style={[styles.bubbleText, agent ? null : styles.bubbleTextUser]}>▍</Text>
         ) : null}
         {item.error ? <Text selectable style={styles.bubbleError}>{item.error}</Text> : null}
-      </Pressable>
+        <Pressable
+          hitSlop={10}
+          style={[styles.bubbleMenuButton, agent ? styles.bubbleMenuButtonAgent : styles.bubbleMenuButtonUser]}
+          onPress={onMenu}>
+          <Text style={styles.bubbleMenuButtonText}>⋯</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -555,9 +561,24 @@ const styles = StyleSheet.create({
   bubbleRow: { width: '100%', flexDirection: 'row', marginBottom: 8 },
   bubbleRowUser: { justifyContent: 'flex-end' },
   bubbleRowAgent: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '85%', borderRadius: 12, padding: 10 },
+  bubble: { maxWidth: '85%', borderRadius: 12, padding: 10, paddingBottom: 26 },
   bubbleUser: { backgroundColor: '#0a5cff' },
   bubbleAgent: { backgroundColor: '#f0f0f0' },
+  bubbleMenuButton: {
+    position: 'absolute',
+    bottom: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dddddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubbleMenuButtonAgent: { right: -12 },
+  bubbleMenuButtonUser: { right: 6 },
+  bubbleMenuButtonText: { fontSize: 14, color: '#555', lineHeight: 16 },
   menuBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },  menuSheet: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, paddingBottom: 28, gap: 12 },
   menuPreview: { fontSize: 14, color: '#666', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 10 },
   menuAction: { fontSize: 16, color: '#111', paddingVertical: 6 },
