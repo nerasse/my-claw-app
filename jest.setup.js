@@ -25,6 +25,14 @@ jest.mock('react-native-marked', () => {
   };
 });
 
+// react-native-svg needs the native binary; swap its render tree for plain Views in tests.
+jest.mock('react-native-svg', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const stub = () => props => React.createElement(View, props);
+  return { __esModule: true, default: stub(), Svg: stub(), Path: stub() };
+});
+
 // DeviceEventEmitter stays real so tests can push frames through the actual listener path.
 jest.mock('./src/core/nativeBridge', () => ({
   deviceBridge: {

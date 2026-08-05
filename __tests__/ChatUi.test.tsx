@@ -68,6 +68,35 @@ test('a tool card starts collapsed and reveals arguments and output on tap', asy
   await unmount(tree);
 });
 
+test('an empty thread shows the hero composer, which leaves once history arrives', async () => {
+  const tree = await renderApp();
+
+  // Composite and host instances both carry the props; count the host nodes only.
+  const heroInputs = tree.root.findAll(
+    node => String(node.type) === 'TextInput' && node.props.placeholder === 'Ask anything',
+    { deep: true },
+  );
+  const compactInputs = tree.root.findAll(
+    node => String(node.type) === 'TextInput' && node.props.placeholder === 'message',
+    { deep: true },
+  );
+  expect(heroInputs).toHaveLength(1);
+  expect(compactInputs).toHaveLength(0);
+
+  await ReactTestRenderer.act(async () => {
+    chatStore.seedHistory(THREAD, history);
+  });
+  await waitFor(() => textsOf(tree).includes('bash'));
+
+  expect(
+    tree.root.findAll(node => String(node.type) === 'TextInput' && node.props.placeholder === 'Ask anything', { deep: true }),
+  ).toHaveLength(0);
+  expect(
+    tree.root.findAll(node => String(node.type) === 'TextInput' && node.props.placeholder === 'message', { deep: true }),
+  ).toHaveLength(1);
+  await unmount(tree);
+});
+
 test('the stored dark mode paints the shell dark', async () => {
   const tree = await renderWithHistory();
   const backgrounds = new Set<string>();
@@ -84,10 +113,13 @@ test('the stored dark mode paints the shell dark', async () => {
 
 test('bubbles stay compact: agent text sits in a tight bubble', async () => {
   const tree = await renderWithHistory();
+  // Bubbles are the nodes carrying a maxWidth constraint; the composer field is not a bubble.
   const bubbles = tree.root.findAll(
     node =>
       Array.isArray(node.props.style) &&
-      node.props.style.some((entry: unknown) => entry && typeof entry === 'object' && 'paddingVertical' in (entry as object)),
+      node.props.style.some(
+        (entry: unknown) => entry && typeof entry === 'object' && 'maxWidth' in (entry as object),
+      ),
     { deep: true },
   );
   const paddings = bubbles.flatMap(node =>

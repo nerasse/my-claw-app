@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -48,7 +49,26 @@ export function Drawer({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
+  const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return sessions;
+    return sessions.filter(session => session.title.toLowerCase().includes(needle));
+  }, [sessions, query]);
+
+  // Stable identities so React.memo on the rows keeps working while the list is long.
+  const threadsById = useMemo(() => new Map(sessions.map(session => [session.threadId, session])), [sessions]);
+  const handleOpen = useCallback((threadId: string) => onOpenThread(threadId), [onOpenThread]);
+  const handleMenu = useCallback(
+    (threadId: string) => {
+      const thread = threadsById.get(threadId);
+      if (thread) onThreadMenu(thread);
+    },
+    [onThreadMenu, threadsById],
+  );
 
   useEffect(() => {
     Animated.timing(progress, { toValue: open ? 1 : 0, duration: 200, useNativeDriver: true }).start();
@@ -75,12 +95,19 @@ export function Drawer({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
       </Animated.View>
 
-      <Animated.View style={[styles.panel, { transform: [{ translateX }] }]} {...panResponder.panHandlers}>
+      <Animated.View
+        style={[
+          styles.panel,
+          // The panel is absolutely positioned, so the shell's safe-area padding does not
+          // apply to it: the phone's status bar and gesture bar have to be padded here.
+          { paddingTop: insets.top + space.sm, transform: [{ translateX }] },
+        ]}
+        {...panResponder.panHandlers}>
         <View style={styles.head}>
           <Text style={styles.brand}>MyClaw</Text>
           <Pressable
             onPress={onNewThread}
-            hitSlop={10}
+            hitSlop={8}
             style={styles.newButton}
             accessibilityRole="button"
             accessibilityLabel="New conversation">
@@ -88,27 +115,51 @@ export function Drawer({
           </Pressable>
         </View>
 
-        <Text style={styles.sectionLabel}>conversations · {sessions.length}</Text>
+        <Text style={styles.sectionLabel}>
+          conversations · {filtered.length === sessions.length ? sessions.length : `${filtered.length} / ${sessions.length}`}
+        </Text>
+
+        <TextInput
+          style={styles.search}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="search"
+          placeholderTextColor={palette.textFaint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Search conversations"
+        />
 
         <FlatList
           style={styles.list}
-          data={sessions}
+          data={filtered}
           keyExtractor={item => item.threadId}
           ItemSeparatorComponent={Separator}
-          ListEmptyComponent={<Text style={styles.empty}>no conversations</Text>}
+          keyboardShouldPersistTaps="handled"
+          // Virtualized by default; tuned so a long list scrolls without re-rendering
+          // everything, and the memoized rows only update when their own props move.
+          initialNumToRender={14}
+          maxToRenderPerBatch={14}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === 'android'}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {query.trim() ? 'no match' : 'no conversations'}
+            </Text>
+          }
           renderItem={({ item }) => (
             <ThreadRow
               item={item}
               active={item.threadId === activeThread}
               unread={unread.includes(item.threadId)}
-              onOpen={() => onOpenThread(item.threadId)}
-              onMenu={() => onThreadMenu(item)}
+              onOpen={handleOpen}
+              onMenu={handleMenu}
             />
           )}
         />
 
         <Pressable
-          style={styles.footer}
+          style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}
           onPress={onOpenSettings}
           accessibilityRole="button"
           accessibilityLabel="Open settings">
@@ -138,25 +189,25 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surface,
     borderRightWidth: 1,
     borderRightColor: palette.border,
-    paddingTop: space.xl,
   },
   head: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     paddingHorizontal: space.lg,
+    paddingTop: space.sm,
     paddingBottom: space.sm,
   },
   brand: { fontSize: font.screen, fontWeight: '700' as const, color: palette.text, letterSpacing: 0.2 },
   newButton: {
-    width: 26,
-    height: 26,
+    width: 40,
+    height: 40,
     borderRadius: radius.sm,
     backgroundColor: palette.accentSoft,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  newGlyph: { fontSize: font.screen, lineHeight: 19, color: palette.accent, fontWeight: '700' as const },
+  newGlyph: { fontSize: 22, lineHeight: 26, color: palette.accent, fontWeight: '700' as const },
   sectionLabel: {
     paddingHorizontal: space.lg,
     paddingBottom: space.xs,
@@ -166,6 +217,18 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
   },
   list: { flex: 1, paddingHorizontal: space.sm },
+  search: {
+    marginHorizontal: space.md,
+    marginBottom: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.pill,
+    fontSize: font.body,
+    color: palette.text,
+    backgroundColor: palette.surfaceAlt,
+  },
   separator: { height: 1, backgroundColor: palette.border, marginHorizontal: space.sm },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
   footer: {
@@ -174,7 +237,7 @@ const createStyles = (palette: Palette) => ({
     borderTopWidth: 1,
     borderTopColor: palette.border,
     paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingTop: space.md,
   },
   footerMain: { flex: 1, gap: 1 },
   footerTitle: { fontSize: font.body, color: palette.text },

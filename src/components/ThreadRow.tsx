@@ -4,7 +4,11 @@ import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
-export function ThreadRow({
+/**
+ * Memoized: with hundreds of sessions, a scroll or an unread change must not re-render every
+ * row. The handlers take the threadId instead of a per-row closure so their identity is stable.
+ */
+export const ThreadRow = React.memo(function ThreadRowRow({
   item,
   active,
   unread,
@@ -14,15 +18,15 @@ export function ThreadRow({
   item: SessionSummary;
   active: boolean;
   unread: boolean;
-  onOpen: () => void;
-  onMenu: () => void;
+  onOpen: (threadId: string) => void;
+  onMenu: (threadId: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.row, active && styles.rowActive]}>
       <Pressable
         style={styles.main}
-        onPress={onOpen}
+        onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
         accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}`}>
@@ -36,16 +40,16 @@ export function ThreadRow({
         {item.messageCount > 0 ? <Text style={styles.meta}>{item.messageCount} messages</Text> : null}
       </Pressable>
       <Pressable
-        hitSlop={10}
+        hitSlop={6}
         style={styles.menu}
-        onPress={onMenu}
+        onPress={() => onMenu(item.threadId)}
         accessibilityRole="button"
         accessibilityLabel={`Actions for conversation ${item.title}`}>
         <Text style={styles.menuGlyph}>⋯</Text>
       </Pressable>
     </View>
   );
-}
+});
 
 const createStyles = (palette: Palette) => ({
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: radius.sm },
@@ -57,6 +61,6 @@ const createStyles = (palette: Palette) => ({
   titleUnread: { fontWeight: '700' as const },
   date: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   meta: { fontSize: font.small, color: palette.textFaint },
-  menu: { paddingHorizontal: space.sm, paddingVertical: space.md },
-  menuGlyph: { fontSize: font.body, color: palette.textFaint },
+  menu: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center' as const, justifyContent: 'center' as const },
+  menuGlyph: { fontSize: 17, lineHeight: 20, color: palette.textFaint },
 });

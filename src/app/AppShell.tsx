@@ -38,6 +38,7 @@ export function AppShell(): React.JSX.Element {
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [autoFocusHero, setAutoFocusHero] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
 
@@ -59,6 +60,7 @@ export function AppShell(): React.JSX.Element {
     (threadId: string) => {
       selectThread(threadId);
       chatStore.markRead(threadId);
+      setAutoFocusHero(false);
       setDrawerOpen(false);
       setSettingsOpen(false);
       connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
@@ -68,6 +70,9 @@ export function AppShell(): React.JSX.Element {
 
   const newThread = useCallback(() => {
     selectThread(uuid());
+    // The composer is the whole screen on a fresh thread: focus it, but only from the + tap,
+    // never when the app boots into an empty list.
+    setAutoFocusHero(true);
     setDrawerOpen(false);
     setSettingsOpen(false);
   }, [selectThread]);
@@ -261,6 +266,7 @@ export function AppShell(): React.JSX.Element {
             />
           ) : (
             <ChatScreen
+              threadId={activeThread ?? ''}
               title={title}
               subtitle={subtitle}
               connectionState={status.state}
@@ -268,7 +274,12 @@ export function AppShell(): React.JSX.Element {
               mediaBase={mediaBase}
               deviceInfo={deviceInfo}
               hint={hint}
+              autoFocusHero={autoFocusHero}
               onOpenDrawer={() => setDrawerOpen(true)}
+              onStatusPress={() => {
+                setSettingsOpen(true);
+                setAutoFocusHero(false);
+              }}
               onSend={sendChat}
               onBubbleMenu={setBubbleMenu}
             />
@@ -318,5 +329,5 @@ export function AppShell(): React.JSX.Element {
 
 const createStyles = (palette: Palette) => ({
   safe: { flex: 1, backgroundColor: palette.bg },
-  container: { flex: 1, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.sm },
+  container: { flex: 1, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.lg },
 });

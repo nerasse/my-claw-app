@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 export interface BubbleMenuAction {
@@ -19,10 +20,12 @@ export function BubbleMenu({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   return (
     <View style={styles.backdrop}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
-      <View style={styles.sheet}>
+      {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }]}>
         <View style={styles.grabber} />
         <Text style={styles.preview} numberOfLines={2}>
           {preview}

@@ -88,8 +88,8 @@ const createStyles = (palette: Palette) => ({
   time: { fontSize: font.micro, alignSelf: 'flex-end' as const, marginTop: 1 },
   timeAgent: { color: palette.textFaint },
   timeUser: { color: palette.accentText, opacity: 0.7 },
-  menu: { position: 'absolute' as const, bottom: -2, width: 18, height: 18, alignItems: 'center' as const, justifyContent: 'center' as const },
-  menuAgent: { right: -18 },
-  menuUser: { left: -18 },
-  menuGlyph: { fontSize: font.meta, lineHeight: 14, color: palette.textFaint },
+  menu: { position: 'absolute' as const, bottom: -2, width: 24, height: 24, alignItems: 'center' as const, justifyContent: 'center' as const },
+  menuAgent: { right: -24 },
+  menuUser: { left: -24 },
+  menuGlyph: { fontSize: 16, lineHeight: 18, color: palette.textFaint },
 });

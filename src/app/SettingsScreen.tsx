@@ -43,106 +43,118 @@ export function SettingsScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back to chat">
-          <Text style={styles.back}>‹</Text>
+        <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to chat">
+          <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.title}>Settings</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Text style={styles.section}>appearance</Text>
-        <View style={styles.segment}>
-          {THEME_OPTIONS.map(option => {
-            const selected = option.mode === themeMode;
-            return (
-              <Pressable
-                key={option.mode}
-                style={[styles.segmentItem, selected && styles.segmentItemActive]}
-                onPress={() => onThemeModeChange(option.mode)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`Theme ${option.label}`}>
-                <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.hint}>
-          {themeMode === 'system' ? `follows the phone · currently ${dark ? 'dark' : 'light'}` : 'forced choice'}
-        </Text>
-
-        <Text style={styles.section}>server</Text>
-        <TextInput
-          style={styles.input}
-          value={url}
-          onChangeText={onUrlChange}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="wss://server/mobile"
-          placeholderTextColor={palette.textFaint}
-          accessibilityLabel="Server address"
-        />
-        <View style={styles.row}>
-          <Pressable
-            style={[styles.button, (connected || status.state === 'connecting') && styles.buttonOff]}
-            onPress={onConnect}
-            disabled={connected || status.state === 'connecting'}
-            accessibilityRole="button">
-            <Text style={styles.buttonText}>Connect</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.button, styles.buttonGhost, !connected && status.state !== 'connecting' && styles.buttonOff]}
-            onPress={onDisconnect}
-            disabled={!connected && status.state !== 'connecting'}
-            accessibilityRole="button">
-            <Text style={[styles.buttonText, styles.buttonGhostText]}>Disconnect</Text>
-          </Pressable>
-        </View>
-        <View style={styles.kv}>
-          <Text style={styles.key}>state</Text>
-          <Text style={styles.value}>
-            {status.state}
-            {status.attempts ? ` · attempt ${status.attempts}` : ''}
-          </Text>
-        </View>
-        {status.reason ? (
-          <View style={styles.kv}>
-            <Text style={styles.key}>reason</Text>
-            <Text style={styles.value} numberOfLines={2}>
-              {status.reason}
+        <View style={styles.category}>
+          <Text style={styles.section}>appearance</Text>
+          <View style={styles.card}>
+            <View style={styles.segment}>
+              {THEME_OPTIONS.map(option => {
+                const selected = option.mode === themeMode;
+                return (
+                  <Pressable
+                    key={option.mode}
+                    style={[styles.segmentItem, selected && styles.segmentItemActive]}
+                    onPress={() => onThemeModeChange(option.mode)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Theme ${option.label}`}>
+                    <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.hint}>
+              {themeMode === 'system' ? `follows the phone · currently ${dark ? 'dark' : 'light'}` : 'forced choice'}
             </Text>
           </View>
-        ) : null}
-        <View style={styles.kv}>
-          <Text style={styles.key}>send queue</Text>
-          <Text style={styles.value}>{pending === 0 ? 'empty' : `${pending} pending`}</Text>
         </View>
-        {pending > 0 ? (
-          <Pressable style={[styles.button, styles.buttonGhost]} onPress={onClearOutbox} accessibilityRole="button">
-            <Text style={[styles.buttonText, styles.buttonGhostText]}>Clear queue</Text>
-          </Pressable>
-        ) : null}
 
-        <Text style={styles.section}>device</Text>
-        {deviceInfo ? (
-          <>
-            <View style={styles.kv}>
-              <Text style={styles.key}>device</Text>
-              <Text style={[styles.value, styles.mono]} selectable>
-                {deviceInfo.deviceId}
-              </Text>
+        <View style={styles.category}>
+          <Text style={styles.section}>server</Text>
+          <View style={styles.card}>
+            <TextInput
+              style={styles.input}
+              value={url}
+              onChangeText={onUrlChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="wss://server/mobile"
+              placeholderTextColor={palette.textFaint}
+              accessibilityLabel="Server address"
+            />
+            <View style={styles.row}>
+              <Pressable
+                style={[styles.button, (connected || status.state === 'connecting') && styles.buttonOff]}
+                onPress={onConnect}
+                disabled={connected || status.state === 'connecting'}
+                accessibilityRole="button">
+                <Text style={styles.buttonText}>Connect</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.button, styles.buttonGhost, !connected && status.state !== 'connecting' && styles.buttonOff]}
+                onPress={onDisconnect}
+                disabled={!connected && status.state !== 'connecting'}
+                accessibilityRole="button">
+                <Text style={[styles.buttonText, styles.buttonGhostText]}>Disconnect</Text>
+              </Pressable>
             </View>
             <View style={styles.kv}>
-              <Text style={styles.key}>token</Text>
-              <Text style={[styles.value, styles.mono]} selectable>
-                {deviceInfo.token}
+              <Text style={styles.key}>state</Text>
+              <Text style={styles.value}>
+                {status.state}
+                {status.attempts ? ` · attempt ${status.attempts}` : ''}
               </Text>
             </View>
-            <Text style={styles.hint}>paste into channels.mobile.devices on the server</Text>
-          </>
-        ) : (
-          <Text style={styles.hint}>device not initialized</Text>
-        )}
+            {status.reason ? (
+              <View style={styles.kv}>
+                <Text style={styles.key}>reason</Text>
+                <Text style={styles.value} numberOfLines={2}>
+                  {status.reason}
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.kv}>
+              <Text style={styles.key}>send queue</Text>
+              <Text style={styles.value}>{pending === 0 ? 'empty' : `${pending} pending`}</Text>
+            </View>
+            {pending > 0 ? (
+              <Pressable style={[styles.button, styles.buttonGhost]} onPress={onClearOutbox} accessibilityRole="button">
+                <Text style={[styles.buttonText, styles.buttonGhostText]}>Clear queue</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>device</Text>
+          <View style={styles.card}>
+            {deviceInfo ? (
+              <>
+                <View style={styles.kv}>
+                  <Text style={styles.key}>device</Text>
+                  <Text style={[styles.value, styles.mono]} selectable>
+                    {deviceInfo.deviceId}
+                  </Text>
+                </View>
+                <View style={styles.kv}>
+                  <Text style={styles.key}>token</Text>
+                  <Text style={[styles.value, styles.mono]} selectable>
+                    {deviceInfo.token}
+                  </Text>
+                </View>
+                <Text style={styles.hint}>paste into channels.mobile.devices on the server</Text>
+              </>
+            ) : (
+              <Text style={styles.hint}>device not initialized</Text>
+            )}
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -158,15 +170,33 @@ const createStyles = (palette: Palette) => ({
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
-  back: { fontSize: 24, lineHeight: 26, color: palette.text },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
-  body: { paddingBottom: space.xl, gap: space.sm },
+  body: { paddingBottom: space.xl },
+  category: { marginTop: space.lg },
   section: {
-    marginTop: space.lg,
+    marginBottom: space.xs,
+    paddingHorizontal: space.xs,
     fontSize: font.micro,
     color: palette.textFaint,
     letterSpacing: 0.5,
     textTransform: 'uppercase' as const,
+  },
+  card: {
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    padding: space.md,
+    gap: space.sm,
   },
   segment: {
     flexDirection: 'row' as const,
@@ -175,7 +205,7 @@ const createStyles = (palette: Palette) => ({
     padding: 2,
     gap: 2,
   },
-  segmentItem: { flex: 1, alignItems: 'center' as const, paddingVertical: space.sm, borderRadius: radius.sm - 1 },
+  segmentItem: { flex: 1, alignItems: 'center' as const, paddingVertical: 10, borderRadius: radius.sm - 1 },
   segmentItemActive: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.border },
   segmentText: { fontSize: font.meta, color: palette.textMuted },
   segmentTextActive: { color: palette.text, fontWeight: '600' as const },
@@ -195,7 +225,7 @@ const createStyles = (palette: Palette) => ({
     flex: 1,
     backgroundColor: palette.accent,
     borderRadius: radius.sm,
-    paddingVertical: space.sm,
+    paddingVertical: 11,
     alignItems: 'center' as const,
   },
   buttonGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: palette.border },

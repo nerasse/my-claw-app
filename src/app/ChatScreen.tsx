@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View, type ViewStyle } from 'react-native';
 import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
 import { Composer } from '../components/Composer';
@@ -10,6 +10,19 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 const GROUP_WINDOW_MS = 120_000;
 
+function statusColor(state: WsState, styles: ReturnType<typeof createStyles>): ViewStyle | null {
+  switch (state) {
+    case 'connected':
+      return styles.statusOk;
+    case 'disconnected':
+      return styles.statusBad;
+    case 'connecting':
+      return styles.statusWarn;
+    default:
+      return styles.statusOff;
+  }
+}
+
 /** Same author, close in time and not split by a tool card: render as one visual block. */
 function isGrouped(items: ChatItem[], index: number): boolean {
   const item = items[index];
@@ -19,6 +32,7 @@ function isGrouped(items: ChatItem[], index: number): boolean {
 }
 
 export function ChatScreen({
+  threadId,
   title,
   subtitle,
   connectionState,
@@ -26,10 +40,13 @@ export function ChatScreen({
   mediaBase,
   deviceInfo,
   hint,
+  autoFocusHero,
   onOpenDrawer,
+  onStatusPress,
   onSend,
   onBubbleMenu,
 }: {
+  threadId: string;
   title: string;
   subtitle: string;
   connectionState: WsState;
@@ -37,7 +54,9 @@ export function ChatScreen({
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
   hint?: string;
+  autoFocusHero: boolean;
   onOpenDrawer: () => void;
+  onStatusPress: () => void;
   onSend: (text: string) => void;
   onBubbleMenu: (item: TextItem) => void;
 }): React.JSX.Element {
@@ -59,12 +78,13 @@ export function ChatScreen({
     setDraft('');
   }, [draft, onSend]);
 
+  const empty = items.length === 0;
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable
           onPress={onOpenDrawer}
-          hitSlop={12}
           style={styles.menuButton}
           accessibilityRole="button"
           accessibilityLabel="Open conversations">
@@ -78,34 +98,56 @@ export function ChatScreen({
             {subtitle}
           </Text>
         </View>
-        <View style={[styles.statusDot, connectionState === 'connected' ? styles.statusOk : styles.statusOff]} />
+        <Pressable
+          onPress={onStatusPress}
+          hitSlop={10}
+          style={styles.statusButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Connection status: ${connectionState}`}>
+          <View style={[styles.statusDot, statusColor(connectionState, styles)]} />
+        </Pressable>
       </View>
 
-      <View style={styles.listWrap}>
-        <FlatList
-          ref={listRef}
-          data={items}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.empty}>empty conversation — write something</Text>}
-          onContentSizeChange={() => {
-            if (atBottom) listRef.current?.scrollToEnd({ animated: false });
-          }}
-          onScroll={event => {
-            const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-            const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
-            if (nearBottom !== atBottom) setAtBottom(nearBottom);
-          }}
-          scrollEventThrottle={16}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item, index }) =>
-            item.kind === 'tool' ? (
-              <ToolCard item={item} />
-            ) : (
-              <Bubble
-                item={item}
-                mediaBase={mediaBase}
-                deviceInfo={deviceInfo}
+      {empty ? (
+        // New conversation: the composer itself is the screen. Keyed by thread so switching
+        // straight from one empty thread to another re-focuses the field.
+        <View style={styles.hero}>
+          <Composer
+            key={threadId}
+            hero
+            autoFocus={autoFocusHero}
+            value={draft}
+            onChange={setDraft}
+            onSend={submit}
+            hint={hint}
+          />
+        </View>
+      ) : (
+        <>
+          <View style={styles.listWrap}>
+            <FlatList
+              ref={listRef}
+              data={items}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContent}
+              onContentSizeChange={() => {
+                if (atBottom) listRef.current?.scrollToEnd({ animated: false });
+              }}
+              onScroll={event => {
+                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+                const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
+                if (nearBottom !== atBottom) setAtBottom(nearBottom);
+              }}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item, index }) =>
+                item.kind === 'tool' ? (
+                  <ToolCard item={item} />
+                ) : (
+                  <Bubble
+                    item={item}
+                    mediaBase={mediaBase}
+                    deviceInfo={deviceInfo}
                 grouped={isGrouped(items, index)}
                 showTime={!isGrouped(items, index + 1)}
                 onMenu={() => onBubbleMenu(item)}
@@ -126,9 +168,11 @@ export function ChatScreen({
             <Text style={styles.jumpGlyph}>↓</Text>
           </Pressable>
         ) : null}
-      </View>
+        </View>
 
-      <Composer value={draft} onChange={setDraft} onSend={submit} hint={hint} />
+        <Composer value={draft} onChange={setDraft} onSend={submit} hint={hint} />
+        </>
+      )}
     </View>
   );
 }
@@ -143,23 +187,38 @@ const createStyles = (palette: Palette) => ({
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
-  menuButton: { paddingVertical: 2 },
-  menuGlyph: { fontSize: font.screen, color: palette.text },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  menuGlyph: { fontSize: 20, lineHeight: 22, color: palette.text },
   headerText: { flex: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusButton: { padding: 2 },
+  statusDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1, borderColor: palette.surface },
   statusOk: { backgroundColor: palette.ok },
   statusOff: { backgroundColor: palette.textFaint },
+  statusWarn: { backgroundColor: palette.warn },
+  statusBad: { backgroundColor: palette.danger },
   listWrap: { flex: 1 },
   listContent: { paddingTop: space.md, paddingBottom: space.sm },
-  empty: { paddingTop: space.xl, textAlign: 'center' as const, fontSize: font.meta, color: palette.textFaint },
+  hero: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.md,
+    paddingBottom: space.xl,
+  },
   jump: {
     position: 'absolute' as const,
     right: 0,
     bottom: space.md,
-    width: 30,
-    height: 30,
+    width: 38,
+    height: 38,
     borderRadius: radius.pill,
     backgroundColor: palette.surface,
     borderWidth: 1,
@@ -167,5 +226,5 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  jumpGlyph: { fontSize: font.meta, color: palette.text, lineHeight: 16 },
+  jumpGlyph: { fontSize: 16, color: palette.text, lineHeight: 20 },
 });
