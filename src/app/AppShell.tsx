@@ -46,6 +46,7 @@ import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { FilesScreen } from './FilesScreen';
+import { ImageViewer } from './ImageViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { Drawer } from './Drawer';
 import { BubbleMenu, type BubbleMenuAction } from '../components/BubbleMenu';
@@ -67,6 +68,10 @@ export function AppShell(): React.JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [imageViewer, setImageViewer] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [diagOpen, setDiagOpen] = useState(false);
@@ -247,6 +252,11 @@ export function AppShell(): React.JSX.Element {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Topmost layer first: the image covers everything else.
+      if (imageViewer) {
+        setImageViewer(null);
+        return true;
+      }
       if (bubbleMenu || threadMenu) {
         setBubbleMenu(null);
         setThreadMenu(null);
@@ -271,7 +281,15 @@ export function AppShell(): React.JSX.Element {
       return false;
     });
     return () => sub.remove();
-  }, [bubbleMenu, drawerOpen, diagOpen, filesOpen, settingsOpen, threadMenu]);
+  }, [
+    bubbleMenu,
+    drawerOpen,
+    diagOpen,
+    filesOpen,
+    imageViewer,
+    settingsOpen,
+    threadMenu,
+  ]);
 
   const sendChat = useCallback(
     async (
@@ -431,6 +449,7 @@ export function AppShell(): React.JSX.Element {
                 if (activeThread)
                   connection.send(encodeFileDelete(activeThread, id));
               }}
+              onOpenImage={setImageViewer}
             />
           ) : (
             <ChatScreen
@@ -472,6 +491,14 @@ export function AppShell(): React.JSX.Element {
           setSettingsOpen(true);
         }}
       />
+
+      {imageViewer ? (
+        <ImageViewer
+          url={imageViewer.url}
+          filename={imageViewer.filename}
+          onClose={() => setImageViewer(null)}
+        />
+      ) : null}
 
       {bubbleMenu ? (
         <BubbleMenu

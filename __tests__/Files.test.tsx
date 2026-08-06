@@ -126,6 +126,20 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
   await waitFor(() => labelsOf(tree).includes('Save image to gallery'));
   expect(globalThis.fetch).not.toHaveBeenCalled();
 
+  // No download card underneath: that second layer stole the taps and its own cross was
+  // unreachable behind the image.
+  expect(labelsOf(tree)).not.toContain('Close file view');
+  expect(labelsOf(tree)).not.toContain('Save file to downloads');
+
+  // And no Modal around the zoomable image: on Android a Modal is a separate window, outside
+  // the gesture root view, where pinch and tap are never recognised.
+  const modals = tree.root.findAll(
+    n =>
+      typeof n.props.onRequestClose === 'function' && n.props.visible === true,
+    { deep: true },
+  );
+  expect(modals).toHaveLength(0);
+
   await press(tree, 'Save image to gallery');
   await waitFor(() => bridge.downloadFile.mock.calls.length > 0);
   expect(bridge.downloadFile).toHaveBeenCalledWith(
@@ -169,7 +183,7 @@ test('tapping the image pops the controls, the cross closes the viewer', async (
   await unmount(tree);
 });
 
-test('the hardware back closes the image gallery, not the whole explorer', async () => {
+test('the hardware back closes the image viewer, not the whole explorer', async () => {
   const tree = await renderApp();
   await openFiles(tree, [
     file({
@@ -183,20 +197,20 @@ test('the hardware back closes the image gallery, not the whole explorer', async
   await press(tree, 'Open file wide.png');
   await waitFor(() => labelsOf(tree).includes('Close image'));
 
-  // The gallery Modal is a separate screen: its onRequestClose is what Android fires.
-  const modal = tree.root
-    .findAll(n => n.props.visible === true && typeof n.props.onRequestClose === 'function', {
-      deep: true,
-    })
-    .at(-1);
-  expect(modal).toBeDefined();
-  let closed = false;
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean> };
+  };
+  const handlers = back.default.__handlers;
+  let handled = false;
   await ReactTestRenderer.act(async () => {
-    closed = modal!.props.onRequestClose();
+    handled = handlers[handlers.length - 1]();
   });
-  expect(closed).not.toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open file wide.png'));
-  expect(labelsOf(tree)).not.toContain('Close image');
+
+  // The image layer takes the press; the file list is still underneath.
+  expect(handled).toBe(true);
+  await waitFor(() => !labelsOf(tree).includes('Close image'));
+  expect(labelsOf(tree)).toContain('Open file wide.png');
 
   await unmount(tree);
 });
