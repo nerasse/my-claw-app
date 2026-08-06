@@ -163,45 +163,28 @@ export function ChatScreen({
       .catch(() => {});
   }, [addAssets]);
 
-  const sendVoiceNote = useCallback(
-    (recording: VoiceRecording) => {
-      if (!deviceInfo) {
-        setUploadError('device not initialized');
-        return;
-      }
-      setUploading(true);
-      setUploadError(null);
-      (async () => {
-        try {
-          const filename = voiceFilename();
-          const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, {
-            id: filename,
-            uri: recording.uri,
-            filename,
-            type: 'audio',
-            mimeType: 'audio/mp4',
-            sizeBytes: recording.sizeBytes,
-          });
-          onSend('', [
-            {
-              id: uploaded.id,
-              type: 'audio',
-              // The local file plays instantly; the server copy is only needed after a reload.
-              uri: recording.uri,
-              filename,
-              audioAsVoice: true,
-              durationMs: recording.durationMs,
-            },
-          ]);
-        } catch (err) {
-          setUploadError(err instanceof Error ? err.message : 'upload failed');
-        } finally {
-          setUploading(false);
-        }
-      })();
-    },
-    [deviceInfo, mediaBase, onSend, threadId],
-  );
+  /**
+   * A finished take is staged, not sent. Releasing the mic is the end of the recording, not the
+   * decision to send it: the note waits in the composer like any attachment, so a caption or a
+   * second file can join it, and it leaves on the same send as everything else.
+   */
+  const stageVoiceNote = useCallback((recording: VoiceRecording) => {
+    const filename = voiceFilename();
+    setUploadError(null);
+    setAttachments(current => [
+      ...current,
+      {
+        id: `voice-${recording.uri}`,
+        uri: recording.uri,
+        filename,
+        type: 'audio',
+        mimeType: 'audio/mp4',
+        sizeBytes: recording.sizeBytes,
+        audioAsVoice: true,
+        durationMs: recording.durationMs,
+      },
+    ]);
+  }, []);
 
   const submit = useCallback(() => {
     const text = draft.trim();
@@ -223,6 +206,8 @@ export function ChatScreen({
               type: uploaded.type,
               uri: attachment.uri,
               filename: attachment.filename,
+              ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
+              ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
             });
           }
           setAttachments([]);
@@ -287,7 +272,7 @@ export function ChatScreen({
             value={draft}
             onChange={setDraft}
             onSend={submit}
-            onRecorded={sendVoiceNote}
+            onRecorded={stageVoiceNote}
             onRecordingError={setUploadError}
             hint={hint}
             commands={commands}
@@ -353,7 +338,7 @@ export function ChatScreen({
           value={draft}
           onChange={setDraft}
           onSend={submit}
-          onRecorded={sendVoiceNote}
+          onRecorded={stageVoiceNote}
           onRecordingError={setUploadError}
           hint={hint}
           commands={commands}

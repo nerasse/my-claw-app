@@ -9,6 +9,9 @@ export interface PendingAttachment {
   type: AttachmentMeta['type'];
   mimeType: string;
   sizeBytes?: number;
+  /** Set on a held-mic take, and carried through to the wire so the server applies its policy. */
+  audioAsVoice?: boolean;
+  durationMs?: number;
 }
 
 export interface UploadedAttachment {

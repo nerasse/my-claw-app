@@ -3,6 +3,7 @@ import { Pressable, Text, TextInput, View, type NativeSyntheticEvent, type TextI
 import Svg, { Path } from 'react-native-svg';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
 import type { VoiceRecording } from '../core/nativeBridge';
+import { VoiceChip } from './VoiceChip';
 import { VoiceRecorder } from './VoiceRecorder';
 import type { PendingAttachment } from '../core/upload';
 import { formatBytes } from '../core/utils';
@@ -58,7 +59,8 @@ export function Composer({
   const nothingToSend = empty && staged === 0;
   const [recording, setRecording] = useState(false);
   // The microphone replaces the send arrow only when there is nothing to send, so a typed
-  // message never has to compete with it for the same corner.
+  // message never has to compete with it for the same corner. A staged take counts as something
+  // to send: the arrow returns, and the note leaves with whatever text was added to it.
   const micVisible = onRecorded !== undefined && nothingToSend;
 
   const query = commandQuery(value);
@@ -121,23 +123,33 @@ export function Composer({
       {uploadError ? <Text style={styles.uploadError}>{uploadError}</Text> : null}
       {attachments && attachments.length > 0 ? (
         <View style={styles.chips}>
-          {attachments.map(attachment => (
-            <View key={attachment.id} style={styles.chip}>
-              <Text style={styles.chipText} numberOfLines={1}>
-                {attachment.filename}
-                {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
-              </Text>
-              {onRemoveAttachment ? (
-                <Pressable
-                  onPress={() => onRemoveAttachment(attachment.id)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove attachment ${attachment.filename}`}>
-                  <Text style={styles.chipRemove}>✕</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
+          {attachments.map(attachment =>
+            attachment.audioAsVoice ? (
+              <VoiceChip
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={
+                  onRemoveAttachment ? () => onRemoveAttachment(attachment.id) : undefined
+                }
+              />
+            ) : (
+              <View key={attachment.id} style={styles.chip}>
+                <Text style={styles.chipText} numberOfLines={1}>
+                  {attachment.filename}
+                  {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
+                </Text>
+                {onRemoveAttachment ? (
+                  <Pressable
+                    onPress={() => onRemoveAttachment(attachment.id)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove attachment ${attachment.filename}`}>
+                    <Text style={styles.chipRemove}>✕</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ),
+          )}
         </View>
       ) : null}
       <View style={styles.row}>

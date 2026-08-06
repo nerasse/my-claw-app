@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { PanResponder, Pressable, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, PanResponder, Pressable, Text, Vibration, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import {
   deviceBridge,
@@ -18,11 +18,12 @@ const CANCEL_DISTANCE = 90;
 /** Drag up past this and the recording keeps going without the finger. */
 const LOCK_DISTANCE = 70;
 /** Enough bars to read the last few seconds at a glance, few enough to stay cheap to render. */
-const WAVE_BARS = 27;
+const WAVE_BARS = 22;
 
 type Phase = 'idle' | 'recording' | 'locked';
 
 interface Props {
+  /** The take is kept, not sent: it lands in the composer so text can be added to it. */
   onRecorded: (recording: VoiceRecording) => void;
   onError: (message: string) => void;
   /** Lets the composer hide the text field while the bar owns the row. */
@@ -31,25 +32,27 @@ interface Props {
 }
 
 /**
- * Hold-to-talk, with the two escapes the gesture needs: slide left to discard, slide up to keep
- * recording hands-free. Both are on the same drag, so the finger never has to find a second
- * target, and neither commits until release.
+ * Hold to talk, slide left to discard, slide up to keep recording hands-free.
  *
- * Built on PanResponder rather than gesture-handler to match the drawer, and because the bar can
- * end up over a modal, where gesture-handler stops receiving touches on Android.
+ * The button that owns the gesture is mounted once and never replaced, only restyled. An earlier
+ * version swapped the whole subtree when recording began, which unmounted the view holding the
+ * touch responder while the finger was still down: Android dropped the gesture, and releasing did
+ * nothing. Anything that appears during a take is a sibling of that button, never a replacement.
  */
 export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Props) {
   const styles = useThemedStyles(createStyles);
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [levels, setLevels] = useState<number[]>([]);
-  const [cancelIntent, setCancelIntent] = useState(false);
+  const [armed, setArmed] = useState(false);
 
-  // The pan callbacks are created once and never see a re-render, so every value they read has
-  // to live in a ref. Reading `phase` there would pin it to 'idle' for the whole gesture.
+  // The pan callbacks are built once and never see a re-render, so every value they read lives
+  // in a ref. Reading `phase` there would pin it to 'idle' for the whole gesture.
   const phaseRef = useRef<Phase>('idle');
   const startingRef = useRef(false);
   const cancelRef = useRef(false);
+  const armedRef = useRef(false);
+  const slide = useRef(new Animated.Value(0)).current;
 
   const setPhaseBoth = useCallback(
     (next: Phase) => {
@@ -83,13 +86,20 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     [],
   );
 
-  const reset = useCallback(() => {
+  const settle = useCallback(() => {
     cancelRef.current = false;
-    setCancelIntent(false);
+    armedRef.current = false;
+    setArmed(false);
     setElapsedMs(0);
     setLevels([]);
     setPhaseBoth('idle');
-  }, [setPhaseBoth]);
+    Animated.spring(slide, {
+      toValue: 0,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 4,
+    }).start();
+  }, [setPhaseBoth, slide]);
 
   const begin = useCallback(async () => {
     if (startingRef.current || phaseRef.current !== 'idle') return;
@@ -109,9 +119,11 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
       if (cancelRef.current) return;
       await deviceBridge.startRecording();
       if (cancelRef.current) {
-        await deviceBridge.cancelRecording();
+        await deviceBridge.cancelRecording().catch(() => {});
         return;
       }
+      // Confirms the microphone is live without asking the eye to leave the conversation.
+      Vibration.vibrate(12);
       setPhaseBoth('recording');
     } catch {
       onError('Could not start recording.');
@@ -123,10 +135,11 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
   const discard = useCallback(() => {
     cancelRef.current = true;
     deviceBridge.cancelRecording().catch(() => {});
-    reset();
-  }, [reset]);
+    Vibration.vibrate(18);
+    settle();
+  }, [settle]);
 
-  const finish = useCallback(async () => {
+  const keep = useCallback(async () => {
     if (phaseRef.current === 'idle') {
       // Released before the recorder was up; begin() sees the flag and stands down.
       cancelRef.current = true;
@@ -134,116 +147,135 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     }
     setPhaseBoth('idle');
     const outcome = await finishRecording();
-    reset();
+    settle();
     if (outcome.ok) {
       onRecorded(outcome.recording);
       return;
     }
     onError(outcome.reason === 'too-short' ? 'Hold to record.' : 'Recording failed.');
-  }, [onError, onRecorded, reset, setPhaseBoth]);
+  }, [onError, onRecorded, settle, setPhaseBoth]);
 
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        cancelRef.current = false;
-        begin().catch(() => {});
-      },
-      onPanResponderMove: (_event, gesture) => {
-        if (phaseRef.current !== 'recording') return;
-        if (gesture.dy < -LOCK_DISTANCE) {
-          setCancelIntent(false);
-          setPhaseBoth('locked');
-          return;
-        }
-        setCancelIntent(gesture.dx < -CANCEL_DISTANCE);
-      },
-      onPanResponderRelease: (_event, gesture) => {
-        if (phaseRef.current === 'locked') return;
-        if (gesture.dx < -CANCEL_DISTANCE) {
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          cancelRef.current = false;
+          begin().catch(() => {});
+        },
+        onPanResponderMove: (_event, gesture) => {
+          if (phaseRef.current !== 'recording') return;
+          if (gesture.dy < -LOCK_DISTANCE) {
+            armedRef.current = false;
+            setArmed(false);
+            slide.setValue(0);
+            Vibration.vibrate(12);
+            setPhaseBoth('locked');
+            return;
+          }
+          // Follows the thumb, left only: dragging right is not a gesture, and a button that
+          // wandered back past its slot would read as a second, different control.
+          slide.setValue(Math.min(0, gesture.dx));
+          const nowArmed = gesture.dx < -CANCEL_DISTANCE;
+          if (nowArmed !== armedRef.current) {
+            armedRef.current = nowArmed;
+            setArmed(nowArmed);
+            // The point of no return is worth feeling, since the eye is on the thumb.
+            Vibration.vibrate(nowArmed ? 20 : 8);
+          }
+        },
+        onPanResponderRelease: () => {
+          if (phaseRef.current === 'locked') return;
+          if (armedRef.current) {
+            discard();
+            return;
+          }
+          keep().catch(() => {});
+        },
+        onPanResponderTerminate: () => {
+          if (phaseRef.current === 'locked') return;
           discard();
-          return;
-        }
-        finish().catch(() => {});
-      },
-      onPanResponderTerminate: () => {
-        if (phaseRef.current === 'locked') return;
-        discard();
-      },
-    }),
-  ).current;
+        },
+      }),
+    [begin, discard, keep, setPhaseBoth, slide],
+  );
 
-  if (phase === 'idle') {
-    return (
-      <View
-        {...pan.panHandlers}
-        style={[styles.mic, hero && styles.micHero]}
-        accessibilityRole="button"
-        accessibilityLabel="Record voice message"
-        accessibilityHint="Hold to record, slide left to cancel, slide up to lock">
-        <MicGlyph color={styles.micGlyphColor.color} size={hero ? 22 : 20} />
-      </View>
-    );
-  }
-
+  const recording = phase === 'recording';
   const locked = phase === 'locked';
-  return (
-    <View style={styles.bar} accessibilityLabel="Recording voice message">
-      <View style={styles.dot} />
-      <Text style={styles.timer}>{formatDuration(elapsedMs)}</Text>
+  const active = recording || locked;
 
-      {cancelIntent ? (
-        <Text style={styles.cancelArmed} numberOfLines={1}>
-          Release to cancel
-        </Text>
-      ) : (
-        <Waveform levels={levels} styles={styles} />
-      )}
+  return (
+    <View style={[styles.wrap, active && styles.wrapActive]}>
+      {/* Always this slot, so inserting the bar never re-parents the button below. */}
+      {active ? (
+        <View style={styles.bar}>
+          <View style={styles.dot} />
+          <Text style={styles.timer}>{formatDuration(elapsedMs)}</Text>
+          {armed ? (
+            <Text style={styles.armed} numberOfLines={1}>
+              Release to delete
+            </Text>
+          ) : (
+            <Waveform levels={levels} styles={styles} />
+          )}
+          {locked ? (
+            <Pressable
+              onPress={discard}
+              hitSlop={8}
+              style={styles.ghost}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel recording">
+              <Text style={styles.ghostText}>Delete</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.hint} numberOfLines={1}>
+              {'\u2039 slide to delete'}
+            </Text>
+          )}
+        </View>
+      ) : null}
 
       {locked ? (
-        <>
-          <Pressable
-            onPress={discard}
-            style={styles.barAction}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel recording">
-            <Text style={styles.barActionText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              finish().catch(() => {});
-            }}
-            style={[styles.mic, styles.micSend]}
-            accessibilityRole="button"
-            accessibilityLabel="Send voice message">
-            <Svg width={20} height={20} viewBox="0 0 24 24">
-              <Path fill={styles.sendGlyphColor.color} d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z" />
-            </Svg>
-          </Pressable>
-        </>
+        <Pressable
+          onPress={() => {
+            keep().catch(() => {});
+          }}
+          style={[styles.button, styles.buttonStop]}
+          accessibilityRole="button"
+          accessibilityLabel="Stop recording">
+          <View style={styles.stopGlyph} />
+        </Pressable>
       ) : (
-        <>
-          <Text style={styles.hint} numberOfLines={1}>
-            {'\u2039 slide to cancel'}
-          </Text>
-          <View
-            {...pan.panHandlers}
-            style={[styles.mic, styles.micLive]}
-            accessibilityRole="button"
-            accessibilityLabel="Recording, release to send">
-            <MicGlyph color={styles.micLiveGlyphColor.color} size={20} />
-          </View>
-        </>
+        <Animated.View
+          {...pan.panHandlers}
+          style={[
+            styles.button,
+            hero && styles.buttonHero,
+            recording && (armed ? styles.buttonArmed : styles.buttonLive),
+            { transform: [{ translateX: slide }] },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={recording ? 'Recording, release to keep' : 'Record voice message'}
+          accessibilityHint="Hold to record, slide left to delete, slide up to keep your hands free">
+          {armed ? (
+            <TrashGlyph color={styles.glyphOnFill.color} size={hero ? 22 : 20} />
+          ) : (
+            <MicGlyph
+              color={recording ? styles.glyphOnFill.color : styles.glyphIdle.color}
+              size={hero ? 22 : 20}
+            />
+          )}
+        </Animated.View>
       )}
     </View>
   );
 }
 
 /**
- * Rendered from the amplitude the recorder reports, not from a decoded waveform: it is proof the
- * microphone is actually hearing something. A flat line while you speak means a dead take, and
- * that is worth seeing before sending rather than after transcription comes back empty.
+ * Drawn from the amplitude the recorder reports, not from a decoded waveform: it is proof the
+ * microphone is hearing something. A flat line while you speak means a dead take, and that is
+ * worth seeing before sending rather than after the transcription comes back empty.
  */
 function Waveform({
   levels,
@@ -256,7 +288,7 @@ function Waveform({
   for (let index = 0; index < WAVE_BARS; index += 1) {
     const level = levels[index] ?? 0;
     // Square-rooted: speech sits low on a linear amplitude scale and would barely move the bars.
-    const height = 3 + Math.round(Math.sqrt(level) * 19);
+    const height = 3 + Math.round(Math.sqrt(level) * 17);
     bars.push(<View key={index} style={[styles.waveBar, { height }]} />);
   }
   return (
@@ -277,8 +309,21 @@ function MicGlyph({ color, size }: { color: string; size: number }) {
   );
 }
 
+function TrashGlyph({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        fill={color}
+        d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zM19 4h-3.5l-1-1h-5l-1 1H5v2h14z"
+      />
+    </Svg>
+  );
+}
+
 const createStyles = (palette: Palette) => ({
-  mic: {
+  wrap: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  wrapActive: { flex: 1 },
+  button: {
     width: 44,
     height: 44,
     borderRadius: radius.pill,
@@ -288,12 +333,13 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  micHero: { width: 50, height: 50 },
-  micLive: { backgroundColor: palette.danger, borderColor: palette.danger },
-  micSend: { backgroundColor: palette.accent, borderColor: palette.accent },
-  micGlyphColor: { color: palette.accent },
-  micLiveGlyphColor: { color: palette.accentText },
-  sendGlyphColor: { color: palette.accentText },
+  buttonHero: { width: 50, height: 50 },
+  buttonLive: { backgroundColor: palette.accent, borderColor: palette.accent },
+  buttonArmed: { backgroundColor: palette.danger, borderColor: palette.danger },
+  buttonStop: { backgroundColor: palette.danger, borderColor: palette.danger },
+  stopGlyph: { width: 14, height: 14, borderRadius: 3, backgroundColor: palette.accentText },
+  glyphIdle: { color: palette.accent },
+  glyphOnFill: { color: palette.accentText },
   bar: {
     flex: 1,
     flexDirection: 'row' as const,
@@ -301,12 +347,7 @@ const createStyles = (palette: Palette) => ({
     gap: space.sm,
     minHeight: 44,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: palette.danger,
-  },
+  dot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: palette.danger },
   timer: {
     fontSize: font.meta,
     color: palette.text,
@@ -318,15 +359,11 @@ const createStyles = (palette: Palette) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 2,
-    height: 22,
+    height: 20,
   },
-  waveBar: {
-    flex: 1,
-    borderRadius: radius.pill,
-    backgroundColor: palette.accentSoft,
-  },
+  waveBar: { flex: 1, borderRadius: radius.pill, backgroundColor: palette.accentSoft },
   hint: { fontSize: font.small, color: palette.textFaint },
-  cancelArmed: { flex: 1, fontSize: font.small, color: palette.danger, textAlign: 'center' as const },
-  barAction: { paddingHorizontal: space.sm, paddingVertical: space.xs },
-  barActionText: { fontSize: font.meta, color: palette.danger },
+  armed: { flex: 1, fontSize: font.small, color: palette.danger, textAlign: 'center' as const },
+  ghost: { paddingHorizontal: space.sm, paddingVertical: space.xs },
+  ghostText: { fontSize: font.meta, color: palette.danger },
 });

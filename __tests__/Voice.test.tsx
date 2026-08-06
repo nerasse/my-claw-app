@@ -105,15 +105,15 @@ function finger(tree: Tree) {
       await ReactTestRenderer.act(async () => {
         handlers('Record voice message').onResponderGrant(event());
       });
-      await waitFor(() => labelsOf(tree).includes('Recording, release to send'));
+      await waitFor(() => labelsOf(tree).includes('Recording, release to keep'));
     },
     async move(dx: number, dy: number): Promise<void> {
       step(dx, dy);
       await ReactTestRenderer.act(async () => {
-        handlers('Recording, release to send').onResponderMove(event());
+        handlers('Recording, release to keep').onResponderMove(event());
       });
     },
-    async up(label = 'Recording, release to send'): Promise<void> {
+    async up(label = 'Recording, release to keep'): Promise<void> {
       await ReactTestRenderer.act(async () => {
         handlers(label).onResponderRelease(event());
       });
@@ -144,7 +144,7 @@ beforeEach(() => {
   jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
 });
 
-test('holding the mic records, and releasing sends the note as a voice attachment', async () => {
+test('releasing the mic stages the note, and sending it is a separate act', async () => {
   const tree = await renderApp();
 
   const touch = finger(tree);
@@ -152,6 +152,13 @@ test('holding the mic records, and releasing sends the note as a voice attachmen
   expect(bridge.startRecording).toHaveBeenCalled();
 
   await touch.up();
+
+  // Staged, not gone: nothing has left the device yet.
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  expect(bridge.uploadFile).not.toHaveBeenCalled();
+  expect(chatSends()).toHaveLength(0);
+
+  await press(tree, 'Send message');
   await waitFor(() => chatSends().length > 0);
 
   const [uri, url, filename, type, threadId] = bridge.uploadFile.mock.calls[0];
@@ -195,17 +202,68 @@ test('sliding up locks the recording, so it survives the finger leaving', async 
   const touch = finger(tree);
   await touch.down();
   await touch.move(0, -110);
-  await waitFor(() => labelsOf(tree).includes('Send voice message'));
+  await waitFor(() => labelsOf(tree).includes('Stop recording'));
 
   // Releasing while locked must not end the take: that is the whole point of locking.
-  await touch.up('Send voice message');
+  await touch.up('Stop recording');
   expect(bridge.stopRecording).not.toHaveBeenCalled();
 
-  await press(tree, 'Send voice message');
+  await press(tree, 'Stop recording');
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+
+  await press(tree, 'Send message');
   await waitFor(() => chatSends().length > 0);
   expect(chatSends()[0].attachments).toEqual([
     { id: 'voice-1', type: 'audio', audioAsVoice: true, durationMs: 3400 },
   ]);
+
+  await unmount(tree);
+});
+
+test('a caption typed after the recording leaves with it, in one message', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+  await touch.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+
+  // An empty thread shows the hero composer, whose placeholder differs from the compact one.
+  const input = tree.root.find(
+    node =>
+      String(node.type) === 'TextInput' &&
+      (node.props.placeholder === 'message' || node.props.placeholder === 'Ask anything'),
+  );
+  await ReactTestRenderer.act(async () => {
+    input.props.onChangeText('et regarde aussi ca');
+  });
+  await press(tree, 'Send message');
+  await waitFor(() => chatSends().length > 0);
+
+  const sent = chatSends()[0];
+  expect(sent.text).toBe('et regarde aussi ca');
+  expect(sent.attachments).toEqual([
+    { id: 'voice-1', type: 'audio', audioAsVoice: true, durationMs: 3400 },
+  ]);
+
+  await unmount(tree);
+});
+
+test('a staged recording can be dropped before it is ever sent', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+  await touch.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+
+  await press(tree, 'Remove voice message');
+  await waitFor(() => !labelsOf(tree).includes('Remove voice message'));
+
+  // Nothing staged, so the corner offers the microphone again rather than a send arrow.
+  expect(labelsOf(tree)).toContain('Record voice message');
+  expect(bridge.uploadFile).not.toHaveBeenCalled();
+  expect(chatSends()).toHaveLength(0);
 
   await unmount(tree);
 });
@@ -257,6 +315,8 @@ test('the transcript lands inside the voice bubble, not in a message of its own'
   const touch = finger(tree);
   await touch.down();
   await touch.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  await press(tree, 'Send message');
   await waitFor(() => chatSends().length > 0);
   const sent = chatSends()[0];
 
@@ -289,6 +349,8 @@ test('a voice bubble plays, pauses, and never lets two notes run at once', async
   const touch = finger(tree);
   await touch.down();
   await touch.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  await press(tree, 'Send message');
   await waitFor(() => labelsOf(tree).includes('Play voice message'));
 
   await press(tree, 'Play voice message');
@@ -354,6 +416,8 @@ test('a reopened conversation renders a voice note exactly like the live one', a
   const touch = finger(tree);
   await touch.down();
   await touch.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  await press(tree, 'Send message');
   await waitFor(() => chatSends().length > 0);
   const sent = chatSends()[0];
 
