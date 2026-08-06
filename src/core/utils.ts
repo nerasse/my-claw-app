@@ -6,13 +6,17 @@ export function uuid(): string {
   });
 }
 
+/**
+ * ws(s):// -> http(s):// origin, by hand on purpose. RN's URL is a partial polyfill whose
+ * `host` getter only matches http(s) urls, so `new URL('ws://host:8080/x').host` is '' on the
+ * device (and correct under Node in tests): that silently produced 'http:///media', which
+ * OkHttp parses as the host "media". No URL here, same result everywhere.
+ */
 export function httpOrigin(wsUrl: string, fallback = 'http://10.10.20.10:8080'): string {
-  try {
-    const url = new URL(wsUrl);
-    return `${url.protocol === 'wss:' ? 'https' : 'http'}://${url.host}`;
-  } catch {
-    return fallback;
-  }
+  const match = /^(wss|ws|https|http):\/\/([^/?#]+)/i.exec(wsUrl.trim());
+  if (!match) return fallback;
+  const secure = match[1].toLowerCase() === 'wss' || match[1].toLowerCase() === 'https';
+  return `${secure ? 'https' : 'http'}://${match[2]}`;
 }
 
 export function formatDate(iso: string): string {

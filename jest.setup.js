@@ -69,3 +69,11 @@ jest.mock('./src/core/device', () => ({
   performAccessibilityAction: jest.fn(() => Promise.resolve(true)),
   onNotification: jest.fn(() => ({ remove: jest.fn() })),
 }));
+
+// Node's URL is spec compliant, the device's is not: RN ships a partial polyfill whose `host`
+// only matches http(s). Using Node's here hid a bug that only showed up on a phone, so tests
+// run against the same URL the app gets.
+// The top level export resolves to Node's real URL here; the device gets this polyfill, and
+// that difference is exactly what we want under test.
+// eslint-disable-next-line @react-native/no-deep-imports
+global.URL = require('react-native/Libraries/Blob/URL').URL;
