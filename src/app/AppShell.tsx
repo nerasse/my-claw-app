@@ -10,13 +10,16 @@ import { prefs } from '../core/prefs';
 import {
   encodeChatSend,
   encodeCommandsList,
+  encodeDiagSnapshot,
   encodeFileDelete,
   encodeFilesList,
+  encodeLogsTail,
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
   encodeSessionList,
   type AttachmentMeta,
+  type LogsTailQuery,
   type SessionFileMeta,
   type SessionSummary,
 } from '../core/protocol';
@@ -26,6 +29,7 @@ import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { FilesScreen } from './FilesScreen';
+import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { Drawer } from './Drawer';
 import { BubbleMenu, type BubbleMenuAction } from '../components/BubbleMenu';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -48,6 +52,11 @@ export function AppShell(): React.JSX.Element {
   const [filesOpen, setFilesOpen] = useState(false);
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
+  const [diagOpen, setDiagOpen] = useState(false);
+  const [diagSnapshot, setDiagSnapshot] = useState('');
+  const [diagLogs, setDiagLogs] = useState('');
+  const [diagBusy, setDiagBusy] = useState(false);
+  const [lastRun, setLastRun] = useState<string | null>(null);
   const [autoFocusHero, setAutoFocusHero] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
@@ -105,6 +114,11 @@ export function AppShell(): React.JSX.Element {
     const offPending = connection.onPending(setPending);
 
     const offFrame = connection.onFrame(frame => {
+      // The run id rides on the reply: keeping the last one is what makes "logs for this run"
+      // possible without asking the user to read anything off a screen.
+      if ((frame.type === 'chat.message' || frame.type === 'chat.stream.start') && frame.run) {
+        setLastRun(frame.run);
+      }
       switch (frame.type) {
         case 'chat.message':
           chatStore.addAgentMessage(frame.threadId, frame.id, frame.text, frame.attachments, frame.replyToId);
@@ -145,6 +159,14 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'commands.list.result':
           commandStore.replace(frame.commands);
+          break;
+        case 'diag.snapshot.result':
+          setDiagSnapshot(frame.text);
+          setDiagBusy(false);
+          break;
+        case 'logs.tail.result':
+          setDiagLogs(frame.lines > 0 ? frame.text : 'no matching lines');
+          setDiagBusy(false);
           break;
         case 'files.list.result':
           setSessionFiles(frame.files);
@@ -228,6 +250,17 @@ export function AppShell(): React.JSX.Element {
     [selectThread],
   );
 
+  const openDiagnostics = useCallback(() => {
+    setDiagOpen(true);
+    setDiagBusy(true);
+    connection.send(encodeDiagSnapshot(activeThreadRef.current ?? ''));
+  }, []);
+
+  const fetchLogs = useCallback((query: LogsTailQuery) => {
+    setDiagBusy(true);
+    connection.send(encodeLogsTail(query));
+  }, []);
+
   const openFiles = useCallback(() => {
     const threadId = activeThreadRef.current;
     if (!threadId) return;
@@ -299,6 +332,20 @@ export function AppShell(): React.JSX.Element {
                 setPending(0);
               }}
               onBack={() => setSettingsOpen(false)}
+              onOpenDiagnostics={() => {
+                setSettingsOpen(false);
+                openDiagnostics();
+              }}
+            />
+          ) : diagOpen ? (
+            <DiagnosticsScreen
+              snapshot={diagSnapshot}
+              logs={diagLogs}
+              lastRun={lastRun}
+              busy={diagBusy}
+              onSnapshot={openDiagnostics}
+              onLogs={fetchLogs}
+              onBack={() => setDiagOpen(false)}
             />
           ) : filesOpen ? (
             <FilesScreen

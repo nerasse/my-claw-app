@@ -29,6 +29,7 @@ export function SettingsScreen({
   onDisconnect,
   onClearOutbox,
   onBack,
+  onOpenDiagnostics,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
@@ -41,6 +42,7 @@ export function SettingsScreen({
   onDisconnect: () => void;
   onClearOutbox: () => void;
   onBack: () => void;
+  onOpenDiagnostics: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette, dark } = useTheme();
@@ -177,6 +179,20 @@ export function SettingsScreen({
             ) : (
               <Text style={styles.hint}>device not initialized</Text>
             )}
+          </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>troubleshooting</Text>
+          <View style={styles.card}>
+            <Pressable
+              style={[styles.button, styles.buttonGhost]}
+              onPress={onOpenDiagnostics}
+              accessibilityRole="button"
+              accessibilityLabel="Open diagnostics">
+              <Text style={[styles.buttonText, styles.buttonGhostText]}>Diagnostics</Text>
+            </Pressable>
+            <Text style={styles.hint}>server snapshot and logs, ready to copy</Text>
           </View>
         </View>
       </ScrollView>

@@ -33,6 +33,8 @@ export interface ChatMessageFrame {
   attachments: AttachmentMeta[];
   replyToId?: string;
   ts?: string;
+  /** Correlation id of the run that produced this reply: quote it to pull its logs. */
+  run?: string;
 }
 
 export interface StreamStartFrame {
@@ -41,6 +43,7 @@ export interface StreamStartFrame {
   threadId: string;
   replyToId?: string;
   ts?: string;
+  run?: string;
 }
 
 export interface StreamDeltaFrame {
@@ -134,6 +137,18 @@ export interface ApprovalRequestFrame {
   expiresAt: number;
 }
 
+export interface DiagSnapshotResultFrame {
+  type: 'diag.snapshot.result';
+  text: string;
+}
+
+export interface LogsTailResultFrame {
+  type: 'logs.tail.result';
+  text: string;
+  lines: number;
+  query: { scope?: string; level?: string; run?: string; contains?: string; limit?: number };
+}
+
 export interface ErrorFrame {
   type: 'error';
   message: string;
@@ -150,6 +165,8 @@ export type ServerFrame =
   | SessionListResultFrame
   | CommandsListResultFrame
   | FilesListResultFrame
+  | DiagSnapshotResultFrame
+  | LogsTailResultFrame
   | ApprovalRequestFrame
   | ErrorFrame;
 
@@ -164,6 +181,8 @@ const FRAME_TYPES = new Set([
   'session.list.result',
   'commands.list.result',
   'files.list.result',
+  'diag.snapshot.result',
+  'logs.tail.result',
   'approval.request',
   'error',
 ]);
@@ -203,6 +222,22 @@ export function encodeFilesList(threadId: string): string {
 
 export function encodeFileDelete(threadId: string, id: string): string {
   return JSON.stringify({ type: 'files.delete', threadId, id });
+}
+
+export function encodeDiagSnapshot(threadId: string): string {
+  return JSON.stringify({ type: 'diag.snapshot', threadId });
+}
+
+export interface LogsTailQuery {
+  scope?: string;
+  level?: 'debug' | 'info' | 'warn' | 'error';
+  run?: string;
+  contains?: string;
+  limit?: number;
+}
+
+export function encodeLogsTail(query: LogsTailQuery = {}): string {
+  return JSON.stringify({ type: 'logs.tail', ...query });
 }
 
 export function encodeSessionHistory(threadId: string, limit = 50): string {
