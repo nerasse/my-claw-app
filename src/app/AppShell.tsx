@@ -47,6 +47,7 @@ import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { FilesScreen } from './FilesScreen';
 import { ImageViewer } from './ImageViewer';
+import { TextViewer } from './TextViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { Drawer } from './Drawer';
 import { BubbleMenu, type BubbleMenuAction } from '../components/BubbleMenu';
@@ -69,6 +70,10 @@ export function AppShell(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [imageViewer, setImageViewer] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
+  const [textViewer, setTextViewer] = useState<{
     url: string;
     filename: string;
   } | null>(null);
@@ -257,6 +262,10 @@ export function AppShell(): React.JSX.Element {
         setImageViewer(null);
         return true;
       }
+      if (textViewer) {
+        setTextViewer(null);
+        return true;
+      }
       if (bubbleMenu || threadMenu) {
         setBubbleMenu(null);
         setThreadMenu(null);
@@ -288,6 +297,7 @@ export function AppShell(): React.JSX.Element {
     filesOpen,
     imageViewer,
     settingsOpen,
+    textViewer,
     threadMenu,
   ]);
 
@@ -450,6 +460,7 @@ export function AppShell(): React.JSX.Element {
                   connection.send(encodeFileDelete(activeThread, id));
               }}
               onOpenImage={setImageViewer}
+              onOpenText={setTextViewer}
             />
           ) : (
             <ChatScreen
@@ -497,6 +508,14 @@ export function AppShell(): React.JSX.Element {
           url={imageViewer.url}
           filename={imageViewer.filename}
           onClose={() => setImageViewer(null)}
+        />
+      ) : null}
+
+      {textViewer ? (
+        <TextViewer
+          url={textViewer.url}
+          filename={textViewer.filename}
+          onClose={() => setTextViewer(null)}
         />
       ) : null}
 

@@ -215,6 +215,50 @@ test('the hardware back closes the image viewer, not the whole explorer', async 
   await unmount(tree);
 });
 
+test('a markdown file opens full screen, not in a modal card', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [file({})]);
+
+  await press(tree, 'Open file notes.md');
+  await waitFor(() => textsOf(tree).some(t => t.includes('# Hello')));
+
+  // Full screen: the preview card with its "no preview" fallback is not mounted, and there
+  // is no Modal around the content at all.
+  expect(labelsOf(tree)).toContain('Close file view');
+  expect(textsOf(tree)).not.toContain('no preview for this file type');
+  const modals = tree.root.findAll(
+    n => typeof n.props.onRequestClose === 'function' && n.props.visible === true,
+    { deep: true },
+  );
+  expect(modals).toHaveLength(0);
+
+  await unmount(tree);
+});
+
+test('the hardware back quits the full-screen text viewer', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [file({})]);
+
+  await press(tree, 'Open file notes.md');
+  await waitFor(() => labelsOf(tree).includes('Close file view'));
+
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean> };
+  };
+  const handlers = back.default.__handlers;
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]();
+  });
+
+  expect(handled).toBe(true);
+  await waitFor(() => !labelsOf(tree).includes('Close file view'));
+  expect(labelsOf(tree)).toContain('Open file notes.md');
+
+  await unmount(tree);
+});
+
 test('a file without a preview still offers a download', async () => {
   const tree = await renderApp();
   await openFiles(tree, [

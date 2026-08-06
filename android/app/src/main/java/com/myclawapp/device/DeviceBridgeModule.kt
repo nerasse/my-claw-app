@@ -318,9 +318,10 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   private fun storeBytes(bytes: ByteArray, filename: String, toGallery: Boolean): String {
+    val safe = uniqueDownloadName(filename, toGallery)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       val values = ContentValues().apply {
-        put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+        put(MediaStore.MediaColumns.DISPLAY_NAME, safe)
         put(MediaStore.MediaColumns.IS_PENDING, 1)
         put(
           MediaStore.MediaColumns.RELATIVE_PATH,
@@ -344,14 +345,62 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       return uri.toString()
     }
     // API 24-28: the DownloadManager is the system's scoped-storage helper, no permission needed.
-    val cache = File(reactContext.cacheDir, filename)
+    val cache = File(reactContext.cacheDir, safe)
     cache.writeBytes(bytes)
     val manager = reactContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     val request = DownloadManager.Request(Uri.fromFile(cache))
-      .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+      .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safe)
       .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
     manager.enqueue(request)
-    return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/" + filename
+    return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/" + safe
+  }
+
+  /**
+   * The device keeps what the server gives it, so the name has to survive both a hostile
+   * filename (path separators, control chars, length) and a name clash: the same report saved
+   * twice must land as "report (1).pdf", not silently replace the first copy.
+   */
+  private fun uniqueDownloadName(raw: String, toGallery: Boolean): String {
+    var name = raw
+      .replace(Regex("[/\\\\\\x00-\\x1f]"), "_")
+      .trim()
+      .replace(Regex("\\s+"), " ")
+      .trimEnd('.', ' ')
+    if (name.isEmpty()) name = "file"
+    val dot = name.lastIndexOf('.')
+    val ext = if (dot > 0) name.substring(dot).take(10) else ""
+    val base = (if (dot > 0) name.substring(0, dot) else name).take(100 - ext.length).trimEnd(' ', '.')
+    val candidate = base + ext
+
+    val taken = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val collection =
+        if (toGallery) MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        else MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+      val relativePath =
+        (if (toGallery) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_DOWNLOADS) + "/my-claw"
+      val names = mutableSetOf<String>()
+      reactContext.contentResolver.query(
+        collection,
+        arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+        "${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+        arrayOf(relativePath),
+        null,
+      )?.use { cursor ->
+        while (cursor.moveToNext()) cursor.getString(0)?.let(names::add)
+      }
+      names
+    } else {
+      val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+      dir.listFiles()?.mapTo(mutableSetOf()) { it.name } ?: emptySet()
+    }
+
+    if (candidate !in taken) return candidate
+    var n = 1
+    while (true) {
+      val tried = "$base ($n)$ext"
+      if (tried !in taken) return tried
+      n++
+    }
   }
 
   @ReactMethod

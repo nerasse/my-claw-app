@@ -1,15 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
-import Markdown from 'react-native-marked';
+import { FlatList, Image, Modal, Pressable, Text, View } from 'react-native';
 import { deviceBridge } from '../core/nativeBridge';
 import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
@@ -18,7 +8,6 @@ import {
   font,
   radius,
   space,
-  useTheme,
   useThemedStyles,
   type Palette,
 } from '../theme';
@@ -48,6 +37,7 @@ export function FilesScreen({
   onBack,
   onDelete,
   onOpenImage,
+  onOpenText,
 }: {
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
@@ -56,6 +46,7 @@ export function FilesScreen({
   onBack: () => void;
   onDelete: (id: string) => void;
   onOpenImage: (file: { url: string; filename: string }) => void;
+  onOpenText: (file: { url: string; filename: string }) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [viewer, setViewer] = useState<SessionFileMeta | null>(null);
@@ -98,14 +89,24 @@ export function FilesScreen({
           return (
             <Pressable
               style={styles.row}
-              onPress={() =>
-                item.type === 'image'
-                  ? onOpenImage({
-                      url: mediaUrl(mediaBase, deviceInfo, item.id),
-                      filename: item.filename,
-                    })
-                  : setViewer(item)
-              }
+              onPress={() => {
+                const isText =
+                  item.filename.toLowerCase().endsWith('.md') ||
+                  item.filename.toLowerCase().endsWith('.txt');
+                if (item.type === 'image') {
+                  onOpenImage({
+                    url: mediaUrl(mediaBase, deviceInfo, item.id),
+                    filename: item.filename,
+                  });
+                } else if (isText) {
+                  onOpenText({
+                    url: mediaUrl(mediaBase, deviceInfo, item.id),
+                    filename: item.filename,
+                  });
+                } else {
+                  setViewer(item);
+                }
+              }}
               accessibilityRole="button"
               accessibilityLabel={`Open file ${item.filename}`}
             >
@@ -171,39 +172,8 @@ function FileViewer({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
-  const [content, setContent] = useState<string | null>(null);
-  const [contentError, setContentError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
-
-  const isText =
-    file.filename.toLowerCase().endsWith('.md') ||
-    file.filename.toLowerCase().endsWith('.txt');
-  const isMarkdown = file.filename.toLowerCase().endsWith('.md');
-
-  useEffect(() => {
-    if (!isText || !url) return;
-    let cancelled = false;
-    fetch(url)
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then(text => {
-        if (!cancelled) {
-          setContent(text);
-          setContentError(null);
-        }
-      })
-      .catch(err => {
-        if (!cancelled)
-          setContentError(err instanceof Error ? err.message : 'cannot fetch');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isText, url]);
 
   useEffect(() => {
     if (!savedTo) return;
@@ -211,14 +181,12 @@ function FileViewer({
     return () => clearTimeout(timer);
   }, [savedTo]);
 
-  const save = (toGallery: boolean) => {
+  const save = () => {
     if (!url) return;
     setSaving(true);
     deviceBridge
-      .downloadFile(url, file.filename, toGallery)
-      .then(() =>
-        setSavedTo(toGallery ? 'saved to the gallery' : 'saved to Downloads'),
-      )
+      .downloadFile(url, file.filename, false)
+      .then(() => setSavedTo('saved to Downloads'))
       .catch(() => setSavedTo('save failed'))
       .finally(() => setSaving(false));
   };
@@ -241,56 +209,9 @@ function FileViewer({
             </Pressable>
           </View>
 
-          {isText && content !== null ? (
-            <ScrollView
-              style={styles.textStage}
-              contentContainerStyle={styles.textStageContent}
-            >
-              {isMarkdown ? (
-                <Markdown
-                  value={content}
-                  styles={{
-                    text: {
-                      color: palette.text,
-                      fontSize: font.body,
-                      lineHeight: 22,
-                    },
-                    link: { color: palette.accent },
-                    h1: { color: palette.text, fontSize: font.screen },
-                    h2: { color: palette.text, fontSize: font.title },
-                    h3: { color: palette.text, fontSize: font.body },
-                    blockquote: {
-                      borderLeftColor: palette.border,
-                      backgroundColor: palette.surfaceAlt,
-                    },
-                    codespan: {
-                      color: palette.accent,
-                      backgroundColor: palette.surfaceAlt,
-                    },
-                    code: { backgroundColor: palette.surfaceAlt },
-                  }}
-                />
-              ) : (
-                <Text style={styles.plainText} selectable>
-                  {content}
-                </Text>
-              )}
-            </ScrollView>
-          ) : isText && content === null ? (
-            <View style={styles.imageStage}>
-              {contentError ? (
-                <Text style={styles.empty}>
-                  could not fetch content ({contentError})
-                </Text>
-              ) : (
-                <ActivityIndicator color={palette.textFaint} />
-              )}
-            </View>
-          ) : (
-            <View style={styles.imageStage}>
-              <Text style={styles.empty}>no preview for this file type</Text>
-            </View>
-          )}
+          <View style={styles.imageStage}>
+            <Text style={styles.empty}>no preview for this file type</Text>
+          </View>
 
           <View style={styles.modalActions}>
             {savedTo ? (
@@ -298,7 +219,7 @@ function FileViewer({
             ) : null}
             <Pressable
               style={[styles.button, saving && styles.buttonOff]}
-              onPress={() => save(false)}
+              onPress={save}
               disabled={saving || !url}
               accessibilityRole="button"
               accessibilityLabel="Save file to downloads"
@@ -419,18 +340,6 @@ function createStyles(palette: Palette) {
       borderRadius: radius.sm,
     },
     fullImage: { width: '100%' as const, height: '100%' as const },
-    textStage: {
-      maxHeight: 360,
-      backgroundColor: palette.bg,
-      borderRadius: radius.sm,
-    },
-    textStageContent: { padding: space.md },
-    plainText: {
-      color: palette.text,
-      fontSize: font.body,
-      fontFamily: 'monospace',
-      lineHeight: 22,
-    },
     modalActions: {
       flexDirection: 'row' as const,
       justifyContent: 'flex-end' as const,
@@ -438,6 +347,7 @@ function createStyles(palette: Palette) {
       gap: space.md,
       paddingTop: space.md,
     },
+    saveFeedback: { color: palette.textFaint, fontSize: font.small, marginRight: 'auto' as const },
     button: {
       paddingHorizontal: space.lg,
       paddingVertical: space.sm,
@@ -449,11 +359,6 @@ function createStyles(palette: Palette) {
       color: '#fff',
       fontSize: font.body,
       fontWeight: '600' as const,
-    },
-    saveFeedback: {
-      color: palette.textFaint,
-      fontSize: font.small,
-      marginRight: 'auto' as const,
     },
   };
 }
