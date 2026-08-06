@@ -43,6 +43,7 @@ export function Bubble({
             onOpen={onOpenAttachment}
             // The transcript belongs to the recording, so only an audio attachment claims it.
             transcript={att.type === 'audio' ? item.transcript : undefined}
+            onAccent={!agent}
           />
         ))}
         {item.text ? (

@@ -106,6 +106,7 @@ class ChatStoreImpl {
         text: textOf(entry),
         attachments: entry.attachments ?? [],
         streaming: false,
+        ...(entry.transcript ? { transcript: entry.transcript } : {}),
         ts,
       };
     });

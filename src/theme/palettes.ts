@@ -13,6 +13,14 @@ export interface Palette {
   accent: string;
   accentText: string;
   accentSoft: string;
+  /**
+   * Secondary text and inactive tracks drawn *on* an accent fill (a user bubble). Neither
+   * textMuted nor border survives there: both are tuned for the page background, and on accent
+   * they read as either invisible or dirty. Expressed as a translucent accentText so the two
+   * themes stay coherent without a second accent ramp.
+   */
+  onAccentMuted: string;
+  onAccentTrack: string;
   ok: string;
   warn: string;
   danger: string;
@@ -32,6 +40,8 @@ export const lightPalette: Palette = {
   accent: '#2563eb',
   accentText: '#ffffff',
   accentSoft: '#e8efff',
+  onAccentMuted: 'rgba(255,255,255,0.74)',
+  onAccentTrack: 'rgba(255,255,255,0.34)',
   ok: '#12855a',
   warn: '#b45309',
   danger: '#c02626',
@@ -50,6 +60,8 @@ export const darkPalette: Palette = {
   accent: '#4d84ff',
   accentText: '#0b1220',
   accentSoft: '#1b2740',
+  onAccentMuted: 'rgba(11,18,32,0.68)',
+  onAccentTrack: 'rgba(11,18,32,0.26)',
   ok: '#3ecf8e',
   warn: '#e0a33e',
   danger: '#ff6b6b',

@@ -20,12 +20,15 @@ export function VoiceNote({
   att,
   uri,
   transcript,
+  onAccent,
 }: {
   att: AttachmentMeta;
   /** Local file while the note is still on this device, else the authenticated media url. */
   uri: string;
-  /** Filled in once the server echoes what it heard. */
+  /** Filled in once the server reports what it heard. */
   transcript?: string;
+  /** Sitting on an accent-filled bubble, where the page colours have no contrast left. */
+  onAccent?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const playback = usePlaybackOf(uri);
@@ -53,13 +56,13 @@ export function VoiceNote({
       <View style={styles.row}>
         <Pressable
           onPress={toggle}
-          style={styles.button}
+          style={[styles.button, onAccent && styles.buttonOnAccent]}
           hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel={playing ? 'Pause voice message' : 'Play voice message'}>
           <Svg width={16} height={16} viewBox="0 0 24 24">
             <Path
-              fill={styles.buttonGlyph.color}
+              fill={onAccent ? styles.buttonGlyphOnAccent.color : styles.buttonGlyph.color}
               d={playing ? 'M6 5h4v14H6zm8 0h4v14h-4z' : 'M8 5v14l11-7z'}
             />
           </Svg>
@@ -78,21 +81,22 @@ export function VoiceNote({
               <View
                 style={[
                   styles.bar,
+                  onAccent && styles.barOnAccent,
                   { height: barHeight(att.id, index) },
-                  index < played ? styles.barPlayed : null,
+                  index < played ? (onAccent ? styles.barPlayedOnAccent : styles.barPlayed) : null,
                 ]}
               />
             </Pressable>
           ))}
         </View>
 
-        <Text style={styles.time}>
+        <Text style={[styles.time, onAccent && styles.timeOnAccent]}>
           {formatDuration(playing || position > 0 ? Math.max(0, total - position) : total)}
         </Text>
       </View>
 
       {transcript ? (
-        <Text style={styles.transcript}>{transcript}</Text>
+        <Text style={[styles.transcript, onAccent && styles.transcriptOnAccent]}>{transcript}</Text>
       ) : null}
     </View>
   );
@@ -123,7 +127,10 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
+  // Inverted on an accent bubble: an accent button on an accent fill has no edge at all.
+  buttonOnAccent: { backgroundColor: palette.accentText },
   buttonGlyph: { color: palette.accentText },
+  buttonGlyphOnAccent: { color: palette.accent },
   bars: {
     flex: 1,
     flexDirection: 'row' as const,
@@ -133,7 +140,9 @@ const createStyles = (palette: Palette) => ({
   },
   barHit: { flex: 1, height: 22, justifyContent: 'center' as const },
   bar: { borderRadius: radius.pill, backgroundColor: palette.border },
+  barOnAccent: { backgroundColor: palette.onAccentTrack },
   barPlayed: { backgroundColor: palette.accent },
+  barPlayedOnAccent: { backgroundColor: palette.accentText },
   time: {
     fontSize: font.micro,
     color: palette.textFaint,
@@ -141,6 +150,7 @@ const createStyles = (palette: Palette) => ({
     minWidth: 30,
     textAlign: 'right' as const,
   },
+  timeOnAccent: { color: palette.onAccentMuted },
   /**
    * The transcript sits inside the bubble instead of arriving as its own message: what was said
    * and the recording of it are one thing, and a separate echo pushed the conversation apart.
@@ -151,4 +161,5 @@ const createStyles = (palette: Palette) => ({
     fontStyle: 'italic' as const,
     maxWidth: 260,
   },
+  transcriptOnAccent: { color: palette.onAccentMuted },
 });

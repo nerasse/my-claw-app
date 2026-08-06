@@ -328,3 +328,82 @@ test('the settings expose the transcription engine and say where the audio goes'
 
   await unmount(tree);
 });
+
+/**
+ * Describes a voice bubble by what it puts on screen. Two renderings that agree here look the
+ * same to the eye, which is the only claim the alignment makes.
+ */
+function bubbleShape(tree: Tree) {
+  const labels = labelsOf(tree);
+  const strings = tree.root
+    .findAll(node => typeof node.props.children === 'string')
+    .map(node => String(node.props.children));
+  return {
+    hasPlayer: labels.includes('Play voice message'),
+    // 0:00 would mean the duration never made it across.
+    duration: strings.find(text => /^\d+:\d\d$/.test(text)),
+    transcript: strings.find(text => text === 'rappelle-moi demain'),
+    // The storage marker must never reach a bubble.
+    marker: strings.find(text => text.includes('[Audio]')),
+  };
+}
+
+test('a reopened conversation renders a voice note exactly like the live one', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+  await touch.up();
+  await waitFor(() => chatSends().length > 0);
+  const sent = chatSends()[0];
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'chat.transcript',
+        threadId: THREAD,
+        replyToId: sent.id,
+        text: 'rappelle-moi demain',
+      }),
+    });
+  });
+  await waitFor(() => bubbleShape(tree).transcript !== undefined);
+  const live = bubbleShape(tree);
+
+  // What the server sends back for the same turn once the thread is reopened.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'chat.history',
+        threadId: THREAD,
+        messages: [
+          {
+            id: 'h-1',
+            role: 'user',
+            text: '',
+            ts: '2026-08-06T21:00:00.000Z',
+            transcript: 'rappelle-moi demain',
+            attachments: [
+              {
+                id: 'voice-1',
+                type: 'audio',
+                filename: 'voice-note.m4a',
+                mimeType: 'audio/mp4',
+                sizeBytes: 13600,
+                durationMs: 3400,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+  });
+  await waitFor(() => bubbleShape(tree).hasPlayer);
+  const replayed = bubbleShape(tree);
+
+  expect(replayed).toEqual(live);
+  expect(replayed.marker).toBeUndefined();
+  expect(replayed.duration).toBe('0:03');
+
+  await unmount(tree);
+});

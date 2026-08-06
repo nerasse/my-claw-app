@@ -92,6 +92,8 @@ export type HistoryEntry =
       text: string;
       ts: string;
       attachments?: AttachmentMeta[];
+      /** Words of this turn's voice note, so a replayed bubble matches the live one. */
+      transcript?: string;
     }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 

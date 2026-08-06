@@ -12,6 +12,7 @@ export function AttachmentView({
   deviceInfo,
   onOpen,
   transcript,
+  onAccent,
 }: {
   att: AttachmentMeta;
   mediaBase: string;
@@ -20,6 +21,8 @@ export function AttachmentView({
   onOpen?: (kind: 'image' | 'text', target: { url: string; filename: string }) => void;
   /** What the server heard, shown under its own recording. */
   transcript?: string;
+  /** Sitting on an accent-filled bubble: the page colours have no contrast there. */
+  onAccent?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const remote = deviceInfo
@@ -37,7 +40,7 @@ export function AttachmentView({
   // A voice note plays where it sits. Falling through to the chip would have named a file the
   // sender already knows about and given no way to hear it back.
   if (att.type === 'audio' && uri && !att.deleted) {
-    return <VoiceNote att={att} uri={uri} transcript={transcript} />;
+    return <VoiceNote att={att} uri={uri} transcript={transcript} onAccent={onAccent} />;
   }
 
   if (att.type === 'image' && uri) {
@@ -49,7 +52,7 @@ export function AttachmentView({
           resizeMode="contain"
           accessibilityLabel={name}
         />
-        <Text style={styles.caption} numberOfLines={1}>
+        <Text style={[styles.caption, onAccent && styles.captionOnAccent]} numberOfLines={1}>
           {name}
         </Text>
       </>
@@ -69,18 +72,18 @@ export function AttachmentView({
   const label = att.deleted ? `${name} (deleted)` : name;
   if (!open) {
     return (
-      <View style={[styles.chip, att.deleted ? styles.chipGone : null]}>
-        <Text style={styles.chipText}>{label}</Text>
+      <View style={[styles.chip, onAccent && styles.chipOnAccent, att.deleted ? styles.chipGone : null]}>
+        <Text style={[styles.chipText, onAccent && styles.chipTextOnAccent]}>{label}</Text>
       </View>
     );
   }
   return (
     <Pressable
-      style={styles.chip}
+      style={[styles.chip, onAccent && styles.chipOnAccent]}
       onPress={open}
       accessibilityRole="button"
       accessibilityLabel={`Open attachment ${name}`}>
-      <Text style={styles.chipText}>{label}</Text>
+      <Text style={[styles.chipText, onAccent && styles.chipTextOnAccent]}>{label}</Text>
     </Pressable>
   );
 }
@@ -94,6 +97,7 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surfaceAlt,
   },
   caption: { fontSize: font.micro, color: palette.textFaint, maxWidth: 190, marginTop: 1 },
+  captionOnAccent: { color: palette.onAccentMuted },
   chip: {
     alignSelf: 'flex-start' as const,
     backgroundColor: palette.accentSoft,
@@ -103,5 +107,7 @@ const createStyles = (palette: Palette) => ({
     marginBottom: space.xs,
   },
   chipGone: { opacity: 0.6 },
+  chipOnAccent: { backgroundColor: palette.onAccentTrack },
   chipText: { fontSize: font.small, color: palette.text },
+  chipTextOnAccent: { color: palette.accentText },
 });
