@@ -148,6 +148,21 @@ test('a gallery photo (content:// uri) is copied to the cache before staging', a
   await waitFor(() => stringsOf(tree).includes('photo.jpg'));
   expect(deviceBridge.prepareFile).toHaveBeenCalledWith('content://media/external/images/42');
 
+  // The upload must go through the native bridge: fetch() cannot read a local uri on Android.
+  await typeInto(tree, 'look at this');
+  await pressLabel(tree, 'Send message');
+  await waitFor(() => bridge.uploadFile.mock.calls.length > 0);
+  expect(bridge.uploadFile).toHaveBeenCalledWith(
+    'file:///cache/prepared',
+    'http://10.10.20.10:8080/media?device=dev-test&token=token-test',
+    'photo.jpg',
+    'image',
+    THREAD,
+  );
+  await waitFor(() =>
+    bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('media-1')),
+  );
+
   await unmount(tree);
 });
 

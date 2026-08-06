@@ -37,6 +37,17 @@ export interface DeviceBridgeNative {
   pickFile(): Promise<PickedFile[]>;
   /** Copies a content:// or file:// uri into the cache and returns a readable file:// uri. */
   prepareFile(uri: string): Promise<{ uri: string; name: string; size: number }>;
+  /**
+   * POSTs a local file as a raw body. Native because RN's fetch cannot read file:// or
+   * content:// uris on Android (OkHttp only accepts http(s) urls).
+   */
+  uploadFile(
+    uri: string,
+    url: string,
+    filename: string,
+    type: string,
+    threadId: string,
+  ): Promise<{ status: number; body: string }>;
 }
 
 const native = NativeModules.DeviceBridge as DeviceBridgeNative | undefined;
@@ -61,6 +72,9 @@ export const deviceBridge: DeviceBridgeNative = {
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   prepareFile: uri => native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),
+  uploadFile: (uri, url, filename, type, threadId) =>
+    native?.uploadFile(uri, url, filename, type, threadId) ??
+    Promise.reject(new Error('DeviceBridge unavailable')),
 };
 
 export const deviceEvents = DeviceEventEmitter;

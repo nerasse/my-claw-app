@@ -15,7 +15,19 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.ThreadLocalRandom
+import java.util.concurrent.TimeUnit
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.Response
+import okio.BufferedSink
+import okio.source
 
 class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule() {
 
@@ -28,6 +40,15 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   private var pendingFilePromise: Promise? = null
+
+  // Uploads can be slow on mobile data; only the connect timeout stays short.
+  private val uploadClient: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+      .connectTimeout(15, TimeUnit.SECONDS)
+      .writeTimeout(5, TimeUnit.MINUTES)
+      .readTimeout(60, TimeUnit.SECONDS)
+      .build()
+  }
 
   // Storage Access Framework picker, wired like the (removed from RN) GuardedResultAsyncTask
   // flow: launch ACTION_GET_CONTENT, copy the results to the cache, resolve the promise.
@@ -160,6 +181,94 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       promise.resolve(map)
     } catch (e: Exception) {
       promise.reject("PREPARE_FAILED", e.message ?: "prepare failed")
+    }
+  }
+
+  /**
+   * Uploads a local file as a raw request body. This has to happen natively: RN's fetch goes
+   * through OkHttp, which only accepts http(s) urls, so reading a file:// or content:// uri from
+   * JS always fails with "Network request failed". Streams from the resolver so a large file is
+   * never held in memory, and sets Content-Length so the server can reject it before buffering.
+   */
+  @ReactMethod
+  fun uploadFile(
+    uri: String,
+    url: String,
+    filename: String,
+    type: String,
+    threadId: String,
+    promise: Promise,
+  ) {
+    val parsed = try {
+      Uri.parse(uri)
+    } catch (e: Exception) {
+      promise.reject("BAD_URI", e.message ?: "bad uri")
+      return
+    }
+    val length = fileLength(parsed)
+    if (length < 0) {
+      promise.reject("OPEN_FAILED", "cannot read $uri")
+      return
+    }
+    val mime = reactContext.contentResolver.getType(parsed) ?: "application/octet-stream"
+    val body = object : RequestBody() {
+      override fun contentType(): MediaType? = mime.toMediaTypeOrNull()
+
+      override fun contentLength(): Long = length
+
+      override fun writeTo(sink: BufferedSink) {
+        val input = reactContext.contentResolver.openInputStream(parsed)
+          ?: throw IOException("cannot open $parsed")
+        input.use { stream -> sink.writeAll(stream.source()) }
+      }
+    }
+    val request = Request.Builder()
+      .url(url)
+      .post(body)
+      .header("x-filename", filename)
+      .header("x-type", type)
+      .header("x-thread-id", threadId)
+      .build()
+    uploadClient.newCall(request).enqueue(object : Callback {
+      override fun onFailure(call: Call, e: IOException) {
+        promise.reject("UPLOAD_FAILED", e.message ?: "upload failed")
+      }
+
+      override fun onResponse(call: Call, response: Response) {
+        response.use {
+          val map = Arguments.createMap()
+          map.putInt("status", it.code)
+          map.putString("body", it.body?.string() ?: "")
+          promise.resolve(map)
+        }
+      }
+    })
+  }
+
+  /** Byte size of a file:// or content:// uri, or -1 when it cannot be read. */
+  private fun fileLength(uri: Uri): Long {
+    if (uri.scheme == "file") {
+      val file = File(uri.path ?: return -1)
+      return if (file.isFile) file.length() else -1
+    }
+    return try {
+      reactContext.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+        if (cursor.moveToFirst() && idx >= 0 && !cursor.isNull(idx)) return cursor.getLong(idx)
+      }
+      // No SIZE column (some providers): fall back to counting the stream.
+      reactContext.contentResolver.openInputStream(uri)?.use { stream ->
+        var total = 0L
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+          val read = stream.read(buffer)
+          if (read < 0) break
+          total += read
+        }
+        total
+      } ?: -1
+    } catch (_: Exception) {
+      -1
     }
   }
 

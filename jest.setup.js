@@ -54,7 +54,8 @@ jest.mock('./src/core/nativeBridge', () => ({
     prefsGetAll: jest.fn(() => Promise.resolve({})),
     prefsSet: jest.fn(() => Promise.resolve()),
     pickFile: jest.fn(() => Promise.resolve([])),
-    prepareFile: jest.fn(uri => Promise.resolve({ uri, name: 'file', size: 0 })),
+    prepareFile: jest.fn(() => Promise.resolve({ uri: 'file:///cache/prepared', name: 'file', size: 0 })),
+    uploadFile: jest.fn(() => Promise.resolve({ status: 200, body: JSON.stringify({ id: 'media-1' }) })),
   },
   deviceEvents: require('react-native').DeviceEventEmitter,
 }));
