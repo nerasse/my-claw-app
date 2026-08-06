@@ -29,6 +29,14 @@ class ClawConnectionService : Service() {
   private var reconnectAttempts = 0
   private var stopping = false
 
+  /**
+   * Bumped on every connect attempt. OkHttp callbacks arrive on their own thread and keep
+   * firing after a socket has been replaced, so a listener that no longer matches would report
+   * the state of a dead connection and schedule a competing reconnect loop.
+   */
+  @Volatile
+  private var generation = 0
+
   private val client = OkHttpClient.Builder()
     .pingInterval(20, TimeUnit.SECONDS)
     .connectTimeout(10, TimeUnit.SECONDS)
@@ -130,6 +138,15 @@ class ClawConnectionService : Service() {
 
   private fun connect() {
     val url = targetUrl ?: getSharedPreferences("claw_connection", Context.MODE_PRIVATE).getString(EXTRA_URL, null) ?: return
+    // Remembered here too: after the system restarts the service, targetUrl is null and the
+    // reported state would carry no address at all.
+    targetUrl = url
+    // A connect while one is already live replaces it. Without this the old socket stayed
+    // open on the old server, kept delivering frames, and its retry loop fought the new one.
+    handler.removeCallbacksAndMessages(null)
+    val gen = ++generation
+    webSocket?.close(1000, "reconnecting")
+    webSocket = null
     state = "connecting"
     emitState(null, 0)
     val deviceId = DeviceCredentials.deviceId(this)
@@ -139,6 +156,11 @@ class ClawConnectionService : Service() {
       request,
       object : WebSocketListener() {
         override fun onOpen(ws: WebSocket, response: Response) {
+          if (gen != generation) {
+            ws.close(1000, "superseded")
+            return
+          }
+          webSocket = ws
           reconnectAttempts = 0
           state = "connected"
           drainOutbox(ws)
@@ -147,18 +169,22 @@ class ClawConnectionService : Service() {
         }
 
         override fun onMessage(ws: WebSocket, text: String) {
+          if (gen != generation) return
           emitMessage(text)
         }
 
         override fun onMessage(ws: WebSocket, bytes: ByteString) {
+          if (gen != generation) return
           emitMessage(bytes.utf8())
         }
 
         override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+          if (gen != generation) return
           onDisconnected(reason)
         }
 
         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+          if (gen != generation) return
           onDisconnected(t.message ?: "failure")
         }
       },
@@ -182,6 +208,7 @@ class ClawConnectionService : Service() {
 
   private fun stopConnection() {
     handler.removeCallbacksAndMessages(null)
+    generation++
     webSocket?.close(1000, "user disconnect")
     webSocket = null
     state = "idle"

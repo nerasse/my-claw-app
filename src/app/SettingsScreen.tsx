@@ -47,6 +47,12 @@ export function SettingsScreen({
   const styles = useThemedStyles(createStyles);
   const { palette, dark } = useTheme();
   const connected = status.state === 'connected';
+  const busy = connected || status.state === 'connecting';
+  /**
+   * The socket keeps running on the address it was started with, so editing the field alone
+   * would leave the screen showing one server while the app talks to another.
+   */
+  const elsewhere = busy && Boolean(status.url) && status.url !== url.trim();
   const [showToken, setShowToken] = useState(false);
 
   return (
@@ -97,13 +103,19 @@ export function SettingsScreen({
               placeholderTextColor={palette.textFaint}
               accessibilityLabel="Server address"
             />
+            {elsewhere ? (
+              <Text style={styles.hint} accessibilityLabel="Live server differs">
+                {`still talking to ${status.url} · reconnect to apply`}
+              </Text>
+            ) : null}
             <View style={styles.row}>
               <Pressable
-                style={[styles.button, (connected || status.state === 'connecting') && styles.buttonOff]}
+                style={[styles.button, busy && !elsewhere && styles.buttonOff]}
                 onPress={onConnect}
-                disabled={connected || status.state === 'connecting'}
-                accessibilityRole="button">
-                <Text style={styles.buttonText}>Connect</Text>
+                disabled={busy && !elsewhere}
+                accessibilityRole="button"
+                accessibilityLabel={elsewhere ? 'Reconnect to the new server' : 'Connect'}>
+                <Text style={styles.buttonText}>{elsewhere ? 'Reconnect' : 'Connect'}</Text>
               </Pressable>
               <Pressable
                 style={[styles.button, styles.buttonGhost, !connected && status.state !== 'connecting' && styles.buttonOff]}
