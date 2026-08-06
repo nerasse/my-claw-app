@@ -35,8 +35,10 @@ import {
   encodeSessionDelete,
   encodeSessionHistory,
   encodeSessionList,
+  encodeSessionRename,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
+  MAX_TITLE_LENGTH,
   type LogsTailQuery,
   type SessionFileMeta,
   type SessionSummary,
@@ -54,6 +56,7 @@ import { ImageViewer } from './ImageViewer';
 import { TextViewer } from './TextViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { Drawer } from './Drawer';
+import { PromptSheet } from '../components/PromptSheet';
 import { BubbleMenu, type BubbleMenuAction } from '../components/BubbleMenu';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
@@ -94,6 +97,7 @@ export function AppShell(): React.JSX.Element {
   const [autoFocusHero, setAutoFocusHero] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
+  const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
 
   const items = useChatItems(activeThread);
   const sessions = useSessions();
@@ -289,6 +293,11 @@ export function AppShell(): React.JSX.Element {
         setFileToDelete(null);
         return true;
       }
+      // Innermost first: the rename sheet sits over the menu that opened it.
+      if (threadToRename) {
+        setThreadToRename(null);
+        return true;
+      }
       if (bubbleMenu || threadMenu) {
         setBubbleMenu(null);
         setThreadMenu(null);
@@ -323,6 +332,7 @@ export function AppShell(): React.JSX.Element {
     settingsOpen,
     textViewer,
     threadMenu,
+    threadToRename,
   ]);
 
   const sendChat = useCallback(
@@ -414,6 +424,15 @@ export function AppShell(): React.JSX.Element {
 
   const threadActions: BubbleMenuAction[] = threadMenu
     ? [
+        {
+          label: 'Rename',
+          onPress: () => {
+            // Handing the menu straight to the sheet: closing first would drop the thread it
+            // was opened for, and the sheet needs the current name to start from.
+            setThreadToRename(threadMenu);
+            setThreadMenu(null);
+          },
+        },
         {
           label: 'Archive',
           onPress: () =>
@@ -587,6 +606,22 @@ export function AppShell(): React.JSX.Element {
           preview={threadMenu.title}
           actions={threadActions}
           onClose={() => setThreadMenu(null)}
+        />
+      ) : null}
+
+      {threadToRename ? (
+        <PromptSheet
+          title="Name this conversation"
+          hint="Leave empty to go back to the first message."
+          initialValue={threadToRename.title}
+          placeholder="Infra maison"
+          maxLength={MAX_TITLE_LENGTH}
+          onSubmit={value => {
+            connection
+              .send(encodeSessionRename(threadToRename.threadId, value))
+              .catch(() => {});
+          }}
+          onClose={() => setThreadToRename(null)}
         />
       ) : null}
 

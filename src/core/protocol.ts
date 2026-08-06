@@ -245,6 +245,13 @@ export function encodeChatSend(id: string, text: string, threadId: string, attac
 
 export type VoiceMode = 'cloud' | 'local' | 'auto';
 
+/** Mirrors the server cap, so the field cannot accept a name that would come back truncated. */
+export const MAX_TITLE_LENGTH = 60;
+
+export function encodeSessionRename(threadId: string, title: string): string {
+  return JSON.stringify({ type: 'session.rename', threadId, title });
+}
+
 export function encodeVoiceModeGet(): string {
   return JSON.stringify({ type: 'voice.mode.get' });
 }

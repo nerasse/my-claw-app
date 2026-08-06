@@ -35,7 +35,8 @@ export function BubbleMenu({
             key={action.label}
             style={[styles.action, action.danger && styles.actionDanger]}
             onPress={action.onPress}
-            accessibilityRole="button">
+            accessibilityRole="button"
+            accessibilityLabel={action.label}>
             {action.label}
           </Text>
         ))}
