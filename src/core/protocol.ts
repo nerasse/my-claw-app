@@ -157,8 +157,25 @@ export interface LogsTailResultFrame {
   query: { scope?: string; level?: string; run?: string; contains?: string; limit?: number };
 }
 
+export interface TranscriptFrame {
+  type: 'chat.transcript';
+  threadId: string;
+  /** The id this device generated for the chat.send that carried the recording. */
+  replyToId: string;
+  text: string;
+}
+
+export interface VoiceModeResultFrame {
+  type: 'voice.mode.result';
+  mode: 'cloud' | 'local' | 'auto';
+  /** What "auto" resolves to right now, so the screen never has to guess. */
+  resolved: 'cloud' | 'local';
+  /** False when the server has no cloud credentials: the choice would fail. */
+  cloudAvailable: boolean;
+}
+
 /** Which request was refused. The screen that asked is the one that shows it. */
-export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs';
+export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice';
 
 export interface ErrorFrame {
   type: 'error';
@@ -179,6 +196,8 @@ export type ServerFrame =
   | FilesListResultFrame
   | DiagSnapshotResultFrame
   | LogsTailResultFrame
+  | VoiceModeResultFrame
+  | TranscriptFrame
   | ApprovalRequestFrame
   | ErrorFrame;
 
@@ -195,6 +214,8 @@ const FRAME_TYPES = new Set([
   'files.list.result',
   'diag.snapshot.result',
   'logs.tail.result',
+  'voice.mode.result',
+  'chat.transcript',
   'approval.request',
   'error',
 ]);
@@ -218,6 +239,16 @@ export function encodeChatSend(id: string, text: string, threadId: string, attac
   return JSON.stringify(attachments?.length
     ? { type: 'chat.send', id, text, threadId, attachments }
     : { type: 'chat.send', id, text, threadId });
+}
+
+export type VoiceMode = 'cloud' | 'local' | 'auto';
+
+export function encodeVoiceModeGet(): string {
+  return JSON.stringify({ type: 'voice.mode.get' });
+}
+
+export function encodeVoiceModeSet(mode: VoiceMode): string {
+  return JSON.stringify({ type: 'voice.mode.set', mode });
 }
 
 export function encodeSessionList(): string {

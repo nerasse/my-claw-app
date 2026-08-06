@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
+import type { VoiceRecording } from '../core/nativeBridge';
+import { VoiceRecorder } from './VoiceRecorder';
 import type { PendingAttachment } from '../core/upload';
 import { formatBytes } from '../core/utils';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -20,6 +22,8 @@ export function Composer({
   onRemoveAttachment,
   uploading,
   uploadError,
+  onRecorded,
+  onRecordingError,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -41,10 +45,21 @@ export function Composer({
   onRemoveAttachment?: (id: string) => void;
   uploading?: boolean;
   uploadError?: string | null;
+  /** A finished voice note. Absent means the composer offers no microphone at all. */
+  onRecorded?: (recording: VoiceRecording) => void;
+  onRecordingError?: (message: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
   const empty = value.trim().length === 0;
+  const staged = attachments?.length ?? 0;
+  // An attachment on its own is a message. Gating on text alone made the button dead for a
+  // photo sent without a caption, even though the send path already accepted it.
+  const nothingToSend = empty && staged === 0;
+  const [recording, setRecording] = useState(false);
+  // The microphone replaces the send arrow only when there is nothing to send, so a typed
+  // message never has to compete with it for the same corner.
+  const micVisible = onRecorded !== undefined && nothingToSend;
 
   const query = commandQuery(value);
   const menu = query !== null && commands ? filterCommands(query, commands) : null;
@@ -126,7 +141,7 @@ export function Composer({
         </View>
       ) : null}
       <View style={styles.row}>
-        {onPickAttachment ? (
+        {onPickAttachment && !recording ? (
           <Pressable
             style={[styles.attach, hero && styles.sendHero]}
             onPress={onPickAttachment}
@@ -135,6 +150,7 @@ export function Composer({
             <Text style={[styles.attachGlyph, uploading && styles.attachBusy]}>{uploading ? '…' : '＋'}</Text>
           </Pressable>
         ) : null}
+        {recording ? null : (
         <TextInput
           style={[styles.input, hero && styles.inputHero]}
           value={value}
@@ -148,16 +164,26 @@ export function Composer({
           blurOnSubmit={false}
           accessibilityLabel="Message to send"
         />
-        <Pressable
-          style={[styles.send, hero && styles.sendHero, empty && styles.sendIdle]}
-          onPress={onSend}
-          disabled={empty}
-          accessibilityRole="button"
-          accessibilityLabel="Send message">
-          <Svg width={hero ? 22 : 20} height={hero ? 22 : 20} viewBox="0 0 24 24">
-            <Path fill={empty ? palette.textFaint : palette.accentText} d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z" />
-          </Svg>
-        </Pressable>
+        )}
+        {micVisible ? (
+          <VoiceRecorder
+            hero={hero}
+            onRecorded={onRecorded}
+            onError={onRecordingError ?? (() => {})}
+            onActiveChange={setRecording}
+          />
+        ) : (
+          <Pressable
+            style={[styles.send, hero && styles.sendHero, nothingToSend && styles.sendIdle]}
+            onPress={onSend}
+            disabled={nothingToSend}
+            accessibilityRole="button"
+            accessibilityLabel="Send message">
+            <Svg width={hero ? 22 : 20} height={hero ? 22 : 20} viewBox="0 0 24 24">
+              <Path fill={nothingToSend ? palette.textFaint : palette.accentText} d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z" />
+            </Svg>
+          </Pressable>
+        )}
       </View>
     </View>
   );

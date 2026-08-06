@@ -9,7 +9,9 @@ test('boots on the chat screen with a composer and a drawer handle', async () =>
   const labels = labelsOf(tree);
   expect(labels).toContain('Message to send');
   expect(labels).toContain('Open conversations');
-  expect(labels).toContain('Send message');
+  // Nothing typed yet, so the corner offers the microphone rather than a dead send arrow.
+  expect(labels).toContain('Record voice message');
+  expect(labels).not.toContain('Send message');
   await unmount(tree);
 });
 

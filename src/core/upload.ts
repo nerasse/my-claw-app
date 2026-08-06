@@ -16,6 +16,17 @@ export interface UploadedAttachment {
   type: AttachmentMeta['type'];
 }
 
+/** An uploaded attachment on its way to the wire, plus what only this device knows about it. */
+export interface OutgoingAttachment {
+  id: string;
+  type: AttachmentMeta['type'];
+  /** Local file, kept so the bubble renders before the server copy is reachable. */
+  uri?: string;
+  filename?: string;
+  audioAsVoice?: boolean;
+  durationMs?: number;
+}
+
 /**
  * Pushes a local file to the server as raw bytes (the endpoint reads the body as-is), then
  * returns the media id to reference in chat.send.

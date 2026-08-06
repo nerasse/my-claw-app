@@ -109,8 +109,75 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
 
   override fun invalidate() {
     reactContext.removeActivityEventListener(filePickListener)
+    voiceAudio.teardown()
     DeviceBus.detach()
     super.invalidate()
+  }
+
+  private val voiceAudio by lazy { VoiceAudio(reactContext) }
+
+  /**
+   * Starts capture and returns the destination immediately. The caller needs the uri before the
+   * take ends: a cancelled recording still has to be deleted, and a crash mid-take leaves a file
+   * whose name the JS side already knows.
+   */
+  @ReactMethod
+  fun startRecording(promise: Promise) {
+    if (ContextCompat.checkSelfPermission(reactContext, android.Manifest.permission.RECORD_AUDIO)
+      != android.content.pm.PackageManager.PERMISSION_GRANTED
+    ) {
+      promise.reject("NO_MIC_PERMISSION", "Microphone permission not granted")
+      return
+    }
+    try {
+      promise.resolve(voiceAudio.startRecording())
+    } catch (err: Exception) {
+      promise.reject("RECORD_FAILED", err.message ?: "could not start recording", err)
+    }
+  }
+
+  /** Resolves null when the take was too short to contain audio, rather than a 0-byte file. */
+  @ReactMethod
+  fun stopRecording(promise: Promise) {
+    try {
+      promise.resolve(voiceAudio.stopRecording())
+    } catch (err: Exception) {
+      promise.reject("RECORD_FAILED", err.message ?: "could not stop recording", err)
+    }
+  }
+
+  @ReactMethod
+  fun cancelRecording(promise: Promise) {
+    voiceAudio.cancelRecording()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun playAudio(uri: String, promise: Promise) {
+    try {
+      voiceAudio.play(uri)
+      promise.resolve(null)
+    } catch (err: Exception) {
+      promise.reject("PLAYBACK_FAILED", err.message ?: "could not play audio", err)
+    }
+  }
+
+  @ReactMethod
+  fun pausePlayback(promise: Promise) {
+    voiceAudio.pause()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun seekPlayback(positionMs: Double, promise: Promise) {
+    voiceAudio.seek(positionMs.toInt())
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun stopPlayback(promise: Promise) {
+    voiceAudio.stopPlayback()
+    promise.resolve(null)
   }
 
   /** Multi-file picker through the system document picker (Storage Access Framework). */

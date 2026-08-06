@@ -35,12 +35,16 @@ import {
   encodeSessionDelete,
   encodeSessionHistory,
   encodeSessionList,
-  type AttachmentMeta,
+  encodeVoiceModeGet,
+  encodeVoiceModeSet,
   type LogsTailQuery,
   type SessionFileMeta,
   type SessionSummary,
+  type VoiceMode,
+  type VoiceModeResultFrame,
 } from '../core/protocol';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
+import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
@@ -68,6 +72,7 @@ export function AppShell(): React.JSX.Element {
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<SessionFileMeta | null>(null);
@@ -215,6 +220,12 @@ export function AppShell(): React.JSX.Element {
           chatStore.seedHistory(frame.threadId, frame.messages);
           chatStore.markRead(frame.threadId);
           break;
+        case 'voice.mode.result':
+          setVoice(frame);
+          break;
+        case 'chat.transcript':
+          chatStore.setTranscript(frame.threadId, frame.replyToId, frame.text);
+          break;
         case 'error':
           // Where the user asked is where the refusal belongs: a rejected delete used to be
           // invisible under the files screen, and then loud in a conversation it has nothing
@@ -315,15 +326,7 @@ export function AppShell(): React.JSX.Element {
   ]);
 
   const sendChat = useCallback(
-    async (
-      text: string,
-      attachments?: Array<{
-        id: string;
-        type: AttachmentMeta['type'];
-        uri?: string;
-        filename?: string;
-      }>,
-    ) => {
+    async (text: string, attachments?: OutgoingAttachment[]) => {
       const threadId = activeThreadRef.current ?? uuid();
       if (!activeThreadRef.current) selectThread(threadId);
       const id = uuid();
@@ -336,22 +339,43 @@ export function AppShell(): React.JSX.Element {
           type: attachment.type,
           uri: attachment.uri,
           filename: attachment.filename,
+          ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
+          ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
         })) ?? [],
       );
-      sessionStore.ensure(threadId, text || '(attachment)');
+      const isVoiceNote = attachments?.some(attachment => attachment.audioAsVoice) ?? false;
+      sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : '(attachment)'));
       // The wire only carries the reference; uri and filename are local bubble concerns.
       const delivered = await connection.send(
         encodeChatSend(
           id,
           text,
           threadId,
-          attachments?.map(attachment => ({ id: attachment.id, type: attachment.type })),
+          attachments?.map(attachment => ({
+            id: attachment.id,
+            type: attachment.type,
+            ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
+            ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
+          })),
         ),
       );
       if (!delivered) chatStore.markSendFailed(threadId, id);
     },
     [selectThread],
   );
+
+  // Asked for when the screen opens rather than at boot: it is the only place that shows it,
+  // and a stale answer from an hour ago would render a switch that no longer matches the server.
+  useEffect(() => {
+    if (!settingsOpen) return;
+    connection.send(encodeVoiceModeGet()).catch(() => {});
+  }, [settingsOpen]);
+
+  const changeVoiceMode = useCallback((mode: VoiceMode) => {
+    // No optimistic write: the server answers with the state it actually stored, including what
+    // "auto" resolved to, and a switch that lied about that would be worse than a slow one.
+    connection.send(encodeVoiceModeSet(mode)).catch(() => {});
+  }, []);
 
   const openDiagnostics = useCallback(() => {
     setDiagOpen(true);
@@ -442,6 +466,8 @@ export function AppShell(): React.JSX.Element {
             <SettingsScreen
               url={url}
               onUrlChange={changeUrl}
+              voice={voice}
+              onVoiceModeChange={changeVoiceMode}
               themeMode={themeControl.mode}
               onThemeModeChange={themeControl.setMode}
               status={status}

@@ -4,6 +4,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import type { DeviceInfo } from '../core/device';
 import type { WsStatusPayload } from '../core/types';
 import type { ThemeMode } from '../core/prefs';
+import type { VoiceMode, VoiceModeResultFrame } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
@@ -11,6 +12,28 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
   { mode: 'light', label: 'Light' },
   { mode: 'dark', label: 'Dark' },
 ];
+
+const VOICE_OPTIONS: Array<{ mode: VoiceMode; label: string }> = [
+  { mode: 'auto', label: 'Auto' },
+  { mode: 'cloud', label: 'Cloud' },
+  { mode: 'local', label: 'Local' },
+];
+
+/**
+ * Says where the voice goes, not just which switch is on. "Local" is about the server's machine,
+ * not the phone: the recording leaves the device either way, and that is the part worth stating.
+ */
+function voiceHint(voice: VoiceModeResultFrame | null): string {
+  if (!voice) return 'asking the server…';
+  if (!voice.cloudAvailable && voice.mode !== 'local') {
+    return 'no cloud key on the server · transcribing locally';
+  }
+  const where =
+    voice.resolved === 'cloud'
+      ? 'sent to Groq for transcription'
+      : 'transcribed on the server, nothing leaves it';
+  return voice.mode === 'auto' ? `auto · ${where}` : where;
+}
 
 /** Keeps the last four characters visible so the pair can be recognized, nothing more. */
 function maskToken(token: string): string {
@@ -30,6 +53,8 @@ export function SettingsScreen({
   onClearOutbox,
   onBack,
   onOpenDiagnostics,
+  voice,
+  onVoiceModeChange,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
@@ -43,6 +68,9 @@ export function SettingsScreen({
   onClearOutbox: () => void;
   onBack: () => void;
   onOpenDiagnostics: () => void;
+  /** Null until the server has answered voice.mode.get. */
+  voice: VoiceModeResultFrame | null;
+  onVoiceModeChange: (mode: VoiceMode) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette, dark } = useTheme();
@@ -87,6 +115,39 @@ export function SettingsScreen({
             <Text style={styles.hint}>
               {themeMode === 'system' ? `follows the phone · currently ${dark ? 'dark' : 'light'}` : 'forced choice'}
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>voice</Text>
+          <View style={styles.card}>
+            <View style={styles.segment}>
+              {VOICE_OPTIONS.map(option => {
+                const selected = voice ? option.mode === voice.mode : false;
+                // Offering cloud without credentials would be a choice that fails on the next
+                // recording, with the failure surfacing far from here.
+                const usable = option.mode === 'local' || (voice?.cloudAvailable ?? true);
+                return (
+                  <Pressable
+                    key={option.mode}
+                    style={[
+                      styles.segmentItem,
+                      selected && styles.segmentItemActive,
+                      !usable && styles.segmentItemOff,
+                    ]}
+                    disabled={!voice || !usable}
+                    onPress={() => onVoiceModeChange(option.mode)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected, disabled: !usable }}
+                    accessibilityLabel={`Transcription ${option.label}`}>
+                    <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.hint}>{voiceHint(voice)}</Text>
           </View>
         </View>
 
@@ -259,6 +320,7 @@ const createStyles = (palette: Palette) => ({
   },
   segmentItem: { flex: 1, alignItems: 'center' as const, paddingVertical: 10, borderRadius: radius.sm - 1 },
   segmentItemActive: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.border },
+  segmentItemOff: { opacity: 0.4 },
   segmentText: { fontSize: font.meta, color: palette.textMuted },
   segmentTextActive: { color: palette.text, fontWeight: '600' as const },
   hint: { fontSize: font.small, color: palette.textFaint },

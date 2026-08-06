@@ -18,6 +18,28 @@ export interface PickedFile {
   size: number;
 }
 
+export interface VoiceRecording {
+  uri: string;
+  durationMs: number;
+  sizeBytes: number;
+}
+
+/** Pushed while recording, ~16 times a second: `level` is already normalised to 0..1. */
+export interface VoiceLevelEvent {
+  level: number;
+  elapsedMs: number;
+}
+
+export interface VoicePlaybackEvent {
+  uri: string | null;
+  playing: boolean;
+  positionMs: number;
+  durationMs: number;
+}
+
+export const VOICE_LEVEL_EVENT = 'claw:voice:level';
+export const VOICE_PLAYBACK_EVENT = 'claw:voice:playback';
+
 /**
  * Single typed door to the Kotlin module. Everything else imports this instead of
  * NativeModules, so tests can mock one file and a renamed native method breaks
@@ -65,6 +87,18 @@ export interface DeviceBridgeNative {
    * location. Resolves null when the picker is dismissed.
    */
   saveFile(url: string, filename: string): Promise<{ path: string } | null>;
+  /**
+   * Starts microphone capture and resolves the destination file:// uri. Rejects with
+   * NO_MIC_PERMISSION when the permission was never granted, so the caller can ask.
+   */
+  startRecording(): Promise<string>;
+  /** Resolves null when the take was too short to hold audio (a tap rather than a hold). */
+  stopRecording(): Promise<VoiceRecording | null>;
+  cancelRecording(): Promise<void>;
+  playAudio(uri: string): Promise<void>;
+  pausePlayback(): Promise<void>;
+  seekPlayback(positionMs: number): Promise<void>;
+  stopPlayback(): Promise<void>;
 }
 
 const native = NativeModules.DeviceBridge as DeviceBridgeNative | undefined;
@@ -107,6 +141,17 @@ export const deviceBridge: DeviceBridgeNative = {
     Promise.reject(new Error('DeviceBridge unavailable')),
   saveFile: (url, filename) =>
     native?.saveFile(url, filename) ?? Promise.reject(new Error('DeviceBridge unavailable')),
+  // No silent fallback: a recorder that resolves without recording would hand the composer an
+  // empty take to upload, and the failure would only surface as an unexplained refusal.
+  startRecording: () =>
+    native?.startRecording() ?? Promise.reject(new Error('DeviceBridge unavailable')),
+  stopRecording: () => native?.stopRecording() ?? Promise.resolve(null),
+  cancelRecording: () => native?.cancelRecording() ?? Promise.resolve(),
+  playAudio: uri =>
+    native?.playAudio(uri) ?? Promise.reject(new Error('DeviceBridge unavailable')),
+  pausePlayback: () => native?.pausePlayback() ?? Promise.resolve(),
+  seekPlayback: positionMs => native?.seekPlayback(positionMs) ?? Promise.resolve(),
+  stopPlayback: () => native?.stopPlayback() ?? Promise.resolve(),
 };
 
 export const deviceEvents = DeviceEventEmitter;

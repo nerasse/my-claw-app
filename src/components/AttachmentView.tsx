@@ -3,6 +3,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 import type { AttachmentMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
 import { viewerFor } from '../core/utils';
+import { VoiceNote } from './VoiceNote';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 export function AttachmentView({
@@ -10,12 +11,15 @@ export function AttachmentView({
   mediaBase,
   deviceInfo,
   onOpen,
+  transcript,
 }: {
   att: AttachmentMeta;
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
   /** Routed to the same full-screen viewers as the file explorer. */
   onOpen?: (kind: 'image' | 'text', target: { url: string; filename: string }) => void;
+  /** What the server heard, shown under its own recording. */
+  transcript?: string;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const remote = deviceInfo
@@ -29,6 +33,12 @@ export function AttachmentView({
     onOpen && kind && remote
       ? () => onOpen(kind, { url: remote, filename: name })
       : undefined;
+
+  // A voice note plays where it sits. Falling through to the chip would have named a file the
+  // sender already knows about and given no way to hear it back.
+  if (att.type === 'audio' && uri && !att.deleted) {
+    return <VoiceNote att={att} uri={uri} transcript={transcript} />;
+  }
 
   if (att.type === 'image' && uri) {
     const image = (

@@ -11,7 +11,9 @@ import { connection } from '../core/connection';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
 import { encodeCommandsList, type AttachmentMeta } from '../core/protocol';
-import { uploadMedia, type PendingAttachment } from '../core/upload';
+import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
+import type { VoiceRecording } from '../core/nativeBridge';
+import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
 import type { WsState } from '../core/types';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -77,15 +79,7 @@ export function ChatScreen({
   onOpenDrawer: () => void;
   onStatusPress: () => void;
   onFilesPress: () => void;
-  onSend: (
-    text: string,
-    attachments?: Array<{
-      id: string;
-      type: AttachmentMeta['type'];
-      uri?: string;
-      filename?: string;
-    }>,
-  ) => void;
+  onSend: (text: string, attachments?: OutgoingAttachment[]) => void;
   onBubbleMenu: (item: TextItem) => void;
   onOpenImage: (target: { url: string; filename: string }) => void;
   onOpenText: (target: { url: string; filename: string }) => void;
@@ -169,6 +163,46 @@ export function ChatScreen({
       .catch(() => {});
   }, [addAssets]);
 
+  const sendVoiceNote = useCallback(
+    (recording: VoiceRecording) => {
+      if (!deviceInfo) {
+        setUploadError('device not initialized');
+        return;
+      }
+      setUploading(true);
+      setUploadError(null);
+      (async () => {
+        try {
+          const filename = voiceFilename();
+          const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, {
+            id: filename,
+            uri: recording.uri,
+            filename,
+            type: 'audio',
+            mimeType: 'audio/mp4',
+            sizeBytes: recording.sizeBytes,
+          });
+          onSend('', [
+            {
+              id: uploaded.id,
+              type: 'audio',
+              // The local file plays instantly; the server copy is only needed after a reload.
+              uri: recording.uri,
+              filename,
+              audioAsVoice: true,
+              durationMs: recording.durationMs,
+            },
+          ]);
+        } catch (err) {
+          setUploadError(err instanceof Error ? err.message : 'upload failed');
+        } finally {
+          setUploading(false);
+        }
+      })();
+    },
+    [deviceInfo, mediaBase, onSend, threadId],
+  );
+
   const submit = useCallback(() => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
@@ -181,12 +215,7 @@ export function ChatScreen({
       setUploadError(null);
       (async () => {
         try {
-          const refs: Array<{
-            id: string;
-            type: AttachmentMeta['type'];
-            uri?: string;
-            filename?: string;
-          }> = [];
+          const refs: OutgoingAttachment[] = [];
           for (const attachment of attachments) {
             const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, attachment);
             refs.push({
@@ -258,6 +287,8 @@ export function ChatScreen({
             value={draft}
             onChange={setDraft}
             onSend={submit}
+            onRecorded={sendVoiceNote}
+            onRecordingError={setUploadError}
             hint={hint}
             commands={commands}
             attachments={attachments}
@@ -322,6 +353,8 @@ export function ChatScreen({
           value={draft}
           onChange={setDraft}
           onSend={submit}
+          onRecorded={sendVoiceNote}
+          onRecordingError={setUploadError}
           hint={hint}
           commands={commands}
           attachments={attachments}

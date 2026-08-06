@@ -1,0 +1,154 @@
+import React, { useCallback } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import type { AttachmentMeta } from '../core/protocol';
+import { formatDuration, usePlaybackOf, voicePlayback } from '../core/voice';
+import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+
+/** Fixed bar count: the shape is decorative, and decoding a waveform for it would cost a decode. */
+const BARS = 24;
+
+/**
+ * A sent voice note, playable in place.
+ *
+ * The bars are not the real waveform. Reading one would mean decoding the file on the phone for
+ * a purely decorative result, so they are a stable pseudo-random shape seeded by the id: the same
+ * note always looks the same, which is what makes it recognisable in a scrollback, and no bubble
+ * pretends to show audio it never read.
+ */
+export function VoiceNote({
+  att,
+  uri,
+  transcript,
+}: {
+  att: AttachmentMeta;
+  /** Local file while the note is still on this device, else the authenticated media url. */
+  uri: string;
+  /** Filled in once the server echoes what it heard. */
+  transcript?: string;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const playback = usePlaybackOf(uri);
+  const playing = playback?.playing ?? false;
+
+  const total = playback?.durationMs || att.durationMs || 0;
+  const position = playback?.positionMs ?? 0;
+  const progress = total > 0 ? Math.min(1, position / total) : 0;
+
+  const toggle = useCallback(() => {
+    voicePlayback.toggle(uri, att.durationMs ?? 0).catch(() => {});
+  }, [att.durationMs, uri]);
+
+  const seekTo = useCallback(
+    (fraction: number) => {
+      if (total > 0) voicePlayback.seek(Math.round(fraction * total)).catch(() => {});
+    },
+    [total],
+  );
+
+  const played = Math.round(progress * BARS);
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.row}>
+        <Pressable
+          onPress={toggle}
+          style={styles.button}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={playing ? 'Pause voice message' : 'Play voice message'}>
+          <Svg width={16} height={16} viewBox="0 0 24 24">
+            <Path
+              fill={styles.buttonGlyph.color}
+              d={playing ? 'M6 5h4v14H6zm8 0h4v14h-4z' : 'M8 5v14l11-7z'}
+            />
+          </Svg>
+        </Pressable>
+
+        <View style={styles.bars} accessibilityLabel="Playback position">
+          {Array.from({ length: BARS }, (_, index) => (
+            <Pressable
+              key={index}
+              // The whole strip is the scrub target: a thumb cannot hit a 2 px bar, and a
+              // separate slider under a chat bubble is more chrome than the gesture is worth.
+              onPress={() => seekTo((index + 0.5) / BARS)}
+              style={styles.barHit}
+              accessibilityRole="button"
+              accessibilityLabel={`Seek to ${Math.round(((index + 0.5) / BARS) * 100)} percent`}>
+              <View
+                style={[
+                  styles.bar,
+                  { height: barHeight(att.id, index) },
+                  index < played ? styles.barPlayed : null,
+                ]}
+              />
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={styles.time}>
+          {formatDuration(playing || position > 0 ? Math.max(0, total - position) : total)}
+        </Text>
+      </View>
+
+      {transcript ? (
+        <Text style={styles.transcript}>{transcript}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Deterministic from the id, so a note keeps its silhouette across renders and reloads. */
+function barHeight(seed: string, index: number): number {
+  let hash = index * 31 + 7;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 33 + seed.charCodeAt(i)) % 100003;
+  }
+  return 5 + (hash % 14);
+}
+
+const createStyles = (palette: Palette) => ({
+  wrap: { marginBottom: space.xs, gap: 3 },
+  row: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    minWidth: 190,
+  },
+  button: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    backgroundColor: palette.accent,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  buttonGlyph: { color: palette.accentText },
+  bars: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    height: 22,
+    gap: 2,
+  },
+  barHit: { flex: 1, height: 22, justifyContent: 'center' as const },
+  bar: { borderRadius: radius.pill, backgroundColor: palette.border },
+  barPlayed: { backgroundColor: palette.accent },
+  time: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    fontVariant: ['tabular-nums' as const],
+    minWidth: 30,
+    textAlign: 'right' as const,
+  },
+  /**
+   * The transcript sits inside the bubble instead of arriving as its own message: what was said
+   * and the recording of it are one thing, and a separate echo pushed the conversation apart.
+   */
+  transcript: {
+    fontSize: font.small,
+    color: palette.textMuted,
+    fontStyle: 'italic' as const,
+    maxWidth: 260,
+  },
+});
