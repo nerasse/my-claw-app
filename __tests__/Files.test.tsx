@@ -47,6 +47,16 @@ async function openFiles(tree: Tree, files: SessionFileMeta[]): Promise<void> {
   );
 }
 
+function pressText(tree: Tree, text: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    const target = tree.root.find(
+      node =>
+        node.props.children === text && typeof node.props.onPress === 'function',
+    );
+    target.props.onPress();
+  });
+}
+
 function sentFrames(): string[] {
   return bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
 }
@@ -263,7 +273,7 @@ test('the hardware back quits the full-screen text viewer', async () => {
   await unmount(tree);
 });
 
-test('the delete button removes the file without opening the viewer', async () => {
+test('deleting asks for a confirmation, and the cancel sends nothing', async () => {
   const tree = await renderApp();
   await openFiles(tree, [
     file({ id: 'del1', filename: 'old.pdf', type: 'file' }),
@@ -271,6 +281,32 @@ test('the delete button removes the file without opening the viewer', async () =
 
   bridge.sendMessage.mockClear();
   await press(tree, 'Delete file old.pdf');
+
+  // The tap on delete must not double as a tap on the row: nothing opened.
+  expect(labelsOf(tree)).not.toContain('Close file view');
+  expect(labelsOf(tree)).not.toContain('Close image');
+  expect(textsOf(tree)).toContain(
+    'Delete old.pdf? The agent loses access to it too.',
+  );
+  expect(sentFrames().some(f => f.includes('files.delete'))).toBe(false);
+
+  await pressText(tree, 'Cancel');
+  expect(sentFrames().some(f => f.includes('files.delete'))).toBe(false);
+  expect(textsOf(tree)).toContain('old.pdf');
+
+  await unmount(tree);
+});
+
+test('confirming the delete sends the frame for that file', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [
+    file({ id: 'del1', filename: 'old.pdf', type: 'file' }),
+    file({ id: 'del2', filename: 'keep.pdf', type: 'file' }),
+  ]);
+
+  bridge.sendMessage.mockClear();
+  await press(tree, 'Delete file old.pdf');
+  await pressText(tree, 'Delete');
 
   const frame = JSON.parse(sentFrames().at(-1)!) as {
     type: string;
@@ -280,10 +316,6 @@ test('the delete button removes the file without opening the viewer', async () =
   expect(frame.type).toBe('files.delete');
   expect(frame.threadId).toBe('t-files');
   expect(frame.id).toBe('del1');
-
-  // The tap on delete must not double as a tap on the row: nothing opened.
-  expect(labelsOf(tree)).not.toContain('Close file view');
-  expect(labelsOf(tree)).not.toContain('Close image');
 
   await unmount(tree);
 });

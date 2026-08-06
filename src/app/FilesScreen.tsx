@@ -45,7 +45,8 @@ export function FilesScreen({
   files: SessionFileMeta[];
   totalBytes: number;
   onBack: () => void;
-  onDelete: (id: string) => void;
+  /** Asks for the delete; the shell confirms before anything leaves. */
+  onDelete: (file: SessionFileMeta) => void;
   onOpenImage: (file: { url: string; filename: string }) => void;
   onOpenText: (file: { url: string; filename: string }) => void;
   /** Server-side refusal for this screen. Without it a failed delete just looks inert. */
@@ -136,7 +137,7 @@ export function FilesScreen({
                 </View>
               </Pressable>
               <Pressable
-                onPress={() => onDelete(item.id)}
+                onPress={() => onDelete(item)}
                 hitSlop={10}
                 style={styles.delete}
                 accessibilityRole="button"

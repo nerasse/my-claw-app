@@ -200,6 +200,7 @@ test('the session file explorer lists files with sizes and deletes them', async 
   expect(stringsOf(tree)).toContain('5.0 KB');
 
   await pressLabel(tree, 'Delete file note.pdf');
+  await pressText(tree, 'Delete');
   expect(bridge.sendMessage).toHaveBeenCalledWith(
     JSON.stringify({ type: 'files.delete', threadId: THREAD, id: 'f1' }),
   );

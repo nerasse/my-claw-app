@@ -70,6 +70,7 @@ export function AppShell(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<SessionFileMeta | null>(null);
   const [imageViewer, setImageViewer] = useState<{
     url: string;
     filename: string;
@@ -271,6 +272,10 @@ export function AppShell(): React.JSX.Element {
         setTextViewer(null);
         return true;
       }
+      if (fileToDelete) {
+        setFileToDelete(null);
+        return true;
+      }
       if (bubbleMenu || threadMenu) {
         setBubbleMenu(null);
         setThreadMenu(null);
@@ -299,6 +304,7 @@ export function AppShell(): React.JSX.Element {
     bubbleMenu,
     drawerOpen,
     diagOpen,
+    fileToDelete,
     filesOpen,
     imageViewer,
     settingsOpen,
@@ -469,11 +475,7 @@ export function AppShell(): React.JSX.Element {
               totalBytes={filesTotal}
               onBack={() => setFilesOpen(false)}
               error={filesError ?? undefined}
-              onDelete={id => {
-                setFilesError(null);
-                if (activeThread)
-                  connection.send(encodeFileDelete(activeThread, id));
-              }}
+              onDelete={setFileToDelete}
               onOpenImage={setImageViewer}
               onOpenText={setTextViewer}
             />
@@ -557,6 +559,28 @@ export function AppShell(): React.JSX.Element {
           preview={threadMenu.title}
           actions={threadActions}
           onClose={() => setThreadMenu(null)}
+        />
+      ) : null}
+
+      {fileToDelete ? (
+        <BubbleMenu
+          preview={`Delete ${fileToDelete.filename}? The agent loses access to it too.`}
+          actions={[
+            {
+              label: 'Delete',
+              danger: true,
+              onPress: () => {
+                setFilesError(null);
+                if (activeThread)
+                  connection.send(
+                    encodeFileDelete(activeThread, fileToDelete.id),
+                  );
+                setFileToDelete(null);
+              },
+            },
+            { label: 'Cancel', onPress: () => setFileToDelete(null) },
+          ]}
+          onClose={() => setFileToDelete(null)}
         />
       ) : null}
     </SafeAreaView>
