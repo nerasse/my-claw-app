@@ -1,9 +1,14 @@
 package com.myclawapp.device
 
 import android.app.Activity
+import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.ActivityEventListener
@@ -270,6 +275,83 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     } catch (_: Exception) {
       -1
     }
+  }
+
+  /**
+   * GETs a media url (the agent's /media/<id>, which carries the auth in the query) and stores
+   * the bytes on the device. `toGallery` saves into Pictures (and MediaStore on modern
+   * Android, so the photo app sees it); anything else lands in Downloads. No permission is
+   * needed: MediaStore inserts are allowed on API 29+, and below that the system
+   * DownloadManager writes on our behalf.
+   */
+  @ReactMethod
+  fun downloadFile(url: String, filename: String, toGallery: Boolean, promise: Promise) {
+    val safeName = filename.replace(Regex("[/\\\\]"), "_").ifBlank { "file" }
+    val request = Request.Builder().url(url).get().build()
+    uploadClient.newCall(request).enqueue(object : Callback {
+      override fun onFailure(call: Call, e: IOException) {
+        promise.reject("DOWNLOAD_FAILED", e.message ?: "download failed")
+      }
+
+      override fun onResponse(call: Call, response: Response) {
+        response.use {
+          if (!it.isSuccessful) {
+            promise.reject("DOWNLOAD_FAILED", "server answered ${it.code}")
+            return
+          }
+          val bytes = it.body?.bytes()
+          if (bytes == null) {
+            promise.reject("DOWNLOAD_FAILED", "empty response")
+            return
+          }
+          try {
+            val path = storeBytes(bytes, safeName, toGallery)
+            val map = Arguments.createMap()
+            map.putString("path", path)
+            promise.resolve(map)
+          } catch (e: Exception) {
+            promise.reject("SAVE_FAILED", e.message ?: "save failed")
+          }
+        }
+      }
+    })
+  }
+
+  private fun storeBytes(bytes: ByteArray, filename: String, toGallery: Boolean): String {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val values = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+        put(MediaStore.MediaColumns.IS_PENDING, 1)
+        put(
+          MediaStore.MediaColumns.RELATIVE_PATH,
+          (if (toGallery) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_DOWNLOADS) + "/my-claw",
+        )
+      }
+      val collection =
+        if (toGallery) {
+          values.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+          MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+          MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        }
+      val uri = reactContext.contentResolver.insert(collection, values)
+        ?: throw IOException("media store insert failed")
+      reactContext.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+        ?: throw IOException("cannot open output stream")
+      values.clear()
+      values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+      reactContext.contentResolver.update(uri, values, null, null)
+      return uri.toString()
+    }
+    // API 24-28: the DownloadManager is the system's scoped-storage helper, no permission needed.
+    val cache = File(reactContext.cacheDir, filename)
+    cache.writeBytes(bytes)
+    val manager = reactContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val request = DownloadManager.Request(Uri.fromFile(cache))
+      .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+      .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+    manager.enqueue(request)
+    return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/" + filename
   }
 
   @ReactMethod

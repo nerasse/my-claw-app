@@ -1,9 +1,26 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, KeyboardAvoidingView, Platform, StatusBar, View } from 'react-native';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  BackHandler,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { connection } from '../core/connection';
-import { chatStore, useChatItems, useUnreadThreads, type TextItem } from '../core/chat';
+import {
+  chatStore,
+  useChatItems,
+  useUnreadThreads,
+  type TextItem,
+} from '../core/chat';
 import { sessionStore, useSessions } from '../core/sessions';
 import { commandStore } from '../core/commands';
 import { prefs } from '../core/prefs';
@@ -116,12 +133,21 @@ export function AppShell(): React.JSX.Element {
     const offFrame = connection.onFrame(frame => {
       // The run id rides on the reply: keeping the last one is what makes "logs for this run"
       // possible without asking the user to read anything off a screen.
-      if ((frame.type === 'chat.message' || frame.type === 'chat.stream.start') && frame.run) {
+      if (
+        (frame.type === 'chat.message' || frame.type === 'chat.stream.start') &&
+        frame.run
+      ) {
         setLastRun(frame.run);
       }
       switch (frame.type) {
         case 'chat.message':
-          chatStore.addAgentMessage(frame.threadId, frame.id, frame.text, frame.attachments, frame.replyToId);
+          chatStore.addAgentMessage(
+            frame.threadId,
+            frame.id,
+            frame.text,
+            frame.attachments,
+            frame.replyToId,
+          );
           noteActivity(frame.threadId, frame.text);
           break;
         case 'chat.stream.start':
@@ -178,7 +204,12 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'error':
           if (activeThreadRef.current) {
-            chatStore.addAgentMessage(activeThreadRef.current, `err-${Date.now()}`, `error: ${frame.message}`, []);
+            chatStore.addAgentMessage(
+              activeThreadRef.current,
+              `err-${Date.now()}`,
+              `error: ${frame.message}`,
+              [],
+            );
           }
           break;
         case 'approval.request':
@@ -193,13 +224,19 @@ export function AppShell(): React.JSX.Element {
       if (stored.lastThreadId) openThread(stored.lastThreadId);
       return connection.getState().then(state => {
         setStatus({ state });
-        if (state !== 'connected' && state !== 'connecting') connection.connect(stored.serverUrl);
+        if (state !== 'connected' && state !== 'connecting')
+          connection.connect(stored.serverUrl);
         connection.send(encodeSessionList());
       });
     });
 
-    getDeviceInfo().then(setDeviceInfo).catch(() => {});
-    connection.pendingCount().then(setPending).catch(() => {});
+    getDeviceInfo()
+      .then(setDeviceInfo)
+      .catch(() => {});
+    connection
+      .pendingCount()
+      .then(setPending)
+      .catch(() => {});
 
     return () => {
       offState();
@@ -223,13 +260,28 @@ export function AppShell(): React.JSX.Element {
         setSettingsOpen(false);
         return true;
       }
+      if (diagOpen) {
+        setDiagOpen(false);
+        return true;
+      }
+      if (filesOpen) {
+        setFilesOpen(false);
+        return true;
+      }
       return false;
     });
     return () => sub.remove();
-  }, [bubbleMenu, drawerOpen, settingsOpen, threadMenu]);
+  }, [bubbleMenu, drawerOpen, diagOpen, filesOpen, settingsOpen, threadMenu]);
 
   const sendChat = useCallback(
-    async (text: string, attachments?: Array<{ id: string; type: AttachmentMeta['type']; uri?: string }>) => {
+    async (
+      text: string,
+      attachments?: Array<{
+        id: string;
+        type: AttachmentMeta['type'];
+        uri?: string;
+      }>,
+    ) => {
       const threadId = activeThreadRef.current ?? uuid();
       if (!activeThreadRef.current) selectThread(threadId);
       const id = uuid();
@@ -244,7 +296,9 @@ export function AppShell(): React.JSX.Element {
         })) ?? [],
       );
       sessionStore.ensure(threadId, text || '(attachment)');
-      const delivered = await connection.send(encodeChatSend(id, text, threadId, attachments));
+      const delivered = await connection.send(
+        encodeChatSend(id, text, threadId, attachments),
+      );
       if (!delivered) chatStore.markSendFailed(threadId, id);
     },
     [selectThread],
@@ -287,16 +341,29 @@ export function AppShell(): React.JSX.Element {
 
   const threadActions: BubbleMenuAction[] = threadMenu
     ? [
-        { label: 'Archive', onPress: () => dropThread(threadMenu.threadId, encodeSessionArchive(threadMenu.threadId)) },
+        {
+          label: 'Archive',
+          onPress: () =>
+            dropThread(
+              threadMenu.threadId,
+              encodeSessionArchive(threadMenu.threadId),
+            ),
+        },
         {
           label: 'Delete',
           danger: true,
-          onPress: () => dropThread(threadMenu.threadId, encodeSessionDelete(threadMenu.threadId)),
+          onPress: () =>
+            dropThread(
+              threadMenu.threadId,
+              encodeSessionDelete(threadMenu.threadId),
+            ),
         },
       ]
     : [];
 
-  const title = (activeThread ? sessionStore.titleOf(activeThread) : null) ?? 'new conversation';
+  const title =
+    (activeThread ? sessionStore.titleOf(activeThread) : null) ??
+    'new conversation';
   const offline = status.state !== 'connected';
   const subtitle = [
     offline ? status.state : 'connected',
@@ -313,8 +380,14 @@ export function AppShell(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} backgroundColor={palette.bg} />
-      <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <StatusBar
+        barStyle={dark ? 'light-content' : 'dark-content'}
+        backgroundColor={palette.bg}
+      />
+      <KeyboardAvoidingView
+        style={styles.safe}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={styles.container}>
           {settingsOpen ? (
             <SettingsScreen
@@ -355,7 +428,8 @@ export function AppShell(): React.JSX.Element {
               totalBytes={filesTotal}
               onBack={() => setFilesOpen(false)}
               onDelete={id => {
-                if (activeThread) connection.send(encodeFileDelete(activeThread, id));
+                if (activeThread)
+                  connection.send(encodeFileDelete(activeThread, id));
               }}
             />
           ) : (
@@ -416,7 +490,11 @@ export function AppShell(): React.JSX.Element {
       ) : null}
 
       {threadMenu ? (
-        <BubbleMenu preview={threadMenu.title} actions={threadActions} onClose={() => setThreadMenu(null)} />
+        <BubbleMenu
+          preview={threadMenu.title}
+          actions={threadActions}
+          onClose={() => setThreadMenu(null)}
+        />
       ) : null}
     </SafeAreaView>
   );
@@ -424,5 +502,10 @@ export function AppShell(): React.JSX.Element {
 
 const createStyles = (palette: Palette) => ({
   safe: { flex: 1, backgroundColor: palette.bg },
-  container: { flex: 1, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.lg },
+  container: {
+    flex: 1,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
+  },
 });

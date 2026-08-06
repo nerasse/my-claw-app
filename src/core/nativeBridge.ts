@@ -36,7 +36,9 @@ export interface DeviceBridgeNative {
   prefsSet(key: string, value: string | null): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
   /** Copies a content:// or file:// uri into the cache and returns a readable file:// uri. */
-  prepareFile(uri: string): Promise<{ uri: string; name: string; size: number }>;
+  prepareFile(
+    uri: string,
+  ): Promise<{ uri: string; name: string; size: number }>;
   /**
    * POSTs a local file as a raw body. Native because RN's fetch cannot read file:// or
    * content:// uris on Android (OkHttp only accepts http(s) urls).
@@ -48,13 +50,25 @@ export interface DeviceBridgeNative {
     type: string,
     threadId: string,
   ): Promise<{ status: number; body: string }>;
+  /**
+   * GETs a media url and stores the bytes: in Pictures (visible to the gallery app) when
+   * `toGallery`, in Downloads otherwise. Runs on the native side because the URL carries the
+   * auth token and the bytes never touch the JS heap.
+   */
+  downloadFile(
+    url: string,
+    filename: string,
+    toGallery: boolean,
+  ): Promise<{ path: string }>;
 }
 
 const native = NativeModules.DeviceBridge as DeviceBridgeNative | undefined;
 
 if (!native && !__DEV__) {
   // Fail loudly at boot rather than silently dropping every frame at runtime.
-  console.error('DeviceBridge native module missing: the app cannot reach the agent');
+  console.error(
+    'DeviceBridge native module missing: the app cannot reach the agent',
+  );
 }
 
 export const deviceBridge: DeviceBridgeNative = {
@@ -63,17 +77,28 @@ export const deviceBridge: DeviceBridgeNative = {
   sendMessage: text => native?.sendMessage(text) ?? Promise.resolve(false),
   pendingCount: () => native?.pendingCount() ?? Promise.resolve(0),
   clearOutbox: () => native?.clearOutbox() ?? Promise.resolve(),
-  getConnectionState: () => native?.getConnectionState() ?? Promise.resolve('idle'),
-  getDeviceInfo: () => native?.getDeviceInfo() ?? Promise.reject(new Error('DeviceBridge unavailable')),
+  getConnectionState: () =>
+    native?.getConnectionState() ?? Promise.resolve('idle'),
+  getDeviceInfo: () =>
+    native?.getDeviceInfo() ??
+    Promise.reject(new Error('DeviceBridge unavailable')),
   getCapabilities: () =>
     native?.getCapabilities() ??
-    Promise.resolve({ accessibility: false, notificationListener: false, wssConnection: false }),
+    Promise.resolve({
+      accessibility: false,
+      notificationListener: false,
+      wssConnection: false,
+    }),
   prefsGetAll: () => native?.prefsGetAll() ?? Promise.resolve({}),
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
-  prepareFile: uri => native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),
+  prepareFile: uri =>
+    native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),
   uploadFile: (uri, url, filename, type, threadId) =>
     native?.uploadFile(uri, url, filename, type, threadId) ??
+    Promise.reject(new Error('DeviceBridge unavailable')),
+  downloadFile: (url, filename, toGallery) =>
+    native?.downloadFile(url, filename, toGallery) ??
     Promise.reject(new Error('DeviceBridge unavailable')),
 };
 

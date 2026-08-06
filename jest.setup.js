@@ -5,23 +5,57 @@
  */
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
-  default: { setString: jest.fn(), getString: jest.fn(() => Promise.resolve('')) },
+  default: {
+    setString: jest.fn(),
+    getString: jest.fn(() => Promise.resolve('')),
+  },
 }));
 
 // The shipped mock exposes everything under `default`; spread it so named imports resolve.
-jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
+);
+
+// The RN jest preset resolves platform files to 'ios', whose BackHandler is a no-op
+// (BackHandler.ios.js). The real app runs BackHandler.android.js, which iterates the
+// registered handlers and stops at the first that returns true. Keep a registry the tests
+// can drive directly, so the hardware-back behaviour is testable at all.
+jest.mock('react-native/Libraries/Utilities/BackHandler.ios', () => {
+  const handlers = [];
+  const mock = {
+    exitApp: jest.fn(),
+    addEventListener: jest.fn((_event, handler) => {
+      handlers.push(handler);
+      return {
+        remove: () => {
+          const index = handlers.indexOf(handler);
+          if (index >= 0) handlers.splice(index, 1);
+        },
+      };
+    }),
+    removeEventListener: jest.fn(),
+    __handlers: handlers,
+  };
+  return { __esModule: true, default: mock };
+});
 
 jest.mock('react-native-marked', () => {
   const React = require('react');
   const { Text } = require('react-native');
+  const FakeMarkdown = ({ value }) =>
+    React.createElement(Text, { key: 'md' }, String(value));
   return {
     __esModule: true,
+    default: FakeMarkdown,
     Renderer: class {
       getKey() {
         return 'k';
       }
     },
-    useMarkdown: value => [React.createElement(Text, { key: 'md' }, String(value))],
+    useMarkdown: value => [
+      React.createElement(Text, { key: 'md' }, String(value)),
+    ],
   };
 });
 
@@ -35,7 +69,9 @@ jest.mock('react-native-svg', () => {
 
 jest.mock('react-native-image-picker', () => ({
   launchCamera: jest.fn((_options, callback) => callback({ didCancel: true })),
-  launchImageLibrary: jest.fn((_options, callback) => callback({ didCancel: true })),
+  launchImageLibrary: jest.fn((_options, callback) =>
+    callback({ didCancel: true }),
+  ),
 }));
 
 // The SAF file picker lives in our own Kotlin bridge, like the rest of the native modules.
@@ -47,24 +83,43 @@ jest.mock('./src/core/nativeBridge', () => ({
     pendingCount: jest.fn(() => Promise.resolve(0)),
     clearOutbox: jest.fn(() => Promise.resolve()),
     getConnectionState: jest.fn(() => Promise.resolve('connected')),
-    getDeviceInfo: jest.fn(() => Promise.resolve({ deviceId: 'dev-test', token: 'token-test' })),
+    getDeviceInfo: jest.fn(() =>
+      Promise.resolve({ deviceId: 'dev-test', token: 'token-test' }),
+    ),
     getCapabilities: jest.fn(() =>
-      Promise.resolve({ accessibility: false, notificationListener: false, wssConnection: true }),
+      Promise.resolve({
+        accessibility: false,
+        notificationListener: false,
+        wssConnection: true,
+      }),
     ),
     prefsGetAll: jest.fn(() => Promise.resolve({})),
     prefsSet: jest.fn(() => Promise.resolve()),
     pickFile: jest.fn(() => Promise.resolve([])),
-    prepareFile: jest.fn(() => Promise.resolve({ uri: 'file:///cache/prepared', name: 'file', size: 0 })),
-    uploadFile: jest.fn(() => Promise.resolve({ status: 200, body: JSON.stringify({ id: 'media-1' }) })),
+    prepareFile: jest.fn(() =>
+      Promise.resolve({ uri: 'file:///cache/prepared', name: 'file', size: 0 }),
+    ),
+    uploadFile: jest.fn(() =>
+      Promise.resolve({ status: 200, body: JSON.stringify({ id: 'media-1' }) }),
+    ),
+    downloadFile: jest.fn(() =>
+      Promise.resolve({ path: '/storage/Pictures/my-claw/file' }),
+    ),
   },
   deviceEvents: require('react-native').DeviceEventEmitter,
 }));
 
 jest.mock('./src/core/device', () => ({
   getCapabilities: jest.fn(() =>
-    Promise.resolve({ accessibility: false, notificationListener: false, wssConnection: true }),
+    Promise.resolve({
+      accessibility: false,
+      notificationListener: false,
+      wssConnection: true,
+    }),
   ),
-  getDeviceInfo: jest.fn(() => Promise.resolve({ deviceId: 'dev-test', token: 'token-test' })),
+  getDeviceInfo: jest.fn(() =>
+    Promise.resolve({ deviceId: 'dev-test', token: 'token-test' }),
+  ),
   getAccessibilitySnapshot: jest.fn(() => Promise.resolve(null)),
   performAccessibilityAction: jest.fn(() => Promise.resolve(true)),
   onNotification: jest.fn(() => ({ remove: jest.fn() })),
