@@ -25,6 +25,15 @@ function sentFrames(): Array<Record<string, unknown>> {
   );
 }
 
+/** Counts staged takes by their pressable node: labelsOf reports each element more than once. */
+function stagedNotes(tree: Tree): number {
+  return tree.root.findAll(
+    node =>
+      node.props.accessibilityLabel === 'Remove voice message' &&
+      typeof node.props.onPress === 'function',
+  ).length;
+}
+
 function chatSends(): Array<Record<string, unknown>> {
   return sentFrames().filter(frame => frame.type === 'chat.send');
 }
@@ -326,7 +335,7 @@ test('the transcript lands inside the voice bubble, not in a message of its own'
         type: 'chat.transcript',
         threadId: THREAD,
         replyToId: sent.id,
-        text: 'rappelle-moi demain',
+        items: [{ id: 'voice-1', text: 'rappelle-moi demain' }],
       }),
     });
   });
@@ -427,7 +436,7 @@ test('a reopened conversation renders a voice note exactly like the live one', a
         type: 'chat.transcript',
         threadId: THREAD,
         replyToId: sent.id,
-        text: 'rappelle-moi demain',
+        items: [{ id: 'voice-1', text: 'rappelle-moi demain' }],
       }),
     });
   });
@@ -446,7 +455,7 @@ test('a reopened conversation renders a voice note exactly like the live one', a
             role: 'user',
             text: '',
             ts: '2026-08-06T21:00:00.000Z',
-            transcript: 'rappelle-moi demain',
+            transcripts: { 'voice-1': 'rappelle-moi demain' },
             attachments: [
               {
                 id: 'voice-1',
@@ -468,6 +477,158 @@ test('a reopened conversation renders a voice note exactly like the live one', a
   expect(replayed).toEqual(live);
   expect(replayed.marker).toBeUndefined();
   expect(replayed.duration).toBe('0:03');
+
+  await unmount(tree);
+});
+
+test('several notes can be recorded in a row and leave together, each with its own words', async () => {
+  const tree = await renderApp();
+
+  // The server gives each upload its own id, which is what pairs a transcript to a bubble.
+  let uploaded = 0;
+  bridge.uploadFile.mockImplementation(() => {
+    uploaded += 1;
+    return Promise.resolve({ status: 200, body: JSON.stringify({ id: `voice-${uploaded}` }) });
+  });
+
+  // Two takes back to back: the mic stays offered because nothing has been typed.
+  const first = finger(tree);
+  await first.down();
+  await first.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  expect(labelsOf(tree)).toContain('Record voice message');
+  // ...and the send arrow appears beside it, so both are one tap away.
+  expect(labelsOf(tree)).toContain('Send message');
+
+  bridge.stopRecording.mockResolvedValue({
+    uri: 'file:///cache/voice-2.m4a',
+    durationMs: 5200,
+    sizeBytes: 20800,
+  });
+  const second = finger(tree);
+  await second.down();
+  await second.up();
+  await waitFor(() => stagedNotes(tree) === 2);
+
+  await press(tree, 'Send message');
+  // Two uploads run in sequence, so this needs more room than the helper's default.
+  await waitFor(() => chatSends().length > 0, 60);
+
+  const sent = chatSends()[0];
+  expect(sent.attachments).toHaveLength(2);
+  expect((sent.attachments as Array<Record<string, unknown>>)[1]).toMatchObject({
+    id: 'voice-2',
+    audioAsVoice: true,
+    durationMs: 5200,
+  });
+
+  // Each recording carries its own transcript, not one blob repeated under both.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'chat.transcript',
+        threadId: THREAD,
+        replyToId: sent.id,
+        items: [
+          { id: 'voice-1', text: 'premier bout' },
+          { id: 'voice-2', text: 'deuxieme bout' },
+        ],
+      }),
+    });
+  });
+
+  await waitFor(() => {
+    const strings = tree.root
+      .findAll(node => typeof node.props.children === 'string')
+      .map(node => String(node.props.children));
+    return strings.includes('premier bout') && strings.includes('deuxieme bout');
+  }, 40);
+
+  await unmount(tree);
+});
+
+test('typing a message puts the microphone away, so the two never share a corner', async () => {
+  const tree = await renderApp();
+
+  expect(labelsOf(tree)).toContain('Record voice message');
+
+  const input = tree.root.find(
+    node =>
+      String(node.type) === 'TextInput' &&
+      (node.props.placeholder === 'message' || node.props.placeholder === 'Ask anything'),
+  );
+  await ReactTestRenderer.act(async () => {
+    input.props.onChangeText('bonjour');
+  });
+
+  expect(labelsOf(tree)).not.toContain('Record voice message');
+  expect(labelsOf(tree)).toContain('Send message');
+
+  await unmount(tree);
+});
+
+test('a staged take can be listened to and scrubbed before it is sent', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+  await touch.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+
+  // The same controls the bubbles have, on a take that has not left the device.
+  await press(tree, 'Play voice message');
+  expect(bridge.playAudio).toHaveBeenCalledWith('file:///cache/voice.m4a');
+
+  const scrub = labelsOf(tree).find(label => label.startsWith('Seek to '))!;
+  expect(scrub).toBeDefined();
+  await press(tree, scrub);
+  expect(bridge.seekPlayback).toHaveBeenCalled();
+
+  // Nothing has been sent by reviewing it.
+  expect(chatSends()).toHaveLength(0);
+
+  await unmount(tree);
+});
+
+test('a third recording makes the list scrollable instead of pushing the field off screen', async () => {
+  const tree = await renderApp();
+
+  let uploaded = 0;
+  bridge.uploadFile.mockImplementation(() => {
+    uploaded += 1;
+    return Promise.resolve({ status: 200, body: JSON.stringify({ id: `voice-${uploaded}` }) });
+  });
+
+  const scrollState = (): boolean | undefined =>
+    tree.root.findAll(node => node.props.scrollEnabled !== undefined && node.props.nestedScrollEnabled)[0]
+      ?.props.scrollEnabled;
+
+  for (let take = 1; take <= 2; take += 1) {
+    bridge.stopRecording.mockResolvedValue({
+      uri: `file:///cache/voice-${take}.m4a`,
+      durationMs: 1000 * take,
+      sizeBytes: 4000 * take,
+    });
+    const touch = finger(tree);
+    await touch.down();
+    await touch.up();
+    await waitFor(() => stagedNotes(tree) === take);
+  }
+
+  // Two fit in the window, so the list must not steal the gesture from the conversation.
+  expect(scrollState()).toBe(false);
+
+  bridge.stopRecording.mockResolvedValue({
+    uri: 'file:///cache/voice-3.m4a',
+    durationMs: 3000,
+    sizeBytes: 12000,
+  });
+  const third = finger(tree);
+  await third.down();
+  await third.up();
+  await waitFor(() => stagedNotes(tree) === 3);
+
+  expect(scrollState()).toBe(true);
 
   await unmount(tree);
 });

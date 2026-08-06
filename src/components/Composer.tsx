@@ -11,7 +11,7 @@ import {
 import { PlusIcon, SendIcon } from './icons';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
 import type { VoiceRecording } from '../core/nativeBridge';
-import { VoiceChip } from './VoiceChip';
+import { StagedVoiceList } from './StagedVoiceList';
 import { VoiceRecorder } from './VoiceRecorder';
 import type { PendingAttachment } from '../core/upload';
 import { formatBytes } from '../core/utils';
@@ -66,10 +66,16 @@ export function Composer({
   // photo sent without a caption, even though the send path already accepted it.
   const nothingToSend = empty && staged === 0;
   const [recording, setRecording] = useState(false);
-  // The microphone replaces the send arrow only when there is nothing to send, so a typed
-  // message never has to compete with it for the same corner. A staged take counts as something
-  // to send: the arrow returns, and the note leaves with whatever text was added to it.
-  const micVisible = onRecorded !== undefined && nothingToSend;
+  /**
+   * The microphone is offered as long as nothing has been typed, so several notes can be
+   * recorded in a row. It only steps aside for a written message, which is the one case where
+   * the two would compete for the same corner. Once anything is staged the send arrow appears
+   * beside it, so adding another note and sending are both one tap away.
+   */
+  const micVisible = onRecorded !== undefined && empty;
+  const sendVisible = !micVisible || staged > 0;
+  const recordings = attachments?.filter(item => item.audioAsVoice) ?? [];
+  const files = attachments?.filter(item => !item.audioAsVoice) ?? [];
 
   const query = commandQuery(value);
   const menu = query !== null && commands ? filterCommands(query, commands) : null;
@@ -129,35 +135,30 @@ export function Composer({
 
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       {uploadError ? <Text style={styles.uploadError}>{uploadError}</Text> : null}
-      {attachments && attachments.length > 0 ? (
+      {/* Recordings get a full row each; anything else stays a chip, since a file name is all
+          there is to show about it. */}
+      {recordings.length > 0 ? (
+        <StagedVoiceList attachments={recordings} onRemove={onRemoveAttachment} />
+      ) : null}
+      {files.length > 0 ? (
         <View style={styles.chips}>
-          {attachments.map(attachment =>
-            attachment.audioAsVoice ? (
-              <VoiceChip
-                key={attachment.id}
-                attachment={attachment}
-                onRemove={
-                  onRemoveAttachment ? () => onRemoveAttachment(attachment.id) : undefined
-                }
-              />
-            ) : (
-              <View key={attachment.id} style={styles.chip}>
-                <Text style={styles.chipText} numberOfLines={1}>
-                  {attachment.filename}
-                  {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
-                </Text>
-                {onRemoveAttachment ? (
-                  <Pressable
-                    onPress={() => onRemoveAttachment(attachment.id)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove attachment ${attachment.filename}`}>
-                    <Text style={styles.chipRemove}>✕</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ),
-          )}
+          {files.map(attachment => (
+            <View key={attachment.id} style={styles.chip}>
+              <Text style={styles.chipText} numberOfLines={1}>
+                {attachment.filename}
+                {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
+              </Text>
+              {onRemoveAttachment ? (
+                <Pressable
+                  onPress={() => onRemoveAttachment(attachment.id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove attachment ${attachment.filename}`}>
+                  <Text style={styles.chipRemove}>✕</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
         </View>
       ) : null}
       <View style={styles.row}>
@@ -196,7 +197,8 @@ export function Composer({
             onError={onRecordingError ?? (() => {})}
             onActiveChange={setRecording}
           />
-        ) : (
+        ) : null}
+        {sendVisible && !recording ? (
           <Pressable
             style={[styles.send, hero && styles.sendHero, nothingToSend && styles.sendIdle]}
             onPress={onSend}
@@ -208,7 +210,7 @@ export function Composer({
               color={nothingToSend ? palette.textFaint : palette.accentText}
             />
           </Pressable>
-        )}
+        ) : null}
       </View>
     </View>
   );

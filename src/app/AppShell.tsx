@@ -228,7 +228,7 @@ export function AppShell(): React.JSX.Element {
           setVoice(frame);
           break;
         case 'chat.transcript':
-          chatStore.setTranscript(frame.threadId, frame.replyToId, frame.text);
+          chatStore.setTranscripts(frame.threadId, frame.replyToId, frame.items);
           break;
         case 'error':
           // Where the user asked is where the refusal belongs: a rejected delete used to be

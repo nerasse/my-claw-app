@@ -92,8 +92,8 @@ export type HistoryEntry =
       text: string;
       ts: string;
       attachments?: AttachmentMeta[];
-      /** Words of this turn's voice note, so a replayed bubble matches the live one. */
-      transcript?: string;
+      /** Words per recording id, so each replayed bubble matches the live one. */
+      transcripts?: Record<string, string>;
     }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 
@@ -162,9 +162,10 @@ export interface LogsTailResultFrame {
 export interface TranscriptFrame {
   type: 'chat.transcript';
   threadId: string;
-  /** The id this device generated for the chat.send that carried the recording. */
+  /** The id this device generated for the chat.send that carried the recordings. */
   replyToId: string;
-  text: string;
+  /** One entry per recording: a message can carry several, each with its own words. */
+  items: Array<{ id: string; text: string }>;
 }
 
 export interface VoiceModeResultFrame {

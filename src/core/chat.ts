@@ -9,8 +9,8 @@ export interface TextItem {
   attachments: AttachmentMeta[];
   streaming: boolean;
   error?: string;
-  /** What the server heard in this turn's voice note, rendered inside its bubble. */
-  transcript?: string;
+  /** What the server heard, per recording id, rendered inside each recording's own bubble. */
+  transcripts?: Record<string, string>;
   ts: number;
 }
 
@@ -106,7 +106,7 @@ class ChatStoreImpl {
         text: textOf(entry),
         attachments: entry.attachments ?? [],
         streaming: false,
-        ...(entry.transcript ? { transcript: entry.transcript } : {}),
+        ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
         ts,
       };
     });
@@ -122,9 +122,12 @@ class ChatStoreImpl {
    * Lands the transcript on the bubble that carried the recording. Ignored when the bubble is
    * gone (thread cleared, app restarted mid-run): the words belong to that turn or to nothing.
    */
-  setTranscript(threadId: string, id: string, transcript: string): void {
-    if (!this.getItems(threadId).some(item => item.id === id)) return;
-    this.patch(threadId, id, { transcript });
+  setTranscripts(threadId: string, id: string, items: Array<{ id: string; text: string }>): void {
+    const current = this.getItems(threadId).find(item => item.id === id);
+    if (!current || current.kind !== 'text') return;
+    const transcripts = { ...current.transcripts };
+    for (const item of items) transcripts[item.id] = item.text;
+    this.patch(threadId, id, { transcripts });
   }
 
   /** The native outbox could neither send nor queue the frame: say so on the bubble. */

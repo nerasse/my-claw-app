@@ -41,8 +41,9 @@ export function Bubble({
             mediaBase={mediaBase}
             deviceInfo={deviceInfo}
             onOpen={onOpenAttachment}
-            // The transcript belongs to the recording, so only an audio attachment claims it.
-            transcript={att.type === 'audio' ? item.transcript : undefined}
+            // Each recording carries its own words; one blob under all of them would say the
+            // wrong thing twice.
+            transcript={item.transcripts?.[att.id]}
             onAccent={!agent}
           />
         ))}
