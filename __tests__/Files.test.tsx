@@ -327,13 +327,36 @@ test('a refused delete surfaces on the files screen', async () => {
   await press(tree, 'Delete file garde.pdf');
   await ReactTestRenderer.act(async () => {
     DeviceEventEmitter.emit('claw:ws:message', {
-      text: JSON.stringify({ type: 'error', message: 'file not found' }),
+      text: JSON.stringify({
+        type: 'error',
+        message: 'file not found',
+        scope: 'files',
+      }),
     });
   });
 
   // Routed only to a chat bubble, this was invisible under the files screen.
   await waitFor(() => labelsOf(tree).includes('Files error file not found'));
   expect(textsOf(tree)).toContain('garde.pdf');
+
+  await unmount(tree);
+});
+
+test('an error from another screen does not land on the files banner', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [file({ id: 'f9', filename: 'garde.pdf', type: 'file' })]);
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'error',
+        message: 'history failed',
+        scope: 'session',
+      }),
+    });
+  });
+
+  expect(labelsOf(tree)).not.toContain('Files error history failed');
 
   await unmount(tree);
 });

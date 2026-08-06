@@ -216,10 +216,12 @@ export function AppShell(): React.JSX.Element {
           chatStore.markRead(frame.threadId);
           break;
         case 'error':
-          // The files screen covers the chat, so an error routed only to a bubble is a
-          // silent failure: a rejected delete looked like a dead button.
-          setFilesError(frame.message);
-          if (activeThreadRef.current) {
+          // Where the user asked is where the refusal belongs: a rejected delete used to be
+          // invisible under the files screen, and then loud in a conversation it has nothing
+          // to do with.
+          if (frame.scope === 'files') {
+            setFilesError(frame.message);
+          } else if (activeThreadRef.current) {
             chatStore.addAgentMessage(
               activeThreadRef.current,
               `err-${Date.now()}`,

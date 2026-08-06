@@ -157,9 +157,13 @@ export interface LogsTailResultFrame {
   query: { scope?: string; level?: string; run?: string; contains?: string; limit?: number };
 }
 
+/** Which request was refused. The screen that asked is the one that shows it. */
+export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs';
+
 export interface ErrorFrame {
   type: 'error';
   message: string;
+  scope?: ErrorScope;
 }
 
 export type ServerFrame =
