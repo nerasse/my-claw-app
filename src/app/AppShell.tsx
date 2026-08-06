@@ -69,6 +69,7 @@ export function AppShell(): React.JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const [imageViewer, setImageViewer] = useState<{
     url: string;
     filename: string;
@@ -207,12 +208,16 @@ export function AppShell(): React.JSX.Element {
         case 'files.list.result':
           setSessionFiles(frame.files);
           setFilesTotal(frame.totalBytes);
+          setFilesError(null);
           break;
         case 'chat.history':
           chatStore.seedHistory(frame.threadId, frame.messages);
           chatStore.markRead(frame.threadId);
           break;
         case 'error':
+          // The files screen covers the chat, so an error routed only to a bubble is a
+          // silent failure: a rejected delete looked like a dead button.
+          setFilesError(frame.message);
           if (activeThreadRef.current) {
             chatStore.addAgentMessage(
               activeThreadRef.current,
@@ -463,7 +468,9 @@ export function AppShell(): React.JSX.Element {
               files={sessionFiles}
               totalBytes={filesTotal}
               onBack={() => setFilesOpen(false)}
+              error={filesError ?? undefined}
               onDelete={id => {
+                setFilesError(null);
                 if (activeThread)
                   connection.send(encodeFileDelete(activeThread, id));
               }}

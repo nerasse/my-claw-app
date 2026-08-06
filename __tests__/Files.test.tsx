@@ -288,6 +288,24 @@ test('the delete button removes the file without opening the viewer', async () =
   await unmount(tree);
 });
 
+test('a refused delete surfaces on the files screen', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [file({ id: 'del2', filename: 'garde.pdf', type: 'file' })]);
+
+  await press(tree, 'Delete file garde.pdf');
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'error', message: 'file not found' }),
+    });
+  });
+
+  // Routed only to a chat bubble, this was invisible under the files screen.
+  await waitFor(() => labelsOf(tree).includes('Files error file not found'));
+  expect(textsOf(tree)).toContain('garde.pdf');
+
+  await unmount(tree);
+});
+
 test('a file without a preview still offers a download', async () => {
   const tree = await renderApp();
   await openFiles(tree, [

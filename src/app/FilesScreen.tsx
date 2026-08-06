@@ -38,6 +38,7 @@ export function FilesScreen({
   onDelete,
   onOpenImage,
   onOpenText,
+  error,
 }: {
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
@@ -47,6 +48,8 @@ export function FilesScreen({
   onDelete: (id: string) => void;
   onOpenImage: (file: { url: string; filename: string }) => void;
   onOpenText: (file: { url: string; filename: string }) => void;
+  /** Server-side refusal for this screen. Without it a failed delete just looks inert. */
+  error?: string;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [viewer, setViewer] = useState<SessionFileMeta | null>(null);
@@ -70,6 +73,12 @@ export function FilesScreen({
           </Text>
         </View>
       </View>
+
+      {error ? (
+        <Text style={styles.error} accessibilityLabel={`Files error ${error}`}>
+          {error}
+        </Text>
+      ) : null}
 
       <FlatList
         style={styles.list}
@@ -289,6 +298,16 @@ function createStyles(palette: Palette) {
       fontSize: font.micro,
       color: palette.textFaint,
       fontWeight: '700' as const,
+    },
+    error: {
+      marginHorizontal: space.md,
+      marginBottom: space.sm,
+      paddingHorizontal: space.sm,
+      paddingVertical: space.xs,
+      borderRadius: radius.sm,
+      backgroundColor: palette.surfaceAlt,
+      color: palette.danger,
+      fontSize: font.small,
     },
     rowMain: {
       flex: 1,

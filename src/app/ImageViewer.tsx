@@ -25,8 +25,9 @@ export function ImageViewer({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  // The shell insets its top edge, so the layer has to climb back over the status bar for
-  // the photo to really own the screen; the bars then keep clear of it on their own.
+  // An absolutely positioned child is laid out against the shell's outer box, so the layer
+  // already spans the status bar: the photo owns the screen at top 0, and only the bars have
+  // to keep clear of it. Offsetting the stage instead pushed them under the status bar.
   const insets = useSafeAreaInsets();
   const [controlsVisible, setControlsVisible] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,7 +56,7 @@ export function ImageViewer({
   }, [filename, url]);
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, { top: -insets.top }]}>
+    <View style={[StyleSheet.absoluteFill, styles.stage]}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
       <ImageZoom
         uri={url}
