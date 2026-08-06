@@ -62,6 +62,8 @@ export function ChatScreen({
   onFilesPress,
   onSend,
   onBubbleMenu,
+  onOpenImage,
+  onOpenText,
 }: {
   threadId: string;
   title: string;
@@ -75,8 +77,18 @@ export function ChatScreen({
   onOpenDrawer: () => void;
   onStatusPress: () => void;
   onFilesPress: () => void;
-  onSend: (text: string, attachments?: Array<{ id: string; type: AttachmentMeta['type']; uri?: string }>) => void;
+  onSend: (
+    text: string,
+    attachments?: Array<{
+      id: string;
+      type: AttachmentMeta['type'];
+      uri?: string;
+      filename?: string;
+    }>,
+  ) => void;
   onBubbleMenu: (item: TextItem) => void;
+  onOpenImage: (target: { url: string; filename: string }) => void;
+  onOpenText: (target: { url: string; filename: string }) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const listRef = useRef<FlatList<ChatItem>>(null);
@@ -169,10 +181,20 @@ export function ChatScreen({
       setUploadError(null);
       (async () => {
         try {
-          const refs: Array<{ id: string; type: AttachmentMeta['type']; uri?: string }> = [];
+          const refs: Array<{
+            id: string;
+            type: AttachmentMeta['type'];
+            uri?: string;
+            filename?: string;
+          }> = [];
           for (const attachment of attachments) {
             const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, attachment);
-            refs.push({ id: uploaded.id, type: uploaded.type, uri: attachment.uri });
+            refs.push({
+              id: uploaded.id,
+              type: uploaded.type,
+              uri: attachment.uri,
+              filename: attachment.filename,
+            });
           }
           setAttachments([]);
           onSend(text, refs);
@@ -274,6 +296,9 @@ export function ChatScreen({
                 grouped={isGrouped(items, index)}
                 showTime={!isGrouped(items, index + 1)}
                 onMenu={() => onBubbleMenu(item)}
+                onOpenAttachment={(kind, target) =>
+                  kind === 'image' ? onOpenImage(target) : onOpenText(target)
+                }
               />
             )
           }

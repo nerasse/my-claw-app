@@ -19,6 +19,20 @@ export function httpOrigin(wsUrl: string, fallback = 'http://10.10.20.10:8080'):
   return `${secure ? 'https' : 'http'}://${match[2]}`;
 }
 
+/**
+ * Which full-screen viewer opens a file, in the explorer and in a chat bubble alike. Anything
+ * else falls back to the download card: one rule, so both entry points agree.
+ */
+export function viewerFor(
+  type: 'image' | 'audio' | 'video' | 'file',
+  filename: string | undefined,
+): 'image' | 'text' | null {
+  if (type === 'image') return 'image';
+  const name = (filename ?? '').toLowerCase();
+  if (name.endsWith('.md') || name.endsWith('.txt')) return 'text';
+  return null;
+}
+
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';

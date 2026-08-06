@@ -102,7 +102,7 @@ class ChatStoreImpl {
         id: entry.id,
         role: entry.role === 'user' ? 'user' : 'agent',
         text: textOf(entry),
-        attachments: [],
+        attachments: entry.attachments ?? [],
         streaming: false,
         ts,
       };

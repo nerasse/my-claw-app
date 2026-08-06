@@ -308,6 +308,7 @@ export function AppShell(): React.JSX.Element {
         id: string;
         type: AttachmentMeta['type'];
         uri?: string;
+        filename?: string;
       }>,
     ) => {
       const threadId = activeThreadRef.current ?? uuid();
@@ -321,11 +322,18 @@ export function AppShell(): React.JSX.Element {
           id: attachment.id,
           type: attachment.type,
           uri: attachment.uri,
+          filename: attachment.filename,
         })) ?? [],
       );
       sessionStore.ensure(threadId, text || '(attachment)');
+      // The wire only carries the reference; uri and filename are local bubble concerns.
       const delivered = await connection.send(
-        encodeChatSend(id, text, threadId, attachments),
+        encodeChatSend(
+          id,
+          text,
+          threadId,
+          attachments?.map(attachment => ({ id: attachment.id, type: attachment.type })),
+        ),
       );
       if (!delivered) chatStore.markSendFailed(threadId, id);
     },
@@ -481,6 +489,8 @@ export function AppShell(): React.JSX.Element {
               onFilesPress={openFiles}
               onSend={sendChat}
               onBubbleMenu={setBubbleMenu}
+              onOpenImage={setImageViewer}
+              onOpenText={setTextViewer}
             />
           )}
         </View>

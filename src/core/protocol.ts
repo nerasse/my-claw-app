@@ -10,6 +10,8 @@ export interface AttachmentMeta {
   audioAsVoice?: boolean;
   /** Local file preview for attachments that have not left the phone yet. */
   uri?: string;
+  /** Replayed turn whose file was deleted since: named, but there is nothing to open. */
+  deleted?: boolean;
 }
 
 export interface AttachmentRef {
@@ -84,7 +86,13 @@ export interface ToolCallFrame extends ToolCallPayload {
 }
 
 export type HistoryEntry =
-  | { id: string; role: 'user' | 'assistant'; text: string; ts: string }
+  | {
+      id: string;
+      role: 'user' | 'assistant';
+      text: string;
+      ts: string;
+      attachments?: AttachmentMeta[];
+    }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 
 export interface ChatHistoryFrame {

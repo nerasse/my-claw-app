@@ -3,7 +3,7 @@ import { FlatList, Image, Modal, Pressable, Text, View } from 'react-native';
 import { deviceBridge } from '../core/nativeBridge';
 import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
-import { formatBytes, formatDate } from '../core/utils';
+import { formatBytes, formatDate, viewerFor } from '../core/utils';
 import {
   font,
   radius,
@@ -91,22 +91,14 @@ export function FilesScreen({
               <Pressable
                 style={styles.rowMain}
                 onPress={() => {
-                  const isText =
-                    item.filename.toLowerCase().endsWith('.md') ||
-                    item.filename.toLowerCase().endsWith('.txt');
-                  if (item.type === 'image') {
-                    onOpenImage({
-                      url: mediaUrl(mediaBase, deviceInfo, item.id),
-                      filename: item.filename,
-                    });
-                  } else if (isText) {
-                    onOpenText({
-                      url: mediaUrl(mediaBase, deviceInfo, item.id),
-                      filename: item.filename,
-                    });
-                  } else {
-                    setViewer(item);
-                  }
+                  const target = {
+                    url: mediaUrl(mediaBase, deviceInfo, item.id),
+                    filename: item.filename,
+                  };
+                  const kind = viewerFor(item.type, item.filename);
+                  if (kind === 'image') onOpenImage(target);
+                  else if (kind === 'text') onOpenText(target);
+                  else setViewer(item);
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Open file ${item.filename}`}

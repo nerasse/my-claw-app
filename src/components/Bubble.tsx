@@ -18,6 +18,7 @@ export function Bubble({
   grouped,
   showTime,
   onMenu,
+  onOpenAttachment,
 }: {
   item: TextItem;
   mediaBase: string;
@@ -26,6 +27,7 @@ export function Bubble({
   grouped: boolean;
   showTime: boolean;
   onMenu: () => void;
+  onOpenAttachment?: (kind: 'image' | 'text', target: { url: string; filename: string }) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const agent = item.role === 'agent';
@@ -33,7 +35,13 @@ export function Bubble({
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
       <View style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
         {item.attachments.map(att => (
-          <AttachmentView key={att.id} att={att} mediaBase={mediaBase} deviceInfo={deviceInfo} />
+          <AttachmentView
+            key={att.id}
+            att={att}
+            mediaBase={mediaBase}
+            deviceInfo={deviceInfo}
+            onOpen={onOpenAttachment}
+          />
         ))}
         {item.text ? (
           agent ? (

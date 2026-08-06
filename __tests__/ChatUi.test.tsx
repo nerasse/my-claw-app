@@ -9,7 +9,7 @@ import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
 import { darkPalette, lightPalette } from '../src/theme/palettes';
 import type { HistoryEntry } from '../src/core/protocol';
-import { renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
+import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-ui';
@@ -320,4 +320,78 @@ test('bubbles stay compact: agent text sits in a tight bubble', async () => {
   expect(paddings.length).toBeGreaterThan(0);
   expect(Math.max(...paddings)).toBeLessThanOrEqual(8);
   await unmount(tree);
+});
+
+describe('attachments in a replayed turn', () => {
+  const withFiles: HistoryEntry[] = [
+    {
+      id: 'h-a',
+      role: 'user',
+      text: 'regarde ca',
+      ts: '2026-01-01T10:00:00.000Z',
+      attachments: [
+        { id: 'img1', type: 'image', filename: 'photo de vacances.png', sizeBytes: 3 },
+        { id: 'doc1', type: 'file', filename: 'notes.md', mimeType: 'text/markdown' },
+        { id: 'gone', type: 'file', filename: 'ancien.txt', deleted: true },
+      ],
+    },
+  ];
+
+  async function renderWithAttachments(): Promise<Tree> {
+    const tree = await renderApp();
+    await ReactTestRenderer.act(async () => {
+      chatStore.seedHistory(THREAD, withFiles);
+    });
+    // The bubble text is an array child (text + caret), so stringsOf, not textsOf.
+    await waitFor(() => stringsOf(tree).includes('regarde ca'));
+    return tree;
+  }
+
+  test('names each file instead of its type, and flags the deleted one', async () => {
+    const tree = await renderWithAttachments();
+    const texts = stringsOf(tree);
+
+    expect(texts).toContain('photo de vacances.png');
+    expect(texts).toContain('notes.md');
+    expect(texts).toContain('ancien.txt (deleted)');
+    // The server path used to leak into the bubble; the turn is now clean text.
+    expect(texts.join(' ')).not.toContain('files/my-claw-app');
+
+    await unmount(tree);
+  });
+
+  test('tapping an attached image opens the same viewer as the explorer', async () => {
+    const tree = await renderWithAttachments();
+
+    await waitFor(() =>
+      labelsOf(tree).includes('Open attachment photo de vacances.png'),
+    );
+    await pressLabel(tree, 'Open attachment photo de vacances.png');
+    await waitFor(() => labelsOf(tree).includes('Close image'));
+
+    await unmount(tree);
+  });
+
+  test('tapping an attached markdown file opens it full screen', async () => {
+    const tree = await renderWithAttachments();
+
+    await waitFor(() => labelsOf(tree).includes('Open attachment notes.md'));
+    await pressLabel(tree, 'Open attachment notes.md');
+    await waitFor(() => labelsOf(tree).includes('Close file view'));
+    expect(stringsOf(tree)).toContain('notes.md');
+
+    await unmount(tree);
+  });
+
+  test('a deleted attachment is inert', async () => {
+    const tree = await renderWithAttachments();
+
+    const openable = tree.root.findAll(
+      node => node.props.accessibilityLabel === 'Open attachment ancien.txt',
+      { deep: true },
+    );
+    expect(openable).toHaveLength(0);
+
+    await unmount(tree);
+  });
 });
