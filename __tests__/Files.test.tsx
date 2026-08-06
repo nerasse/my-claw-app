@@ -75,20 +75,20 @@ test('the hardware back button returns from the file explorer to the chat', asyn
 
   // The Android layer calls the last registered handler and stops when it returns true.
   // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
-  const back = (
-    require('react-native/Libraries/Utilities/BackHandler.ios') as {
-      default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
-    }
-  ).default;
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+  };
+  const handlers = back.default.__handlers;
+
   let handled = false;
   await ReactTestRenderer.act(async () => {
-    handled = back.__handlers[back.__handlers.length - 1]();
+    handled = handlers[handlers.length - 1]();
   });
 
   expect(handled).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Message to send'));
   expect(labelsOf(tree)).not.toContain('Back to chat');
-  expect(back.exitApp).not.toHaveBeenCalled();
+  expect(back.default.exitApp).not.toHaveBeenCalled();
   await unmount(tree);
 });
 
