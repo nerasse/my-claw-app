@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { ImageZoom } from '@likashefqet/react-native-image-zoom';
 import Markdown from 'react-native-marked';
 import { deviceBridge } from '../core/nativeBridge';
 import type { SessionFileMeta } from '../core/protocol';
@@ -140,7 +141,6 @@ export function FilesScreen({
         <FileViewer
           file={viewer}
           url={mediaUrl(mediaBase, deviceInfo, viewer.id)}
-          deviceInfo={deviceInfo}
           onClose={() => setViewer(null)}
         />
       ) : null}
@@ -156,12 +156,10 @@ export function FilesScreen({
 function FileViewer({
   file,
   url,
-  deviceInfo,
   onClose,
 }: {
   file: SessionFileMeta;
   url: string;
-  deviceInfo: DeviceInfo | null;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -237,15 +235,14 @@ function FileViewer({
           </View>
 
           {isImage ? (
-            <View style={styles.imageStage}>
-              {url ? (
-                <Image
-                  source={{ uri: url }}
-                  style={styles.fullImage}
-                  resizeMode="contain"
-                />
-              ) : null}
-            </View>
+            <ImageGallery
+              url={url}
+              filename={file.filename}
+              onClose={onClose}
+              saving={saving}
+              savedTo={savedTo}
+              onSave={() => save(true)}
+            />
           ) : isText && content !== null ? (
             <ScrollView
               style={styles.textStage}
@@ -303,19 +300,104 @@ function FileViewer({
             ) : null}
             <Pressable
               style={[styles.button, saving && styles.buttonOff]}
-              onPress={() => save(isImage && Boolean(deviceInfo))}
+              onPress={() => save(false)}
               disabled={saving || !url}
               accessibilityRole="button"
-              accessibilityLabel={
-                isImage ? 'Save image to gallery' : 'Save file to downloads'
-              }
+              accessibilityLabel="Save file to downloads"
             >
               <Text style={styles.buttonText}>
-                {saving ? 'saving…' : isImage ? 'Save to gallery' : 'Download'}
+                {saving ? 'saving…' : 'Download'}
               </Text>
             </Pressable>
           </View>
         </View>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * Gallery-style viewer: the image owns the whole screen, pinches to zoom (double-tap
+ * toggles 1x/3x), and a tap on the image pops the controls — a top bar with the name and
+ * the close cross, a bottom bar with the save button. The controls fade away on their own
+ * after a moment so nothing covers the photo. The hardware back closes the viewer: the
+ * Modal intercepts it and asks onRequestClose, the same call the cross makes.
+ */
+function ImageGallery({
+  url,
+  filename,
+  onClose,
+  saving,
+  savedTo,
+  onSave,
+}: {
+  url: string;
+  filename: string;
+  onClose: () => void;
+  saving: boolean;
+  savedTo: string | null;
+  onSave: () => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const [controlsVisible, setControlsVisible] = useState(true);
+
+  useEffect(() => {
+    if (!controlsVisible) return;
+    const timer = setTimeout(() => setControlsVisible(false), 4000);
+    return () => clearTimeout(timer);
+  }, [controlsVisible]);
+
+  return (
+    <Modal
+      visible
+      transparent={false}
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={styles.galleryStage}>
+        <ImageZoom
+          uri={url}
+          minScale={1}
+          maxScale={5}
+          isSingleTapEnabled
+          onSingleTap={() => setControlsVisible(v => !v)}
+          isDoubleTapEnabled
+          style={styles.galleryImage}
+        />
+        {controlsVisible ? (
+          <>
+            <View style={styles.galleryTopBar}>
+              <Text style={styles.galleryTitle} numberOfLines={1}>
+                {filename}
+              </Text>
+              <Pressable
+                onPress={onClose}
+                style={styles.galleryClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close image"
+              >
+                <Text style={styles.galleryCloseGlyph}>✕</Text>
+              </Pressable>
+            </View>
+            <View style={styles.galleryBottomBar}>
+              {savedTo ? (
+                <Text style={styles.gallerySaved}>{savedTo}</Text>
+              ) : null}
+              <Pressable
+                onPress={onSave}
+                disabled={saving}
+                style={styles.gallerySave}
+                accessibilityRole="button"
+                accessibilityLabel="Save image to gallery"
+              >
+                <Text style={styles.gallerySaveText}>
+                  {saving ? 'saving…' : 'Save to gallery'}
+                </Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
       </View>
     </Modal>
   );
@@ -426,6 +508,51 @@ function createStyles(palette: Palette) {
       borderRadius: radius.sm,
     },
     fullImage: { width: '100%' as const, height: '100%' as const },
+    galleryStage: { flex: 1, backgroundColor: '#000' },
+    galleryImage: { width: '100%' as const, height: '100%' as const },
+    galleryTopBar: {
+      position: 'absolute' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: space.md,
+      paddingHorizontal: space.md,
+      paddingVertical: space.md,
+      paddingTop: 48,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    galleryTitle: { flex: 1, color: '#fff', fontSize: font.body, fontWeight: '600' as const },
+    galleryClose: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    galleryCloseGlyph: { fontSize: 16, color: '#fff', lineHeight: 18 },
+    galleryBottomBar: {
+      position: 'absolute' as const,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: space.md,
+      padding: space.md,
+      paddingBottom: 40,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    gallerySaved: { flex: 1, color: '#cfd6e4', fontSize: font.small },
+    gallerySave: {
+      paddingHorizontal: space.lg,
+      paddingVertical: space.sm,
+      borderRadius: radius.sm,
+      backgroundColor: palette.accent,
+    },
+    gallerySaveText: { color: '#fff', fontSize: font.body, fontWeight: '600' as const },
     textStage: {
       maxHeight: 360,
       backgroundColor: palette.bg,

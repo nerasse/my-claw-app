@@ -17,6 +17,10 @@ jest.mock(
   () => require('react-native-safe-area-context/jest/mock').default,
 );
 
+// Mock the native gesture handler module the app registers at boot, and reset any
+// listeners between test files.
+require('react-native-gesture-handler/jestSetup');
+
 // The RN jest preset resolves platform files to 'ios', whose BackHandler is a no-op
 // (BackHandler.ios.js). The real app runs BackHandler.android.js, which iterates the
 // registered handlers and stops at the first that returns true. Keep a registry the tests
@@ -39,6 +43,22 @@ jest.mock('react-native/Libraries/Utilities/BackHandler.ios', () => {
   };
   return { __esModule: true, default: mock };
 });
+
+// The zoom library runs on worklets and the native gesture recognisers; under jest the
+// gestures do not exist, so the image stands in for a Pressable that fires the single-tap
+// callback the way the real component does on Android.
+jest.mock('@likashefqet/react-native-image-zoom', () => {
+  const React = require('react');
+  const { Pressable } = require('react-native');
+  const stub = props =>
+    React.createElement(Pressable, {
+      accessibilityLabel: 'Zoomable image',
+      onPress: props.onSingleTap,
+    });
+  return { __esModule: true, default: stub, ImageZoom: stub, Zoomable: stub };
+});
+
+jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
 
 jest.mock('react-native-marked', () => {
   const React = require('react');

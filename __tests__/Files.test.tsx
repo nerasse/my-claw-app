@@ -137,6 +137,70 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
   await unmount(tree);
 });
 
+test('tapping the image pops the controls, the cross closes the viewer', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [
+    file({
+      id: 'img2',
+      filename: 'shot.png',
+      type: 'image',
+      mimeType: 'image/png',
+    }),
+  ]);
+
+  await press(tree, 'Open file shot.png');
+  await waitFor(() => labelsOf(tree).includes('Close image'));
+  expect(labelsOf(tree)).toContain('Save image to gallery');
+
+  // Tap on the photo: the bars disappear so nothing covers the image.
+  await press(tree, 'Zoomable image');
+  await waitFor(() => !labelsOf(tree).includes('Close image'));
+  expect(labelsOf(tree)).not.toContain('Save image to gallery');
+
+  // Tap again: they pop back.
+  await press(tree, 'Zoomable image');
+  await waitFor(() => labelsOf(tree).includes('Close image'));
+
+  // The cross quits the viewer and lands back on the file list.
+  await press(tree, 'Close image');
+  await waitFor(() => labelsOf(tree).includes('Open file shot.png'));
+  expect(labelsOf(tree)).not.toContain('Close image');
+
+  await unmount(tree);
+});
+
+test('the hardware back closes the image gallery, not the whole explorer', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [
+    file({
+      id: 'img3',
+      filename: 'wide.png',
+      type: 'image',
+      mimeType: 'image/png',
+    }),
+  ]);
+
+  await press(tree, 'Open file wide.png');
+  await waitFor(() => labelsOf(tree).includes('Close image'));
+
+  // The gallery Modal is a separate screen: its onRequestClose is what Android fires.
+  const modal = tree.root
+    .findAll(n => n.props.visible === true && typeof n.props.onRequestClose === 'function', {
+      deep: true,
+    })
+    .at(-1);
+  expect(modal).toBeDefined();
+  let closed = false;
+  await ReactTestRenderer.act(async () => {
+    closed = modal!.props.onRequestClose();
+  });
+  expect(closed).not.toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open file wide.png'));
+  expect(labelsOf(tree)).not.toContain('Close image');
+
+  await unmount(tree);
+});
+
 test('a file without a preview still offers a download', async () => {
   const tree = await renderApp();
   await openFiles(tree, [
