@@ -1,13 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
+} from 'react-native';
+import { PlusIcon, SendIcon } from './icons';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { VoiceChip } from './VoiceChip';
 import { VoiceRecorder } from './VoiceRecorder';
 import type { PendingAttachment } from '../core/upload';
 import { formatBytes } from '../core/utils';
-import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { font, lineHeightFor, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 export function Composer({
   value,
@@ -159,7 +167,11 @@ export function Composer({
             onPress={onPickAttachment}
             accessibilityRole="button"
             accessibilityLabel="Add attachment">
-            <Text style={[styles.attachGlyph, uploading && styles.attachBusy]}>{uploading ? '…' : '＋'}</Text>
+            {uploading ? (
+              <ActivityIndicator size="small" color={palette.textFaint} />
+            ) : (
+              <PlusIcon size={20} color={palette.accent} />
+            )}
           </Pressable>
         ) : null}
         {recording ? null : (
@@ -191,9 +203,10 @@ export function Composer({
             disabled={nothingToSend}
             accessibilityRole="button"
             accessibilityLabel="Send message">
-            <Svg width={hero ? 22 : 20} height={hero ? 22 : 20} viewBox="0 0 24 24">
-              <Path fill={nothingToSend ? palette.textFaint : palette.accentText} d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z" />
-            </Svg>
+            <SendIcon
+              size={hero ? 22 : 20}
+              color={nothingToSend ? palette.textFaint : palette.accentText}
+            />
           </Pressable>
         )}
       </View>
@@ -226,7 +239,7 @@ const createStyles = (palette: Palette) => ({
   menuItem: { paddingHorizontal: space.md, paddingVertical: space.sm, gap: 1 },
   menuItemSelected: { backgroundColor: palette.accentSoft },
   menuName: { fontSize: font.meta, fontFamily: 'monospace', color: palette.accent, fontWeight: '600' as const },
-  menuDesc: { fontSize: font.small, color: palette.textMuted, lineHeight: 15 },
+  menuDesc: { fontSize: font.small, color: palette.textMuted, lineHeight: lineHeightFor(font.small) },
   row: { flexDirection: 'row' as const, alignItems: 'flex-end' as const, gap: space.sm },
   attach: {
     width: 44,
@@ -238,8 +251,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  attachGlyph: { fontSize: 20, lineHeight: 24, color: palette.accent },
-  attachBusy: { color: palette.textFaint },
   chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.xs },
   chip: {
     flexDirection: 'row' as const,

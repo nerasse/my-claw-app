@@ -4,7 +4,7 @@ import type { TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
 function clock(ts: number): string {
   const date = new Date(ts);
@@ -93,7 +93,7 @@ const createStyles = (palette: Palette) => ({
   },
   bubbleUser: { backgroundColor: palette.accent, borderBottomRightRadius: radius.sm },
   bubbleAgent: { backgroundColor: palette.surfaceAlt, borderBottomLeftRadius: radius.sm },
-  text: { fontSize: font.body, lineHeight: 19, color: palette.text },
+  text: { fontSize: font.body, lineHeight: lineHeightFor(font.body), color: palette.text },
   textUser: { color: palette.accentText },
   error: { fontSize: font.small, color: palette.danger, marginTop: 2 },
   time: { fontSize: font.micro, alignSelf: 'flex-end' as const, marginTop: 1 },

@@ -16,7 +16,8 @@ import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
 import type { WsState } from '../core/types';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { FolderIcon } from '../components/icons';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 const GROUP_WINDOW_MS = 120_000;
 
@@ -85,6 +86,7 @@ export function ChatScreen({
   onOpenText: (target: { url: string; filename: string }) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   const listRef = useRef<FlatList<ChatItem>>(null);
   const [draft, setDraft] = useState('');
   const [atBottom, setAtBottom] = useState(true);
@@ -257,7 +259,7 @@ export function ChatScreen({
           style={styles.filesButton}
           accessibilityRole="button"
           accessibilityLabel="Session files">
-          <Text style={styles.filesGlyph}>🗂</Text>
+          <FolderIcon size={19} color={palette.text} />
         </Pressable>
       </View>
 
@@ -397,7 +399,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  filesGlyph: { fontSize: 17, lineHeight: 20 },
   statusDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1, borderColor: palette.surface },
   statusOk: { backgroundColor: palette.ok },
   statusOff: { backgroundColor: palette.textFaint },

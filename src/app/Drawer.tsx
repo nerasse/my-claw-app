@@ -3,6 +3,7 @@ import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
+import { PlusIcon } from '../components/icons';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -111,7 +112,7 @@ export function Drawer({
             style={styles.newButton}
             accessibilityRole="button"
             accessibilityLabel="New conversation">
-            <Text style={styles.newGlyph}>+</Text>
+            <PlusIcon size={20} color={palette.accent} />
           </Pressable>
         </View>
 
@@ -207,7 +208,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  newGlyph: { fontSize: 22, lineHeight: 26, color: palette.accent, fontWeight: '700' as const },
   sectionLabel: {
     paddingHorizontal: space.lg,
     paddingBottom: space.xs,

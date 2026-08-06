@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { PlayPauseIcon } from './icons';
 import type { PendingAttachment } from '../core/upload';
 import { formatDuration, usePlaybackOf, voicePlayback } from '../core/voice';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -36,12 +36,7 @@ export function VoiceChip({
         hitSlop={6}
         accessibilityRole="button"
         accessibilityLabel={playing ? 'Pause voice message' : 'Play voice message'}>
-        <Svg width={14} height={14} viewBox="0 0 24 24">
-          <Path
-            fill={styles.glyph.color}
-            d={playing ? 'M6 5h4v14H6zm8 0h4v14h-4z' : 'M8 5v14l11-7z'}
-          />
-        </Svg>
+        <PlayPauseIcon playing={playing} size={14} color={styles.glyph.color} />
       </Pressable>
 
       <Text style={styles.label}>

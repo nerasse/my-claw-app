@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type { ToolItem } from '../core/chat';
 import { formatDuration, summarizeArgs } from '../core/utils';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * One executed tool, collapsed to a single dense line and expanded on tap to show the
@@ -85,7 +85,7 @@ const createStyles = (palette: Palette) => ({
   code: {
     fontFamily: 'monospace',
     fontSize: font.small,
-    lineHeight: 16,
+    lineHeight: lineHeightFor(font.small),
     color: palette.text,
     backgroundColor: palette.bg,
     borderRadius: 5,

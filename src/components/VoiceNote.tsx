@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { PlayPauseIcon } from './icons';
 import type { AttachmentMeta } from '../core/protocol';
 import { formatDuration, usePlaybackOf, voicePlayback } from '../core/voice';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -60,12 +60,11 @@ export function VoiceNote({
           hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel={playing ? 'Pause voice message' : 'Play voice message'}>
-          <Svg width={16} height={16} viewBox="0 0 24 24">
-            <Path
-              fill={onAccent ? styles.buttonGlyphOnAccent.color : styles.buttonGlyph.color}
-              d={playing ? 'M6 5h4v14H6zm8 0h4v14h-4z' : 'M8 5v14l11-7z'}
-            />
-          </Svg>
+          <PlayPauseIcon
+            playing={playing}
+            size={16}
+            color={onAccent ? styles.buttonGlyphOnAccent.color : styles.buttonGlyph.color}
+          />
         </Pressable>
 
         <View style={styles.bars} accessibilityLabel="Playback position">

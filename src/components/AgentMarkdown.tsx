@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
-import { font, space, useTheme, type Palette } from '../theme';
+import { font, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
-function markedStyles(palette: Palette): MarkedStyles {
+export function markedStyles(palette: Palette): MarkedStyles {
   return {
-    text: { fontSize: font.body, color: palette.text, lineHeight: 19, flexShrink: 1 },
+    text: { fontSize: font.body, color: palette.text, lineHeight: lineHeightFor(font.body), flexShrink: 1 },
     paragraph: { marginVertical: 2, flexShrink: 1 },
     strong: { fontWeight: '700', color: palette.text },
     em: { fontStyle: 'italic' },
@@ -34,7 +34,7 @@ function markedStyles(palette: Palette): MarkedStyles {
     },
     hr: { marginVertical: space.sm, borderBottomColor: palette.border },
     list: { marginVertical: 2, flexShrink: 1 },
-    li: { fontSize: font.body, color: palette.text, lineHeight: 19 },
+    li: { fontSize: font.body, color: palette.text, lineHeight: lineHeightFor(font.body) },
     table: { marginVertical: space.xs, flexShrink: 1 },
     tableRow: { borderBottomWidth: 1, borderBottomColor: palette.border },
     tableCell: { padding: space.xs, borderWidth: 1, borderColor: palette.border },
@@ -69,6 +69,6 @@ export function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  code: { fontFamily: 'monospace', fontSize: font.meta, lineHeight: 17 },
+  code: { fontFamily: 'monospace', fontSize: font.meta, lineHeight: lineHeightFor(font.meta) },
   wrap: { flexShrink: 1 },
 });

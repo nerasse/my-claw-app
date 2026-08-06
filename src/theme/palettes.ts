@@ -95,4 +95,17 @@ export const font = {
   screen: 16,
 } as const;
 
+/**
+ * Line box for text that can contain emoji.
+ *
+ * Android draws colour emoji from a fallback font whose metrics are much taller than the Latin
+ * face at the same size. An explicit lineHeight sets an exact line box, so anything tighter than
+ * those metrics clips the glyph -- worst when an emoji wraps onto a line of its own, where no
+ * Latin glyph is holding the box open and the emoji simply loses its bottom. 1.5x clears Noto
+ * Color Emoji at every size used here. Chrome icons avoid the problem entirely by being vectors.
+ */
+export function lineHeightFor(fontSize: number): number {
+  return Math.round(fontSize * 1.5);
+}
+
 export const DRAWER_WIDTH = 288;

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, Text, Vibration, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { MicIcon, TrashIcon } from './icons';
 import {
   deviceBridge,
   deviceEvents,
@@ -259,9 +259,9 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
           accessibilityLabel={recording ? 'Recording, release to keep' : 'Record voice message'}
           accessibilityHint="Hold to record, slide left to delete, slide up to keep your hands free">
           {armed ? (
-            <TrashGlyph color={styles.glyphOnFill.color} size={hero ? 22 : 20} />
+            <TrashIcon color={styles.glyphOnFill.color} size={hero ? 22 : 20} />
           ) : (
-            <MicGlyph
+            <MicIcon
               color={recording ? styles.glyphOnFill.color : styles.glyphIdle.color}
               size={hero ? 22 : 20}
             />
@@ -295,28 +295,6 @@ function Waveform({
     <View style={styles.wave} accessibilityLabel="Microphone level">
       {bars}
     </View>
-  );
-}
-
-function MicGlyph({ color, size }: { color: string; size: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path
-        fill={color}
-        d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"
-      />
-    </Svg>
-  );
-}
-
-function TrashGlyph({ color, size }: { color: string; size: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path
-        fill={color}
-        d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zM19 4h-3.5l-1-1h-5l-1 1H5v2h14z"
-      />
-    </Svg>
   );
 }
 

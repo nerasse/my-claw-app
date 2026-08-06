@@ -4,10 +4,12 @@ import { deviceBridge } from '../core/nativeBridge';
 import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
 import { formatBytes, formatDate, viewerFor } from '../core/utils';
+import { TrashIcon } from '../components/icons';
 import {
   font,
   radius,
   space,
+  useTheme,
   useThemedStyles,
   type Palette,
 } from '../theme';
@@ -53,6 +55,7 @@ export function FilesScreen({
   error?: string;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   const [viewer, setViewer] = useState<SessionFileMeta | null>(null);
 
   return (
@@ -143,7 +146,7 @@ export function FilesScreen({
                 accessibilityRole="button"
                 accessibilityLabel={`Delete file ${item.filename}`}
               >
-                <Text style={styles.deleteGlyph}>🗑</Text>
+                <TrashIcon size={17} color={palette.danger} />
               </Pressable>
             </View>
           );
@@ -320,7 +323,6 @@ function createStyles(palette: Palette) {
     filename: { fontSize: font.body, color: palette.text },
     meta: { fontSize: font.small, color: palette.textFaint },
     delete: { padding: space.sm },
-    deleteGlyph: { fontSize: 15, lineHeight: 18 },
     modalBackdrop: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.7)',
