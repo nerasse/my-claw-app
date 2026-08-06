@@ -1,6 +1,6 @@
 # MyClaw App
 
-Android companion app for [my-claw](https://git.kssimi.fr/claw/my-claw), a self-hosted AI agent. First mobile channel: chat + phone control tools.
+Android companion app for [my-claw](https://git.kssimi.fr/claw/my-claw), a self-hosted AI agent. First client of the my-claw-app channel: chat + phone control tools.
 
 ## Stack
 

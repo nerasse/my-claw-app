@@ -93,7 +93,7 @@ export function SettingsScreen({
               onChangeText={onUrlChange}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="wss://server/mobile"
+              placeholder="wss://server/my-claw-app"
               placeholderTextColor={palette.textFaint}
               accessibilityLabel="Server address"
             />
@@ -174,7 +174,7 @@ export function SettingsScreen({
                   accessibilityLabel="Copy device and token">
                   <Text style={[styles.buttonText, styles.buttonGhostText]}>Copy device & token</Text>
                 </Pressable>
-                <Text style={styles.hint}>paste into channels.mobile.devices on the server</Text>
+                <Text style={styles.hint}>paste into channels["my-claw-app"].devices on the server</Text>
               </>
             ) : (
               <Text style={styles.hint}>device not initialized</Text>

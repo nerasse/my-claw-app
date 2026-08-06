@@ -53,7 +53,7 @@ test('opening diagnostics asks the server for a snapshot and shows it', async ()
   await openDiagnostics(tree);
   expect(sent().some(f => f.includes('"diag.snapshot"'))).toBe(true);
 
-  await receive({ type: 'diag.snapshot.result', text: 'my-claw 0.1.146\nchannels up: mobile' });
+  await receive({ type: 'diag.snapshot.result', text: 'my-claw 0.1.146\nchannels up: my-claw-app' });
   await waitFor(() => textsOf(tree).some(t => t.includes('my-claw 0.1.146')));
 
   await unmount(tree);
@@ -64,7 +64,7 @@ test('the log tail is filtered by level and scope, and the result can be copied'
   await openDiagnostics(tree);
 
   await pressLabel(tree, 'Level error');
-  await pressLabel(tree, 'Scope mobile');
+  await pressLabel(tree, 'Scope my-claw-app');
   await pressLabel(tree, 'Fetch logs');
 
   const query = JSON.parse(sent().filter(f => f.includes('"logs.tail"')).at(-1)!) as {
@@ -73,7 +73,7 @@ test('the log tail is filtered by level and scope, and the result can be copied'
     limit: number;
   };
   expect(query.level).toBe('error');
-  expect(query.scope).toBe('mobile');
+  expect(query.scope).toBe('my-claw-app');
   expect(query.limit).toBe(200);
 
   await receive({ type: 'logs.tail.result', text: 'boom', lines: 1, query: {} });

@@ -5,7 +5,7 @@ import type { LogsTailQuery } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 const LEVELS: Array<NonNullable<LogsTailQuery['level']>> = ['debug', 'info', 'warn', 'error'];
-const SCOPES = ['all', 'mobile', 'orchestrator', 'telegram', 'matrix'] as const;
+const SCOPES = ['all', 'my-claw-app', 'orchestrator', 'telegram', 'matrix'] as const;
 
 export function DiagnosticsScreen({
   snapshot,

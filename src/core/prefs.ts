@@ -8,7 +8,7 @@ export interface Prefs {
   lastThreadId: string | null;
 }
 
-export const DEFAULT_SERVER_URL = 'ws://10.10.20.10:8080/mobile';
+export const DEFAULT_SERVER_URL = 'ws://10.10.20.10:8080/my-claw-app';
 
 const DEFAULTS: Prefs = {
   themeMode: 'system',

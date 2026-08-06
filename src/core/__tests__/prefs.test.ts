@@ -18,11 +18,11 @@ describe('prefs.hydrate', () => {
   test('reads back stored values', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({
       themeMode: 'dark',
-      serverUrl: 'wss://claw.example/mobile',
+      serverUrl: 'wss://claw.example/my-claw-app',
       lastThreadId: 'thread-9',
     });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/mobile', lastThreadId: 'thread-9' });
+    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9' });
   });
 
   test('ignores a corrupted theme mode and an empty url', async () => {
@@ -63,7 +63,7 @@ describe('prefs.set', () => {
   test('a failed write never rejects into the UI', async () => {
     await prefs.hydrate();
     bridge.prefsSet.mockRejectedValueOnce(new Error('disk full'));
-    expect(() => prefs.set('serverUrl', 'ws://localhost:9/mobile')).not.toThrow();
+    expect(() => prefs.set('serverUrl', 'ws://localhost:9/my-claw-app')).not.toThrow();
     await Promise.resolve();
   });
 });
