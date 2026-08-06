@@ -51,6 +51,7 @@ const realFetch = globalThis.fetch;
 
 beforeEach(() => {
   bridge.downloadFile.mockClear();
+  bridge.saveFile.mockClear();
   // A thread must exist for the files button to be enabled, like in the running app.
   bridge.prefsGetAll.mockResolvedValue({
     themeMode: 'dark',
@@ -101,11 +102,10 @@ test('tapping a markdown file shows its rendered content and offers a download',
   await waitFor(() => textsOf(tree).some(t => t.includes('# Hello')));
 
   await press(tree, 'Save file to downloads');
-  await waitFor(() => bridge.downloadFile.mock.calls.length > 0);
-  expect(bridge.downloadFile).toHaveBeenCalledWith(
+  await waitFor(() => bridge.saveFile.mock.calls.length > 0);
+  expect(bridge.saveFile).toHaveBeenCalledWith(
     `${MEDIA_URL}/f1?device=dev-test&token=token-test`,
     'notes.md',
-    false,
   );
 
   await unmount(tree);
@@ -274,6 +274,14 @@ test('a file without a preview still offers a download', async () => {
   await waitFor(() => labelsOf(tree).includes('Save file to downloads'));
   await waitFor(() => textsOf(tree).includes('no preview for this file type'));
   expect(globalThis.fetch).not.toHaveBeenCalled();
+
+  // The download button of the card also opens the system save-as dialog.
+  await press(tree, 'Save file to downloads');
+  await waitFor(() => bridge.saveFile.mock.calls.length > 0);
+  expect(bridge.saveFile).toHaveBeenCalledWith(
+    `${MEDIA_URL}/a1?device=dev-test&token=token-test`,
+    'clip.mp3',
+  );
 
   await unmount(tree);
 });

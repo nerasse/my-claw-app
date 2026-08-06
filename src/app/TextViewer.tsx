@@ -1,14 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Markdown from 'react-native-marked';
 import { deviceBridge } from '../core/nativeBridge';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 /**
- * Full-screen text viewer for .md and .txt session files: the content owns the screen, the
- * top bar holds the name and the close cross, and the hardware back quits it like the image
- * viewer. Same layer trick as ImageViewer — no Modal, so it covers the shell's padded
- * container while staying in the app's window.
+ * Full-screen text viewer for .md and .txt session files. Same layer trick as the image
+ * viewer — no Modal — but it stays inside the safe area: the phone's status bar keeps its
+ * icons, the top bar carries the name and the close cross, and the hardware back quits.
+ * Download opens the system "Save as" dialog so the user picks the destination.
  */
 export function TextViewer({
   url,
@@ -21,6 +29,7 @@ export function TextViewer({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
+  const insets = useSafeAreaInsets();
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -42,7 +51,8 @@ export function TextViewer({
         }
       })
       .catch(err => {
-        if (!cancelled) setContentError(err instanceof Error ? err.message : 'cannot fetch');
+        if (!cancelled)
+          setContentError(err instanceof Error ? err.message : 'cannot fetch');
       });
     return () => {
       cancelled = true;
@@ -58,14 +68,18 @@ export function TextViewer({
   const save = () => {
     setSaving(true);
     deviceBridge
-      .downloadFile(url, filename, false)
-      .then(() => setSavedTo('saved to Downloads'))
+      .saveFile(url, filename)
+      .then(path => {
+        if (path) setSavedTo('saved');
+      })
       .catch(() => setSavedTo('save failed'))
       .finally(() => setSaving(false));
   };
 
   return (
-    <View style={StyleSheet.absoluteFill}>
+    <View
+      style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}
+    >
       <View style={styles.topBar}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
@@ -82,7 +96,7 @@ export function TextViewer({
       </View>
 
       {content !== null ? (
-        <ScrollView style={styles.stage} contentContainerStyle={styles.stageContent}>
+        <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
           {isMarkdown ? (
             <Markdown
               value={content}
@@ -107,25 +121,32 @@ export function TextViewer({
           )}
         </ScrollView>
       ) : (
-        <View style={styles.stage}>
+        <View style={styles.body}>
           {contentError ? (
-            <Text style={styles.error}>could not fetch content ({contentError})</Text>
+            <Text style={styles.error}>
+              could not fetch content ({contentError})
+            </Text>
           ) : (
             <ActivityIndicator color={palette.textFaint} />
           )}
         </View>
       )}
 
-      <View style={styles.bottomBar}>
-        {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : <View style={styles.spacer} />}
+      <View
+        style={[
+          styles.bottomBar,
+          { paddingBottom: space.sm + Math.max(insets.bottom - space.sm, 0) },
+        ]}
+      >
+        {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : null}
         <Pressable
           onPress={save}
           disabled={saving}
-          style={[styles.save, saving && styles.saveOff]}
+          style={[styles.button, saving && styles.buttonOff]}
           accessibilityRole="button"
           accessibilityLabel="Save file to downloads"
         >
-          <Text style={styles.saveText}>{saving ? 'saving…' : 'Download'}</Text>
+          <Text style={styles.buttonText}>{saving ? 'saving…' : 'Download'}</Text>
         </Pressable>
       </View>
     </View>
@@ -133,6 +154,7 @@ export function TextViewer({
 }
 
 const createStyles = (palette: Palette) => ({
+  stage: { backgroundColor: palette.bg },
   topBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -143,47 +165,61 @@ const createStyles = (palette: Palette) => ({
     borderBottomColor: palette.border,
     backgroundColor: palette.surface,
   },
-  title: { flex: 1, fontSize: font.body, fontWeight: '600' as const, color: palette.text },
+  title: {
+    flex: 1,
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    color: palette.text,
+  },
   close: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radius.sm,
     backgroundColor: palette.surfaceAlt,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 15, lineHeight: 18, color: palette.text },
-  stage: { flex: 1, backgroundColor: palette.bg },
-  stageContent: { padding: space.md, paddingBottom: 80 },
+  closeGlyph: { fontSize: 14, lineHeight: 16, color: palette.text },
+  body: { flex: 1, backgroundColor: palette.bg },
+  bodyContent: { padding: space.md, paddingBottom: space.xl },
   plainText: {
     color: palette.text,
     fontSize: font.body,
     fontFamily: 'monospace',
     lineHeight: 22,
   },
-  error: { textAlign: 'center' as const, fontSize: font.meta, color: palette.textFaint, padding: space.lg },
+  error: {
+    textAlign: 'center' as const,
+    fontSize: font.meta,
+    color: palette.textFaint,
+    padding: space.lg,
+  },
   bottomBar: {
-    position: 'absolute' as const,
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    justifyContent: 'flex-end' as const,
     gap: space.md,
-    padding: space.md,
-    paddingBottom: 36,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
     borderTopWidth: 1,
     borderTopColor: palette.border,
     backgroundColor: palette.surface,
   },
-  spacer: { flex: 1 },
-  saved: { flex: 1, fontSize: font.small, color: palette.textFaint },
-  save: {
+  saved: {
+    marginRight: 'auto' as const,
+    fontSize: font.small,
+    color: palette.textFaint,
+  },
+  button: {
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
     borderRadius: radius.sm,
     backgroundColor: palette.accent,
   },
-  saveOff: { opacity: 0.5 },
-  saveText: { color: '#fff', fontSize: font.body, fontWeight: '600' as const },
+  buttonOff: { opacity: 0.5 },
+  buttonText: {
+    color: '#fff',
+    fontSize: font.body,
+    fontWeight: '600' as const,
+  },
 });

@@ -185,8 +185,10 @@ function FileViewer({
     if (!url) return;
     setSaving(true);
     deviceBridge
-      .downloadFile(url, file.filename, false)
-      .then(() => setSavedTo('saved to Downloads'))
+      .saveFile(url, file.filename)
+      .then(path => {
+        if (path) setSavedTo('saved');
+      })
       .catch(() => setSavedTo('save failed'))
       .finally(() => setSaving(false));
   };

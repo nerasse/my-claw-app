@@ -42,9 +42,13 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     // App settings only (theme, server url, last thread). Credentials stay in the Keystore.
     private const val PREFS_NAME = "claw_prefs"
     private const val FILE_PICK_REQUEST_CODE = 4201
+    private const val FILE_SAVE_REQUEST_CODE = 4202
   }
 
   private var pendingFilePromise: Promise? = null
+  private var pendingSavePromise: Promise? = null
+  private var pendingSaveUrl: String? = null
+  private var pendingSaveName: String? = null
 
   // Uploads can be slow on mobile data; only the connect timeout stays short.
   private val uploadClient: OkHttpClient by lazy {
@@ -59,6 +63,21 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   // flow: launch ACTION_GET_CONTENT, copy the results to the cache, resolve the promise.
   private val filePickListener: ActivityEventListener = object : BaseActivityEventListener() {
     override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+      if (requestCode == FILE_SAVE_REQUEST_CODE) {
+        val promise = pendingSavePromise ?: return
+        val url = pendingSaveUrl ?: return
+        pendingSavePromise = null
+        pendingSaveUrl = null
+        pendingSaveName = null
+        if (resultCode != Activity.RESULT_OK || data == null || data.data == null) {
+          // The user walked away from the picker: not an error, just nothing saved.
+          promise.resolve(null)
+          return
+        }
+        downloadInto(reactContext.contentResolver.openOutputStream(data.data!!), url, promise)
+        return
+      }
+
       if (requestCode != FILE_PICK_REQUEST_CODE) return
       val promise = pendingFilePromise ?: return
       pendingFilePromise = null
@@ -308,6 +327,66 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
             val path = storeBytes(bytes, safeName, toGallery)
             val map = Arguments.createMap()
             map.putString("path", path)
+            promise.resolve(map)
+          } catch (e: Exception) {
+            promise.reject("SAVE_FAILED", e.message ?: "save failed")
+          }
+        }
+      }
+    })
+  }
+
+  /**
+   * Asks the user where to save first: opens the system "Save as" dialog (Storage Access
+   * Framework) pre-filled with the filename, then downloads the media url into the chosen
+   * location. Resolves null when the picker is dismissed — that is a cancel, not an error.
+   */
+  @ReactMethod
+  fun saveFile(url: String, filename: String, promise: Promise) {
+    val activity = reactContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "no current activity")
+      return
+    }
+    if (pendingSavePromise != null) {
+      promise.reject("SAVE_IN_PROGRESS", "a save is already in progress")
+      return
+    }
+    pendingSavePromise = promise
+    pendingSaveUrl = url
+    pendingSaveName = filename
+    val safeName = filename.replace(Regex("[/\\\\]"), "_").ifBlank { "file" }
+    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+      addCategory(Intent.CATEGORY_OPENABLE)
+      type = "*/*"
+      putExtra(Intent.EXTRA_TITLE, safeName)
+    }
+    activity.startActivityForResult(intent, FILE_SAVE_REQUEST_CODE)
+  }
+
+  private fun downloadInto(output: java.io.OutputStream?, url: String, promise: Promise) {
+    if (output == null) {
+      promise.reject("SAVE_FAILED", "cannot open chosen location")
+      return
+    }
+    val request = Request.Builder().url(url).get().build()
+    uploadClient.newCall(request).enqueue(object : Callback {
+      override fun onFailure(call: Call, e: IOException) {
+        promise.reject("DOWNLOAD_FAILED", e.message ?: "download failed")
+      }
+
+      override fun onResponse(call: Call, response: Response) {
+        response.use {
+          if (!it.isSuccessful) {
+            promise.reject("DOWNLOAD_FAILED", "server answered ${it.code}")
+            return
+          }
+          try {
+            output.use { out ->
+              it.body?.byteStream()?.use { input -> input.copyTo(out) }
+            }
+            val map = Arguments.createMap()
+            map.putString("path", url)
             promise.resolve(map)
           } catch (e: Exception) {
             promise.reject("SAVE_FAILED", e.message ?: "save failed")

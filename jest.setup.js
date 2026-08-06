@@ -125,6 +125,7 @@ jest.mock('./src/core/nativeBridge', () => ({
     downloadFile: jest.fn(() =>
       Promise.resolve({ path: '/storage/Pictures/my-claw/file' }),
     ),
+    saveFile: jest.fn(() => Promise.resolve({ path: 'content://saved/file' })),
   },
   deviceEvents: require('react-native').DeviceEventEmitter,
 }));

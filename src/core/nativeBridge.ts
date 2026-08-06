@@ -60,6 +60,11 @@ export interface DeviceBridgeNative {
     filename: string,
     toGallery: boolean,
   ): Promise<{ path: string }>;
+  /**
+   * Opens the system "Save as" dialog, then downloads the media url into the chosen
+   * location. Resolves null when the picker is dismissed.
+   */
+  saveFile(url: string, filename: string): Promise<{ path: string } | null>;
 }
 
 const native = NativeModules.DeviceBridge as DeviceBridgeNative | undefined;
@@ -100,6 +105,8 @@ export const deviceBridge: DeviceBridgeNative = {
   downloadFile: (url, filename, toGallery) =>
     native?.downloadFile(url, filename, toGallery) ??
     Promise.reject(new Error('DeviceBridge unavailable')),
+  saveFile: (url, filename) =>
+    native?.saveFile(url, filename) ?? Promise.reject(new Error('DeviceBridge unavailable')),
 };
 
 export const deviceEvents = DeviceEventEmitter;
