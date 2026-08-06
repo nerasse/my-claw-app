@@ -87,51 +87,53 @@ export function FilesScreen({
               ? mediaUrl(mediaBase, deviceInfo, item.id)
               : '';
           return (
-            <Pressable
-              style={styles.row}
-              onPress={() => {
-                const isText =
-                  item.filename.toLowerCase().endsWith('.md') ||
-                  item.filename.toLowerCase().endsWith('.txt');
-                if (item.type === 'image') {
-                  onOpenImage({
-                    url: mediaUrl(mediaBase, deviceInfo, item.id),
-                    filename: item.filename,
-                  });
-                } else if (isText) {
-                  onOpenText({
-                    url: mediaUrl(mediaBase, deviceInfo, item.id),
-                    filename: item.filename,
-                  });
-                } else {
-                  setViewer(item);
-                }
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Open file ${item.filename}`}
-            >
-              {uri ? (
-                <Image
-                  source={{ uri }}
-                  style={styles.thumb}
-                  resizeMode="cover"
-                  accessibilityLabel={item.filename}
-                />
-              ) : (
-                <View style={[styles.thumb, styles.thumbLabel]}>
-                  <Text style={styles.thumbLabelText}>
-                    {TYPE_LABEL[item.type]}
+            <View style={styles.row}>
+              <Pressable
+                style={styles.rowMain}
+                onPress={() => {
+                  const isText =
+                    item.filename.toLowerCase().endsWith('.md') ||
+                    item.filename.toLowerCase().endsWith('.txt');
+                  if (item.type === 'image') {
+                    onOpenImage({
+                      url: mediaUrl(mediaBase, deviceInfo, item.id),
+                      filename: item.filename,
+                    });
+                  } else if (isText) {
+                    onOpenText({
+                      url: mediaUrl(mediaBase, deviceInfo, item.id),
+                      filename: item.filename,
+                    });
+                  } else {
+                    setViewer(item);
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Open file ${item.filename}`}
+              >
+                {uri ? (
+                  <Image
+                    source={{ uri }}
+                    style={styles.thumb}
+                    resizeMode="cover"
+                    accessibilityLabel={item.filename}
+                  />
+                ) : (
+                  <View style={[styles.thumb, styles.thumbLabel]}>
+                    <Text style={styles.thumbLabelText}>
+                      {TYPE_LABEL[item.type]}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.rowMainText}>
+                  <Text style={styles.filename} numberOfLines={1}>
+                    {item.filename}
+                  </Text>
+                  <Text style={styles.meta}>
+                    {formatBytes(item.sizeBytes)} · {formatDate(item.ts)}
                   </Text>
                 </View>
-              )}
-              <View style={styles.rowMain}>
-                <Text style={styles.filename} numberOfLines={1}>
-                  {item.filename}
-                </Text>
-                <Text style={styles.meta}>
-                  {formatBytes(item.sizeBytes)} · {formatDate(item.ts)}
-                </Text>
-              </View>
+              </Pressable>
               <Pressable
                 onPress={() => onDelete(item.id)}
                 hitSlop={10}
@@ -141,7 +143,7 @@ export function FilesScreen({
               >
                 <Text style={styles.deleteGlyph}>🗑</Text>
               </Pressable>
-            </Pressable>
+            </View>
           );
         }}
       />
@@ -296,7 +298,13 @@ function createStyles(palette: Palette) {
       color: palette.textFaint,
       fontWeight: '700' as const,
     },
-    rowMain: { flex: 1, gap: 1 },
+    rowMain: {
+      flex: 1,
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: space.md,
+    },
+    rowMainText: { flex: 1, gap: 1 },
     filename: { fontSize: font.body, color: palette.text },
     meta: { fontSize: font.small, color: palette.textFaint },
     delete: { padding: space.sm },

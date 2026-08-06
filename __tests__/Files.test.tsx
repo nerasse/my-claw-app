@@ -47,6 +47,10 @@ async function openFiles(tree: Tree, files: SessionFileMeta[]): Promise<void> {
   );
 }
 
+function sentFrames(): string[] {
+  return bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
+}
+
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -255,6 +259,31 @@ test('the hardware back quits the full-screen text viewer', async () => {
   expect(handled).toBe(true);
   await waitFor(() => !labelsOf(tree).includes('Close file view'));
   expect(labelsOf(tree)).toContain('Open file notes.md');
+
+  await unmount(tree);
+});
+
+test('the delete button removes the file without opening the viewer', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [
+    file({ id: 'del1', filename: 'old.pdf', type: 'file' }),
+  ]);
+
+  bridge.sendMessage.mockClear();
+  await press(tree, 'Delete file old.pdf');
+
+  const frame = JSON.parse(sentFrames().at(-1)!) as {
+    type: string;
+    threadId: string;
+    id: string;
+  };
+  expect(frame.type).toBe('files.delete');
+  expect(frame.threadId).toBe('t-files');
+  expect(frame.id).toBe('del1');
+
+  // The tap on delete must not double as a tap on the row: nothing opened.
+  expect(labelsOf(tree)).not.toContain('Close file view');
+  expect(labelsOf(tree)).not.toContain('Close image');
 
   await unmount(tree);
 });
