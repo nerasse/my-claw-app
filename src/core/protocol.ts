@@ -218,6 +218,23 @@ export interface SkillsListResultFrame {
   skills: SkillEntry[];
 }
 
+/** One tool of the server catalog. `source` tells where it comes from; MCP tools carry their
+ *  server name so the page can group them. `disabled` mirrors the global tools.disabled
+ *  denylist, so a tool that is off shows as off instead of looking broken. */
+export interface ToolEntry {
+  name: string;
+  description: string;
+  source: 'built-in' | 'plugin' | 'mcp';
+  /** Present for source "mcp": the config key under `mcp`, also the namespace prefix. */
+  server?: string;
+  disabled: boolean;
+}
+
+export interface ToolsListResultFrame {
+  type: 'tools.list.result';
+  tools: ToolEntry[];
+}
+
 /** One workspace of the server, for display only: where its files and skills live. */
 export interface WorkspaceEntry {
   key: string;
@@ -271,6 +288,7 @@ export type ErrorScope =
   | 'skills'
   | 'agents'
   | 'mcp'
+  | 'tools'
   | 'instructions';
 
 export interface ErrorFrame {
@@ -414,6 +432,7 @@ export type ServerFrame =
   | VoiceModeResultFrame
   | ModelListResultFrame
   | SkillsListResultFrame
+  | ToolsListResultFrame
   | WorkspacesListResultFrame
   | ModelResultFrame
   | CommandResultFrame
@@ -444,6 +463,7 @@ const FRAME_TYPES = new Set([
   'voice.mode.result',
   'model.list.result',
   'skills.list.result',
+  'tools.list.result',
   'workspaces.list.result',
   'model.result',
   'agents.config.result',
@@ -551,6 +571,10 @@ export function encodeModelList(): string {
 
 export function encodeSkillsList(): string {
   return JSON.stringify({ type: 'skills.list' });
+}
+
+export function encodeToolsList(): string {
+  return JSON.stringify({ type: 'tools.list' });
 }
 
 export function encodeWorkspacesList(): string {

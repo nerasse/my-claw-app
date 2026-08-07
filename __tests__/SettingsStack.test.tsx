@@ -226,7 +226,7 @@ test('empty categories open their page and back out to the index', async () => {
   await openSettings(tree);
 
   await pressLabel(tree, 'Open tools');
-  await waitFor(() => textsOf(tree).includes('nothing here yet'));
+  await waitFor(() => textsOf(tree).includes('no tools found'));
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open general'));
 

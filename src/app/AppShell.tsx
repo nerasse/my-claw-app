@@ -51,6 +51,7 @@ import {
   encodeSessionRename,
   encodeSessionUnarchive,
   encodeSkillsList,
+  encodeToolsList,
   encodeWorkspacesList,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
@@ -61,6 +62,7 @@ import {
   type SessionFileMeta,
   type SessionSummary,
   type SkillEntry,
+  type ToolEntry,
   type VoiceMode,
   type VoiceModeResultFrame,
   type WorkspaceEntry,
@@ -84,6 +86,7 @@ import { ProvidersScreen } from './ProvidersScreen';
 import { ProviderScreen } from './ProviderScreen';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
+import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
 import { FilesScreen } from './FilesScreen';
@@ -201,6 +204,8 @@ export function AppShell(): React.JSX.Element {
   const [agentModelPath, setAgentModelPath] = useState<string[]>([]);
   const [agentsEffortOpen, setAgentsEffortOpen] = useState(false);
   const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [tools, setTools] = useState<ToolEntry[]>([]);
+  const [toolsError, setToolsError] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
   const [skillsError, setSkillsError] = useState<string | null>(null);
   const [skillViewer, setSkillViewer] = useState<{
@@ -398,6 +403,10 @@ export function AppShell(): React.JSX.Element {
           setSkills(frame.skills);
           setSkillsError(null);
           break;
+        case 'tools.list.result':
+          setTools(frame.tools);
+          setToolsError(null);
+          break;
         case 'workspaces.list.result':
           setWorkspaces(frame.workspaces);
           break;
@@ -451,6 +460,8 @@ export function AppShell(): React.JSX.Element {
             } else if (frame.scope === 'skills') {
               // An old server has no skill catalog: the skills page must not spin forever.
               setSkillsError(frame.message);
+            } else if (frame.scope === 'tools') {
+              setToolsError(frame.message);
             } else if (frame.scope === 'agents') {
               agentsStore.fail(frame.message);
             } else if (frame.scope === 'instructions') {
@@ -693,6 +704,13 @@ export function AppShell(): React.JSX.Element {
     if (!settingsOpen || settingsPage !== 'skills') return;
     connection.send(encodeSkillsList()).catch(() => {});
     connection.send(encodeWorkspacesList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
+  // Same for the tools page: it is the only surface that shows the catalog, and plugins and
+  // disabled tools change under hot-reload, so a list from earlier can already be wrong.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'tools') return;
+    connection.send(encodeToolsList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   // The agent defaults are asked for when the Agents page opens. A server that predates the
@@ -1011,6 +1029,7 @@ export function AppShell(): React.JSX.Element {
             settingsPage === 'index' ? (
               <SettingsScreen
                 skillsCount={skills.length}
+                toolsCount={tools.length}
                 onBack={() => setSettingsOpen(false)}
                 onOpenCategory={category => {
                   // Reaching a category from the index resets where its back button leads: a
@@ -1138,7 +1157,11 @@ export function AppShell(): React.JSX.Element {
                 onBack={() => setSettingsPage('general')}
               />
             ) : settingsPage === 'tools' ? (
-              <EmptyCategoryScreen title="Tools" onBack={() => setSettingsPage('index')} />
+              <ToolsScreen
+                tools={tools}
+                error={toolsError ?? undefined}
+                onBack={() => setSettingsPage('index')}
+              />
             ) : settingsPage === 'mcps' ? (
               <EmptyCategoryScreen title="MCPs" onBack={() => setSettingsPage('index')} />
             ) : (
