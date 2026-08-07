@@ -59,7 +59,7 @@ export function DiagnosticsScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to chat">
+        <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to settings">
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>

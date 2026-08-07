@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { ActionSheet, type SheetOption } from './ActionSheet';
 import { connection } from '../core/connection';
@@ -22,15 +22,19 @@ function splitGroup(model: ModelOption): string[] {
  */
 export function ModelSheet({
   threadId,
+  path,
+  onPathChange,
   onClose,
 }: {
   threadId: string | null;
+  /** Group being browsed, owned by the shell so the hardware back can walk out of it. */
+  path: string[];
+  onPathChange: (path: string[]) => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const catalog = useModelCatalog();
   const thread = useThreadModel(threadId);
-  const [path, setPath] = useState<string[]>([]);
 
   const models = catalog.models;
   const activeModel = thread?.model ?? catalog.defaultModel;
@@ -78,7 +82,7 @@ export function ModelSheet({
   for (const subgroup of list.subgroups) {
     options.push({
       label: `${subgroup} ›`,
-      onPress: () => setPath(pathNow => [...pathNow, subgroup]),
+      onPress: () => onPathChange([...path, subgroup]),
     });
   }
 
@@ -95,7 +99,7 @@ export function ModelSheet({
   }
 
   if (path.length > 0) {
-    options.push({ label: '< Back', onPress: () => setPath(pathNow => pathNow.slice(0, -1)) });
+    options.push({ label: '< Back', onPress: () => onPathChange(path.slice(0, -1)) });
   }
 
   const effort = thread?.effort;

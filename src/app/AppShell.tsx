@@ -95,7 +95,9 @@ export function AppShell(): React.JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing. A row of links with more pages to come. */
-  const [settingsPage, setSettingsPage] = useState<'general' | 'skills' | 'workspaces'>('general');
+  const [settingsPage, setSettingsPage] = useState<
+    'general' | 'skills' | 'workspaces' | 'diagnostics'
+  >('general');
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
   const [skillsError, setSkillsError] = useState<string | null>(null);
@@ -118,7 +120,6 @@ export function AppShell(): React.JSX.Element {
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
-  const [diagOpen, setDiagOpen] = useState(false);
   const [diagSnapshot, setDiagSnapshot] = useState('');
   const [diagLogs, setDiagLogs] = useState('');
   const [diagBusy, setDiagBusy] = useState(false);
@@ -128,6 +129,8 @@ export function AppShell(): React.JSX.Element {
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
+  /** Which group of the model picker is open: its own stack, walked by the back key. */
+  const [modelPath, setModelPath] = useState<string[]>([]);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -389,6 +392,12 @@ export function AppShell(): React.JSX.Element {
         return true;
       }
       if (modelOpen) {
+        // The picker's groups are a stack of their own: back walks out of a group before it
+        // closes the sheet, which otherwise threw away the whole menu on the first press.
+        if (modelPath.length > 0) {
+          setModelPath(current => current.slice(0, -1));
+          return true;
+        }
         setModelOpen(false);
         return true;
       }
@@ -411,7 +420,7 @@ export function AppShell(): React.JSX.Element {
       }
       if (settingsOpen) {
         // Innermost page first: the back key walks the settings stack, not the whole app.
-        if (settingsPage === 'skills' || settingsPage === 'workspaces') {
+        if (settingsPage !== 'general') {
           setSettingsPage('general');
           return true;
         }
@@ -420,10 +429,6 @@ export function AppShell(): React.JSX.Element {
       }
       if (archivesOpen) {
         setArchivesOpen(false);
-        return true;
-      }
-      if (diagOpen) {
-        setDiagOpen(false);
         return true;
       }
       if (filesOpen) {
@@ -447,11 +452,11 @@ export function AppShell(): React.JSX.Element {
     bubbleMenu,
     commandMenuOpen,
     drawerOpen,
-    diagOpen,
     fileToDelete,
     filesOpen,
     imageViewer,
     modelOpen,
+    modelPath,
     selectThread,
     settingsOpen,
     settingsPage,
@@ -522,10 +527,19 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeVoiceModeSet(mode)).catch(() => {});
   }, []);
 
+  // Diagnostics is a settings page, not a screen of its own: reached from settings, the back
+  // key has to land back on settings instead of dropping the user two levels down.
   const openDiagnostics = useCallback(() => {
-    setDiagOpen(true);
+    setSettingsOpen(true);
+    setSettingsPage('diagnostics');
     setDiagBusy(true);
     connection.send(encodeDiagSnapshot(activeThreadRef.current ?? ''));
+  }, []);
+
+  /** Every entry point of the picker starts at its root, never inside yesterday's group. */
+  const openModel = useCallback(() => {
+    setModelPath([]);
+    setModelOpen(true);
   }, []);
 
   const fetchLogs = useCallback((query: LogsTailQuery) => {
@@ -614,7 +628,7 @@ export function AppShell(): React.JSX.Element {
       switch (command) {
         case 'model':
           setCommandMenuOpen(false);
-          setModelOpen(true);
+          openModel();
           return true;
         case 'new':
           setCommandMenuOpen(false);
@@ -634,7 +648,7 @@ export function AppShell(): React.JSX.Element {
           return false;
       }
     },
-    [newThread, sessions],
+    [newThread, openModel, sessions],
   );
 
   const currentModelLabel = threadModel
@@ -647,7 +661,7 @@ export function AppShell(): React.JSX.Element {
       hint: currentModelLabel ? `current: ${currentModelLabel}` : undefined,
       onPress: () => {
         setCommandMenuOpen(false);
-        setModelOpen(true);
+        openModel();
       },
     },
     ...(streaming
@@ -749,6 +763,16 @@ export function AppShell(): React.JSX.Element {
                 workspaces={workspaces}
                 onBack={() => setSettingsPage('general')}
               />
+            ) : settingsPage === 'diagnostics' ? (
+              <DiagnosticsScreen
+                snapshot={diagSnapshot}
+                logs={diagLogs}
+                lastRun={lastRun}
+                busy={diagBusy}
+                onSnapshot={openDiagnostics}
+                onLogs={fetchLogs}
+                onBack={() => setSettingsPage('general')}
+              />
             ) : (
               <SettingsScreen
                 url={url}
@@ -767,30 +791,14 @@ export function AppShell(): React.JSX.Element {
                   setPending(0);
                 }}
                 onBack={() => setSettingsOpen(false)}
-                onOpenDiagnostics={() => {
-                  setSettingsOpen(false);
-                  openDiagnostics();
-                }}
+                onOpenDiagnostics={openDiagnostics}
                 onOpenSkills={() => setSettingsPage('skills')}
                 onOpenWorkspaces={() => setSettingsPage('workspaces')}
                 modelLabel={currentModelLabel}
-                onOpenModel={() => {
-                  setSettingsOpen(false);
-                  setModelOpen(true);
-                }}
+                onOpenModel={openModel}
               />
             )
-          ) : diagOpen ? (
-            <DiagnosticsScreen
-              snapshot={diagSnapshot}
-              logs={diagLogs}
-              lastRun={lastRun}
-              busy={diagBusy}
-              onSnapshot={openDiagnostics}
-              onLogs={fetchLogs}
-              onBack={() => setDiagOpen(false)}
-            />
-          )           : archivesOpen ? (
+          ) : archivesOpen ? (
             <ArchivesScreen
               sessions={archivedSessions}
               onBack={() => setArchivesOpen(false)}
@@ -934,6 +942,8 @@ export function AppShell(): React.JSX.Element {
       {modelOpen ? (
         <ModelSheet
           threadId={activeThread}
+          path={modelPath}
+          onPathChange={setModelPath}
           onClose={() => setModelOpen(false)}
         />
       ) : null}
