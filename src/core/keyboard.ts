@@ -56,3 +56,21 @@ export function useSheetBottomInset(extra: number): number {
   const keyboard = useKeyboardHeight();
   return combineBottomInset(insets.bottom, keyboard, Platform.OS === 'ios') + extra;
 }
+
+/**
+ * Drops the keyboard when a surface with nothing to type into takes the screen. React Native
+ * has no automatic behaviour here (the bottom-sheet libraries call `dismiss` by hand too), and
+ * a keyboard left up from the composer costs twice: it covers the lower half of a menu, and on
+ * Android it swallows the first back press, which is what made a back walk out of settings feel
+ * like the app closing at random.
+ *
+ * Pass `open` for a surface that stays mounted and toggles (the drawer); leave it out for one
+ * that is mounted only while it shows, where mounting is the opening.
+ *
+ * Never use this on a surface that owns a focused field: it would fight its own autofocus.
+ */
+export function useDismissKeyboard(open = true): void {
+  useEffect(() => {
+    if (open) Keyboard.dismiss();
+  }, [open]);
+}

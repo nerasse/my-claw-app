@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageZoom } from '@likashefqet/react-native-image-zoom';
 import { deviceBridge } from '../core/nativeBridge';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { useDismissKeyboard } from '../core/keyboard';
 
 /**
  * Full-screen image viewer, gallery style: pinch to zoom, double-tap to toggle, and a tap
@@ -25,6 +26,8 @@ export function ImageViewer({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // opened from a bubble, with the composer's keyboard still up behind it.
+  useDismissKeyboard();
   // An absolutely positioned child is laid out against the shell's outer box, so the layer
   // already spans the status bar: the photo owns the screen at top 0, and only the bars have
   // to keep clear of it. Offsetting the stage instead pushed them under the status bar.

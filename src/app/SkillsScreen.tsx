@@ -3,6 +3,7 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import type { SkillEntry, WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { useDismissKeyboard } from '../core/keyboard';
 
 /** Display names of the three tiers, with the server-side location as the honest hint. */
 const SOURCE_SECTIONS: Array<{ source: SkillEntry['source']; label: string; hint: string }> = [
@@ -60,6 +61,8 @@ export function SkillsScreen({
   onOpenSkill: (skill: SkillEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // nothing to type into on this page.
+  useDismissKeyboard();
   const { scrollProps, indicator } = useScrollIndicator();
   const rows = buildRows(skills, workspaces);
 

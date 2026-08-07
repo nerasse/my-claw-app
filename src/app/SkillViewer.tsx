@@ -6,6 +6,7 @@ import { splitSkillDoc } from '../core/skills';
 import type { SkillEntry } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { useDismissKeyboard } from '../core/keyboard';
 
 /**
  * Full-screen reader for one skill's SKILL.md: frontmatter stripped into a meta header, the
@@ -22,6 +23,8 @@ export function SkillViewer({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // nothing to type into: the keyboard would cover the document.
+  useDismissKeyboard();
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
   const { scrollProps, indicator } = useScrollIndicator();

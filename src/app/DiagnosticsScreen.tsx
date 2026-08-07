@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type { LogsTailQuery } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { useDismissKeyboard } from '../core/keyboard';
 
 const LEVELS: Array<NonNullable<LogsTailQuery['level']>> = ['debug', 'info', 'warn', 'error'];
 const SCOPES = ['all', 'my-claw-app', 'orchestrator', 'telegram', 'matrix'] as const;
@@ -25,6 +26,8 @@ export function DiagnosticsScreen({
   onBack: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // the log filter is never focused on the way in.
+  useDismissKeyboard();
   const [level, setLevel] = useState<NonNullable<LogsTailQuery['level']>>('warn');
   const [scope, setScope] = useState<(typeof SCOPES)[number]>('all');
   const [contains, setContains] = useState('');

@@ -3,6 +3,7 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import type { WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { useDismissKeyboard } from '../core/keyboard';
 
 /**
  * The server's workspaces, read-only. Each is a directory with its own prompt files and
@@ -17,6 +18,8 @@ export function WorkspacesScreen({
   onBack: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // nothing to type into on this page.
+  useDismissKeyboard();
   const { scrollProps, indicator } = useScrollIndicator();
 
   return (

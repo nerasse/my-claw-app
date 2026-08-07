@@ -4,6 +4,7 @@ import { ThreadRow } from '../components/ThreadRow';
 import type { SessionSummary } from '../core/protocol';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { useDismissKeyboard } from '../core/keyboard';
 
 /**
  * The conversations the owner filed away. They are whole sessions, not snapshots: opening one
@@ -21,6 +22,8 @@ export function ArchivesScreen({
   onThreadMenu: (thread: SessionSummary) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // the archived list is reached from the drawer, with the composer's keyboard still up.
+  useDismissKeyboard();
   const { scrollProps, indicator } = useScrollIndicator();
 
   const handleMenu = React.useCallback(

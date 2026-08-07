@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSheetBottomInset } from '../core/keyboard';
+import { useDismissKeyboard, useSheetBottomInset } from '../core/keyboard';
 import { useScrollIndicator } from './ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -32,7 +32,9 @@ export function ActionSheet({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  // Opened from the composer, the keyboard is still up and would swallow the lower options.
+  // Nothing in this sheet is typed into: the composer's keyboard goes, or it covers the lower
+  // options. The inset stays for a keyboard that comes back up under a sheet that outlives it.
+  useDismissKeyboard();
   const bottomInset = useSheetBottomInset(space.xl);
   const { scrollProps, indicator } = useScrollIndicator();
   return (

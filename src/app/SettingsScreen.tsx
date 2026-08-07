@@ -6,6 +6,7 @@ import type { WsStatusPayload } from '../core/types';
 import type { ThemeMode } from '../core/prefs';
 import type { VoiceMode, VoiceModeResultFrame } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { useDismissKeyboard } from '../core/keyboard';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
   { mode: 'system', label: 'System' },
@@ -82,6 +83,8 @@ export function SettingsScreen({
   onOpenModel: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // the server field is never focused on the way in.
+  useDismissKeyboard();
   const { palette, dark } = useTheme();
   const connected = status.state === 'connected';
   const busy = connected || status.state === 'connecting';

@@ -7,7 +7,6 @@ import React, {
 } from 'react';
 import {
   BackHandler,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -831,12 +830,7 @@ export function AppShell(): React.JSX.Element {
               deviceInfo={deviceInfo}
               hint={hint}
               autoFocusHero={autoFocusHero}
-              onOpenDrawer={() => {
-                // The composer's keyboard eats the first Android back press: close it before
-                // the panel opens, so the first back closes the menu instead of doing nothing.
-                Keyboard.dismiss();
-                setDrawerOpen(true);
-              }}
+              onOpenDrawer={() => setDrawerOpen(true)}
               onStatusPress={() => {
                 setSettingsOpen(true);
                 setAutoFocusHero(false);

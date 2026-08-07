@@ -5,6 +5,7 @@ import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
 import { PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { useDismissKeyboard } from '../core/keyboard';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -59,6 +60,9 @@ export function Drawer({
   const progress = useRef(new Animated.Value(0)).current;
   const [query, setQuery] = useState('');
   const { scrollProps, indicator } = useScrollIndicator();
+  // The panel stays mounted, so opening it is a prop change, not a mount. Its search field is
+  // never focused on the way in: whatever keyboard is up belongs to the composer behind it.
+  useDismissKeyboard(open);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();

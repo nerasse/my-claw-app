@@ -6,6 +6,7 @@ import type { DeviceInfo } from '../core/device';
 import { formatBytes, formatDate, viewerFor } from '../core/utils';
 import { TrashIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { useDismissKeyboard } from '../core/keyboard';
 import {
   font,
   radius,
@@ -56,6 +57,8 @@ export function FilesScreen({
   error?: string;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // reached from the chat header, where the composer's keyboard is usually up.
+  useDismissKeyboard();
   const { palette } = useTheme();
   const [viewer, setViewer] = useState<SessionFileMeta | null>(null);
   const { scrollProps, indicator } = useScrollIndicator();

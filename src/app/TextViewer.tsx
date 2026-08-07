@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Markdown from 'react-native-marked';
 import { deviceBridge } from '../core/nativeBridge';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { useDismissKeyboard } from '../core/keyboard';
 
 /**
  * Full-screen text viewer for .md and .txt session files. Same layer trick as the image
@@ -28,6 +29,8 @@ export function TextViewer({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // opened from a bubble, with the composer's keyboard still up behind it.
+  useDismissKeyboard();
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
   const [content, setContent] = useState<string | null>(null);
