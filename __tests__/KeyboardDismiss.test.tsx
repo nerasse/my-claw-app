@@ -102,17 +102,23 @@ test.each([
   await settleAndUnmount(tree);
 });
 
-test('settings and every page under it drop the keyboard', async () => {
+test('the settings index and every page under it drop the keyboard', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Open conversations');
   dismiss.mockClear();
   await pressLabel(tree, 'Open settings');
-  await waitFor(() => labelsOf(tree).includes('Server address'));
+  await waitFor(() => labelsOf(tree).includes('Open general'));
   expect(dismiss).toHaveBeenCalled();
 
   dismiss.mockClear();
   await pressLabel(tree, 'Open skills');
   await waitFor(() => labelsOf(tree).includes('Back to settings'));
+  expect(dismiss).toHaveBeenCalled();
+
+  dismiss.mockClear();
+  await pressLabel(tree, 'Back to settings');
+  await pressLabel(tree, 'Open general');
+  await waitFor(() => labelsOf(tree).includes('Server address'));
   expect(dismiss).toHaveBeenCalled();
 
   await settleAndUnmount(tree);

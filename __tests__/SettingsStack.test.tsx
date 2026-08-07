@@ -11,7 +11,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
-import { labelsOf, renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
+import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const KEPT = 'thread-kept';
@@ -91,6 +91,7 @@ beforeEach(() => {
 test('the model picker opened from settings comes back to settings, not to the exit', async () => {
   const tree = await boot();
   await openSettings(tree);
+  await pressLabel(tree, 'Open general');
   await emit({
     type: 'model.list.result',
     models: [{ id: 'fast-1', label: 'Fast' }],
@@ -107,7 +108,9 @@ test('the model picker opened from settings comes back to settings, not to the e
   await waitFor(() => labelsOf(tree).includes('Choose model'));
   expect(labelsOf(tree)).not.toContain('Fast');
 
-  // And from settings the next press reaches the conversation, never the launcher.
+  // Then back walks General to the index, and the index to the conversation, never the launcher.
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open general'));
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open conversations'));
   expect(backHandler().exitApp).not.toHaveBeenCalled();
@@ -118,6 +121,7 @@ test('the model picker opened from settings comes back to settings, not to the e
 test('back walks out of a model group before it closes the picker', async () => {
   const tree = await boot();
   await openSettings(tree);
+  await pressLabel(tree, 'Open general');
   await emit({
     type: 'model.list.result',
     models: [
@@ -148,6 +152,7 @@ test('back walks out of a model group before it closes the picker', async () => 
 test('the picker reopens at its root after a group was browsed', async () => {
   const tree = await boot();
   await openSettings(tree);
+  await pressLabel(tree, 'Open general');
   await emit({
     type: 'model.list.result',
     models: [
@@ -171,19 +176,45 @@ test('the picker reopens at its root after a group was browsed', async () => {
   await settleAndUnmount(tree);
 });
 
-test('diagnostics is a settings page: back returns to settings', async () => {
+test('diagnostics is a page under General: back walks diagnostics, General, index', async () => {
   const tree = await boot();
   await openSettings(tree);
+  await pressLabel(tree, 'Open general');
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
   await pressLabel(tree, 'Open diagnostics');
-  await waitFor(() => labelsOf(tree).includes('Back to settings'));
+  await waitFor(() => labelsOf(tree).includes('Back to general'));
 
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
+
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open general'));
 
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open conversations'));
   expect(backHandler().exitApp).not.toHaveBeenCalled();
+
+  await settleAndUnmount(tree);
+});
+
+test('empty categories open their page and back out to the index', async () => {
+  const tree = await boot();
+  await openSettings(tree);
+
+  await pressLabel(tree, 'Open tools');
+  await waitFor(() => textsOf(tree).includes('nothing here yet'));
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open general'));
+
+  await pressLabel(tree, 'Open MCPs');
+  await waitFor(() => textsOf(tree).includes('nothing here yet'));
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open general'));
+
+  await pressLabel(tree, 'Open other');
+  await waitFor(() => textsOf(tree).includes('nothing here yet'));
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open general'));
 
   await settleAndUnmount(tree);
 });

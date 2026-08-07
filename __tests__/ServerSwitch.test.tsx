@@ -25,6 +25,7 @@ function announce(state: string, url: string): Promise<void> {
 async function openSettings(tree: Tree): Promise<void> {
   const statusLabel = labelsOf(tree).find(l => l.startsWith('Connection status'))!;
   await press(tree, statusLabel);
+  await press(tree, 'Open general');
   await waitFor(() => labelsOf(tree).includes('Server address'));
 }
 

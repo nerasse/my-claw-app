@@ -64,6 +64,8 @@ import type { WsStatusPayload } from '../core/types';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
+import { GeneralSettingsScreen } from './GeneralSettingsScreen';
+import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
@@ -93,10 +95,18 @@ export function AppShell(): React.JSX.Element {
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  /** Which settings page is showing. A row of links with more pages to come. */
+  /** Which settings page is showing: the index lists the categories, every other value is a
+   *  page under it, and back always walks one level up. */
   const [settingsPage, setSettingsPage] = useState<
-    'general' | 'skills' | 'workspaces' | 'diagnostics'
-  >('general');
+    | 'index'
+    | 'general'
+    | 'skills'
+    | 'workspaces'
+    | 'tools'
+    | 'mcps'
+    | 'other'
+    | 'diagnostics'
+  >('index');
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
   const [skillsError, setSkillsError] = useState<string | null>(null);
@@ -182,6 +192,13 @@ export function AppShell(): React.JSX.Element {
     setDrawerOpen(false);
     setSettingsOpen(false);
   }, [selectThread]);
+
+  /** Settings always open on the category index, never inside yesterday's page. */
+  const openSettings = useCallback(() => {
+    setSettingsPage('index');
+    setSettingsOpen(true);
+    setAutoFocusHero(false);
+  }, []);
 
   useEffect(() => {
     /** Activity in a thread the user is not reading: badge it and make sure it is listed. */
@@ -418,12 +435,17 @@ export function AppShell(): React.JSX.Element {
         return true;
       }
       if (settingsOpen) {
-        // Innermost page first: the back key walks the settings stack, not the whole app.
-        if (settingsPage !== 'general') {
+        // Innermost page first: the back key walks the settings stack one level at a time,
+        // so a habit press from a subpage can never fall through to the launcher.
+        if (settingsPage === 'index') {
+          setSettingsOpen(false);
+          return true;
+        }
+        if (settingsPage === 'diagnostics' || settingsPage === 'workspaces') {
           setSettingsPage('general');
           return true;
         }
-        setSettingsOpen(false);
+        setSettingsPage('index');
         return true;
       }
       if (archivesOpen) {
@@ -526,8 +548,8 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeVoiceModeSet(mode)).catch(() => {});
   }, []);
 
-  // Diagnostics is a settings page, not a screen of its own: reached from settings, the back
-  // key has to land back on settings instead of dropping the user two levels down.
+  // Diagnostics is a page under General, not a screen of its own: reached from settings, the
+  // back key has to land back on General instead of dropping the user two levels down.
   const openDiagnostics = useCallback(() => {
     setSettingsOpen(true);
     setSettingsPage('diagnostics');
@@ -743,12 +765,41 @@ export function AppShell(): React.JSX.Element {
       >
         <View style={styles.container}>
           {settingsOpen ? (
-            settingsPage === 'skills' ? (
+            settingsPage === 'index' ? (
+              <SettingsScreen
+                skillsCount={skills.length}
+                onBack={() => setSettingsOpen(false)}
+                onOpenCategory={setSettingsPage}
+              />
+            ) : settingsPage === 'general' ? (
+              <GeneralSettingsScreen
+                url={url}
+                onUrlChange={changeUrl}
+                voice={voice}
+                onVoiceModeChange={changeVoiceMode}
+                themeMode={themeControl.mode}
+                onThemeModeChange={themeControl.setMode}
+                status={status}
+                pending={pending}
+                deviceInfo={deviceInfo}
+                onConnect={() => connection.connect(url)}
+                onDisconnect={() => connection.disconnect()}
+                onClearOutbox={() => {
+                  connection.clearOutbox();
+                  setPending(0);
+                }}
+                onBack={() => setSettingsPage('index')}
+                onOpenDiagnostics={openDiagnostics}
+                onOpenWorkspaces={() => setSettingsPage('workspaces')}
+                modelLabel={currentModelLabel}
+                onOpenModel={openModel}
+              />
+            ) : settingsPage === 'skills' ? (
               <SkillsScreen
                 skills={skills}
                 workspaces={workspaces}
                 error={skillsError ?? undefined}
-                onBack={() => setSettingsPage('general')}
+                onBack={() => setSettingsPage('index')}
                 onOpenSkill={skill => {
                   if (!deviceInfo) return;
                   setSkillViewer({
@@ -772,30 +823,12 @@ export function AppShell(): React.JSX.Element {
                 onLogs={fetchLogs}
                 onBack={() => setSettingsPage('general')}
               />
+            ) : settingsPage === 'tools' ? (
+              <EmptyCategoryScreen title="Tools" onBack={() => setSettingsPage('index')} />
+            ) : settingsPage === 'mcps' ? (
+              <EmptyCategoryScreen title="MCPs" onBack={() => setSettingsPage('index')} />
             ) : (
-              <SettingsScreen
-                url={url}
-                onUrlChange={changeUrl}
-                voice={voice}
-                onVoiceModeChange={changeVoiceMode}
-                themeMode={themeControl.mode}
-                onThemeModeChange={themeControl.setMode}
-                status={status}
-                pending={pending}
-                deviceInfo={deviceInfo}
-                onConnect={() => connection.connect(url)}
-                onDisconnect={() => connection.disconnect()}
-                onClearOutbox={() => {
-                  connection.clearOutbox();
-                  setPending(0);
-                }}
-                onBack={() => setSettingsOpen(false)}
-                onOpenDiagnostics={openDiagnostics}
-                onOpenSkills={() => setSettingsPage('skills')}
-                onOpenWorkspaces={() => setSettingsPage('workspaces')}
-                modelLabel={currentModelLabel}
-                onOpenModel={openModel}
-              />
+              <EmptyCategoryScreen title="Other" onBack={() => setSettingsPage('index')} />
             )
           ) : archivesOpen ? (
             <ArchivesScreen
@@ -831,10 +864,7 @@ export function AppShell(): React.JSX.Element {
               hint={hint}
               autoFocusHero={autoFocusHero}
               onOpenDrawer={() => setDrawerOpen(true)}
-              onStatusPress={() => {
-                setSettingsOpen(true);
-                setAutoFocusHero(false);
-              }}
+              onStatusPress={openSettings}
               onFilesPress={openFiles}
               onSend={sendChat}
               onBubbleMenu={setBubbleMenu}
@@ -868,7 +898,7 @@ export function AppShell(): React.JSX.Element {
         onThreadMenu={setThreadMenu}
         onOpenSettings={() => {
           setDrawerOpen(false);
-          setSettingsOpen(true);
+          openSettings();
         }}
         archivedCount={archivedSessions.length}
         onOpenArchives={() => {

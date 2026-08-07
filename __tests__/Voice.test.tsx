@@ -376,6 +376,7 @@ test('the settings expose the transcription engine and say where the audio goes'
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
+  await press(tree, 'Open general');
 
   await waitFor(() =>
     sentFrames().some(frame => frame.type === 'voice.mode.get'),

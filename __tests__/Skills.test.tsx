@@ -162,6 +162,7 @@ test('the workspaces page lists every workspace and its path', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
   await openSettings(tree);
+  await pressLabel(tree, 'Open general');
   await waitFor(() => labelsOf(tree).includes('Open workspaces'));
   await pressLabel(tree, 'Open workspaces');
   await emit({
@@ -181,7 +182,7 @@ test('the workspaces page lists every workspace and its path', async () => {
   await ReactTestRenderer.act(async () => {
     hardwareBack();
   });
-  await waitFor(() => labelsOf(tree).includes('Open skills'));
+  await waitFor(() => labelsOf(tree).includes('Open workspaces'));
 
   await settleAndUnmount(tree);
 });
