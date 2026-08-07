@@ -31,6 +31,7 @@ export function AgentsSettingsScreen({
   onBack,
   onOpenDefaultModel,
   onOpenDefaultEffort,
+  onOpenProviders,
   onOpenAgent,
 }: {
   config: AgentsConfigResultFrame | null;
@@ -39,6 +40,7 @@ export function AgentsSettingsScreen({
   onBack: () => void;
   onOpenDefaultModel: () => void;
   onOpenDefaultEffort: () => void;
+  onOpenProviders: () => void;
   onOpenAgent: (key: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -93,6 +95,20 @@ export function AgentsSettingsScreen({
                 <View style={styles.linkMain}>
                   <Text style={styles.linkTitle}>{config.defaultEffort || 'not set'}</Text>
                   <Text style={styles.hint}>reasoning effort when a model sets none of its own</Text>
+                </View>
+                <Text style={styles.linkGlyph}>›</Text>
+              </Pressable>
+              <View style={styles.separator} />
+              <Pressable
+                style={[styles.row, styles.link]}
+                onPress={onOpenProviders}
+                accessibilityRole="button"
+                accessibilityLabel="Providers">
+                <View style={styles.linkMain}>
+                  <Text style={styles.linkTitle}>Providers</Text>
+                  <Text style={styles.hint}>
+                    {config.providers.length} configured · {config.providers.filter(provider => provider.keyPresent).length} with a key set
+                  </Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
               </Pressable>

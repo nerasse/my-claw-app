@@ -73,6 +73,8 @@ import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
 import { AgentDetailScreen } from './AgentDetailScreen';
+import { ProvidersScreen } from './ProvidersScreen';
+import { ProviderScreen } from './ProviderScreen';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { SkillViewer } from './SkillViewer';
@@ -169,6 +171,8 @@ export function AppShell(): React.JSX.Element {
     | 'general'
     | 'agents'
     | 'agent'
+    | 'providers'
+    | 'provider'
     | 'skills'
     | 'workspaces'
     | 'tools'
@@ -178,6 +182,8 @@ export function AppShell(): React.JSX.Element {
   >('index');
   /** The agent detail page shows this key, taken from the last agents.config.result. */
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  /** The provider page shows this key's models, filtered from the shared catalog. */
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
   const [agentModelPath, setAgentModelPath] = useState<string[]>([]);
@@ -539,6 +545,14 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('agents');
           return true;
         }
+        if (settingsPage === 'provider') {
+          setSettingsPage('providers');
+          return true;
+        }
+        if (settingsPage === 'providers') {
+          setSettingsPage('agents');
+          return true;
+        }
         if (settingsPage === 'agents') {
           setSettingsPage('index');
           return true;
@@ -656,6 +670,13 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeAgentsConfigGet()).catch(() => {});
     const timer = setTimeout(() => agentsStore.markUnsupported(), 4000);
     return () => clearTimeout(timer);
+  }, [settingsOpen, settingsPage]);
+
+  // The catalog is fetched at connect, but the provider pages group it by provider and the
+  // grouping follows config hot-reloads: ask again when they open, like the skills page does.
+  useEffect(() => {
+    if (!settingsOpen || (settingsPage !== 'providers' && settingsPage !== 'provider')) return;
+    connection.send(encodeModelList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
@@ -869,6 +890,13 @@ export function AppShell(): React.JSX.Element {
       : 'offline · message will send on reconnect'
     : undefined;
   const selectedAgentInfo = agentsConfig?.agents.find(agent => agent.key === selectedAgent) ?? null;
+  // Same grouping rule as the server's provider count: a model with no provider of its own
+  // follows the global default provider.
+  const providerModels = selectedProvider
+    ? catalog.models.filter(
+        model => (model.provider ?? agentsConfig?.defaultProvider) === selectedProvider,
+      )
+    : [];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -920,11 +948,42 @@ export function AppShell(): React.JSX.Element {
                   setAgentModelFor('global');
                 }}
                 onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
+                onOpenProviders={() => setSettingsPage('providers')}
                 onOpenAgent={key => {
                   setSelectedAgent(key);
                   setSettingsPage('agent');
                 }}
               />
+            ) : settingsPage === 'providers' ? (
+              <ProvidersScreen
+                providers={agentsConfig?.providers ?? []}
+                onBack={() => setSettingsPage('agents')}
+                onOpenProvider={key => {
+                  setSelectedProvider(key);
+                  setSettingsPage('provider');
+                }}
+              />
+            ) : settingsPage === 'provider' ? (
+              selectedProvider ? (
+                <ProviderScreen
+                  providerKey={selectedProvider}
+                  models={providerModels}
+                  defaultModel={agentsConfig?.defaultModel ?? ''}
+                  onSetDefault={modelId => {
+                    connection.send(encodeAgentsModelSet('global', modelId)).catch(() => {});
+                  }}
+                  onBack={() => setSettingsPage('providers')}
+                />
+              ) : (
+                <ProvidersScreen
+                  providers={agentsConfig?.providers ?? []}
+                  onBack={() => setSettingsPage('agents')}
+                  onOpenProvider={key => {
+                    setSelectedProvider(key);
+                    setSettingsPage('provider');
+                  }}
+                />
+              )
             ) : settingsPage === 'agent' ? (
               selectedAgentInfo ? (
                 <AgentDetailScreen
@@ -947,6 +1006,7 @@ export function AppShell(): React.JSX.Element {
                     setAgentModelFor('global');
                   }}
                   onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
+                  onOpenProviders={() => setSettingsPage('providers')}
                   onOpenAgent={key => {
                     setSelectedAgent(key);
                     setSettingsPage('agent');

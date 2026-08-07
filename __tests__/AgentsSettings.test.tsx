@@ -58,6 +58,25 @@ function sentFrames(): Array<Record<string, unknown>> {
   );
 }
 
+/** The Android layer calls the last registered handler and stops when it returns true. */
+function backHandler(): { __handlers: Array<() => boolean>; exitApp: jest.Mock } {
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+  };
+  return back.default;
+}
+
+/** True when the press was handled: false is what makes Android close the app. */
+async function hardwareBack(): Promise<boolean> {
+  const handlers = backHandler().__handlers;
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]!();
+  });
+  return handled;
+}
+
 function agentsConfig(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     type: 'agents.config.result',
@@ -195,7 +214,105 @@ test('a page the server never answers shows the unsupported notice', async () =>
 
   // What the 4s guard in the shell does: a server that predates the frames answers nothing,
   // and the page must say so instead of spinning.
-  agentsStore.markUnsupported();
+  await ReactTestRenderer.act(async () => {
+    agentsStore.markUnsupported();
+  });
   await waitFor(() => textsOf(tree).some(text => text.includes('0.1.168')));
   await settleAndUnmount(tree);
+});
+
+describe('providers', () => {
+  function providersConfig(): Record<string, unknown> {
+    return {
+      ...agentsConfig(),
+      defaultModel: 'mimo',
+      defaultProvider: 'litellm',
+      providers: [
+        { key: 'litellm', type: 'openai', discover: true, models: 2, keyEnv: 'LITELLM_API_KEY', keyPresent: true },
+        { key: 'anthropic', type: 'claude-sdk', discover: true, models: 1, keyEnv: 'ANTHROPIC_API_KEY', keyPresent: false },
+      ],
+    };
+  }
+
+  test('the Providers row opens the list the server sent', async () => {
+    const tree = await boot();
+    await emit(providersConfig());
+    await pressLabel(tree, 'Providers');
+    await waitFor(() => labelsOf(tree).includes('Open provider anthropic'));
+    expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Open provider litellm', 'Open provider anthropic']));
+    expect(textsOf(tree)).toEqual(expect.arrayContaining(['2 models · key set (LITELLM_API_KEY)']));
+    await settleAndUnmount(tree);
+  });
+
+  test('a provider opens only its own models, filtered like the server counts them', async () => {
+    const tree = await boot();
+    await emit(providersConfig());
+    await emit({
+      type: 'model.list.result',
+      models: [
+        { id: 'mimo', label: 'Mimo', provider: 'litellm' },
+        { id: 'opus', label: 'Opus', provider: 'anthropic' },
+        { id: 'naked', label: 'Naked' },
+      ],
+      defaultModel: 'mimo',
+    });
+    await pressLabel(tree, 'Providers');
+    await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+    await pressLabel(tree, 'Open provider litellm');
+    await waitFor(() => labelsOf(tree).includes('Set default Mimo'));
+    expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Set default Mimo']));
+    expect(labelsOf(tree)).not.toContain('Set default Opus');
+    // "Naked" has no provider: it follows the global default provider (litellm) and shows here.
+    expect(labelsOf(tree)).toContain('Set default Naked');
+    // The model in force is marked.
+    expect(textsOf(tree)).toEqual(expect.arrayContaining(['default']));
+    await settleAndUnmount(tree);
+  });
+
+  test('tapping a model makes it the global default', async () => {
+    const tree = await boot();
+    await emit(providersConfig());
+    await emit({
+      type: 'model.list.result',
+      models: [
+        { id: 'mimo', label: 'Mimo', provider: 'litellm' },
+        { id: 'opus', label: 'Opus', provider: 'anthropic' },
+      ],
+      defaultModel: 'mimo',
+    });
+    await pressLabel(tree, 'Providers');
+    await waitFor(() => labelsOf(tree).includes('Open provider anthropic'));
+    await pressLabel(tree, 'Open provider anthropic');
+    await waitFor(() => labelsOf(tree).includes('Set default Opus'));
+    await pressLabel(tree, 'Set default Opus');
+
+    expect(sentFrames()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set', agent: 'global', model: 'opus' })]),
+    );
+    await settleAndUnmount(tree);
+  });
+
+  test('back walks provider, providers, agents, index', async () => {
+    const tree = await boot();
+    await emit(providersConfig());
+    await pressLabel(tree, 'Providers');
+    await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+    await pressLabel(tree, 'Open provider litellm');
+    await waitFor(() => labelsOf(tree).includes('Back to providers'));
+
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('Default model'));
+
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('Open general'));
+
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('Open conversations'));
+    expect(backHandler().exitApp).not.toHaveBeenCalled();
+
+    await settleAndUnmount(tree);
+  });
 });
