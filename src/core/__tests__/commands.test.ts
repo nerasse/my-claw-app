@@ -6,7 +6,6 @@ const COMMANDS = [
   { name: 'models', description: 'List available models' },
   { name: 'help', description: 'List available commands' },
   { name: 'verbose', description: 'Toggle verbose tool output' },
-  { name: 'clear', description: 'Clear session history' },
   { name: 'archive', description: 'Delete archives created by /new' },
 ];
 

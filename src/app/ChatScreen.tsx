@@ -71,6 +71,7 @@ export function ChatScreen({
   onCommandEntered,
   streaming,
   onStop,
+  onNewThread,
 }: {
   threadId: string;
   title: string;
@@ -95,6 +96,8 @@ export function ChatScreen({
   /** A run is streaming into this thread: the composer offers Stop instead of Send. */
   streaming: boolean;
   onStop: () => void;
+  /** Wire /new: starts a fresh conversation, like the + button. */
+  onNewThread: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -202,6 +205,14 @@ export function ChatScreen({
   const submit = useCallback(() => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
+    // /new is the wire form of the + button: a fresh conversation, not a reset of this one.
+    // Intercepted here so it works even when the slash-menu is closed, and never reaches the
+    // server as a command about a conversation the user is leaving.
+    if (text.toLowerCase() === '/new') {
+      onNewThread();
+      setDraft('');
+      return;
+    }
     if (attachments.length > 0) {
       if (!deviceInfo) {
         setUploadError('device not initialized');
@@ -235,7 +246,7 @@ export function ChatScreen({
       onSend(text);
     }
     setDraft('');
-  }, [attachments, deviceInfo, draft, mediaBase, onSend, threadId]);
+  }, [attachments, deviceInfo, draft, mediaBase, onNewThread, onSend, threadId]);
 
   const empty = items.length === 0;
 

@@ -552,10 +552,6 @@ export function AppShell(): React.JSX.Element {
         case 'stop':
           if (threadId) connection.send(encodeChatStop(threadId));
           return true;
-        case 'clear':
-          setCommandMenuOpen(false);
-          setConfirmClear(true);
-          return true;
         case 'archive':
           if (threadId) {
             dropThread(threadId, encodeSessionArchive(threadId), true);
@@ -771,6 +767,7 @@ export function AppShell(): React.JSX.Element {
               onStop={() => {
                 if (activeThread) connection.send(encodeChatStop(activeThread));
               }}
+              onNewThread={newThread}
             />
           )}
         </View>

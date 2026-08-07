@@ -20,7 +20,6 @@ const DEFAULT_COMMANDS: CommandDef[] = [
   { name: 'verbose', description: 'Toggle verbose tool output' },
   { name: 'status', description: 'Session diagnostics: context, tokens, cost, active runs' },
   { name: 'stop', description: 'Stop the running agent and its sub-agents' },
-  { name: 'clear', description: 'Clear session history' },
   { name: 'archive', description: 'Delete archives created by /new' },
   { name: 'cron', description: 'List scheduled tasks' },
   { name: 'codex', description: 'ChatGPT/Codex login: login|status|logout' },

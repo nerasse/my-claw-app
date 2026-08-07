@@ -53,7 +53,7 @@ beforeEach(() => {
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
 });
 
-test('the ⋮ menu opens the command menu with model, clear and the rest', async () => {
+test('the ⋮ menu opens the command menu with model, clear history and the rest', async () => {
   const tree = await renderApp();
   await waitFor(() => labelsOf(tree).includes('Commands'));
 
