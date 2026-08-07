@@ -615,7 +615,6 @@ export function AppShell(): React.JSX.Element {
           } satisfies SheetOption,
         ]
       : []),
-    { label: 'New conversation', onPress: () => { setCommandMenuOpen(false); newThread(); } },
     ...(activeThread
       ? [
           {
@@ -649,15 +648,8 @@ export function AppShell(): React.JSX.Element {
           } satisfies SheetOption,
         ]
       : []),
-    // Settings live in the drawer and Diagnostics inside them: this menu is for what acts on
-    // the conversation in front of you.
-    {
-      label: 'Files',
-      onPress: () => {
-        setCommandMenuOpen(false);
-        openFiles();
-      },
-    },
+    // New conversations live on the + in the drawer (and the /new command); Files has its
+    // own header button. This menu stays for what acts on the conversation in front of you.
   ];
 
   const title =

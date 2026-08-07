@@ -7,7 +7,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
-import { labelsOf, renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
+import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 /** Every string anywhere in the tree, including array children (bubble text renders as arrays). */
 function allTexts(tree: Tree): string[] {
@@ -60,10 +60,17 @@ test('the ⋮ menu opens the command menu with the conversation actions', async 
   // The thread has no session yet, so conversation actions stay hidden; the app-level ones show.
   await pressLabel(tree, 'Commands');
   await waitFor(() => labelsOf(tree).includes('Model…'));
-  expect(labelsOf(tree)).toContain('New conversation');
-  expect(labelsOf(tree)).toContain('Files');
+
+  // The drawer's + keeps its own label ("New conversation"): assert on the sheet's rendered
+  // text instead, which only options produce.
+  const texts = textsOf(tree);
+  expect(texts).toContain('Model…');
+  // New conversations live on the + in the drawer (and the /new command); Files has its own
+  // header button. Duplicating them here was noise.
+  expect(texts).not.toContain('New conversation');
+  expect(texts).not.toContain('Files');
   // Settings live in the drawer, Diagnostics inside them: duplicating them here was noise.
-  expect(labelsOf(tree)).not.toContain('Diagnostics');
+  expect(texts).not.toContain('Diagnostics');
 
   await settleAndUnmount(tree);
 });
