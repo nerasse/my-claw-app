@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSheetBottomInset } from '../core/keyboard';
+import { useScrollIndicator } from './ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 export interface SheetOption {
@@ -33,6 +34,7 @@ export function ActionSheet({
   const styles = useThemedStyles(createStyles);
   // Opened from the composer, the keyboard is still up and would swallow the lower options.
   const bottomInset = useSheetBottomInset(space.xl);
+  const { scrollProps, indicator } = useScrollIndicator();
   return (
     <View style={styles.backdrop}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
@@ -46,32 +48,36 @@ export function ActionSheet({
         ) : null}
         {children}
         {options && options.length > 0 ? (
-          <ScrollView
-            style={styles.scroll}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled>
-            {options.map(option => (
-              <Pressable
-                key={option.label}
-                style={styles.option}
-                onPress={option.onPress}
-                accessibilityRole="button"
-                accessibilityState={{ selected: option.selected ?? false }}
-                accessibilityLabel={option.label}>
-                <View style={styles.optionMain}>
-                  <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>
-                    {option.label}
-                  </Text>
-                  {option.hint ? (
-                    <Text style={styles.optionHint} numberOfLines={2}>
-                      {option.hint}
+          <View style={styles.scrollWrap}>
+            <ScrollView
+              {...scrollProps}
+              style={styles.scroll}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled>
+              {options.map(option => (
+                <Pressable
+                  key={option.label}
+                  style={styles.option}
+                  onPress={option.onPress}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: option.selected ?? false }}
+                  accessibilityLabel={option.label}>
+                  <View style={styles.optionMain}>
+                    <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>
+                      {option.label}
                     </Text>
-                  ) : null}
-                </View>
-                {option.selected ? <Text style={styles.check}>✓</Text> : null}
-              </Pressable>
-            ))}
-          </ScrollView>
+                    {option.hint ? (
+                      <Text style={styles.optionHint} numberOfLines={2}>
+                        {option.hint}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {option.selected ? <Text style={styles.check}>✓</Text> : null}
+                </Pressable>
+              ))}
+            </ScrollView>
+            {indicator}
+          </View>
         ) : null}
       </View>
     </View>
@@ -114,7 +120,8 @@ const createStyles = (palette: Palette) => ({
     paddingBottom: space.sm,
     marginBottom: space.xs,
   },
-  scroll: { flexGrow: 0 },
+  scrollWrap: { flexShrink: 1, minHeight: 0 },
+  scroll: { flexGrow: 1 },
   option: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

@@ -17,6 +17,7 @@ import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
 import type { WsState } from '../core/types';
 import { FolderIcon } from '../components/icons';
+import { useScrollIndicator } from '../components/ScrollIndicator';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 const GROUP_WINDOW_MS = 120_000;
@@ -250,6 +251,16 @@ export function ChatScreen({
 
   const empty = items.length === 0;
 
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
+    if (nearBottom !== atBottom) setAtBottom(nearBottom);
+  }, [atBottom]);
+  const handleContentSize = useCallback(() => {
+    if (atBottom) listRef.current?.scrollToEnd({ animated: false });
+  }, [atBottom]);
+  const { scrollProps, indicator } = useScrollIndicator(handleScroll, handleContentSize);
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -322,18 +333,10 @@ export function ChatScreen({
           <View style={styles.listWrap}>
             <FlatList
               ref={listRef}
+              {...scrollProps}
               data={items}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
-              onContentSizeChange={() => {
-                if (atBottom) listRef.current?.scrollToEnd({ animated: false });
-              }}
-              onScroll={event => {
-                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-                const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
-                if (nearBottom !== atBottom) setAtBottom(nearBottom);
-              }}
-              scrollEventThrottle={16}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item, index }) =>
                 item.kind === 'tool' ? (
@@ -353,6 +356,8 @@ export function ChatScreen({
             )
           }
         />
+
+        {indicator}
 
         {!atBottom && items.length > 0 ? (
           <Pressable

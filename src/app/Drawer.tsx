@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
 import { PlusIcon } from '../components/icons';
+import { useScrollIndicator } from '../components/ScrollIndicator';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -57,6 +58,7 @@ export function Drawer({
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
   const [query, setQuery] = useState('');
+  const { scrollProps, indicator } = useScrollIndicator();
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -135,33 +137,37 @@ export function Drawer({
           accessibilityLabel="Search conversations"
         />
 
-        <FlatList
-          style={styles.list}
-          data={filtered}
-          keyExtractor={item => item.threadId}
-          ItemSeparatorComponent={Separator}
-          keyboardShouldPersistTaps="handled"
-          // Virtualized by default; tuned so a long list scrolls without re-rendering
-          // everything, and the memoized rows only update when their own props move.
-          initialNumToRender={14}
-          maxToRenderPerBatch={14}
-          windowSize={9}
-          removeClippedSubviews={Platform.OS === 'android'}
-          ListEmptyComponent={
-            <Text style={styles.empty}>
-              {query.trim() ? 'no match' : 'no conversations'}
-            </Text>
-          }
-          renderItem={({ item }) => (
-            <ThreadRow
-              item={item}
-              active={item.threadId === activeThread}
-              unread={unread.includes(item.threadId)}
-              onOpen={handleOpen}
-              onMenu={handleMenu}
-            />
-          )}
-        />
+        <View style={styles.listArea}>
+          <FlatList
+            {...scrollProps}
+            style={styles.list}
+            data={filtered}
+            keyExtractor={item => item.threadId}
+            ItemSeparatorComponent={Separator}
+            keyboardShouldPersistTaps="handled"
+            // Virtualized by default; tuned so a long list scrolls without re-rendering
+            // everything, and the memoized rows only update when their own props move.
+            initialNumToRender={14}
+            maxToRenderPerBatch={14}
+            windowSize={9}
+            removeClippedSubviews={Platform.OS === 'android'}
+            ListEmptyComponent={
+              <Text style={styles.empty}>
+                {query.trim() ? 'no match' : 'no conversations'}
+              </Text>
+            }
+            renderItem={({ item }) => (
+              <ThreadRow
+                item={item}
+                active={item.threadId === activeThread}
+                unread={unread.includes(item.threadId)}
+                onOpen={handleOpen}
+                onMenu={handleMenu}
+              />
+            )}
+          />
+          {indicator}
+        </View>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
           {/* Always shown: an entry that appears only once it has content is an entry nobody
@@ -236,7 +242,8 @@ const createStyles = (palette: Palette) => ({
     letterSpacing: 0.5,
     textTransform: 'uppercase' as const,
   },
-  list: { flex: 1, paddingHorizontal: space.sm },
+  listArea: { flex: 1 },
+  list: { paddingHorizontal: space.sm },
   search: {
     marginHorizontal: space.md,
     marginBottom: space.sm,

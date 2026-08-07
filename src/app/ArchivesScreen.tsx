@@ -2,6 +2,7 @@ import React from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { ThreadRow } from '../components/ThreadRow';
 import type { SessionSummary } from '../core/protocol';
+import { useScrollIndicator } from '../components/ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -20,6 +21,7 @@ export function ArchivesScreen({
   onThreadMenu: (thread: SessionSummary) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { scrollProps, indicator } = useScrollIndicator();
 
   const handleMenu = React.useCallback(
     (threadId: string) => {
@@ -47,22 +49,26 @@ export function ArchivesScreen({
         </View>
       </View>
 
-      <FlatList
-        style={styles.list}
-        data={sessions}
-        keyExtractor={item => item.threadId}
-        contentContainerStyle={sessions.length === 0 ? styles.emptyContent : styles.listContent}
-        ListEmptyComponent={<Text style={styles.empty}>no archived conversations</Text>}
-        renderItem={({ item }) => (
-          <ThreadRow
-            item={item}
-            active={false}
-            unread={false}
-            onOpen={onOpenThread}
-            onMenu={handleMenu}
-          />
-        )}
-      />
+      <View style={styles.listArea}>
+        <FlatList
+          {...scrollProps}
+          style={styles.list}
+          data={sessions}
+          keyExtractor={item => item.threadId}
+          contentContainerStyle={sessions.length === 0 ? styles.emptyContent : styles.listContent}
+          ListEmptyComponent={<Text style={styles.empty}>no archived conversations</Text>}
+          renderItem={({ item }) => (
+            <ThreadRow
+              item={item}
+              active={false}
+              unread={false}
+              onOpen={onOpenThread}
+              onMenu={handleMenu}
+            />
+          )}
+        />
+        {indicator}
+      </View>
     </View>
   );
 }
@@ -89,7 +95,8 @@ const createStyles = (palette: Palette) => ({
   headerText: { flex: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  list: { flex: 1 },
+  listArea: { flex: 1 },
+  list: {},
   listContent: { paddingTop: space.sm },
   emptyContent: { flexGrow: 1, justifyContent: 'center' as const },
   empty: {

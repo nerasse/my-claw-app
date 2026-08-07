@@ -5,6 +5,7 @@ import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
 import { formatBytes, formatDate, viewerFor } from '../core/utils';
 import { TrashIcon } from '../components/icons';
+import { useScrollIndicator } from '../components/ScrollIndicator';
 import {
   font,
   radius,
@@ -57,6 +58,7 @@ export function FilesScreen({
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
   const [viewer, setViewer] = useState<SessionFileMeta | null>(null);
+  const { scrollProps, indicator } = useScrollIndicator();
 
   return (
     <View style={styles.screen}>
@@ -84,16 +86,18 @@ export function FilesScreen({
         </Text>
       ) : null}
 
-      <FlatList
-        style={styles.list}
-        data={files}
-        keyExtractor={item => item.id}
-        contentContainerStyle={
-          files.length === 0 ? styles.emptyContent : styles.listContent
-        }
-        ListEmptyComponent={
-          <Text style={styles.empty}>no files in this conversation</Text>
-        }
+      <View style={styles.listArea}>
+        <FlatList
+          {...scrollProps}
+          style={styles.list}
+          data={files}
+          keyExtractor={item => item.id}
+          contentContainerStyle={
+            files.length === 0 ? styles.emptyContent : styles.listContent
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>no files in this conversation</Text>
+          }
         renderItem={({ item }) => {
           const uri =
             item.type === 'image'
@@ -151,7 +155,9 @@ export function FilesScreen({
             </View>
           );
         }}
-      />
+        />
+        {indicator}
+      </View>
 
       {viewer ? (
         <FileViewer
@@ -274,7 +280,8 @@ function createStyles(palette: Palette) {
       color: palette.text,
     },
     subtitle: { fontSize: font.small, color: palette.textFaint },
-    list: { flex: 1 },
+    listArea: { flex: 1 },
+    list: {},
     listContent: { paddingTop: space.sm },
     emptyContent: { flexGrow: 1, justifyContent: 'center' as const },
     empty: {
