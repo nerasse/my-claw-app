@@ -129,7 +129,7 @@ async function boot(): Promise<Tree> {
     ],
     defaultModel: 'fast-1',
   });
-  await waitFor(() => labelsOf(tree).includes('Open agent cron'));
+  await waitFor(() => labelsOf(tree).includes('Open agent Scheduled tasks'));
   return tree;
 }
 
@@ -143,17 +143,19 @@ beforeEach(() => {
 test('the page renders every agent the server sends, names included', async () => {
   const tree = await boot();
   const labels = labelsOf(tree);
-  expect(labels).toEqual(expect.arrayContaining(['Open agent orchestrator', 'Open agent general', 'Open agent cron']));
+  expect(labels).toEqual(expect.arrayContaining(['Open agent Orchestrator', 'Open agent General sub-agent', 'Open agent Scheduled tasks']));
   // Nothing about the agents is hardcoded: the server's label and inheritance rule show up.
   expect(textsOf(tree)).toEqual(expect.arrayContaining(['Scheduled tasks']));
-  expect(textsOf(tree)).toEqual(expect.arrayContaining(['inherits from the orchestrator']));
-  expect(textsOf(tree)).toEqual(expect.arrayContaining(['inherits the global default']));
+  expect(textsOf(tree).some(text => text.includes('inherits from the orchestrator'))).toBe(true);
+  expect(textsOf(tree).some(text => text.includes('inherits the global default'))).toBe(true);
+  // The model reads as its catalog label, not the raw id the server stores.
+  expect(textsOf(tree).some(text => text.startsWith('Fast · '))).toBe(true);
   await settleAndUnmount(tree);
 });
 
 test('picking a model for an agent sends agents.model.set and the page follows', async () => {
   const tree = await boot();
-  await pressLabel(tree, 'Open agent general');
+  await pressLabel(tree, 'Open agent General sub-agent');
   await waitFor(() => labelsOf(tree).includes('Change model'));
   await pressLabel(tree, 'Change model');
   await waitFor(() => labelsOf(tree).includes('Claude ›'));
@@ -167,7 +169,7 @@ test('picking a model for an agent sends agents.model.set and the page follows',
 
   // The answer is the state the server stored: the detail page shows the pin.
   await emit(agentsConfig({ agents: [{ key: 'general', label: 'General sub-agent', description: 'Spawned with full tool access', model: 'opus', pinned: true, inheritsFrom: 'global' }] }));
-  await waitFor(() => textsOf(tree).includes('pinned to this agent'));
+  await waitFor(() => textsOf(tree).some(text => text.includes('pinned to this agent')));
   await settleAndUnmount(tree);
 });
 
@@ -180,7 +182,7 @@ test('the root option sends agents.model.clear so the agent inherits again', asy
       ],
     }),
   );
-  await pressLabel(tree, 'Open agent general');
+  await pressLabel(tree, 'Open agent General sub-agent');
   await waitFor(() => labelsOf(tree).includes('Change model'));
   await pressLabel(tree, 'Change model');
   await waitFor(() => labelsOf(tree).includes('Follow global default (Fast)'));
@@ -189,6 +191,50 @@ test('the root option sends agents.model.clear so the agent inherits again', asy
   expect(sentFrames()).toEqual(
     expect.arrayContaining([expect.objectContaining({ type: 'agents.model.clear', agent: 'general' })]),
   );
+  await settleAndUnmount(tree);
+});
+
+test('the detail page shows the scope the server sent, read-only', async () => {
+  const tree = await boot();
+  await emit(
+    agentsConfig({
+      agents: [
+        {
+          key: 'general',
+          label: 'General sub-agent',
+          description: 'Spawned with full tool access',
+          model: 'opus',
+          pinned: true,
+          inheritsFrom: 'global',
+          skills: ['forgejo', 'pdf'],
+          mcp: ['*'],
+          workspace: 'infra',
+          contextCap: 0,
+          maxIterations: 12,
+        },
+      ],
+    }),
+  );
+  await pressLabel(tree, 'Open agent General sub-agent');
+  await waitFor(() => labelsOf(tree).includes('Change model'));
+
+  const texts = textsOf(tree);
+  // What decides what this agent can reach, without opening config.json on the server.
+  expect(texts).toEqual(expect.arrayContaining(['forgejo, pdf', 'all', 'infra', 'no ceiling', '12']));
+  // The pinned model reads as its catalog label.
+  expect(texts).toEqual(expect.arrayContaining(['Opus']));
+  await settleAndUnmount(tree);
+});
+
+test('a refused write shows the reason on the page that asked for it', async () => {
+  const tree = await boot();
+  await pressLabel(tree, 'Open agent General sub-agent');
+  await waitFor(() => labelsOf(tree).includes('Change model'));
+  await ReactTestRenderer.act(async () => {
+    agentsStore.fail('unknown agent');
+  });
+  // The config is still on screen: the error must not be swallowed by the loaded state.
+  await waitFor(() => labelsOf(tree).includes('Agents error unknown agent'));
   await settleAndUnmount(tree);
 });
 
@@ -259,12 +305,10 @@ describe('providers', () => {
     await pressLabel(tree, 'Providers');
     await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
     await pressLabel(tree, 'Open provider litellm');
-    await waitFor(() => labelsOf(tree).includes('Set default Mimo'));
-    expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Set default Mimo']));
+    await waitFor(() => labelsOf(tree).includes('Set default Naked'));
     expect(labelsOf(tree)).not.toContain('Set default Opus');
-    // "Naked" has no provider: it follows the global default provider (litellm) and shows here.
-    expect(labelsOf(tree)).toContain('Set default Naked');
-    // The model in force is marked.
+    // Mimo is already the global default: the row says so instead of offering a no-op.
+    expect(labelsOf(tree)).toContain('Mimo, already the default');
     expect(textsOf(tree)).toEqual(expect.arrayContaining(['default']));
     await settleAndUnmount(tree);
   });

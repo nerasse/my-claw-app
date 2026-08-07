@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import type { ModelOption } from '../core/protocol';
+import type { ModelOption, ProviderInfo } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -10,16 +10,19 @@ import { useDismissKeyboard } from '../core/keyboard';
  * Tapping a model makes it the global default; the one in force carries a checkmark.
  */
 export function ProviderScreen({
-  providerKey,
+  provider,
   models,
   defaultModel,
+  error,
   onSetDefault,
   onBack,
 }: {
-  providerKey: string;
+  provider: ProviderInfo;
   models: ModelOption[];
   /** The global default id, so the row in force is marked. */
   defaultModel: string;
+  /** Server refused the last write: shown here, where the user asked for it. */
+  error: string | null;
   onSetDefault: (modelId: string) => void;
   onBack: () => void;
 }): React.JSX.Element {
@@ -37,12 +40,18 @@ export function ProviderScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
-          <Text style={styles.title}>{providerKey}</Text>
+          <Text style={styles.title}>{provider.group || provider.key}</Text>
           <Text style={styles.subtitle}>
-            {models.length} model{models.length === 1 ? '' : 's'} · tap one to make it the default
+            {`${models.length} model${models.length === 1 ? '' : 's'} · tap one to make it the default`}
           </Text>
         </View>
       </View>
+
+      {error ? (
+        <Text style={styles.error} accessibilityLabel={`Agents error ${error}`}>
+          {error}
+        </Text>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
@@ -55,7 +64,8 @@ export function ProviderScreen({
                   style={[styles.row, styles.link]}
                   onPress={() => onSetDefault(model.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Set default ${model.label}`}>
+                  accessibilityState={{ selected: isDefault }}
+                  accessibilityLabel={isDefault ? `${model.label}, already the default` : `Set default ${model.label}`}>
                   <View style={styles.linkMain}>
                     <View style={styles.linkTitleLine}>
                       <Text style={styles.linkTitle}>{model.label}</Text>
@@ -141,4 +151,10 @@ const createStyles = (palette: Palette) => ({
   checkmark: { fontSize: font.body, color: palette.accent, fontWeight: '600' as const },
   emptyArea: { marginTop: space.lg, alignItems: 'center' as const },
   empty: { fontSize: font.meta, color: palette.textFaint },
+  error: {
+    textAlign: 'center' as const,
+    fontSize: font.meta,
+    color: palette.danger,
+    padding: space.md,
+  },
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { AgentInfo, AgentsConfigResultFrame } from '../core/protocol';
 import type { AgentsStatus } from '../core/agents';
+import { useModelCatalog } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -45,7 +46,10 @@ export function AgentsSettingsScreen({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
-  const defaultLabel = config?.defaultModel || 'none set';
+  const catalog = useModelCatalog();
+  /** Ids are what the config stores; the label is what every other screen shows. */
+  const labelOf = (modelId: string): string =>
+    catalog.models.find(model => model.id === modelId)?.label ?? modelId;
   const agents = config?.agents ?? [];
 
   return (
@@ -68,6 +72,13 @@ export function AgentsSettingsScreen({
         </View>
       </View>
 
+      {/* A refused write must be visible where it was asked for, not only when the page is empty. */}
+      {config && error ? (
+        <Text style={styles.error} accessibilityLabel={`Agents error ${error}`}>
+          {error}
+        </Text>
+      ) : null}
+
       {config ? (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <View style={styles.category}>
@@ -79,9 +90,11 @@ export function AgentsSettingsScreen({
                 accessibilityRole="button"
                 accessibilityLabel="Default model">
                 <View style={styles.linkMain}>
-                  <Text style={styles.linkTitle}>{defaultLabel}</Text>
-                  <Text style={styles.hint}>
-                    {config.defaultProvider ? `provider: ${config.defaultProvider}` : 'what every agent falls back to'}
+                  <Text style={styles.linkTitle}>{config.defaultModel ? labelOf(config.defaultModel) : 'none set'}</Text>
+                  <Text style={styles.hint} numberOfLines={1}>
+                    {config.defaultProvider
+                      ? `${config.defaultModel} · provider ${config.defaultProvider}`
+                      : 'what every agent falls back to'}
                   </Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
@@ -107,7 +120,9 @@ export function AgentsSettingsScreen({
                 <View style={styles.linkMain}>
                   <Text style={styles.linkTitle}>Providers</Text>
                   <Text style={styles.hint}>
-                    {config.providers.length} configured · {config.providers.filter(provider => provider.keyPresent).length} with a key set
+                    {`${config.providers.length} configured · ${
+                      config.providers.filter(provider => provider.keyPresent).length
+                    } with a key set`}
                   </Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
@@ -125,14 +140,16 @@ export function AgentsSettingsScreen({
                     style={[styles.row, styles.link]}
                     onPress={() => onOpenAgent(agent.key)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Open agent ${agent.key}`}>
+                    accessibilityLabel={`Open agent ${agent.label}`}>
                     <View style={styles.linkMain}>
                       <View style={styles.linkTitleLine}>
                         <Text style={styles.linkTitle}>{agent.label}</Text>
-                        {!agent.pinned ? <Text style={styles.badge}>{inheritLabel(agent)}</Text> : null}
+                        {!agent.pinned ? <Text style={styles.badge}>inherited</Text> : null}
                       </View>
                       <Text style={styles.hint} numberOfLines={1}>
-                        {agent.model || 'no model'} · {agent.description}
+                        {`${agent.model ? labelOf(agent.model) : 'no model'} · ${
+                          agent.pinned ? 'pinned' : inheritLabel(agent)
+                        }`}
                       </Text>
                     </View>
                     <Text style={styles.linkGlyph}>›</Text>
@@ -205,6 +222,14 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.sm,
     paddingHorizontal: 4,
     paddingVertical: 1,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  error: {
+    textAlign: 'center' as const,
+    fontSize: font.meta,
+    color: palette.danger,
+    padding: space.md,
   },
   emptyArea: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: space.lg },
   empty: { fontSize: font.meta, color: palette.textFaint, textAlign: 'center' as const },

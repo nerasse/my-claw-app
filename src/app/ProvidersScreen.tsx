@@ -47,15 +47,17 @@ export function ProvidersScreen({
                 style={[styles.row, styles.link]}
                 onPress={() => onOpenProvider(provider.key)}
                 accessibilityRole="button"
-                accessibilityLabel={`Open provider ${provider.key}`}>
+                accessibilityLabel={`Open provider ${provider.group || provider.key}`}>
                 <View style={styles.linkMain}>
                   <View style={styles.linkTitleLine}>
-                    <Text style={styles.linkTitle}>{provider.key}</Text>
+                    <Text style={styles.linkTitle}>{provider.group || provider.key}</Text>
                     <Text style={styles.badge}>{provider.type}</Text>
                     {provider.discover ? <Text style={styles.badge}>discovery</Text> : null}
                   </View>
                   <Text style={styles.hint} numberOfLines={1}>
-                    {`${provider.models} model${provider.models === 1 ? '' : 's'}${
+                    {`${provider.group ? `${provider.key} · ` : ''}${provider.models} model${
+                      provider.models === 1 ? '' : 's'
+                    }${
                       provider.keyEnv
                         ? ` · key ${provider.keyPresent ? 'set' : 'missing'} (${provider.keyEnv})`
                         : ' · no key needed'

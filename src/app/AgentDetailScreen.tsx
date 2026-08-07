@@ -2,25 +2,39 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { AgentInfo } from '../core/protocol';
 import { inheritLabel } from './AgentsSettingsScreen';
+import { useModelCatalog } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
+/** A scope is a list of names, `["*"]` for everything, or absent (inherited). */
+function scopeText(scope: string[] | null | undefined, inheritedFrom: string): string {
+  if (scope === null || scope === undefined) return inheritedFrom;
+  if (scope.includes('*')) return 'all';
+  return scope.length === 0 ? 'none' : scope.join(', ');
+}
+
 /**
- * One agent's defaults. Lot by lot: the model today (pinned or inherited), then the context
- * ceiling and iteration budget join the card when their pickers exist. Everything renders from
- * the server-sent AgentInfo, so the page never hardcodes an agent name.
+ * One agent's defaults. The model is editable; the rest of the entry is shown read-only, because
+ * it is what actually decides what this agent can reach and reading it here beats opening
+ * config.json on the server. Everything renders from the server-sent AgentInfo, so the page
+ * never hardcodes an agent name.
  */
 export function AgentDetailScreen({
   agent,
+  error,
   onBack,
   onOpenModel,
 }: {
   agent: AgentInfo;
+  /** Server refused the last write: shown here, where the user asked for it. */
+  error: string | null;
   onBack: () => void;
   onOpenModel: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
+  const catalog = useModelCatalog();
+  const modelLabel = catalog.models.find(model => model.id === agent.model)?.label ?? agent.model;
 
   return (
     <View style={styles.screen}>
@@ -38,6 +52,12 @@ export function AgentDetailScreen({
         </View>
       </View>
 
+      {error ? (
+        <Text style={styles.error} accessibilityLabel={`Agents error ${error}`}>
+          {error}
+        </Text>
+      ) : null}
+
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.category}>
           <Text style={styles.section}>model</Text>
@@ -48,14 +68,64 @@ export function AgentDetailScreen({
               accessibilityRole="button"
               accessibilityLabel="Change model">
               <View style={styles.linkMain}>
-                <Text style={styles.linkTitle}>{agent.model || 'no model'}</Text>
-                <Text style={styles.hint}>
-                  {agent.pinned ? 'pinned to this agent' : inheritLabel(agent)}
+                <View style={styles.linkTitleLine}>
+                  <Text style={styles.linkTitle}>{modelLabel || 'no model'}</Text>
+                  {!agent.pinned ? <Text style={styles.badge}>inherited</Text> : null}
+                </View>
+                <Text style={styles.hint} numberOfLines={1}>
+                  {agent.pinned ? `${agent.model} · pinned to this agent` : inheritLabel(agent)}
                 </Text>
               </View>
               <Text style={styles.linkGlyph}>›</Text>
             </Pressable>
           </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>scope</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>skills</Text>
+              <Text style={styles.rowValue} numberOfLines={1}>
+                {scopeText(agent.skills, 'inherited')}
+              </Text>
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>MCP</Text>
+              <Text style={styles.rowValue} numberOfLines={1}>
+                {scopeText(agent.mcp, 'inherited')}
+              </Text>
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>workspace</Text>
+              <Text style={styles.rowValue} numberOfLines={1}>
+                {agent.workspace ?? 'default'}
+              </Text>
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>context cap</Text>
+              <Text style={styles.rowValue} numberOfLines={1}>
+                {agent.contextCap === null || agent.contextCap === undefined
+                  ? 'global setting'
+                  : agent.contextCap === 0
+                    ? 'no ceiling'
+                    : `${agent.contextCap} tokens`}
+              </Text>
+            </View>
+            <View style={styles.separator} />
+            <View style={styles.row}>
+              <Text style={styles.rowKey}>iterations</Text>
+              <Text style={styles.rowValue} numberOfLines={1}>
+                {agent.maxIterations === null || agent.maxIterations === undefined
+                  ? 'default'
+                  : String(agent.maxIterations)}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.note}>read-only for now · edit these in the server config</Text>
         </View>
       </ScrollView>
     </View>
@@ -103,7 +173,29 @@ const createStyles = (palette: Palette) => ({
   },
   link: { flexDirection: 'row' as const, alignItems: 'center' as const },
   linkMain: { flex: 1, gap: 2 },
+  linkTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
   linkTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   linkGlyph: { fontSize: 20, color: palette.textFaint },
   hint: { fontSize: font.small, color: palette.textMuted },
+  rowKey: { fontSize: font.small, color: palette.textMuted },
+  rowValue: { flex: 1, fontSize: font.small, color: palette.text, textAlign: 'right' as const },
+  separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
+  badge: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  note: { fontSize: font.micro, color: palette.textFaint, paddingHorizontal: space.xs },
+  error: {
+    textAlign: 'center' as const,
+    fontSize: font.meta,
+    color: palette.danger,
+    padding: space.md,
+  },
 });

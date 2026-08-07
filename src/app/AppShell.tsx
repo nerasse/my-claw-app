@@ -890,6 +890,8 @@ export function AppShell(): React.JSX.Element {
       : 'offline · message will send on reconnect'
     : undefined;
   const selectedAgentInfo = agentsConfig?.agents.find(agent => agent.key === selectedAgent) ?? null;
+  const selectedProviderInfo =
+    agentsConfig?.providers.find(provider => provider.key === selectedProvider) ?? null;
   // Same grouping rule as the server's provider count: a model with no provider of its own
   // follows the global default provider.
   const providerModels = selectedProvider
@@ -897,6 +899,36 @@ export function AppShell(): React.JSX.Element {
         model => (model.provider ?? agentsConfig?.defaultProvider) === selectedProvider,
       )
     : [];
+  // Both pages double as the fallback when a detail page has no subject yet (config not loaded,
+  // or a key that no longer exists), so they are built once here.
+  const agentsPage = (
+    <AgentsSettingsScreen
+      config={agentsConfig}
+      status={agentsState.status}
+      error={agentsState.error}
+      onBack={() => setSettingsPage('index')}
+      onOpenDefaultModel={() => {
+        setAgentModelPath([]);
+        setAgentModelFor('global');
+      }}
+      onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
+      onOpenProviders={() => setSettingsPage('providers')}
+      onOpenAgent={key => {
+        setSelectedAgent(key);
+        setSettingsPage('agent');
+      }}
+    />
+  );
+  const providersPage = (
+    <ProvidersScreen
+      providers={agentsConfig?.providers ?? []}
+      onBack={() => setSettingsPage('agents')}
+      onOpenProvider={key => {
+        setSelectedProvider(key);
+        setSettingsPage('provider');
+      }}
+    />
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -938,56 +970,29 @@ export function AppShell(): React.JSX.Element {
                 onOpenWorkspaces={() => setSettingsPage('workspaces')}
               />
             ) : settingsPage === 'agents' ? (
-              <AgentsSettingsScreen
-                config={agentsConfig}
-                status={agentsState.status}
-                error={agentsState.error}
-                onBack={() => setSettingsPage('index')}
-                onOpenDefaultModel={() => {
-                  setAgentModelPath([]);
-                  setAgentModelFor('global');
-                }}
-                onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
-                onOpenProviders={() => setSettingsPage('providers')}
-                onOpenAgent={key => {
-                  setSelectedAgent(key);
-                  setSettingsPage('agent');
-                }}
-              />
+              agentsPage
             ) : settingsPage === 'providers' ? (
-              <ProvidersScreen
-                providers={agentsConfig?.providers ?? []}
-                onBack={() => setSettingsPage('agents')}
-                onOpenProvider={key => {
-                  setSelectedProvider(key);
-                  setSettingsPage('provider');
-                }}
-              />
+              providersPage
             ) : settingsPage === 'provider' ? (
-              selectedProvider ? (
+              selectedProviderInfo ? (
                 <ProviderScreen
-                  providerKey={selectedProvider}
+                  provider={selectedProviderInfo}
                   models={providerModels}
                   defaultModel={agentsConfig?.defaultModel ?? ''}
+                  error={agentsState.error}
                   onSetDefault={modelId => {
                     connection.send(encodeAgentsModelSet('global', modelId)).catch(() => {});
                   }}
                   onBack={() => setSettingsPage('providers')}
                 />
               ) : (
-                <ProvidersScreen
-                  providers={agentsConfig?.providers ?? []}
-                  onBack={() => setSettingsPage('agents')}
-                  onOpenProvider={key => {
-                    setSelectedProvider(key);
-                    setSettingsPage('provider');
-                  }}
-                />
+                providersPage
               )
             ) : settingsPage === 'agent' ? (
               selectedAgentInfo ? (
                 <AgentDetailScreen
                   agent={selectedAgentInfo}
+                  error={agentsState.error}
                   onBack={() => setSettingsPage('agents')}
                   onOpenModel={() => {
                     if (!selectedAgent) return;
@@ -996,22 +1001,7 @@ export function AppShell(): React.JSX.Element {
                   }}
                 />
               ) : (
-                <AgentsSettingsScreen
-                  config={agentsConfig}
-                  status={agentsState.status}
-                  error={agentsState.error}
-                  onBack={() => setSettingsPage('index')}
-                  onOpenDefaultModel={() => {
-                    setAgentModelPath([]);
-                    setAgentModelFor('global');
-                  }}
-                  onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
-                  onOpenProviders={() => setSettingsPage('providers')}
-                  onOpenAgent={key => {
-                    setSelectedAgent(key);
-                    setSettingsPage('agent');
-                  }}
-                />
+                agentsPage
               )
             ) : settingsPage === 'skills' ? (
               <SkillsScreen
