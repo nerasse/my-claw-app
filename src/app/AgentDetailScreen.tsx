@@ -24,12 +24,14 @@ export function AgentDetailScreen({
   error,
   onBack,
   onOpenModel,
+  onOpenInstructions,
 }: {
   agent: AgentInfo;
   /** Server refused the last write: shown here, where the user asked for it. */
   error: string | null;
   onBack: () => void;
   onOpenModel: () => void;
+  onOpenInstructions: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
@@ -81,6 +83,38 @@ export function AgentDetailScreen({
           </View>
         </View>
 
+        {agent.source ? (
+          <View style={styles.category}>
+            <Text style={styles.section}>definition</Text>
+            <View style={styles.card}>
+              <View style={styles.row}>
+                <Text style={styles.rowKey}>tier</Text>
+                <Text style={styles.rowValue} numberOfLines={1}>
+                  {agent.layer ? `${agent.source} · ${agent.layer}` : agent.source}
+                </Text>
+              </View>
+              <View style={styles.separator} />
+              <View style={styles.row}>
+                <Text style={styles.rowKey}>toolset</Text>
+                <Text style={styles.rowValue} numberOfLines={1}>
+                  {agent.base ?? 'general'}
+                </Text>
+              </View>
+              <View style={styles.separator} />
+              <View style={styles.row}>
+                <Text style={styles.rowKey}>file</Text>
+                <Text style={styles.rowValue} numberOfLines={1}>
+                  {agent.path ?? ''}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.note}>
+              Edit the file on the server to change this agent. A higher tier replaces a lower one
+              entirely rather than extending it.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.category}>
           <Text style={styles.section}>scope</Text>
           <View style={styles.card}>
@@ -104,6 +138,20 @@ export function AgentDetailScreen({
                 {agent.workspace ?? 'default'}
               </Text>
             </View>
+            <View style={styles.separator} />
+            {/* The workspace prompt files this agent sits on. A file-defined agent adds its own
+                mandate on top of them, which lives in its `.agents/` file rather than here. */}
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenInstructions}
+              accessibilityRole="button"
+              accessibilityLabel="Open instructions">
+              <Text style={styles.rowKey}>instructions</Text>
+              <Text style={styles.rowValue} numberOfLines={1}>
+                {agent.workspace ? `${agent.workspace} workspace` : 'default workspace'}
+              </Text>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
             <View style={styles.separator} />
             <View style={styles.row}>
               <Text style={styles.rowKey}>context cap</Text>

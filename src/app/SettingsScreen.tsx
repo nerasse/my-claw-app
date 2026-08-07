@@ -7,7 +7,7 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'agents' | 'tools' | 'skills' | 'mcps' | 'other';
+  key: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'other';
 }> = [
   {
     title: 'General',
@@ -20,6 +20,12 @@ const CATEGORIES: Array<{
     hint: 'default model, effort, per-agent settings',
     accessibilityLabel: 'Open agents',
     key: 'agents',
+  },
+  {
+    title: 'Instructions',
+    hint: 'the markdown that builds the prompt',
+    accessibilityLabel: 'Open instructions',
+    key: 'instructions',
   },
   {
     title: 'Tools',
@@ -58,7 +64,9 @@ export function SettingsScreen({
 }: {
   skillsCount: number;
   onBack: () => void;
-  onOpenCategory: (category: 'general' | 'agents' | 'tools' | 'skills' | 'mcps' | 'other') => void;
+  onOpenCategory: (
+    category: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'other',
+  ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();

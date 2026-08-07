@@ -359,4 +359,42 @@ describe('providers', () => {
 
     await settleAndUnmount(tree);
   });
+
+  test('a file-defined agent shows its tier, and a reserved role shows none', async () => {
+    const tree = await boot();
+    await emit(agentsConfig({
+      agents: [
+        { key: 'orchestrator', label: 'Orchestrator', description: 'The agent you talk to', model: 'fast-1', pinned: false, inheritsFrom: 'global' },
+        { key: 'research', label: 'research', description: 'Read-only', model: 'fast-1', pinned: false, inheritsFrom: 'global', source: 'built-in', path: '/b/research.md', base: 'research' },
+        { key: 'reviewer', label: 'reviewer', description: 'Reviews diffs', model: 'fast-1', pinned: false, inheritsFrom: 'global', source: 'workspace', path: '/w/reviewer.md', base: 'research', layer: 'proj' },
+      ],
+    }));
+    await waitFor(() => labelsOf(tree).includes('Open agent reviewer'));
+    const texts = textsOf(tree);
+    // The workspace name is what tells two same-named files apart, so it wins over the tier word.
+    expect(texts).toEqual(expect.arrayContaining(['BUILT-IN', 'PROJ']));
+    await settleAndUnmount(tree);
+  });
+
+  test('the detail page shows where a file agent is defined, and hides it for a role', async () => {
+    const tree = await boot();
+    await emit(agentsConfig({
+      agents: [
+        { key: 'orchestrator', label: 'Orchestrator', description: 'The agent you talk to', model: 'fast-1', pinned: false, inheritsFrom: 'global' },
+        { key: 'reviewer', label: 'reviewer', description: 'Reviews diffs', model: 'fast-1', pinned: false, inheritsFrom: 'global', source: 'workspace', path: '/w/.agents/reviewer.md', base: 'research', layer: 'proj' },
+      ],
+    }));
+    await waitFor(() => labelsOf(tree).includes('Open agent reviewer'));
+    await pressLabel(tree, 'Open agent reviewer');
+    await waitFor(() => textsOf(tree).includes('definition'));
+    expect(textsOf(tree)).toEqual(expect.arrayContaining(['workspace \u00b7 proj', 'research', '/w/.agents/reviewer.md']));
+
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('Open agent Orchestrator'));
+    await pressLabel(tree, 'Open agent Orchestrator');
+    await waitFor(() => textsOf(tree).includes('scope'));
+    // A role has no file, so a tier and a path would be an invention.
+    expect(textsOf(tree)).not.toContain('definition');
+    await settleAndUnmount(tree);
+  });
 });

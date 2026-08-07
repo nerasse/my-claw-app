@@ -28,6 +28,10 @@ import { prefs } from '../core/prefs';
 import {
   encodeApprovalResponse,
   encodeAgentsConfigGet,
+  encodeInstructionsGet,
+  encodeInstructionsGetNested,
+  encodeInstructionsList,
+  encodeInstructionsSet,
   encodeAgentsEffortSet,
   encodeAgentsModelClear,
   encodeAgentsModelSet,
@@ -63,6 +67,9 @@ import {
 } from '../core/protocol';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
 import { agentsStore, useAgentsConfig } from '../core/agents';
+import { instructionsStore, useInstructions } from '../core/instructions';
+import { InstructionsScreen } from './InstructionsScreen';
+import { InstructionEditorScreen } from './InstructionEditorScreen';
 import { skillUrl } from '../core/skills';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import type { OutgoingAttachment } from '../core/upload';
@@ -175,6 +182,8 @@ export function AppShell(): React.JSX.Element {
     | 'provider'
     | 'skills'
     | 'workspaces'
+    | 'instructions'
+    | 'instruction'
     | 'tools'
     | 'mcps'
     | 'other'
@@ -184,6 +193,9 @@ export function AppShell(): React.JSX.Element {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   /** The provider page shows this key's models, filtered from the shared catalog. */
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  /** Instructions is a top-level category, but the agent page links into it: back has to return
+   *  where the user came from rather than dropping them at the index. */
+  const [instructionsFrom, setInstructionsFrom] = useState<'index' | 'agent'>('index');
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
   const [agentModelPath, setAgentModelPath] = useState<string[]>([]);
@@ -235,6 +247,7 @@ export function AppShell(): React.JSX.Element {
   const catalog = useModelCatalog();
   const threadModel = useThreadModel(activeThread);
   const agentsState = useAgentsConfig();
+  const instructions = useInstructions();
   const agentsConfig = agentsState.config;
   const streaming = items.some(item => item.kind === 'text' && item.streaming);
 
@@ -394,6 +407,15 @@ export function AppShell(): React.JSX.Element {
         case 'agents.config.result':
           agentsStore.receive(frame);
           break;
+        case 'instructions.list.result':
+          instructionsStore.receive(frame);
+          break;
+        case 'instructions.file':
+          instructionsStore.receiveFile(frame);
+          break;
+        case 'instructions.saved':
+          instructionsStore.receiveSaved(frame);
+          break;
         case 'chat.command.result':
           chatStore.addCommandResult(
             frame.threadId,
@@ -431,6 +453,8 @@ export function AppShell(): React.JSX.Element {
               setSkillsError(frame.message);
             } else if (frame.scope === 'agents') {
               agentsStore.fail(frame.message);
+            } else if (frame.scope === 'instructions') {
+              instructionsStore.fail(frame.message);
             } else if (activeThreadRef.current) {
               chatStore.addAgentMessage(
                 activeThreadRef.current,
@@ -557,6 +581,15 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('index');
           return true;
         }
+        if (settingsPage === 'instruction') {
+          instructionsStore.closeEditor();
+          setSettingsPage('instructions');
+          return true;
+        }
+        if (settingsPage === 'instructions') {
+          setSettingsPage(instructionsFrom === 'agent' ? 'agent' : 'index');
+          return true;
+        }
         if (settingsPage === 'diagnostics' || settingsPage === 'workspaces') {
           setSettingsPage('general');
           return true;
@@ -595,6 +628,7 @@ export function AppShell(): React.JSX.Element {
     fileToDelete,
     filesOpen,
     imageViewer,
+    instructionsFrom,
     modelOpen,
     modelPath,
     selectThread,
@@ -677,6 +711,17 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     if (!settingsOpen || (settingsPage !== 'providers' && settingsPage !== 'provider')) return;
     connection.send(encodeModelList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
+  // Same guard as the agents page: a server without the instructions frames answers nothing,
+  // and the page must say so rather than spin. The list is re-asked on every visit because the
+  // agent edits AGENTS.md too, so a list from ten minutes ago can already be wrong.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'instructions') return;
+    instructionsStore.request();
+    connection.send(encodeInstructionsList()).catch(() => {});
+    const timer = setTimeout(() => instructionsStore.markUnsupported(), 4000);
+    return () => clearTimeout(timer);
   }, [settingsOpen, settingsPage]);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
@@ -899,6 +944,27 @@ export function AppShell(): React.JSX.Element {
         model => (model.provider ?? agentsConfig?.defaultProvider) === selectedProvider,
       )
     : [];
+  const openInstruction = (workspace: string, file: string): void => {
+    instructionsStore.openEditor(workspace, file);
+    setSettingsPage('instruction');
+    connection.send(encodeInstructionsGet(workspace, file)).catch(() => {});
+  };
+  const instructionsPage = (
+    <InstructionsScreen
+      entries={instructions.entries}
+      nested={instructions.nested}
+      status={instructions.status}
+      error={instructions.error}
+      backLabel={instructionsFrom === 'agent' ? 'Back to agent' : 'Back to settings'}
+      onBack={() => setSettingsPage(instructionsFrom === 'agent' ? 'agent' : 'index')}
+      onOpen={entry => openInstruction(entry.workspace, entry.file)}
+      onOpenNested={item => {
+        instructionsStore.openEditor(item.workspace, item.path);
+        setSettingsPage('instruction');
+        connection.send(encodeInstructionsGetNested(item.workspace, item.path)).catch(() => {});
+      }}
+    />
+  );
   // Both pages double as the fallback when a detail page has no subject yet (config not loaded,
   // or a key that no longer exists), so they are built once here.
   const agentsPage = (
@@ -946,7 +1012,12 @@ export function AppShell(): React.JSX.Element {
               <SettingsScreen
                 skillsCount={skills.length}
                 onBack={() => setSettingsOpen(false)}
-                onOpenCategory={setSettingsPage}
+                onOpenCategory={category => {
+                  // Reaching a category from the index resets where its back button leads: a
+                  // previous visit from the agent page must not keep sending it there.
+                  if (category === 'instructions') setInstructionsFrom('index');
+                  setSettingsPage(category);
+                }}
               />
             ) : settingsPage === 'general' ? (
               <GeneralSettingsScreen
@@ -971,6 +1042,36 @@ export function AppShell(): React.JSX.Element {
               />
             ) : settingsPage === 'agents' ? (
               agentsPage
+            ) : settingsPage === 'instructions' ? (
+              instructionsPage
+            ) : settingsPage === 'instruction' ? (
+              instructions.editor ? (
+                <InstructionEditorScreen
+                  editor={instructions.editor}
+                  maxBytes={instructions.maxBytes}
+                  onBack={() => {
+                    instructionsStore.closeEditor();
+                    setSettingsPage('instructions');
+                  }}
+                  onChange={draft => instructionsStore.edit(draft)}
+                  onSave={() => {
+                    const editor = instructions.editor;
+                    if (!editor) return;
+                    instructionsStore.markSaving();
+                    connection
+                      .send(encodeInstructionsSet(editor.workspace, editor.file, editor.draft, editor.sha))
+                      .catch(() => {});
+                  }}
+                  onReload={() => {
+                    const editor = instructions.editor;
+                    if (!editor) return;
+                    instructionsStore.openEditor(editor.workspace, editor.file);
+                    connection.send(encodeInstructionsGet(editor.workspace, editor.file)).catch(() => {});
+                  }}
+                />
+              ) : (
+                instructionsPage
+              )
             ) : settingsPage === 'providers' ? (
               providersPage
             ) : settingsPage === 'provider' ? (
@@ -998,6 +1099,10 @@ export function AppShell(): React.JSX.Element {
                     if (!selectedAgent) return;
                     setAgentModelPath([]);
                     setAgentModelFor(selectedAgent);
+                  }}
+                  onOpenInstructions={() => {
+                    setInstructionsFrom('agent');
+                    setSettingsPage('instructions');
                   }}
                 />
               ) : (

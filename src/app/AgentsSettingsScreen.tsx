@@ -20,6 +20,15 @@ function unavailableText(status: AgentsStatus, error: string | null): string {
 }
 
 /**
+ * Where a file-defined agent comes from, short enough to sit next to the name. A workspace agent
+ * shows its workspace, since that is what distinguishes two files carrying the same name.
+ */
+function tierBadge(agent: AgentInfo): string {
+  if (agent.layer) return agent.layer.toUpperCase();
+  return agent.source === 'built-in' ? 'BUILT-IN' : 'GLOBAL';
+}
+
+/**
  * The Agents category: the global defaults (model, effort) and one row per agent the server
  * declares, rendered from the frame so nothing is hardcoded on the device. Picking a default
  * opens the same model picker as the chat, pointed at the config file instead of a session.
@@ -144,6 +153,11 @@ export function AgentsSettingsScreen({
                     <View style={styles.linkMain}>
                       <View style={styles.linkTitleLine}>
                         <Text style={styles.linkTitle}>{agent.label}</Text>
+                        {/* The tier says which file wins for this agent, which is the first thing
+                            to know when two of them define the same name. */}
+                        {agent.source ? (
+                          <Text style={styles.badge}>{tierBadge(agent)}</Text>
+                        ) : null}
                         {!agent.pinned ? <Text style={styles.badge}>inherited</Text> : null}
                       </View>
                       <Text style={styles.hint} numberOfLines={1}>

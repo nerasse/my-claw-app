@@ -260,7 +260,18 @@ export interface ChatClearedFrame {
 }
 
 /** Which request was refused. The screen that asked is the one that shows it. */
-export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice' | 'model' | 'skills' | 'agents';
+export type ErrorScope =
+  | 'chat'
+  | 'files'
+  | 'session'
+  | 'diag'
+  | 'logs'
+  | 'voice'
+  | 'model'
+  | 'skills'
+  | 'agents'
+  | 'mcp'
+  | 'instructions';
 
 export interface ErrorFrame {
   type: 'error';
@@ -290,6 +301,16 @@ export interface AgentInfo {
   workspace?: string | null;
   contextCap?: number | null;
   maxIterations?: number | null;
+  /**
+   * Set only for file-defined agents. Absent marks one of the two reserved roles, which exist
+   * without a file and so have no tier or path to show.
+   */
+  source?: string;
+  path?: string;
+  /** The tool baseline the agent narrows from: "general" or "research". */
+  base?: string;
+  /** Workspace layer the file was found in. Distinct from `workspace`, which is where it runs. */
+  layer?: string;
 }
 
 /** A configured provider, for display only: never a secret, only whether its env key is set. */
@@ -320,6 +341,63 @@ export interface AgentsConfigResultFrame {
   agents: AgentInfo[];
 }
 
+/** Where the content of a prompt file comes from. See docs/instructions-page.md on the server. */
+export type InstructionOrigin = 'own' | 'inherited' | 'fallback';
+
+/**
+ * One prompt file in one workspace. There is never a "missing" entry: a workspace without the
+ * file inherits the default one's copy, and that is what the agent reads.
+ */
+export interface InstructionEntry {
+  workspace: string;
+  file: string;
+  origin: InstructionOrigin;
+  /** Workspace the content comes from, empty for `fallback`. */
+  from: string;
+  bytes: number;
+  /** sha of the content that applies; a save echoes it back to prove it is not stale. */
+  sha: string;
+}
+
+/** A nested AGENTS.md found under a workspace. Read-only: it reaches tool results, not the prompt. */
+export interface NestedInstruction {
+  workspace: string;
+  path: string;
+  bytes: number;
+}
+
+export interface InstructionsListResultFrame {
+  type: 'instructions.list.result';
+  entries: InstructionEntry[];
+  nested: NestedInstruction[];
+  /** The editable names, so the app never hardcodes the list the server enforces. */
+  files: string[];
+  maxBytes: number;
+}
+
+export interface InstructionsFileFrame {
+  type: 'instructions.file';
+  workspace: string;
+  file: string;
+  content: string;
+  origin: InstructionOrigin | 'nested';
+  from: string;
+  sha: string;
+  editable: boolean;
+}
+
+/** Answer to every instructions.set, refusals included. `conflict` is the one the editor must
+ *  handle on its own: the file changed on the server, so it has to reload before saving again. */
+export interface InstructionsSavedFrame {
+  type: 'instructions.saved';
+  workspace: string;
+  file: string;
+  ok: boolean;
+  sha: string;
+  conflict: boolean;
+  error?: string;
+}
+
 export type ServerFrame =
   | ChatMessageFrame
   | StreamStartFrame
@@ -343,6 +421,9 @@ export type ServerFrame =
   | TranscriptFrame
   | ApprovalRequestFrame
   | AgentsConfigResultFrame
+  | InstructionsListResultFrame
+  | InstructionsFileFrame
+  | InstructionsSavedFrame
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
@@ -366,6 +447,9 @@ const FRAME_TYPES = new Set([
   'workspaces.list.result',
   'model.result',
   'agents.config.result',
+  'instructions.list.result',
+  'instructions.file',
+  'instructions.saved',
   'chat.transcript',
   'approval.request',
   'error',
@@ -487,6 +571,35 @@ export function encodeModelEffortSet(threadId: string, level: string): string {
 
 export function encodeAgentsConfigGet(): string {
   return JSON.stringify({ type: 'agents.config.get' });
+}
+
+export function encodeInstructionsList(): string {
+  return JSON.stringify({ type: 'instructions.list' });
+}
+
+export function encodeInstructionsGet(workspace: string, file: string): string {
+  return JSON.stringify({ type: 'instructions.get', workspace, file });
+}
+
+export function encodeInstructionsGetNested(workspace: string, nested: string): string {
+  return JSON.stringify({ type: 'instructions.get', workspace, nested });
+}
+
+/**
+ * `sha` is the one the editor loaded. Omitting it means "create this override": the server
+ * refuses if the file already exists, the same way it refuses a stale sha.
+ */
+export function encodeInstructionsSet(
+  workspace: string,
+  file: string,
+  content: string,
+  sha: string | undefined,
+): string {
+  return JSON.stringify(
+    sha === undefined
+      ? { type: 'instructions.set', workspace, file, content }
+      : { type: 'instructions.set', workspace, file, content, sha },
+  );
 }
 
 export function encodeAgentsModelSet(agent: string, model: string): string {
