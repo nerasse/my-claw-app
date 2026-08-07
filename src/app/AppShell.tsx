@@ -43,6 +43,7 @@ import {
   encodeSessionList,
   encodeSessionRename,
   encodeSessionUnarchive,
+  encodeSkillsList,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
@@ -50,16 +51,20 @@ import {
   type LogsTailQuery,
   type SessionFileMeta,
   type SessionSummary,
+  type SkillEntry,
   type VoiceMode,
   type VoiceModeResultFrame,
 } from '../core/protocol';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
+import { skillUrl } from '../core/skills';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
+import { SkillsScreen } from './SkillsScreen';
+import { SkillViewer } from './SkillViewer';
 import { FilesScreen } from './FilesScreen';
 import { ImageViewer } from './ImageViewer';
 import { TextViewer } from './TextViewer';
@@ -86,6 +91,14 @@ export function AppShell(): React.JSX.Element {
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Which settings page is showing. A row of links with more pages to come. */
+  const [settingsPage, setSettingsPage] = useState<'general' | 'skills'>('general');
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [skillsError, setSkillsError] = useState<string | null>(null);
+  const [skillViewer, setSkillViewer] = useState<{
+    url: string;
+    skill: SkillEntry;
+  } | null>(null);
   const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -262,6 +275,10 @@ export function AppShell(): React.JSX.Element {
         case 'model.list.result':
           modelStore.replaceCatalog(frame);
           break;
+        case 'skills.list.result':
+          setSkills(frame.skills);
+          setSkillsError(null);
+          break;
         case 'model.result':
           modelStore.replaceThread(frame);
           break;
@@ -297,6 +314,9 @@ export function AppShell(): React.JSX.Element {
               // A stale picker answered by a server that dropped the model: close the sheet,
               // the next model.list will carry the truth.
               setModelOpen(false);
+            } else if (frame.scope === 'skills') {
+              // An old server has no skill catalog: the skills page must not spin forever.
+              setSkillsError(frame.message);
             } else if (activeThreadRef.current) {
               chatStore.addAgentMessage(
                 activeThreadRef.current,
@@ -378,7 +398,16 @@ export function AppShell(): React.JSX.Element {
         setDrawerOpen(false);
         return true;
       }
+      if (skillViewer) {
+        setSkillViewer(null);
+        return true;
+      }
       if (settingsOpen) {
+        // Innermost page first: the back key walks the settings stack, not the whole app.
+        if (settingsPage === 'skills') {
+          setSettingsPage('general');
+          return true;
+        }
         setSettingsOpen(false);
         return true;
       }
@@ -418,6 +447,8 @@ export function AppShell(): React.JSX.Element {
     modelOpen,
     selectThread,
     settingsOpen,
+    settingsPage,
+    skillViewer,
     textViewer,
     threadMenu,
     threadToRename,
@@ -468,6 +499,13 @@ export function AppShell(): React.JSX.Element {
     if (!settingsOpen) return;
     connection.send(encodeVoiceModeGet()).catch(() => {});
   }, [settingsOpen]);
+
+  // The skill catalog is asked for when its page opens: it is the only surface that shows it,
+  // and a stale list from another day would name skills that moved or disappeared.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'skills') return;
+    connection.send(encodeSkillsList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
     // No optimistic write: the server answers with the state it actually stored, including what
@@ -683,33 +721,49 @@ export function AppShell(): React.JSX.Element {
       >
         <View style={styles.container}>
           {settingsOpen ? (
-            <SettingsScreen
-              url={url}
-              onUrlChange={changeUrl}
-              voice={voice}
-              onVoiceModeChange={changeVoiceMode}
-              themeMode={themeControl.mode}
-              onThemeModeChange={themeControl.setMode}
-              status={status}
-              pending={pending}
-              deviceInfo={deviceInfo}
-              onConnect={() => connection.connect(url)}
-              onDisconnect={() => connection.disconnect()}
-              onClearOutbox={() => {
-                connection.clearOutbox();
-                setPending(0);
-              }}
-              onBack={() => setSettingsOpen(false)}
-              onOpenDiagnostics={() => {
-                setSettingsOpen(false);
-                openDiagnostics();
-              }}
-              modelLabel={currentModelLabel}
-              onOpenModel={() => {
-                setSettingsOpen(false);
-                setModelOpen(true);
-              }}
-            />
+            settingsPage === 'skills' ? (
+              <SkillsScreen
+                skills={skills}
+                error={skillsError ?? undefined}
+                onBack={() => setSettingsPage('general')}
+                onOpenSkill={skill => {
+                  if (!deviceInfo) return;
+                  setSkillViewer({
+                    url: skillUrl(mediaBase, deviceInfo, skill.source, skill.name),
+                    skill,
+                  });
+                }}
+              />
+            ) : (
+              <SettingsScreen
+                url={url}
+                onUrlChange={changeUrl}
+                voice={voice}
+                onVoiceModeChange={changeVoiceMode}
+                themeMode={themeControl.mode}
+                onThemeModeChange={themeControl.setMode}
+                status={status}
+                pending={pending}
+                deviceInfo={deviceInfo}
+                onConnect={() => connection.connect(url)}
+                onDisconnect={() => connection.disconnect()}
+                onClearOutbox={() => {
+                  connection.clearOutbox();
+                  setPending(0);
+                }}
+                onBack={() => setSettingsOpen(false)}
+                onOpenDiagnostics={() => {
+                  setSettingsOpen(false);
+                  openDiagnostics();
+                }}
+                onOpenSkills={() => setSettingsPage('skills')}
+                modelLabel={currentModelLabel}
+                onOpenModel={() => {
+                  setSettingsOpen(false);
+                  setModelOpen(true);
+                }}
+              />
+            )
           ) : diagOpen ? (
             <DiagnosticsScreen
               snapshot={diagSnapshot}
@@ -818,6 +872,14 @@ export function AppShell(): React.JSX.Element {
           url={textViewer.url}
           filename={textViewer.filename}
           onClose={() => setTextViewer(null)}
+        />
+      ) : null}
+
+      {skillViewer ? (
+        <SkillViewer
+          url={skillViewer.url}
+          skill={skillViewer.skill}
+          onClose={() => setSkillViewer(null)}
         />
       ) : null}
 

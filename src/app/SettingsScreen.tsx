@@ -53,6 +53,7 @@ export function SettingsScreen({
   onClearOutbox,
   onBack,
   onOpenDiagnostics,
+  onOpenSkills,
   voice,
   onVoiceModeChange,
   modelLabel,
@@ -70,6 +71,7 @@ export function SettingsScreen({
   onClearOutbox: () => void;
   onBack: () => void;
   onOpenDiagnostics: () => void;
+  onOpenSkills: () => void;
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
   onVoiceModeChange: (mode: VoiceMode) => void;
@@ -134,6 +136,23 @@ export function SettingsScreen({
               <View style={styles.linkMain}>
                 <Text style={styles.linkTitle}>{modelLabel ?? '…'}</Text>
                 <Text style={styles.hint}>the model this conversation runs on</Text>
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>skills</Text>
+          <View style={styles.card}>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenSkills}
+              accessibilityRole="button"
+              accessibilityLabel="Open skills">
+              <View style={styles.linkMain}>
+                <Text style={styles.linkTitle}>Skills</Text>
+                <Text style={styles.hint}>built-in, custom and workspace skills</Text>
               </View>
               <Text style={styles.linkGlyph}>›</Text>
             </Pressable>

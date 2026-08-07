@@ -200,6 +200,20 @@ export interface ModelListResultFrame {
   defaultModel: string;
 }
 
+/** One skill of the server catalog. `path` is display-only: where to edit it on the server. */
+export interface SkillEntry {
+  name: string;
+  description: string;
+  version?: string;
+  source: 'built-in' | 'custom' | 'workspace';
+  path: string;
+}
+
+export interface SkillsListResultFrame {
+  type: 'skills.list.result';
+  skills: SkillEntry[];
+}
+
 /**
  * Answer to model.get / model.set / model.effort.set: the state the server actually stored,
  * never an optimistic echo of what the picker hoped for.
@@ -229,7 +243,7 @@ export interface ChatClearedFrame {
 }
 
 /** Which request was refused. The screen that asked is the one that shows it. */
-export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice' | 'model';
+export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice' | 'model' | 'skills';
 
 export interface ErrorFrame {
   type: 'error';
@@ -252,6 +266,7 @@ export type ServerFrame =
   | LogsTailResultFrame
   | VoiceModeResultFrame
   | ModelListResultFrame
+  | SkillsListResultFrame
   | ModelResultFrame
   | CommandResultFrame
   | ChatClearedFrame
@@ -276,6 +291,7 @@ const FRAME_TYPES = new Set([
   'logs.tail.result',
   'voice.mode.result',
   'model.list.result',
+  'skills.list.result',
   'model.result',
   'chat.transcript',
   'approval.request',
@@ -374,6 +390,10 @@ export function encodeApprovalResponse(id: string, accepted: boolean): string {
 
 export function encodeModelList(): string {
   return JSON.stringify({ type: 'model.list' });
+}
+
+export function encodeSkillsList(): string {
+  return JSON.stringify({ type: 'skills.list' });
 }
 
 export function encodeModelGet(threadId: string): string {
