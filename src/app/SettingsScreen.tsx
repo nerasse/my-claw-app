@@ -54,6 +54,7 @@ export function SettingsScreen({
   onBack,
   onOpenDiagnostics,
   onOpenSkills,
+  onOpenWorkspaces,
   voice,
   onVoiceModeChange,
   modelLabel,
@@ -72,6 +73,7 @@ export function SettingsScreen({
   onBack: () => void;
   onOpenDiagnostics: () => void;
   onOpenSkills: () => void;
+  onOpenWorkspaces: () => void;
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
   onVoiceModeChange: (mode: VoiceMode) => void;
@@ -153,6 +155,23 @@ export function SettingsScreen({
               <View style={styles.linkMain}>
                 <Text style={styles.linkTitle}>Skills</Text>
                 <Text style={styles.hint}>built-in, custom and workspace skills</Text>
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>workspaces</Text>
+          <View style={styles.card}>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenWorkspaces}
+              accessibilityRole="button"
+              accessibilityLabel="Open workspaces">
+              <View style={styles.linkMain}>
+                <Text style={styles.linkTitle}>Workspaces</Text>
+                <Text style={styles.hint}>directories with their own prompts and skills</Text>
               </View>
               <Text style={styles.linkGlyph}>›</Text>
             </Pressable>

@@ -207,11 +207,26 @@ export interface SkillEntry {
   version?: string;
   source: 'built-in' | 'custom' | 'workspace';
   path: string;
+  /** Key of the workspace this skill belongs to, when it is a secondary workspace's. */
+  workspace?: string;
 }
 
 export interface SkillsListResultFrame {
   type: 'skills.list.result';
   skills: SkillEntry[];
+}
+
+/** One workspace of the server, for display only: where its files and skills live. */
+export interface WorkspaceEntry {
+  key: string;
+  path: string;
+  /** The configured default workspace. */
+  default: boolean;
+}
+
+export interface WorkspacesListResultFrame {
+  type: 'workspaces.list.result';
+  workspaces: WorkspaceEntry[];
 }
 
 /**
@@ -267,6 +282,7 @@ export type ServerFrame =
   | VoiceModeResultFrame
   | ModelListResultFrame
   | SkillsListResultFrame
+  | WorkspacesListResultFrame
   | ModelResultFrame
   | CommandResultFrame
   | ChatClearedFrame
@@ -292,6 +308,7 @@ const FRAME_TYPES = new Set([
   'voice.mode.result',
   'model.list.result',
   'skills.list.result',
+  'workspaces.list.result',
   'model.result',
   'chat.transcript',
   'approval.request',
@@ -394,6 +411,10 @@ export function encodeModelList(): string {
 
 export function encodeSkillsList(): string {
   return JSON.stringify({ type: 'skills.list' });
+}
+
+export function encodeWorkspacesList(): string {
+  return JSON.stringify({ type: 'workspaces.list' });
 }
 
 export function encodeModelGet(threadId: string): string {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
-import type { SkillEntry } from '../core/protocol';
+import type { SkillEntry, WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 
@@ -11,27 +11,49 @@ const SOURCE_SECTIONS: Array<{ source: SkillEntry['source']; label: string; hint
   { source: 'workspace', label: 'Workspace', hint: '<workspace>/skills' },
 ];
 
-/** The skills of one tier, in catalog order, with a leading section header row. */
-type Row = { kind: 'header'; source: SkillEntry['source'] } | { kind: 'skill'; skill: SkillEntry };
+/** The skills of one tier in catalog order, with section headers. Workspace skills are
+ *  sub-grouped per workspace so the phone tells two projects apart without guessing. */
+type Row =
+  | { kind: 'header'; source: SkillEntry['source'] }
+  | { kind: 'wsHeader'; workspace: string; path: string }
+  | { kind: 'skill'; skill: SkillEntry };
 
-function buildRows(skills: SkillEntry[]): Row[] {
+function pathOf(workspaces: WorkspaceEntry[], key: string): string {
+  const found = workspaces.find(entry => entry.key === key);
+  return found?.path ?? '';
+}
+
+function buildRows(skills: SkillEntry[], workspaces: WorkspaceEntry[]): Row[] {
   const rows: Row[] = [];
   for (const section of SOURCE_SECTIONS) {
     const ofSource = skills.filter(skill => skill.source === section.source);
     if (ofSource.length === 0) continue;
     rows.push({ kind: 'header', source: section.source });
-    for (const skill of ofSource) rows.push({ kind: 'skill', skill });
+    if (section.source === 'workspace') {
+      const keys = [...new Set(ofSource.map(skill => skill.workspace ?? 'default'))];
+      for (const key of keys) {
+        rows.push({ kind: 'wsHeader', workspace: key, path: pathOf(workspaces, key) });
+        for (const skill of ofSource.filter(s => (s.workspace ?? 'default') === key)) {
+          rows.push({ kind: 'skill', skill });
+        }
+      }
+    } else {
+      for (const skill of ofSource) rows.push({ kind: 'skill', skill });
+    }
   }
   return rows;
 }
 
 export function SkillsScreen({
   skills,
+  workspaces,
   error,
   onBack,
   onOpenSkill,
 }: {
   skills: SkillEntry[];
+  /** Key -> path of every workspace, so the page can name where each skill lives. */
+  workspaces: WorkspaceEntry[];
   /** Server refused the request: distinct from an empty catalog, which is itself a fact. */
   error?: string;
   onBack: () => void;
@@ -39,7 +61,7 @@ export function SkillsScreen({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { scrollProps, indicator } = useScrollIndicator();
-  const rows = buildRows(skills);
+  const rows = buildRows(skills, workspaces);
 
   return (
     <View style={styles.screen}>
@@ -72,7 +94,11 @@ export function SkillsScreen({
           style={styles.list}
           data={rows}
           keyExtractor={row =>
-            row.kind === 'header' ? `h:${row.source}` : `s:${row.skill.source}:${row.skill.name}`
+            row.kind === 'header'
+              ? `h:${row.source}`
+              : row.kind === 'wsHeader'
+                ? `w:${row.workspace}`
+                : `s:${row.skill.source}:${row.skill.workspace ?? 'default'}:${row.skill.name}`
           }
           contentContainerStyle={rows.length === 0 ? styles.emptyContent : styles.listContent}
           ListEmptyComponent={
@@ -85,6 +111,13 @@ export function SkillsScreen({
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>{sectionLabel(item.source)}</Text>
                 <Text style={styles.sectionHint}>{sectionHint(item.source)}</Text>
+              </View>
+            ) : item.kind === 'wsHeader' ? (
+              <View style={styles.wsSection}>
+                <Text style={styles.wsLabel}>{item.workspace}</Text>
+                <Text style={styles.sectionHint} numberOfLines={1}>
+                  {item.path}
+                </Text>
               </View>
             ) : (
               <Pressable
@@ -166,6 +199,17 @@ const createStyles = (palette: Palette) => ({
     marginBottom: space.xs,
     paddingHorizontal: space.md,
     gap: 1,
+  },
+  wsSection: {
+    marginTop: space.md,
+    marginBottom: 2,
+    paddingHorizontal: space.md,
+    gap: 1,
+  },
+  wsLabel: {
+    fontSize: font.small,
+    color: palette.accent,
+    fontWeight: '600' as const,
   },
   sectionLabel: {
     fontSize: font.micro,

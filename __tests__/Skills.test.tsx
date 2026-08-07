@@ -105,17 +105,77 @@ test('the skills page lists the three tiers with their locations', async () => {
   await openSettings(tree);
   await openSkills(tree);
 
-  // The page asks for the catalog when it opens, not at boot.
-  const asked = JSON.parse(String(bridge.sendMessage.mock.calls.at(-1)![0])) as { type: string };
-  expect(asked.type).toBe('skills.list');
+  // The page asks for the catalog and the workspace list when it opens, not at boot.
+  const asked = bridge.sendMessage.mock.calls.map(
+    ([frame]) => JSON.parse(String(frame)) as { type: string },
+  );
+  expect(asked.map(f => f.type)).toEqual(expect.arrayContaining(['skills.list', 'workspaces.list']));
 
   await emit({ type: 'skills.list.result', skills: SKILLS });
+  await emit({
+    type: 'workspaces.list.result',
+    workspaces: [
+      { key: 'default', path: '/home/neras/.my-claw/workspace', default: true },
+      { key: 'sofa', path: '/home/neras/dev/SOFA', default: false },
+    ],
+  });
   await waitFor(() => textsOf(tree).includes('forgejo'));
   expect(textsOf(tree)).toEqual(
     expect.arrayContaining(['Built-in', 'Custom', 'Workspace', 'voice', 'forgejo', 'mailcow']),
   );
   expect(textsOf(tree)).toContain('synced');
   expect(labelsOf(tree)).toContain('Open skill voice');
+
+  await settleAndUnmount(tree);
+});
+
+test('workspace skills are grouped under their workspace key with its path', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
+  await openSettings(tree);
+  await openSkills(tree);
+  await emit({
+    type: 'skills.list.result',
+    skills: [
+      { name: 'mailcow', description: 'Mail server chores', source: 'workspace', workspace: 'sofa', path: '/w/skills/mailcow/SKILL.md' },
+    ],
+  });
+  await emit({
+    type: 'workspaces.list.result',
+    workspaces: [{ key: 'sofa', path: '/home/neras/dev/SOFA', default: false }],
+  });
+
+  await waitFor(() => textsOf(tree).includes('mailcow'));
+  expect(textsOf(tree)).toContain('sofa');
+  expect(textsOf(tree)).toContain('/home/neras/dev/SOFA');
+
+  await settleAndUnmount(tree);
+});
+
+test('the workspaces page lists every workspace and its path', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
+  await openSettings(tree);
+  await waitFor(() => labelsOf(tree).includes('Open workspaces'));
+  await pressLabel(tree, 'Open workspaces');
+  await emit({
+    type: 'workspaces.list.result',
+    workspaces: [
+      { key: 'default', path: '/home/neras/.my-claw/workspace', default: true },
+      { key: 'sofa', path: '/home/neras/dev/SOFA', default: false },
+    ],
+  });
+
+  await waitFor(() => textsOf(tree).includes('/home/neras/dev/SOFA'));
+  expect(textsOf(tree)).toEqual(
+    expect.arrayContaining(['default', 'sofa', '/home/neras/.my-claw/workspace']),
+  );
+
+  // Back returns to the general page, not out of settings.
+  await ReactTestRenderer.act(async () => {
+    hardwareBack();
+  });
+  await waitFor(() => labelsOf(tree).includes('Open skills'));
 
   await settleAndUnmount(tree);
 });

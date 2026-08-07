@@ -44,6 +44,7 @@ import {
   encodeSessionRename,
   encodeSessionUnarchive,
   encodeSkillsList,
+  encodeWorkspacesList,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
@@ -54,6 +55,7 @@ import {
   type SkillEntry,
   type VoiceMode,
   type VoiceModeResultFrame,
+  type WorkspaceEntry,
 } from '../core/protocol';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
 import { skillUrl } from '../core/skills';
@@ -65,6 +67,7 @@ import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { SkillViewer } from './SkillViewer';
+import { WorkspacesScreen } from './WorkspacesScreen';
 import { FilesScreen } from './FilesScreen';
 import { ImageViewer } from './ImageViewer';
 import { TextViewer } from './TextViewer';
@@ -92,8 +95,9 @@ export function AppShell(): React.JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing. A row of links with more pages to come. */
-  const [settingsPage, setSettingsPage] = useState<'general' | 'skills'>('general');
+  const [settingsPage, setSettingsPage] = useState<'general' | 'skills' | 'workspaces'>('general');
   const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
   const [skillsError, setSkillsError] = useState<string | null>(null);
   const [skillViewer, setSkillViewer] = useState<{
     url: string;
@@ -279,6 +283,9 @@ export function AppShell(): React.JSX.Element {
           setSkills(frame.skills);
           setSkillsError(null);
           break;
+        case 'workspaces.list.result':
+          setWorkspaces(frame.workspaces);
+          break;
         case 'model.result':
           modelStore.replaceThread(frame);
           break;
@@ -404,7 +411,7 @@ export function AppShell(): React.JSX.Element {
       }
       if (settingsOpen) {
         // Innermost page first: the back key walks the settings stack, not the whole app.
-        if (settingsPage === 'skills') {
+        if (settingsPage === 'skills' || settingsPage === 'workspaces') {
           setSettingsPage('general');
           return true;
         }
@@ -500,11 +507,13 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeVoiceModeGet()).catch(() => {});
   }, [settingsOpen]);
 
-  // The skill catalog is asked for when its page opens: it is the only surface that shows it,
-  // and a stale list from another day would name skills that moved or disappeared.
+  // The skill catalog and the workspace list are asked for when their pages open: they are the
+  // only surfaces that show them, and a stale list from another day would name skills or paths
+  // that moved or disappeared.
   useEffect(() => {
     if (!settingsOpen || settingsPage !== 'skills') return;
     connection.send(encodeSkillsList()).catch(() => {});
+    connection.send(encodeWorkspacesList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
@@ -724,6 +733,7 @@ export function AppShell(): React.JSX.Element {
             settingsPage === 'skills' ? (
               <SkillsScreen
                 skills={skills}
+                workspaces={workspaces}
                 error={skillsError ?? undefined}
                 onBack={() => setSettingsPage('general')}
                 onOpenSkill={skill => {
@@ -733,6 +743,11 @@ export function AppShell(): React.JSX.Element {
                     skill,
                   });
                 }}
+              />
+            ) : settingsPage === 'workspaces' ? (
+              <WorkspacesScreen
+                workspaces={workspaces}
+                onBack={() => setSettingsPage('general')}
               />
             ) : (
               <SettingsScreen
@@ -757,6 +772,7 @@ export function AppShell(): React.JSX.Element {
                   openDiagnostics();
                 }}
                 onOpenSkills={() => setSettingsPage('skills')}
+                onOpenWorkspaces={() => setSettingsPage('workspaces')}
                 modelLabel={currentModelLabel}
                 onOpenModel={() => {
                   setSettingsOpen(false);
