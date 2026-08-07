@@ -167,7 +167,7 @@ export function Drawer({
           {/* Always shown: an entry that appears only once it has content is an entry nobody
               finds, and the screen says plainly when there is nothing in it. */}
           <Pressable
-            style={styles.footerRow}
+            style={[styles.footerRow, styles.archivedRow]}
             onPress={onOpenArchives}
             accessibilityRole="button"
             accessibilityLabel="Open archived conversations">
@@ -259,6 +259,11 @@ const createStyles = (palette: Palette) => ({
     gap: space.md,
   },
   footerRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  archivedRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.border,
+    paddingBottom: space.md,
+  },
   footerMain: { flex: 1, gap: 1 },
   footerTitle: { fontSize: font.body, color: palette.text },
   footerMeta: { fontSize: font.small, color: palette.textMuted },
