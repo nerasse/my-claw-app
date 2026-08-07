@@ -7,13 +7,19 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'tools' | 'skills' | 'mcps' | 'other';
+  key: 'general' | 'agents' | 'tools' | 'skills' | 'mcps' | 'other';
 }> = [
   {
     title: 'General',
-    hint: 'appearance, model, voice, server',
+    hint: 'appearance, voice, server',
     accessibilityLabel: 'Open general',
     key: 'general',
+  },
+  {
+    title: 'Agents',
+    hint: 'default model, effort, per-agent settings',
+    accessibilityLabel: 'Open agents',
+    key: 'agents',
   },
   {
     title: 'Tools',
@@ -52,7 +58,7 @@ export function SettingsScreen({
 }: {
   skillsCount: number;
   onBack: () => void;
-  onOpenCategory: (category: 'general' | 'tools' | 'skills' | 'mcps' | 'other') => void;
+  onOpenCategory: (category: 'general' | 'agents' | 'tools' | 'skills' | 'mcps' | 'other') => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();

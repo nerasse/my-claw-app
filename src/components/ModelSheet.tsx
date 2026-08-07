@@ -14,32 +14,49 @@ function splitGroup(model: ModelOption): string[] {
   return (model.group ?? '').split('/').map(part => part.trim()).filter(Boolean);
 }
 
+export interface PickerEffort {
+  level: string;
+  levels: string[];
+  onChange: (level: string) => void;
+}
+
+/** The option shown above the list at the root (e.g. "Use default"), checked when it applies. */
+export interface PickerRootOption {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
 /**
- * The model picker of the app, built from the same list as /model on the other channels.
- * Groups fold into submenus; the current model carries a checkmark; effort chips only appear
- * for a model that actually accepts them. Nothing is applied locally: the server answers
- * with the state it stored, and the sheet renders that.
+ * The model picker, presentation-only: models, current id, the group stack and the two actions
+ * (pick, root option) come in as props. The chat sheet and the agent settings page both render
+ * it, so groups, the checkmark and the back-walk behaviour cannot diverge between them.
  */
-export function ModelSheet({
-  threadId,
+export function ModelPickerSheet({
+  title,
+  models,
+  activeId,
   path,
   onPathChange,
+  onSelect,
   onClose,
+  rootOption,
+  effort,
 }: {
-  threadId: string | null;
+  /** Label used in the sheet preview when the user is not inside a group. */
+  title: string;
+  models: ModelOption[];
+  activeId: string;
   /** Group being browsed, owned by the shell so the hardware back can walk out of it. */
   path: string[];
   onPathChange: (path: string[]) => void;
+  onSelect: (modelId: string) => void;
   onClose: () => void;
+  rootOption?: PickerRootOption | null;
+  effort?: PickerEffort | null;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const catalog = useModelCatalog();
-  const thread = useThreadModel(threadId);
-
-  const models = catalog.models;
-  const activeModel = thread?.model ?? catalog.defaultModel;
-  const defaultLabel = models.find(model => model.id === catalog.defaultModel)?.label ?? catalog.defaultModel;
-  const activeLabel = models.find(model => model.id === activeModel)?.label ?? activeModel;
+  const activeLabel = models.find(model => model.id === activeId)?.label ?? activeId;
 
   const list = useMemo(() => {
     const prefix = path.join('/');
@@ -66,16 +83,11 @@ export function ModelSheet({
 
   const options: SheetOption[] = [];
 
-  // The default is the one option that exists even when no session does: picking it clears
-  // the override, which is how a conversation is handed back to the server config.
-  if (path.length === 0) {
+  if (path.length === 0 && rootOption) {
     options.push({
-      label: `Use default (${defaultLabel})`,
-      selected: activeModel === catalog.defaultModel || thread === null,
-      onPress: () => {
-        if (!threadId) return;
-        connection.send(encodeModelSet(threadId, catalog.defaultModel)).catch(() => {});
-      },
+      label: rootOption.label,
+      selected: rootOption.selected,
+      onPress: rootOption.onPress,
     });
   }
 
@@ -90,11 +102,8 @@ export function ModelSheet({
     options.push({
       label: model.label,
       hint: model.id === model.label ? undefined : model.id,
-      selected: model.id === activeModel,
-      onPress: () => {
-        if (!threadId) return;
-        connection.send(encodeModelSet(threadId, model.id)).catch(() => {});
-      },
+      selected: model.id === activeId,
+      onPress: () => onSelect(model.id),
     });
   }
 
@@ -102,19 +111,16 @@ export function ModelSheet({
     options.push({ label: '< Back', onPress: () => onPathChange(path.slice(0, -1)) });
   }
 
-  const effort = thread?.effort;
-  const effortActive = effort?.supported === true && (effort.levels?.length ?? 0) > 0;
-
   return (
     <ActionSheet
       preview={
         path.length > 0
           ? `${path[path.length - 1]} — current: ${activeLabel}`
-          : `Model — current: ${activeLabel}`
+          : `${title} — current: ${activeLabel}`
       }
       options={options}
       onClose={onClose}>
-      {effortActive && threadId ? (
+      {effort && effort.levels.length > 0 ? (
         <View style={styles.effortRow}>
           {effort.levels.map(level => {
             const selected = level === effort.level;
@@ -122,7 +128,7 @@ export function ModelSheet({
               <Pressable
                 key={level}
                 style={[styles.effortChip, selected && styles.effortChipActive]}
-                onPress={() => connection.send(encodeModelEffortSet(threadId, level)).catch(() => {})}
+                onPress={() => effort.onChange(level)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
                 accessibilityLabel={`Reasoning effort ${level}`}>
@@ -133,6 +139,75 @@ export function ModelSheet({
         </View>
       ) : null}
     </ActionSheet>
+  );
+}
+
+/**
+ * The model picker of the chat, built from the same list as /model on the other channels.
+ * Groups fold into submenus; the current model carries a checkmark; effort chips only appear
+ * for a model that actually accepts them. Nothing is applied locally: the server answers
+ * with the state it stored, and the sheet renders that.
+ */
+export function ModelSheet({
+  threadId,
+  path,
+  onPathChange,
+  onClose,
+}: {
+  threadId: string | null;
+  /** Group being browsed, owned by the shell so the hardware back can walk out of it. */
+  path: string[];
+  onPathChange: (path: string[]) => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const catalog = useModelCatalog();
+  const thread = useThreadModel(threadId);
+
+  const models = catalog.models;
+  const activeModel = thread?.model ?? catalog.defaultModel;
+  const defaultLabel = models.find(model => model.id === catalog.defaultModel)?.label ?? catalog.defaultModel;
+
+  const effort = thread?.effort;
+  const effortActive = effort?.supported === true && (effort.levels?.length ?? 0) > 0;
+
+  return (
+    <ModelPickerSheet
+      title="Model"
+      models={models}
+      activeId={activeModel}
+      path={path}
+      onPathChange={onPathChange}
+      onClose={onClose}
+      onSelect={modelId => {
+        if (!threadId) return;
+        connection.send(encodeModelSet(threadId, modelId)).catch(() => {});
+      }}
+      // The default is the one option that exists even when no session does: picking it clears
+      // the override, which is how a conversation is handed back to the server config.
+      rootOption={
+        path.length === 0
+          ? {
+              label: `Use default (${defaultLabel})`,
+              selected: activeModel === catalog.defaultModel || thread === null,
+              onPress: () => {
+                if (!threadId) return;
+                connection.send(encodeModelSet(threadId, catalog.defaultModel)).catch(() => {});
+              },
+            }
+          : null
+      }
+      effort={
+        effortActive && threadId
+          ? {
+              level: effort.level,
+              levels: effort.levels,
+              onChange: level => {
+                connection.send(encodeModelEffortSet(threadId, level)).catch(() => {});
+              },
+            }
+          : null
+      }
+    />
   );
 }
 

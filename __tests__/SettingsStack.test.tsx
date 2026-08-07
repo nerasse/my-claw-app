@@ -75,6 +75,27 @@ async function openSettings(tree: Tree): Promise<void> {
   await pressLabel(tree, 'Open settings');
 }
 
+/** The server answers the Agents page with at least the defaults row usable. */
+function agentsConfig(): Record<string, unknown> {
+  return {
+    type: 'agents.config.result',
+    defaultModel: 'fast-1',
+    defaultEffort: '',
+    effortLevels: ['low', 'medium', 'high'],
+    providers: [],
+    agents: [
+      {
+        key: 'orchestrator',
+        label: 'Orchestrator',
+        description: 'The agent you talk to',
+        model: 'fast-1',
+        pinned: false,
+        inheritsFrom: 'global',
+      },
+    ],
+  };
+}
+
 async function boot(): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
@@ -91,24 +112,25 @@ beforeEach(() => {
 test('the model picker opened from settings comes back to settings, not to the exit', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Open agents');
+  await emit(agentsConfig());
   await emit({
     type: 'model.list.result',
     models: [{ id: 'fast-1', label: 'Fast' }],
     defaultModel: 'fast-1',
   });
 
-  await waitFor(() => labelsOf(tree).includes('Choose model'));
-  await pressLabel(tree, 'Choose model');
+  await waitFor(() => labelsOf(tree).includes('Default model'));
+  await pressLabel(tree, 'Default model');
   await waitFor(() => labelsOf(tree).includes('Fast'));
 
   // Back closes the sheet and puts the settings page back on screen: the screen that opened
   // it is the screen it must return to.
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Choose model'));
+  await waitFor(() => labelsOf(tree).includes('Default model'));
   expect(labelsOf(tree)).not.toContain('Fast');
 
-  // Then back walks General to the index, and the index to the conversation, never the launcher.
+  // Then back walks Agents to the index, and the index to the conversation, never the launcher.
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open general'));
   expect(await hardwareBack()).toBe(true);
@@ -121,7 +143,8 @@ test('the model picker opened from settings comes back to settings, not to the e
 test('back walks out of a model group before it closes the picker', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Open agents');
+  await emit(agentsConfig());
   await emit({
     type: 'model.list.result',
     models: [
@@ -131,8 +154,8 @@ test('back walks out of a model group before it closes the picker', async () => 
     defaultModel: 'fast-1',
   });
 
-  await waitFor(() => labelsOf(tree).includes('Choose model'));
-  await pressLabel(tree, 'Choose model');
+  await waitFor(() => labelsOf(tree).includes('Default model'));
+  await pressLabel(tree, 'Default model');
   await waitFor(() => labelsOf(tree).includes('Claude ›'));
   await pressLabel(tree, 'Claude ›');
   await waitFor(() => labelsOf(tree).includes('Opus'));
@@ -144,7 +167,7 @@ test('back walks out of a model group before it closes the picker', async () => 
 
   // Only then does back close the sheet, back onto settings.
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Choose model'));
+  await waitFor(() => labelsOf(tree).includes('Default model'));
 
   await settleAndUnmount(tree);
 });
@@ -152,7 +175,8 @@ test('back walks out of a model group before it closes the picker', async () => 
 test('the picker reopens at its root after a group was browsed', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Open agents');
+  await emit(agentsConfig());
   await emit({
     type: 'model.list.result',
     models: [
@@ -162,15 +186,15 @@ test('the picker reopens at its root after a group was browsed', async () => {
     defaultModel: 'fast-1',
   });
 
-  await waitFor(() => labelsOf(tree).includes('Choose model'));
-  await pressLabel(tree, 'Choose model');
+  await waitFor(() => labelsOf(tree).includes('Default model'));
+  await pressLabel(tree, 'Default model');
   await waitFor(() => labelsOf(tree).includes('Claude ›'));
   await pressLabel(tree, 'Claude ›');
   await waitFor(() => labelsOf(tree).includes('Opus'));
   await pressLabel(tree, 'Close menu');
 
-  await waitFor(() => labelsOf(tree).includes('Choose model'));
-  await pressLabel(tree, 'Choose model');
+  await waitFor(() => labelsOf(tree).includes('Default model'));
+  await pressLabel(tree, 'Default model');
   await waitFor(() => labelsOf(tree).includes('Claude ›'));
 
   await settleAndUnmount(tree);

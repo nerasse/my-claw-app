@@ -1,4 +1,8 @@
 import {
+  encodeAgentsConfigGet,
+  encodeAgentsEffortSet,
+  encodeAgentsModelClear,
+  encodeAgentsModelSet,
   encodeChatSend,
   encodeCommandsList,
   encodeFileDelete,
@@ -24,6 +28,7 @@ describe('parseServerFrame', () => {
       { type: 'commands.list.result', commands: [{ name: 'status', description: 'diag' }] },
       { type: 'files.list.result', threadId: 't', files: [{ id: 'f1', filename: 'a.pdf', type: 'file', mimeType: 'application/pdf', sizeBytes: 4, ts: 'iso' }], totalBytes: 4 },
       { type: 'approval.request', id: 'a', threadId: 't', toolName: 'bash', args: {}, expiresAt: 1 },
+      { type: 'agents.config.result', defaultModel: 'm', defaultEffort: '', effortLevels: [], providers: [], agents: [] },
       { type: 'error', message: 'x' },
     ];
     for (const frame of frames) {
@@ -83,5 +88,9 @@ describe('encoders', () => {
     expect(JSON.parse(encodeSessionHistory('t'))).toMatchObject({ limit: 50 });
     expect(JSON.parse(encodeSessionArchive('t'))).toEqual({ type: 'session.archive', threadId: 't' });
     expect(JSON.parse(encodeSessionDelete('t'))).toEqual({ type: 'session.delete', threadId: 't' });
+    expect(JSON.parse(encodeAgentsConfigGet())).toEqual({ type: 'agents.config.get' });
+    expect(JSON.parse(encodeAgentsModelSet('cron', 'opus'))).toEqual({ type: 'agents.model.set', agent: 'cron', model: 'opus' });
+    expect(JSON.parse(encodeAgentsModelClear('cron'))).toEqual({ type: 'agents.model.clear', agent: 'cron' });
+    expect(JSON.parse(encodeAgentsEffortSet('high'))).toEqual({ type: 'agents.effort.set', level: 'high' });
   });
 });

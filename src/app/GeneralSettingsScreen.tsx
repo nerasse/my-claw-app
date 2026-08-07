@@ -57,8 +57,6 @@ export function GeneralSettingsScreen({
   onOpenWorkspaces,
   voice,
   onVoiceModeChange,
-  modelLabel,
-  onOpenModel,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
@@ -76,9 +74,6 @@ export function GeneralSettingsScreen({
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
   onVoiceModeChange: (mode: VoiceMode) => void;
-  /** Label of the model on the current thread, null while unknown. */
-  modelLabel: string | null;
-  onOpenModel: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // the server field is never focused on the way in.
@@ -127,24 +122,6 @@ export function GeneralSettingsScreen({
             </Text>
           </View>
         </View>
-
-        <View style={styles.category}>
-          <Text style={styles.section}>model</Text>
-          <View style={styles.card}>
-            <Pressable
-              style={[styles.row, styles.link]}
-              onPress={onOpenModel}
-              accessibilityRole="button"
-              accessibilityLabel="Choose model">
-              <View style={styles.linkMain}>
-                <Text style={styles.linkTitle}>{modelLabel ?? '…'}</Text>
-                <Text style={styles.hint}>the model this conversation runs on</Text>
-              </View>
-              <Text style={styles.linkGlyph}>›</Text>
-            </Pressable>
-          </View>
-        </View>
-
 
         <View style={styles.category}>
           <Text style={styles.section}>workspaces</Text>

@@ -184,6 +184,8 @@ export interface ModelOption {
   label: string;
   /** "/"-separated menu path; the picker renders groups the way the server's /model does. */
   group?: string;
+  /** Provider key this model belongs to, so the app can group models by provider. */
+  provider?: string;
 }
 
 export interface EffortState {
@@ -258,12 +260,64 @@ export interface ChatClearedFrame {
 }
 
 /** Which request was refused. The screen that asked is the one that shows it. */
-export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice' | 'model' | 'skills';
+export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice' | 'model' | 'skills' | 'agents';
 
 export interface ErrorFrame {
   type: 'error';
   message: string;
   scope?: ErrorScope;
+}
+
+/**
+ * One agent, as it resolves right now: its own pin when it has one, otherwise what it inherits.
+ * `skills`/`mcp`/`workspace`/`contextCap`/`maxIterations` are the raw config entry; null means
+ * absent (and inherited), [] is a deliberate "nothing".
+ */
+export interface AgentInfo {
+  /** The config key, e.g. "orchestrator". The app renders whatever the server sends. */
+  key: string;
+  label: string;
+  description: string;
+  /** The model that runs for this agent: own pin or inherited. */
+  model: string;
+  provider?: string;
+  /** There is an entry in `agents.<key>.llm`. */
+  pinned: boolean;
+  /** Where the effective default comes from: "global", "orchestrator", or the key itself. */
+  inheritsFrom: string;
+  skills?: string[] | null;
+  mcp?: string[] | null;
+  workspace?: string | null;
+  contextCap?: number | null;
+  maxIterations?: number | null;
+}
+
+/** A configured provider, for display only: never a secret, only whether its env key is set. */
+export interface ProviderInfo {
+  key: string;
+  type: string;
+  group?: string;
+  discover: boolean;
+  /** Models currently known to belong to this provider. */
+  models: number;
+  keyEnv?: string;
+  keyPresent: boolean;
+}
+
+/**
+ * Answer to agents.config.get and to every agents.* mutation: the state the server stored. The
+ * payload is one whole snapshot, so the app never stitches fields from separate answers.
+ */
+export interface AgentsConfigResultFrame {
+  type: 'agents.config.result';
+  defaultModel: string;
+  defaultProvider?: string;
+  /** "" when no global effort is set. */
+  defaultEffort: string;
+  /** Levels on offer for the global effort, in canonical order. */
+  effortLevels: string[];
+  providers: ProviderInfo[];
+  agents: AgentInfo[];
 }
 
 export type ServerFrame =
@@ -288,6 +342,7 @@ export type ServerFrame =
   | ChatClearedFrame
   | TranscriptFrame
   | ApprovalRequestFrame
+  | AgentsConfigResultFrame
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
@@ -310,6 +365,7 @@ const FRAME_TYPES = new Set([
   'skills.list.result',
   'workspaces.list.result',
   'model.result',
+  'agents.config.result',
   'chat.transcript',
   'approval.request',
   'error',
@@ -427,6 +483,23 @@ export function encodeModelSet(threadId: string, model: string): string {
 
 export function encodeModelEffortSet(threadId: string, level: string): string {
   return JSON.stringify({ type: 'model.effort.set', threadId, level });
+}
+
+export function encodeAgentsConfigGet(): string {
+  return JSON.stringify({ type: 'agents.config.get' });
+}
+
+export function encodeAgentsModelSet(agent: string, model: string): string {
+  return JSON.stringify({ type: 'agents.model.set', agent, model });
+}
+
+export function encodeAgentsModelClear(agent: string): string {
+  return JSON.stringify({ type: 'agents.model.clear', agent });
+}
+
+/** Empty level removes the global effort so model/provider defaults apply again. */
+export function encodeAgentsEffortSet(level: string): string {
+  return JSON.stringify({ type: 'agents.effort.set', level });
 }
 
 export function encodeChatStop(threadId: string): string {

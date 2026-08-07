@@ -27,6 +27,10 @@ import { commandStore } from '../core/commands';
 import { prefs } from '../core/prefs';
 import {
   encodeApprovalResponse,
+  encodeAgentsConfigGet,
+  encodeAgentsEffortSet,
+  encodeAgentsModelClear,
+  encodeAgentsModelSet,
   encodeChatSend,
   encodeChatStop,
   encodeCommandsList,
@@ -48,6 +52,7 @@ import {
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
   type ApprovalRequestFrame,
+  type AgentsConfigResultFrame,
   type LogsTailQuery,
   type SessionFileMeta,
   type SessionSummary,
@@ -57,6 +62,7 @@ import {
   type WorkspaceEntry,
 } from '../core/protocol';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
+import { agentsStore, useAgentsConfig } from '../core/agents';
 import { skillUrl } from '../core/skills';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import type { OutgoingAttachment } from '../core/upload';
@@ -65,6 +71,8 @@ import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
+import { AgentsSettingsScreen } from './AgentsSettingsScreen';
+import { AgentDetailScreen } from './AgentDetailScreen';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { SkillViewer } from './SkillViewer';
@@ -77,11 +85,70 @@ import { ArchivesScreen } from './ArchivesScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetOption } from '../components/ActionSheet';
-import { ModelSheet } from '../components/ModelSheet';
+import { ModelSheet, ModelPickerSheet } from '../components/ModelSheet';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 
 const HISTORY_LIMIT = 50;
+
+/**
+ * The model picker pointed at the server config instead of a session: "global" edits
+ * llm.defaultModel, an agent key edits agents.<key>.llm. The root option hands an agent back
+ * to its inheritance (clear), which is the "Use default" of the chat picker in reverse.
+ */
+function AgentModelPickerSheet({
+  target,
+  config,
+  path,
+  onPathChange,
+  onClose,
+}: {
+  /** "global" or an agent key. */
+  target: string;
+  config: AgentsConfigResultFrame | null;
+  path: string[];
+  onPathChange: (path: string[]) => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const catalog = useModelCatalog();
+  const agent = target === 'global' ? null : config?.agents.find(entry => entry.key === target) ?? null;
+  const activeId = agent ? agent.model : config?.defaultModel ?? '';
+  const defaultLabel =
+    catalog.models.find(model => model.id === config?.defaultModel)?.label ??
+    config?.defaultModel ??
+    'global default';
+  const orchestratorLabel =
+    config?.agents.find(entry => entry.key === 'orchestrator')?.model ?? defaultLabel;
+
+  return (
+    <ModelPickerSheet
+      title={agent ? `Model for ${agent.label}` : 'Default model'}
+      models={catalog.models}
+      activeId={activeId}
+      path={path}
+      onPathChange={onPathChange}
+      onClose={onClose}
+      onSelect={modelId => {
+        connection.send(encodeAgentsModelSet(target, modelId)).catch(() => {});
+      }}
+      rootOption={
+        agent
+          ? {
+              label:
+                agent.inheritsFrom === 'orchestrator'
+                  ? `Inherit orchestrator (${orchestratorLabel})`
+                  : `Follow global default (${defaultLabel})`,
+              selected: !agent.pinned,
+              onPress: () => {
+                connection.send(encodeAgentsModelClear(agent.key)).catch(() => {});
+              },
+            }
+          : null
+      }
+      effort={null}
+    />
+  );
+}
 
 export function AppShell(): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -100,6 +167,8 @@ export function AppShell(): React.JSX.Element {
   const [settingsPage, setSettingsPage] = useState<
     | 'index'
     | 'general'
+    | 'agents'
+    | 'agent'
     | 'skills'
     | 'workspaces'
     | 'tools'
@@ -107,6 +176,12 @@ export function AppShell(): React.JSX.Element {
     | 'other'
     | 'diagnostics'
   >('index');
+  /** The agent detail page shows this key, taken from the last agents.config.result. */
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
+  const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
+  const [agentModelPath, setAgentModelPath] = useState<string[]>([]);
+  const [agentsEffortOpen, setAgentsEffortOpen] = useState(false);
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
   const [skillsError, setSkillsError] = useState<string | null>(null);
@@ -153,6 +228,8 @@ export function AppShell(): React.JSX.Element {
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
   const catalog = useModelCatalog();
   const threadModel = useThreadModel(activeThread);
+  const agentsState = useAgentsConfig();
+  const agentsConfig = agentsState.config;
   const streaming = items.some(item => item.kind === 'text' && item.streaming);
 
   // Frame handlers run outside React: they need the thread on screen right now, not the one
@@ -308,6 +385,9 @@ export function AppShell(): React.JSX.Element {
         case 'model.result':
           modelStore.replaceThread(frame);
           break;
+        case 'agents.config.result':
+          agentsStore.receive(frame);
+          break;
         case 'chat.command.result':
           chatStore.addCommandResult(
             frame.threadId,
@@ -343,6 +423,8 @@ export function AppShell(): React.JSX.Element {
             } else if (frame.scope === 'skills') {
               // An old server has no skill catalog: the skills page must not spin forever.
               setSkillsError(frame.message);
+            } else if (frame.scope === 'agents') {
+              agentsStore.fail(frame.message);
             } else if (activeThreadRef.current) {
               chatStore.addAgentMessage(
                 activeThreadRef.current,
@@ -417,6 +499,18 @@ export function AppShell(): React.JSX.Element {
         setModelOpen(false);
         return true;
       }
+      if (agentsEffortOpen) {
+        setAgentsEffortOpen(false);
+        return true;
+      }
+      if (agentModelFor) {
+        if (agentModelPath.length > 0) {
+          setAgentModelPath(current => current.slice(0, -1));
+          return true;
+        }
+        setAgentModelFor(null);
+        return true;
+      }
       if (commandMenuOpen) {
         setCommandMenuOpen(false);
         return true;
@@ -439,6 +533,14 @@ export function AppShell(): React.JSX.Element {
         // so a habit press from a subpage can never fall through to the launcher.
         if (settingsPage === 'index') {
           setSettingsOpen(false);
+          return true;
+        }
+        if (settingsPage === 'agent') {
+          setSettingsPage('agents');
+          return true;
+        }
+        if (settingsPage === 'agents') {
+          setSettingsPage('index');
           return true;
         }
         if (settingsPage === 'diagnostics' || settingsPage === 'workspaces') {
@@ -469,6 +571,9 @@ export function AppShell(): React.JSX.Element {
     return () => sub.remove();
   }, [
     approvals.length,
+    agentModelFor,
+    agentModelPath,
+    agentsEffortOpen,
     archivesOpen,
     bubbleMenu,
     commandMenuOpen,
@@ -540,6 +645,17 @@ export function AppShell(): React.JSX.Element {
     if (!settingsOpen || settingsPage !== 'skills') return;
     connection.send(encodeSkillsList()).catch(() => {});
     connection.send(encodeWorkspacesList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
+  // The agent defaults are asked for when the Agents page opens. A server that predates the
+  // frames answers nothing at all (unknown frames are dropped silently), so the store flips to
+  // "unsupported" after a beat instead of spinning forever.
+  useEffect(() => {
+    if (!settingsOpen || (settingsPage !== 'agents' && settingsPage !== 'agent')) return;
+    agentsStore.request();
+    connection.send(encodeAgentsConfigGet()).catch(() => {});
+    const timer = setTimeout(() => agentsStore.markUnsupported(), 4000);
+    return () => clearTimeout(timer);
   }, [settingsOpen, settingsPage]);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
@@ -752,6 +868,7 @@ export function AppShell(): React.JSX.Element {
       ? `offline · ${pending} message(s) will send on reconnect`
       : 'offline · message will send on reconnect'
     : undefined;
+  const selectedAgentInfo = agentsConfig?.agents.find(agent => agent.key === selectedAgent) ?? null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -791,9 +908,51 @@ export function AppShell(): React.JSX.Element {
                 onBack={() => setSettingsPage('index')}
                 onOpenDiagnostics={openDiagnostics}
                 onOpenWorkspaces={() => setSettingsPage('workspaces')}
-                modelLabel={currentModelLabel}
-                onOpenModel={openModel}
               />
+            ) : settingsPage === 'agents' ? (
+              <AgentsSettingsScreen
+                config={agentsConfig}
+                status={agentsState.status}
+                error={agentsState.error}
+                onBack={() => setSettingsPage('index')}
+                onOpenDefaultModel={() => {
+                  setAgentModelPath([]);
+                  setAgentModelFor('global');
+                }}
+                onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
+                onOpenAgent={key => {
+                  setSelectedAgent(key);
+                  setSettingsPage('agent');
+                }}
+              />
+            ) : settingsPage === 'agent' ? (
+              selectedAgentInfo ? (
+                <AgentDetailScreen
+                  agent={selectedAgentInfo}
+                  onBack={() => setSettingsPage('agents')}
+                  onOpenModel={() => {
+                    if (!selectedAgent) return;
+                    setAgentModelPath([]);
+                    setAgentModelFor(selectedAgent);
+                  }}
+                />
+              ) : (
+                <AgentsSettingsScreen
+                  config={agentsConfig}
+                  status={agentsState.status}
+                  error={agentsState.error}
+                  onBack={() => setSettingsPage('index')}
+                  onOpenDefaultModel={() => {
+                    setAgentModelPath([]);
+                    setAgentModelFor('global');
+                  }}
+                  onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
+                  onOpenAgent={key => {
+                    setSelectedAgent(key);
+                    setSettingsPage('agent');
+                  }}
+                />
+              )
             ) : settingsPage === 'skills' ? (
               <SkillsScreen
                 skills={skills}
@@ -969,6 +1128,39 @@ export function AppShell(): React.JSX.Element {
           path={modelPath}
           onPathChange={setModelPath}
           onClose={() => setModelOpen(false)}
+        />
+      ) : null}
+
+      {agentModelFor ? (
+        <AgentModelPickerSheet
+          target={agentModelFor}
+          config={agentsConfig}
+          onPathChange={setAgentModelPath}
+          path={agentModelPath}
+          onClose={() => setAgentModelFor(null)}
+        />
+      ) : null}
+
+      {agentsEffortOpen && agentsConfig ? (
+        <ActionSheet
+          preview={`Default effort — current: ${agentsConfig.defaultEffort || 'not set'}`}
+          options={[
+            ...agentsConfig.effortLevels.map(level => ({
+              label: level,
+              selected: level === agentsConfig.defaultEffort,
+              onPress: () => {
+                connection.send(encodeAgentsEffortSet(level)).catch(() => {});
+              },
+            })),
+            {
+              label: 'Not set',
+              selected: agentsConfig.defaultEffort === '',
+              onPress: () => {
+                connection.send(encodeAgentsEffortSet('')).catch(() => {});
+              },
+            },
+          ]}
+          onClose={() => setAgentsEffortOpen(false)}
         />
       ) : null}
 
