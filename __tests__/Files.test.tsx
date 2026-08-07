@@ -49,11 +49,16 @@ async function openFiles(tree: Tree, files: SessionFileMeta[]): Promise<void> {
 
 function pressText(tree: Tree, text: string): Promise<void> {
   return ReactTestRenderer.act(async () => {
-    const target = tree.root.find(
-      node =>
-        node.props.children === text && typeof node.props.onPress === 'function',
+    // The sheet options are Text nodes inside a Pressable; find the label and press its owner.
+    const label = tree.root.find(
+      node => node.props.children === text && String(node.type) === 'Text',
     );
-    target.props.onPress();
+    let node = label.parent;
+    while (node && typeof node.props.onPress !== 'function') {
+      node = node.parent;
+    }
+    if (!node) throw new Error(`no pressable for ${text}`);
+    node.props.onPress();
   });
 }
 

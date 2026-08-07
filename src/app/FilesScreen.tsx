@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FlatList, Image, Modal, Pressable, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { deviceBridge } from '../core/nativeBridge';
 import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
@@ -201,7 +201,10 @@ function FileViewer({
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    // Absolute layer, like the image and text viewers: a React-Native Modal lives outside the
+    // gesture root on Android and drops touches meant for it.
+    <View style={StyleSheet.absoluteFill}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close file view" />
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
@@ -240,7 +243,7 @@ function FileViewer({
           </View>
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }
 

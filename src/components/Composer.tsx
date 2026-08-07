@@ -33,6 +33,8 @@ export function Composer({
   uploadError,
   onRecorded,
   onRecordingError,
+  streaming,
+  onStop,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -45,8 +47,12 @@ export function Composer({
   autoFocus?: boolean;
   /** Server-provided catalog for the slash-menu. */
   commands?: CommandDef[];
-  /** The user picked a command from the slash-menu. */
-  onCommandEntered?: (command: string) => void;
+  /**
+   * The user picked a command from the slash-menu. Returns true when the app handled it
+   * natively (the menu's text must then stay out of the field); false keeps the old text
+   * insertion for commands that still want arguments typed by hand.
+   */
+  onCommandEntered?: (command: string) => boolean;
   /** Files staged for the next message. */
   attachments?: PendingAttachment[];
   /** Opens the attachment picker sheet. */
@@ -57,6 +63,9 @@ export function Composer({
   /** A finished voice note. Absent means the composer offers no microphone at all. */
   onRecorded?: (recording: VoiceRecording) => void;
   onRecordingError?: (message: string) => void;
+  /** A run is streaming into the conversation: the send arrow becomes Stop. */
+  streaming?: boolean;
+  onStop?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -86,8 +95,14 @@ export function Composer({
 
   const insert = useCallback(
     (name: string) => {
+      // A command the app handles natively (model picker, new thread) must not be typed as
+      // text: it would be sent to the model as a question instead of opening the menu. The
+      // "/name" draft goes away with it, since there is nothing left to finish typing.
+      if (onCommandEntered?.(name) === true) {
+        onChange('');
+        return;
+      }
       onChange(`/${name} `);
-      onCommandEntered?.(name);
     },
     [onChange, onCommandEntered],
   );
@@ -198,7 +213,7 @@ export function Composer({
             onActiveChange={setRecording}
           />
         ) : null}
-        {sendVisible && !recording ? (
+        {sendVisible && !recording && !streaming ? (
           <Pressable
             style={[styles.send, hero && styles.sendHero, nothingToSend && styles.sendIdle]}
             onPress={onSend}
@@ -209,6 +224,15 @@ export function Composer({
               size={hero ? 22 : 20}
               color={nothingToSend ? palette.textFaint : palette.accentText}
             />
+          </Pressable>
+        ) : null}
+        {streaming && !recording ? (
+          <Pressable
+            style={[styles.send, hero && styles.sendHero, styles.sendStop]}
+            onPress={onStop}
+            accessibilityRole="button"
+            accessibilityLabel="Stop generating">
+            <Text style={styles.stopGlyph}>■</Text>
           </Pressable>
         ) : null}
       </View>
@@ -298,4 +322,6 @@ const createStyles = (palette: Palette) => ({
   },
   sendHero: { width: 50, height: 50 },
   sendIdle: { backgroundColor: palette.surfaceAlt, borderWidth: 1, borderColor: palette.border },
+  sendStop: { backgroundColor: palette.danger },
+  stopGlyph: { fontSize: 16, lineHeight: 18, color: palette.accentText },
 });

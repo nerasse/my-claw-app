@@ -33,7 +33,14 @@ export function Bubble({
   const agent = item.role === 'agent';
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
-      <View style={[styles.bubble, agent ? styles.bubbleAgent : styles.bubbleUser]}>
+      <View
+        style={[
+          styles.bubble,
+          agent ? styles.bubbleAgent : styles.bubbleUser,
+          // Command output is drawn apart: the agent did not write it, so it must not wear
+          // the agent's clothes.
+          item.command && styles.bubbleCommand,
+        ]}>
         {item.attachments.map(att => (
           <AttachmentView
             key={att.id}
@@ -48,10 +55,10 @@ export function Bubble({
           />
         ))}
         {item.text ? (
-          agent ? (
+          agent && !item.command ? (
             <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
           ) : (
-            <Text selectable style={[styles.text, styles.textUser]}>
+            <Text selectable style={[styles.text, item.command ? styles.textCommand : styles.textUser]}>
               {item.text}
               {item.streaming ? '▍' : ''}
             </Text>
@@ -94,8 +101,16 @@ const createStyles = (palette: Palette) => ({
   },
   bubbleUser: { backgroundColor: palette.accent, borderBottomRightRadius: radius.sm },
   bubbleAgent: { backgroundColor: palette.surfaceAlt, borderBottomLeftRadius: radius.sm },
+  bubbleCommand: {
+    backgroundColor: palette.accentSoft,
+    borderWidth: 1,
+    borderColor: palette.border,
+    maxWidth: '95%' as const,
+  },
   text: { fontSize: font.body, lineHeight: lineHeightFor(font.body), color: palette.text },
   textUser: { color: palette.accentText },
+  // Command output keeps its line breaks: /status is a table, not prose.
+  textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: font.small },
   error: { fontSize: font.small, color: palette.danger, marginTop: 2 },
   time: { fontSize: font.micro, alignSelf: 'flex-end' as const, marginTop: 1 },
   timeAgent: { color: palette.textFaint },

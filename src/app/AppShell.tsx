@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,13 +26,18 @@ import { sessionStore, useSessions } from '../core/sessions';
 import { commandStore } from '../core/commands';
 import { prefs } from '../core/prefs';
 import {
+  encodeApprovalResponse,
   encodeChatSend,
+  encodeChatStop,
   encodeCommandsList,
   encodeDiagSnapshot,
   encodeFileDelete,
   encodeFilesList,
   encodeLogsTail,
+  encodeModelGet,
+  encodeModelList,
   encodeSessionArchive,
+  encodeSessionClear,
   encodeSessionDelete,
   encodeSessionHistory,
   encodeSessionList,
@@ -39,12 +45,14 @@ import {
   encodeVoiceModeGet,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
+  type ApprovalRequestFrame,
   type LogsTailQuery,
   type SessionFileMeta,
   type SessionSummary,
   type VoiceMode,
   type VoiceModeResultFrame,
 } from '../core/protocol';
+import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
@@ -57,8 +65,9 @@ import { TextViewer } from './TextViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
-import { BubbleMenu, type BubbleMenuAction } from '../components/BubbleMenu';
-import { space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { ActionSheet, type SheetOption } from '../components/ActionSheet';
+import { ModelSheet } from '../components/ModelSheet';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 
 const HISTORY_LIMIT = 50;
@@ -98,11 +107,20 @@ export function AppShell(): React.JSX.Element {
   const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // A run can ask several times in a row; each answer clears one, in order.
+  const [approvals, setApprovals] = useState<ApprovalRequestFrame[]>([]);
 
   const items = useChatItems(activeThread);
   const sessions = useSessions();
   const unread = useUnreadThreads();
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
+  const catalog = useModelCatalog();
+  const threadModel = useThreadModel(activeThread);
+  const streaming = items.some(item => item.kind === 'text' && item.streaming);
 
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.
@@ -121,6 +139,9 @@ export function AppShell(): React.JSX.Element {
       setDrawerOpen(false);
       setSettingsOpen(false);
       connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
+      // The model of a conversation is per session: refresh it when the thread changes, so
+      // the picker never shows the previous conversation's choice.
+      connection.send(encodeModelGet(threadId));
     },
     [selectThread],
   );
@@ -147,6 +168,7 @@ export function AppShell(): React.JSX.Element {
       if (next.state === 'connected') {
         connection.send(encodeSessionList());
         connection.send(encodeCommandsList());
+        connection.send(encodeModelList());
       }
     });
     const offPending = connection.onPending(setPending);
@@ -227,26 +249,53 @@ export function AppShell(): React.JSX.Element {
         case 'voice.mode.result':
           setVoice(frame);
           break;
+        case 'model.list.result':
+          modelStore.replaceCatalog(frame);
+          break;
+        case 'model.result':
+          modelStore.replaceThread(frame);
+          break;
+        case 'chat.command.result':
+          chatStore.addCommandResult(
+            frame.threadId,
+            `cmd-${frame.replyToId ?? 'x'}-${Date.now()}`,
+            frame.text,
+            frame.replyToId,
+          );
+          noteActivity(frame.threadId, frame.text);
+          break;
+        case 'chat.cleared':
+          chatStore.clearThread(frame.threadId);
+          break;
         case 'chat.transcript':
           chatStore.setTranscripts(frame.threadId, frame.replyToId, frame.items);
           break;
-        case 'error':
-          // Where the user asked is where the refusal belongs: a rejected delete used to be
-          // invisible under the files screen, and then loud in a conversation it has nothing
-          // to do with.
-          if (frame.scope === 'files') {
-            setFilesError(frame.message);
-          } else if (activeThreadRef.current) {
-            chatStore.addAgentMessage(
-              activeThreadRef.current,
-              `err-${Date.now()}`,
-              `error: ${frame.message}`,
-              [],
-            );
-          }
-          break;
         case 'approval.request':
+          setApprovals(current =>
+            current.some(entry => entry.id === frame.id)
+              ? current
+              : [...current, frame],
+          );
           break;
+          case 'error':
+            // Where the user asked is where the refusal belongs: a rejected delete used to be
+            // invisible under the files screen, and then loud in a conversation it has nothing
+            // to do with.
+            if (frame.scope === 'files') {
+              setFilesError(frame.message);
+            } else if (frame.scope === 'model') {
+              // A stale picker answered by a server that dropped the model: close the sheet,
+              // the next model.list will carry the truth.
+              setModelOpen(false);
+            } else if (activeThreadRef.current) {
+              chatStore.addAgentMessage(
+                activeThreadRef.current,
+                `err-${Date.now()}`,
+                `error: ${frame.message}`,
+                [],
+              );
+            }
+            break;
       }
     });
 
@@ -289,6 +338,14 @@ export function AppShell(): React.JSX.Element {
         setTextViewer(null);
         return true;
       }
+      if (approvals.length > 0) {
+        setApprovals(current => current.slice(1));
+        return true;
+      }
+      if (confirmClear) {
+        setConfirmClear(false);
+        return true;
+      }
       if (fileToDelete) {
         setFileToDelete(null);
         return true;
@@ -296,6 +353,14 @@ export function AppShell(): React.JSX.Element {
       // Innermost first: the rename sheet sits over the menu that opened it.
       if (threadToRename) {
         setThreadToRename(null);
+        return true;
+      }
+      if (modelOpen) {
+        setModelOpen(false);
+        return true;
+      }
+      if (commandMenuOpen) {
+        setCommandMenuOpen(false);
         return true;
       }
       if (bubbleMenu || threadMenu) {
@@ -323,12 +388,16 @@ export function AppShell(): React.JSX.Element {
     });
     return () => sub.remove();
   }, [
+    approvals.length,
     bubbleMenu,
+    commandMenuOpen,
+    confirmClear,
     drawerOpen,
     diagOpen,
     fileToDelete,
     filesOpen,
     imageViewer,
+    modelOpen,
     settingsOpen,
     textViewer,
     threadMenu,
@@ -410,19 +479,27 @@ export function AppShell(): React.JSX.Element {
     prefs.set('serverUrl', next);
   }, []);
 
+  /**
+   * Send a destructive session frame and mirror it locally. `keepInList` is what separates
+   * Archive from Delete: archiving starts a fresh conversation on the same thread (the server
+   * keeps it), deleting removes it outright.
+   */
   const dropThread = useCallback(
-    (threadId: string, frame: string) => {
+    (threadId: string, frame: string, keepInList = false) => {
       connection.send(frame);
       chatStore.clearThread(threadId);
-      sessionStore.remove(threadId);
-      if (activeThreadRef.current === threadId) selectThread(null);
+      modelStore.dropThread(threadId);
+      if (!keepInList) {
+        sessionStore.remove(threadId);
+        if (activeThreadRef.current === threadId) selectThread(null);
+      }
       setThreadMenu(null);
       connection.send(encodeSessionList());
     },
     [selectThread],
   );
 
-  const threadActions: BubbleMenuAction[] = threadMenu
+  const threadActions: SheetOption[] = threadMenu
     ? [
         {
           label: 'Rename',
@@ -435,10 +512,12 @@ export function AppShell(): React.JSX.Element {
         },
         {
           label: 'Archive',
+          hint: 'start this conversation over, keeping its name',
           onPress: () =>
             dropThread(
               threadMenu.threadId,
               encodeSessionArchive(threadMenu.threadId),
+              true,
             ),
         },
         {
@@ -453,6 +532,138 @@ export function AppShell(): React.JSX.Element {
       ]
     : [];
 
+  /**
+   * A slash command picked from the composer's menu. Commands the app can do natively are
+   * handled here (returning true keeps their text out of the field); everything else stays a
+   * typed command that the server executes.
+   */
+  const dispatchCommand = useCallback(
+    (command: string): boolean => {
+      const threadId = activeThreadRef.current;
+      switch (command) {
+        case 'model':
+          setCommandMenuOpen(false);
+          setModelOpen(true);
+          return true;
+        case 'new':
+          setCommandMenuOpen(false);
+          newThread();
+          return true;
+        case 'stop':
+          if (threadId) connection.send(encodeChatStop(threadId));
+          return true;
+        case 'clear':
+          setCommandMenuOpen(false);
+          setConfirmClear(true);
+          return true;
+        case 'archive':
+          if (threadId) {
+            dropThread(threadId, encodeSessionArchive(threadId), true);
+            return true;
+          }
+          return false;
+        case 'rename':
+          if (threadId) {
+            const summary = sessions.find(session => session.threadId === threadId);
+            setThreadToRename(summary ?? { threadId, title: '', messageCount: 0, createdAt: '', lastActiveAt: '' });
+            return true;
+          }
+          return false;
+        default:
+          return false;
+      }
+    },
+    [dropThread, newThread, sessions],
+  );
+
+  const currentModelLabel = threadModel
+    ? catalog.models.find(model => model.id === threadModel.model)?.label ?? threadModel.model
+    : null;
+
+  const commandMenuOptions: SheetOption[] = [
+    {
+      label: 'Model…',
+      hint: currentModelLabel ? `current: ${currentModelLabel}` : undefined,
+      onPress: () => {
+        setCommandMenuOpen(false);
+        setModelOpen(true);
+      },
+    },
+    ...(streaming
+      ? [
+          {
+            label: 'Stop',
+            onPress: () => {
+              const threadId = activeThreadRef.current;
+              if (threadId) connection.send(encodeChatStop(threadId));
+              setCommandMenuOpen(false);
+            },
+          } satisfies SheetOption,
+        ]
+      : []),
+    { label: 'New conversation', onPress: () => { setCommandMenuOpen(false); newThread(); } },
+    {
+      label: 'Clear history',
+      onPress: () => {
+        setCommandMenuOpen(false);
+        setConfirmClear(true);
+      },
+    },
+    ...(activeThread
+      ? [
+          {
+            label: 'Rename conversation…',
+            onPress: () => {
+              setThreadToRename({
+                threadId: activeThread,
+                title: sessionStore.titleOf(activeThread) ?? '',
+                messageCount: 0,
+                createdAt: '',
+                lastActiveAt: '',
+              });
+              setCommandMenuOpen(false);
+            },
+          } satisfies SheetOption,
+          {
+            label: 'Archive',
+            onPress: () => {
+              dropThread(activeThread, encodeSessionArchive(activeThread), true);
+              setCommandMenuOpen(false);
+            },
+          } satisfies SheetOption,
+          {
+            label: 'Delete conversation',
+            danger: true,
+            onPress: () => {
+              setConfirmDelete(activeThread);
+              setCommandMenuOpen(false);
+            },
+          } satisfies SheetOption,
+        ]
+      : []),
+    {
+      label: 'Files',
+      onPress: () => {
+        setCommandMenuOpen(false);
+        openFiles();
+      },
+    },
+    {
+      label: 'Settings',
+      onPress: () => {
+        setCommandMenuOpen(false);
+        setSettingsOpen(true);
+      },
+    },
+    {
+      label: 'Diagnostics',
+      onPress: () => {
+        setCommandMenuOpen(false);
+        openDiagnostics();
+      },
+    },
+  ];
+
   const title =
     (activeThread ? sessionStore.titleOf(activeThread) : null) ??
     'new conversation';
@@ -461,6 +672,8 @@ export function AppShell(): React.JSX.Element {
     offline ? status.state : 'connected',
     pending > 0 ? `${pending} pending` : null,
     items.length > 0 ? `${items.length} items` : null,
+    // The model that runs here: the one fact about a conversation worth seeing at a glance.
+    currentModelLabel ? `model: ${currentModelLabel}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -502,6 +715,11 @@ export function AppShell(): React.JSX.Element {
               onOpenDiagnostics={() => {
                 setSettingsOpen(false);
                 openDiagnostics();
+              }}
+              modelLabel={currentModelLabel}
+              onOpenModel={() => {
+                setSettingsOpen(false);
+                setModelOpen(true);
               }}
             />
           ) : diagOpen ? (
@@ -547,6 +765,12 @@ export function AppShell(): React.JSX.Element {
               onBubbleMenu={setBubbleMenu}
               onOpenImage={setImageViewer}
               onOpenText={setTextViewer}
+              onOpenMenu={() => setCommandMenuOpen(true)}
+              onCommandEntered={dispatchCommand}
+              streaming={streaming}
+              onStop={() => {
+                if (activeThread) connection.send(encodeChatStop(activeThread));
+              }}
             />
           )}
         </View>
@@ -586,9 +810,9 @@ export function AppShell(): React.JSX.Element {
       ) : null}
 
       {bubbleMenu ? (
-        <BubbleMenu
+        <ActionSheet
           preview={bubbleMenu.text}
-          actions={[
+          options={[
             {
               label: 'Copy text',
               onPress: () => {
@@ -602,11 +826,53 @@ export function AppShell(): React.JSX.Element {
       ) : null}
 
       {threadMenu ? (
-        <BubbleMenu
+        <ActionSheet
           preview={threadMenu.title}
-          actions={threadActions}
+          options={threadActions}
           onClose={() => setThreadMenu(null)}
         />
+      ) : null}
+
+      {commandMenuOpen ? (
+        <ActionSheet
+          preview={activeThread ? title : undefined}
+          options={commandMenuOptions}
+          onClose={() => setCommandMenuOpen(false)}
+        />
+      ) : null}
+
+      {modelOpen ? (
+        <ModelSheet
+          threadId={activeThread}
+          onClose={() => setModelOpen(false)}
+        />
+      ) : null}
+
+      {approvals.length > 0 ? (
+        <ActionSheet
+          preview={`${approvals[0]!.toolName} wants to run`}
+          options={[
+            {
+              label: 'Approve',
+              onPress: () => {
+                connection.send(encodeApprovalResponse(approvals[0]!.id, true));
+                setApprovals(current => current.slice(1));
+              },
+            },
+            {
+              label: 'Reject',
+              danger: true,
+              onPress: () => {
+                connection.send(encodeApprovalResponse(approvals[0]!.id, false));
+                setApprovals(current => current.slice(1));
+              },
+            },
+          ]}
+          onClose={() => setApprovals(current => current.slice(1))}>
+          <Text style={styles.approvalArgs} selectable>
+            {JSON.stringify(approvals[0]!.args, null, 2)}
+          </Text>
+        </ActionSheet>
       ) : null}
 
       {threadToRename ? (
@@ -625,10 +891,49 @@ export function AppShell(): React.JSX.Element {
         />
       ) : null}
 
+      {confirmClear ? (
+        <ActionSheet
+          preview="Clear this conversation's history? Its name and model stay; there is no undo."
+          options={[
+            {
+              label: 'Clear history',
+              danger: true,
+              onPress: () => {
+                setConfirmClear(false);
+                if (activeThread) {
+                  connection.send(encodeSessionClear(activeThread));
+                  chatStore.clearThread(activeThread);
+                }
+              },
+            },
+            { label: 'Cancel', onPress: () => setConfirmClear(false) },
+          ]}
+          onClose={() => setConfirmClear(false)}
+        />
+      ) : null}
+
+      {confirmDelete ? (
+        <ActionSheet
+          preview="Delete this conversation? The agent loses access to it too."
+          options={[
+            {
+              label: 'Delete',
+              danger: true,
+              onPress: () => {
+                dropThread(confirmDelete, encodeSessionDelete(confirmDelete));
+                setConfirmDelete(null);
+              },
+            },
+            { label: 'Cancel', onPress: () => setConfirmDelete(null) },
+          ]}
+          onClose={() => setConfirmDelete(null)}
+        />
+      ) : null}
+
       {fileToDelete ? (
-        <BubbleMenu
+        <ActionSheet
           preview={`Delete ${fileToDelete.filename}? The agent loses access to it too.`}
-          actions={[
+          options={[
             {
               label: 'Delete',
               danger: true,
@@ -657,5 +962,14 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingTop: space.sm,
     paddingBottom: space.lg,
+  },
+  approvalArgs: {
+    fontSize: font.small,
+    fontFamily: 'monospace' as const,
+    color: palette.textMuted,
+    backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.sm,
+    padding: space.sm,
+    maxHeight: 180,
   },
 });

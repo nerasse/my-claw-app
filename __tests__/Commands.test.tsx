@@ -1,0 +1,248 @@
+/**
+ * @format
+ */
+
+import ReactTestRenderer from 'react-test-renderer';
+import { DeviceEventEmitter } from 'react-native';
+import { chatStore } from '../src/core/chat';
+import { deviceBridge } from '../src/core/nativeBridge';
+import { commandStore } from '../src/core/commands';
+import { labelsOf, renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
+
+/** Every string anywhere in the tree, including array children (bubble text renders as arrays). */
+function allTexts(tree: Tree): string[] {
+  const out: string[] = [];
+  const walk = (node: ReactTestRenderer.ReactTestInstance): void => {
+    const collect = (value: unknown): void => {
+      if (typeof value === 'string') out.push(value);
+      else if (Array.isArray(value)) value.forEach(collect);
+    };
+    collect(node.props.children);
+    for (const child of node.children) {
+      if (child && typeof child === 'object' && 'props' in (child as object)) {
+        walk(child as ReactTestRenderer.ReactTestInstance);
+      }
+    }
+  };
+  walk(tree.root);
+  return out;
+}
+
+const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
+const THREAD = 't-cmd';
+
+const CATALOG = [
+  { name: 'status', description: 'Session diagnostics: context, tokens, cost' },
+  { name: 'model', description: 'Show or change current model' },
+  { name: 'help', description: 'List available commands' },
+];
+
+function emit(frame: Record<string, unknown>): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify(frame) });
+  });
+}
+
+function sentFrames(): string[] {
+  return bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
+}
+
+beforeEach(() => {
+  chatStore.clearAll();
+  commandStore.replace(CATALOG);
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
+});
+
+test('the ⋮ menu opens the command menu with model, clear and the rest', async () => {
+  const tree = await renderApp();
+  await waitFor(() => labelsOf(tree).includes('Commands'));
+
+  // The thread has no session yet, so conversation actions stay hidden; the app-level ones show.
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Model…'));
+  expect(labelsOf(tree)).toContain('New conversation');
+  expect(labelsOf(tree)).toContain('Clear history');
+  expect(labelsOf(tree)).toContain('Files');
+  expect(labelsOf(tree)).toContain('Settings');
+  expect(labelsOf(tree)).toContain('Diagnostics');
+
+  await settleAndUnmount(tree);
+});
+
+test('the model picker lists models with the current one checked and applies on tap', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello'), 60);
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
+  await pressLabel(tree, 'Model…');
+
+  // The sheet asks the server; the server answers with the catalog and the thread state.
+  await emit({ type: 'model.list.result', models: [
+    { id: 'fast-1', label: 'Fast' },
+    { id: 'strong-2', label: 'Strong', group: 'Advanced' },
+  ], defaultModel: 'fast-1' });
+  await emit({ type: 'model.result', threadId: THREAD, model: 'fast-1', defaultModel: 'fast-1', effort: { level: '', levels: [], supported: false } });
+
+  await waitFor(() => labelsOf(tree).includes('Fast'), 60);
+  // A grouped model hides behind its group's submenu.
+  expect(labelsOf(tree)).not.toContain('Strong');
+  expect(labelsOf(tree)).toContain('Advanced ›');
+
+  await pressLabel(tree, 'Advanced ›');
+  await waitFor(() => labelsOf(tree).includes('Strong'), 60);
+  expect(labelsOf(tree)).toContain('< Back');
+
+  // Back on the root, the default is offered and picking it asks the server to switch.
+  await pressLabel(tree, '< Back');
+  await waitFor(() => labelsOf(tree).includes('Use default (Fast)'), 60);
+  await pressLabel(tree, 'Use default (Fast)');
+  await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'fast-1' })), 60);
+
+  await settleAndUnmount(tree);
+});
+
+test('the subtitle shows which model the thread runs on', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello'), 60);
+  await emit({ type: 'model.list.result', models: [
+    { id: 'fast-1', label: 'Fast' },
+    { id: 'strong-2', label: 'Strong' },
+  ], defaultModel: 'fast-1' });
+  await emit({ type: 'model.result', threadId: THREAD, model: 'strong-2', defaultModel: 'fast-1', effort: { level: '', levels: [], supported: false } });
+  await waitFor(() => allTexts(tree).some(text => text.includes('model: Strong')), 60);
+  await settleAndUnmount(tree);
+});
+
+test('an approval request opens a sheet; approving answers the server', async () => {
+  const tree = await renderApp();
+  await waitFor(() => labelsOf(tree).includes('Message to send'));
+
+  await emit({ type: 'approval.request', id: 'a1', threadId: THREAD, toolName: 'bash', args: { command: 'rm -rf /tmp/x' }, replyToId: 'm1', expiresAt: Date.now() + 60000 });
+
+  await waitFor(() => labelsOf(tree).includes('Approve'));
+  expect(allTexts(tree).some(text => text.includes('rm -rf'))).toBe(true);
+
+  await pressLabel(tree, 'Approve');
+  await waitFor(() =>
+    sentFrames().includes(JSON.stringify({ type: 'approval.response', id: 'a1', accepted: true })),
+  );
+  await waitFor(() => !labelsOf(tree).includes('Approve'));
+
+  await settleAndUnmount(tree);
+});
+
+test('a command result arrives as its own bubble, not an agent reply', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', '/status', []);
+  });
+  await emit({ type: 'chat.command.result', threadId: THREAD, replyToId: 'u1', text: 'Tokens: 1200' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('Tokens: 1200')), 60);
+  await settleAndUnmount(tree);
+});
+
+test('clear history asks for confirmation, then clears the thread', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello there', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello there'));
+
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Clear history'));
+  await pressLabel(tree, 'Clear history');
+  await waitFor(() => labelsOf(tree).includes('Cancel'));
+  expect(labelsOf(tree)).toContain('Clear history');
+
+  await pressLabel(tree, 'Cancel');
+  await waitFor(() => !labelsOf(tree).includes('Cancel'));
+  expect(allTexts(tree)).toContain('hello there');
+
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Clear history'));
+  await pressLabel(tree, 'Clear history');
+  await waitFor(() => labelsOf(tree).includes('Clear history'));
+  await pressText(tree, 'Clear history');
+  await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'session.clear', threadId: THREAD })));
+  expect(allTexts(tree)).not.toContain('hello there');
+
+  await settleAndUnmount(tree);
+});
+
+test('chat.cleared empties the thread on the server word', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello there', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello there'), 60);
+  await emit({ type: 'chat.cleared', threadId: THREAD });
+  await waitFor(() => !allTexts(tree).includes('hello there'), 60);
+  await settleAndUnmount(tree);
+});
+
+test('a streaming run turns the send arrow into Stop', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.startStream(THREAD, 's1', 'u1');
+    chatStore.appendDelta(THREAD, 's1', 'one ');
+  });
+  await waitFor(() => labelsOf(tree).includes('Stop generating'));
+  expect(labelsOf(tree)).not.toContain('Send message');
+
+  await pressLabel(tree, 'Stop generating');
+  await waitFor(() =>
+    sentFrames().includes(JSON.stringify({ type: 'chat.stop', threadId: THREAD })),
+  );
+
+  await ReactTestRenderer.act(async () => {
+    chatStore.endStream(THREAD, 's1');
+  });
+  await waitFor(() => !labelsOf(tree).includes('Stop generating'));
+
+  await settleAndUnmount(tree);
+});
+
+/**
+ * The list scrolls on a 40ms timer; a test that ends first lets it fire outside act() and
+ * fails the run. Wait it out inside act before tearing the tree down.
+ */
+async function settleAndUnmount(tree: Tree): Promise<void> {
+  await ReactTestRenderer.act(async () => {
+    await new Promise<void>(resolve => setTimeout(resolve, 60));
+  });
+  await unmount(tree);
+}
+
+function pressLabel(tree: Tree, label: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    const targets = tree.root.findAll(
+      node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
+      { deep: true },
+    );
+    const target = targets[0] ?? tree.root.find(node => node.props.accessibilityLabel === label);
+    target.props.onPress();
+  });
+}
+
+function pressText(tree: Tree, text: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    const labels = tree.root.findAll(
+      node => node.props.children === text && String(node.type) === 'Text',
+      { deep: true },
+    );
+    const label = labels[0];
+    if (!label) throw new Error(`no text node for ${text}`);
+    let node = label.parent;
+    while (node && typeof node.props.onPress !== 'function') {
+      node = node.parent;
+    }
+    if (!node) throw new Error(`no pressable for ${text}`);
+    node.props.onPress();
+  });
+}

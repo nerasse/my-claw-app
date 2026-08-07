@@ -93,12 +93,18 @@ function pressLabel(tree: Tree, label: string): Promise<void> {
 
 function pressText(tree: Tree, text: string): Promise<void> {
   return ReactTestRenderer.act(async () => {
-    const targets = tree.root.findAll(
-      node => node.props.children === text && typeof node.props.onPress === 'function',
+    const labels = tree.root.findAll(
+      node => node.props.children === text && String(node.type) === 'Text',
       { deep: true },
     );
-    const target = targets[0] ?? tree.root.find(node => node.props.children === text);
-    target.props.onPress();
+    const label = labels[0];
+    if (!label) throw new Error(`no text node for ${text}`);
+    let node = label.parent;
+    while (node && typeof node.props.onPress !== 'function') {
+      node = node.parent;
+    }
+    if (!node) throw new Error(`no pressable for ${text}`);
+    node.props.onPress();
   });
 }
 
@@ -119,13 +125,23 @@ test('typing "/" opens the slash-menu, filters live, and inserts on tap', async 
   expect(textsOf(tree)).toContain('Show or change current model');
   expect(textsOf(tree)).not.toContain('List available commands');
 
-  // Tapping a command inserts it with a trailing space, closing the menu.
+  // Tapping a command the app handles natively (the model picker) keeps its text out of the
+  // field: it must open the menu, not get sent to the model as a question.
   const item = tree.root.find(node => node.props.accessibilityLabel?.startsWith('Command model'));
   await ReactTestRenderer.act(async () => {
     item.props.onPress();
   });
-  expect(inputOf(tree).props.value).toBe('/model ');
+  expect(inputOf(tree).props.value).toBe('');
   expect(textsOf(tree)).not.toContain('Show or change current model');
+
+  // A command without native handling still inserts its text for typed arguments.
+  await typeInto(tree, '/st');
+  await waitFor(() => textsOf(tree).includes('Session diagnostics: context, tokens, cost'));
+  const statusItem = tree.root.find(node => node.props.accessibilityLabel?.startsWith('Command status'));
+  await ReactTestRenderer.act(async () => {
+    statusItem.props.onPress();
+  });
+  expect(inputOf(tree).props.value).toBe('/status ');
 
   await unmount(tree);
 });

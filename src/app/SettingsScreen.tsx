@@ -55,6 +55,8 @@ export function SettingsScreen({
   onOpenDiagnostics,
   voice,
   onVoiceModeChange,
+  modelLabel,
+  onOpenModel,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
@@ -71,6 +73,9 @@ export function SettingsScreen({
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
   onVoiceModeChange: (mode: VoiceMode) => void;
+  /** Label of the model on the current thread, null while unknown. */
+  modelLabel: string | null;
+  onOpenModel: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette, dark } = useTheme();
@@ -115,6 +120,23 @@ export function SettingsScreen({
             <Text style={styles.hint}>
               {themeMode === 'system' ? `follows the phone · currently ${dark ? 'dark' : 'light'}` : 'forced choice'}
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>model</Text>
+          <View style={styles.card}>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenModel}
+              accessibilityRole="button"
+              accessibilityLabel="Choose model">
+              <View style={styles.linkMain}>
+                <Text style={styles.linkTitle}>{modelLabel ?? '…'}</Text>
+                <Text style={styles.hint}>the model this conversation runs on</Text>
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -335,6 +357,10 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surfaceAlt,
   },
   row: { flexDirection: 'row' as const, gap: space.sm },
+  link: { alignItems: 'center' as const },
+  linkMain: { flex: 1, gap: 1 },
+  linkTitle: { fontSize: font.body, color: palette.text, fontWeight: '600' as const },
+  linkGlyph: { fontSize: font.screen, color: palette.textFaint },
   button: {
     flex: 1,
     backgroundColor: palette.accent,

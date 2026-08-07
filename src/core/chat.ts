@@ -11,6 +11,8 @@ export interface TextItem {
   error?: string;
   /** What the server heard, per recording id, rendered inside each recording's own bubble. */
   transcripts?: Record<string, string>;
+  /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
+  command?: boolean;
   ts: number;
 }
 
@@ -133,6 +135,29 @@ class ChatStoreImpl {
   /** The native outbox could neither send nor queue the frame: say so on the bubble. */
   markSendFailed(threadId: string, id: string, error = 'not sent'): void {
     this.patch(threadId, id, { error });
+  }
+
+  /**
+   * Output of a command the server executed. Rendered as its own bubble so `/status` never
+   * masquerades as an agent answer: the agent is not the author of it.
+   */
+  addCommandResult(threadId: string, id: string, text: string, replyToId?: string): void {
+    const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
+    this.append(threadId, {
+      kind: 'text',
+      id,
+      role: 'agent',
+      text,
+      attachments: [],
+      streaming: false,
+      command: true,
+      ts: parent ? parent.ts + 1 : Date.now(),
+    });
+  }
+
+  /** A run is streaming into this thread right now (drives the Stop button). */
+  isStreaming(threadId: string): boolean {
+    return this.getItems(threadId).some(item => item.kind === 'text' && item.streaming);
   }
 
   startStream(threadId: string, id: string, replyToId?: string): void {

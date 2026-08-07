@@ -177,8 +177,57 @@ export interface VoiceModeResultFrame {
   cloudAvailable: boolean;
 }
 
+export interface ModelOption {
+  id: string;
+  label: string;
+  /** "/"-separated menu path; the picker renders groups the way the server's /model does. */
+  group?: string;
+}
+
+export interface EffortState {
+  /** The level in effect ("" when the model discards effort). */
+  level: string;
+  /** Levels the active model accepts; empty means no choice is offered. */
+  levels: string[];
+  supported: boolean;
+}
+
+export interface ModelListResultFrame {
+  type: 'model.list.result';
+  models: ModelOption[];
+  defaultModel: string;
+}
+
+/**
+ * Answer to model.get / model.set / model.effort.set: the state the server actually stored,
+ * never an optimistic echo of what the picker hoped for.
+ */
+export interface ModelResultFrame {
+  type: 'model.result';
+  threadId: string;
+  /** The model that will run on this thread: override or the configured default. */
+  model: string;
+  defaultModel: string;
+  effort: EffortState;
+}
+
+/** Output of a command the server executed; rendered as a distinct bubble, not an agent reply. */
+export interface CommandResultFrame {
+  type: 'chat.command.result';
+  threadId: string;
+  /** The chat.send id that carried the command, when one did. */
+  replyToId?: string;
+  text: string;
+}
+
+/** The thread's history is gone server-side; the app drops its copy. */
+export interface ChatClearedFrame {
+  type: 'chat.cleared';
+  threadId: string;
+}
+
 /** Which request was refused. The screen that asked is the one that shows it. */
-export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice';
+export type ErrorScope = 'chat' | 'files' | 'session' | 'diag' | 'logs' | 'voice' | 'model';
 
 export interface ErrorFrame {
   type: 'error';
@@ -200,6 +249,10 @@ export type ServerFrame =
   | DiagSnapshotResultFrame
   | LogsTailResultFrame
   | VoiceModeResultFrame
+  | ModelListResultFrame
+  | ModelResultFrame
+  | CommandResultFrame
+  | ChatClearedFrame
   | TranscriptFrame
   | ApprovalRequestFrame
   | ErrorFrame;
@@ -212,12 +265,16 @@ const FRAME_TYPES = new Set([
   'chat.stream.abort',
   'chat.tool',
   'chat.history',
+  'chat.command.result',
+  'chat.cleared',
   'session.list.result',
   'commands.list.result',
   'files.list.result',
   'diag.snapshot.result',
   'logs.tail.result',
   'voice.mode.result',
+  'model.list.result',
+  'model.result',
   'chat.transcript',
   'approval.request',
   'error',
@@ -307,4 +364,28 @@ export function encodeSessionDelete(threadId: string): string {
 
 export function encodeApprovalResponse(id: string, accepted: boolean): string {
   return JSON.stringify({ type: 'approval.response', id, accepted });
+}
+
+export function encodeModelList(): string {
+  return JSON.stringify({ type: 'model.list' });
+}
+
+export function encodeModelGet(threadId: string): string {
+  return JSON.stringify({ type: 'model.get', threadId });
+}
+
+export function encodeModelSet(threadId: string, model: string): string {
+  return JSON.stringify({ type: 'model.set', threadId, model });
+}
+
+export function encodeModelEffortSet(threadId: string, level: string): string {
+  return JSON.stringify({ type: 'model.effort.set', threadId, level });
+}
+
+export function encodeChatStop(threadId: string): string {
+  return JSON.stringify({ type: 'chat.stop', threadId });
+}
+
+export function encodeSessionClear(threadId: string): string {
+  return JSON.stringify({ type: 'session.clear', threadId });
 }

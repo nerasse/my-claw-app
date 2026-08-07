@@ -4,7 +4,7 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
 import { Composer } from '../components/Composer';
-import { BubbleMenu } from '../components/BubbleMenu';
+import { ActionSheet } from '../components/ActionSheet';
 import type { ChatItem, TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
@@ -67,6 +67,10 @@ export function ChatScreen({
   onBubbleMenu,
   onOpenImage,
   onOpenText,
+  onOpenMenu,
+  onCommandEntered,
+  streaming,
+  onStop,
 }: {
   threadId: string;
   title: string;
@@ -84,6 +88,13 @@ export function ChatScreen({
   onBubbleMenu: (item: TextItem) => void;
   onOpenImage: (target: { url: string; filename: string }) => void;
   onOpenText: (target: { url: string; filename: string }) => void;
+  /** The command menu of the app (model, stop, clear, ...). */
+  onOpenMenu: () => void;
+  /** A slash command was chosen; true when the app handled it natively. */
+  onCommandEntered: (command: string) => boolean;
+  /** A run is streaming into this thread: the composer offers Stop instead of Send. */
+  streaming: boolean;
+  onStop: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -261,6 +272,13 @@ export function ChatScreen({
           accessibilityLabel="Session files">
           <FolderIcon size={19} color={palette.text} />
         </Pressable>
+        <Pressable
+          onPress={onOpenMenu}
+          style={styles.filesButton}
+          accessibilityRole="button"
+          accessibilityLabel="Commands">
+          <Text style={styles.menuGlyph}>⋮</Text>
+        </Pressable>
       </View>
 
       {empty ? (
@@ -281,8 +299,11 @@ export function ChatScreen({
             attachments={attachments}
             onPickAttachment={() => setAttachOpen(true)}
             onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+            onCommandEntered={onCommandEntered}
             uploading={uploading}
             uploadError={uploadError}
+            streaming={streaming}
+            onStop={onStop}
           />
         </View>
       ) : (
@@ -347,16 +368,19 @@ export function ChatScreen({
           attachments={attachments}
           onPickAttachment={() => setAttachOpen(true)}
           onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+          onCommandEntered={onCommandEntered}
           uploading={uploading}
           uploadError={uploadError}
+          streaming={streaming}
+          onStop={onStop}
         />
         </>
       )}
 
       {attachOpen ? (
-        <BubbleMenu
+        <ActionSheet
           preview="add to this message"
-          actions={[
+          options={[
             { label: 'Photo from gallery', onPress: pickPhotos },
             { label: 'Take a photo', onPress: takePhoto },
             { label: 'File', onPress: pickFiles },
