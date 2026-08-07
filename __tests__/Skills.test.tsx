@@ -149,6 +149,12 @@ test('workspace skills are grouped under their workspace key with its path', asy
   expect(textsOf(tree)).toContain('sofa');
   expect(textsOf(tree)).toContain('/home/neras/dev/SOFA');
 
+  // Opening it must address that workspace: without the key the server would serve the
+  // default workspace's file of the same name, or nothing.
+  await pressLabel(tree, 'Open skill mailcow');
+  await waitFor(() => labelsOf(tree).includes('Close skill view'));
+  expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('workspace=sofa'));
+
   await settleAndUnmount(tree);
 });
 

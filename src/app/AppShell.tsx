@@ -739,7 +739,7 @@ export function AppShell(): React.JSX.Element {
                 onOpenSkill={skill => {
                   if (!deviceInfo) return;
                   setSkillViewer({
-                    url: skillUrl(mediaBase, deviceInfo, skill.source, skill.name),
+                    url: skillUrl(mediaBase, deviceInfo, skill.source, skill.name, skill.workspace),
                     skill,
                   });
                 }}

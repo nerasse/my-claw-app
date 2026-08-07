@@ -3,18 +3,21 @@ import type { SkillEntry } from './protocol';
 
 export type SkillSource = SkillEntry['source'];
 
-/** URL of the raw SKILL.md of a skill, addressed by source+name like the server serves it. */
+/** URL of the raw SKILL.md of a skill, addressed by source+name+workspace like the server
+ *  serves it. The workspace key is what tells two projects' same-named skills apart. */
 export function skillUrl(
   mediaBase: string,
   deviceInfo: DeviceInfo,
   source: SkillSource,
   name: string,
+  workspace?: string,
 ): string {
   const params = new URLSearchParams({
     device: deviceInfo.deviceId,
     token: deviceInfo.token,
     source,
     name,
+    ...(workspace ? { workspace } : {}),
   });
   return `${mediaBase}/skills?${params.toString()}`;
 }
