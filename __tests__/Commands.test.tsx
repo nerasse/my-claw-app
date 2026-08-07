@@ -53,7 +53,7 @@ beforeEach(() => {
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
 });
 
-test('the ⋮ menu opens the command menu with model, clear history and the rest', async () => {
+test('the ⋮ menu opens the command menu with the conversation actions', async () => {
   const tree = await renderApp();
   await waitFor(() => labelsOf(tree).includes('Commands'));
 
@@ -61,10 +61,9 @@ test('the ⋮ menu opens the command menu with model, clear history and the rest
   await pressLabel(tree, 'Commands');
   await waitFor(() => labelsOf(tree).includes('Model…'));
   expect(labelsOf(tree)).toContain('New conversation');
-  expect(labelsOf(tree)).toContain('Clear history');
   expect(labelsOf(tree)).toContain('Files');
-  expect(labelsOf(tree)).toContain('Settings');
-  expect(labelsOf(tree)).toContain('Diagnostics');
+  // Settings live in the drawer, Diagnostics inside them: duplicating them here was noise.
+  expect(labelsOf(tree)).not.toContain('Diagnostics');
 
   await settleAndUnmount(tree);
 });
@@ -100,6 +99,32 @@ test('the model picker lists models with the current one checked and applies on 
   await waitFor(() => labelsOf(tree).includes('Use default (Fast)'), 60);
   await pressLabel(tree, 'Use default (Fast)');
   await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'fast-1' })), 60);
+
+  await settleAndUnmount(tree);
+});
+
+test('a group whose models all live in sub-groups is still reachable', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello'), 60);
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
+  await pressLabel(tree, 'Model…');
+
+  // Nothing sits directly in "Claude": requiring an exact depth made the whole provider vanish.
+  await emit({ type: 'model.list.result', models: [
+    { id: 'fast-1', label: 'Fast' },
+    { id: 'opus', label: 'Opus (auto)', group: 'Claude/Opus' },
+  ], defaultModel: 'fast-1' });
+  await emit({ type: 'model.result', threadId: THREAD, model: 'fast-1', defaultModel: 'fast-1', effort: { level: '', levels: [], supported: false } });
+
+  await waitFor(() => labelsOf(tree).includes('Claude ›'), 60);
+  await pressLabel(tree, 'Claude ›');
+  await waitFor(() => labelsOf(tree).includes('Opus ›'), 60);
+  await pressLabel(tree, 'Opus ›');
+  await waitFor(() => labelsOf(tree).includes('Opus (auto)'), 60);
 
   await settleAndUnmount(tree);
 });
@@ -147,7 +172,7 @@ test('a command result arrives as its own bubble, not an agent reply', async () 
   await settleAndUnmount(tree);
 });
 
-test('clear history asks for confirmation, then clears the thread', async () => {
+test('emptying a conversation is gone: archive files it away, delete destroys it', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.addUserMessage(THREAD, 'u1', 'hello there', []);
@@ -155,22 +180,11 @@ test('clear history asks for confirmation, then clears the thread', async () => 
   await waitFor(() => allTexts(tree).includes('hello there'));
 
   await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Clear history'));
-  await pressLabel(tree, 'Clear history');
-  await waitFor(() => labelsOf(tree).includes('Cancel'));
-  expect(labelsOf(tree)).toContain('Clear history');
+  await waitFor(() => labelsOf(tree).includes('Model…'));
+  expect(labelsOf(tree)).not.toContain('Clear history');
 
-  await pressLabel(tree, 'Cancel');
-  await waitFor(() => !labelsOf(tree).includes('Cancel'));
-  expect(allTexts(tree)).toContain('hello there');
-
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Clear history'));
-  await pressLabel(tree, 'Clear history');
-  await waitFor(() => labelsOf(tree).includes('Clear history'));
-  await pressText(tree, 'Clear history');
-  await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'session.clear', threadId: THREAD })));
-  expect(allTexts(tree)).not.toContain('hello there');
+  // Nothing may reach for the frame either: the server no longer answers it.
+  expect(sentFrames().some(frame => frame.includes('session.clear'))).toBe(false);
 
   await settleAndUnmount(tree);
 });
@@ -230,19 +244,4 @@ function pressLabel(tree: Tree, label: string): Promise<void> {
   });
 }
 
-function pressText(tree: Tree, text: string): Promise<void> {
-  return ReactTestRenderer.act(async () => {
-    const labels = tree.root.findAll(
-      node => node.props.children === text && String(node.type) === 'Text',
-      { deep: true },
-    );
-    const label = labels[0];
-    if (!label) throw new Error(`no text node for ${text}`);
-    let node = label.parent;
-    while (node && typeof node.props.onPress !== 'function') {
-      node = node.parent;
-    }
-    if (!node) throw new Error(`no pressable for ${text}`);
-    node.props.onPress();
-  });
-}
+

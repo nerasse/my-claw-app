@@ -35,6 +35,8 @@ export function Drawer({
   onNewThread,
   onThreadMenu,
   onOpenSettings,
+  archivedCount,
+  onOpenArchives,
 }: {
   open: boolean;
   sessions: SessionSummary[];
@@ -47,6 +49,8 @@ export function Drawer({
   onNewThread: () => void;
   onThreadMenu: (thread: SessionSummary) => void;
   onOpenSettings: () => void;
+  archivedCount: number;
+  onOpenArchives: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -159,21 +163,37 @@ export function Drawer({
           )}
         />
 
-        <Pressable
-          style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}
-          onPress={onOpenSettings}
-          accessibilityRole="button"
-          accessibilityLabel="Open settings">
-          <View style={styles.footerMain}>
-            <Text style={styles.footerTitle}>Settings</Text>
-            <Text style={styles.footerMeta}>
-              <Text style={{ color: connectionState === 'connected' ? palette.ok : palette.textFaint }}>●</Text>{' '}
-              {STATE_LABEL[connectionState]}
-              {pending > 0 ? ` · ${pending} pending` : ''}
-            </Text>
-          </View>
-          <Text style={styles.footerGlyph}>›</Text>
-        </Pressable>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
+          {/* Always shown: an entry that appears only once it has content is an entry nobody
+              finds, and the screen says plainly when there is nothing in it. */}
+          <Pressable
+            style={styles.footerRow}
+            onPress={onOpenArchives}
+            accessibilityRole="button"
+            accessibilityLabel="Open archived conversations">
+            <View style={styles.footerMain}>
+              <Text style={styles.footerTitle}>Archived</Text>
+            </View>
+            {archivedCount > 0 ? <Text style={styles.footerCount}>{archivedCount}</Text> : null}
+            <Text style={styles.footerGlyph}>›</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.footerRow}
+            onPress={onOpenSettings}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings">
+            <View style={styles.footerMain}>
+              <Text style={styles.footerTitle}>Settings</Text>
+              <Text style={styles.footerMeta}>
+                <Text style={{ color: connectionState === 'connected' ? palette.ok : palette.textFaint }}>●</Text>{' '}
+                {STATE_LABEL[connectionState]}
+                {pending > 0 ? ` · ${pending} pending` : ''}
+              </Text>
+            </View>
+            <Text style={styles.footerGlyph}>›</Text>
+          </Pressable>
+        </View>
       </Animated.View>
     </View>
   );
@@ -232,15 +252,16 @@ const createStyles = (palette: Palette) => ({
   separator: { height: 1, backgroundColor: palette.border, marginHorizontal: space.sm },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
   footer: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
     borderTopWidth: 1,
     borderTopColor: palette.border,
     paddingHorizontal: space.lg,
     paddingTop: space.md,
+    gap: space.md,
   },
+  footerRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
   footerMain: { flex: 1, gap: 1 },
   footerTitle: { fontSize: font.body, color: palette.text },
   footerMeta: { fontSize: font.small, color: palette.textMuted },
+  footerCount: { fontSize: font.small, color: palette.textFaint, marginRight: space.sm },
   footerGlyph: { fontSize: font.screen, color: palette.textFaint },
 });

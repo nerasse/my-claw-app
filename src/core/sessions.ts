@@ -17,6 +17,8 @@ function titleFromText(text: string): string {
  */
 class SessionStoreImpl {
   private list: SessionSummary[] = EMPTY;
+  private active: SessionSummary[] = EMPTY;
+  private archived: SessionSummary[] = EMPTY;
   private listeners = new Set<Listener>();
 
   subscribe(listener: Listener): () => void {
@@ -26,8 +28,16 @@ class SessionStoreImpl {
     };
   }
 
-  getSnapshot(): SessionSummary[] {
-    return this.list;
+  /**
+   * Both halves are split once per update, not per render: useSyncExternalStore compares
+   * snapshots by identity, so filtering inside the hook would loop forever on a new array.
+   */
+  getActiveSnapshot(): SessionSummary[] {
+    return this.active;
+  }
+
+  getArchivedSnapshot(): SessionSummary[] {
+    return this.archived;
   }
 
   titleOf(threadId: string): string | undefined {
@@ -58,6 +68,10 @@ class SessionStoreImpl {
   }
 
   private emit(): void {
+    const active = this.list.filter(summary => !summary.archived);
+    const archived = this.list.filter(summary => summary.archived);
+    this.active = active.length === 0 ? EMPTY : active;
+    this.archived = archived.length === 0 ? EMPTY : archived;
     for (const listener of this.listeners) {
       listener();
     }
@@ -69,5 +83,9 @@ export const sessionStore = new SessionStoreImpl();
 const subscribeToSessions = (listener: Listener): (() => void) => sessionStore.subscribe(listener);
 
 export function useSessions(): SessionSummary[] {
-  return useSyncExternalStore(subscribeToSessions, () => sessionStore.getSnapshot());
+  return useSyncExternalStore(subscribeToSessions, () => sessionStore.getActiveSnapshot());
+}
+
+export function useArchivedSessions(): SessionSummary[] {
+  return useSyncExternalStore(subscribeToSessions, () => sessionStore.getArchivedSnapshot());
 }

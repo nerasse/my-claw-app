@@ -3,7 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter, Keyboard, Platform } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
 import {
@@ -51,6 +51,44 @@ async function openThreadMenu(tree: Tree, title: string): Promise<void> {
   await waitFor(() => labelsOf(tree).some(label => label.startsWith('Actions for conversation')));
   const label = labelsOf(tree).find(entry => entry.startsWith('Actions for conversation'))!;
   await press(tree, label);
+}
+
+/** Keyboard has no public emit; the sheets listen on this emitter, so drive it directly. */
+function moveKeyboard(height: number): Promise<void> {
+  const emitter = (Keyboard as unknown as {
+    _emitter: { emit: (event: string, payload: unknown) => void };
+  })._emitter;
+  const ios = Platform.OS === 'ios';
+  const event =
+    height > 0
+      ? ios
+        ? 'keyboardWillShow'
+        : 'keyboardDidShow'
+      : ios
+        ? 'keyboardWillHide'
+        : 'keyboardDidHide';
+  return ReactTestRenderer.act(async () => {
+    emitter.emit(event, { endCoordinates: { height } });
+  });
+}
+
+/** Padding of the sheet holding the field, which is what has to clear the keyboard. */
+function sheetPaddingFor(tree: Tree, label: string): number | undefined {
+  let node = tree.root.find(
+    entry => String(entry.type) === 'TextInput' && entry.props.accessibilityLabel === label,
+  ).parent;
+  while (node) {
+    const styles: unknown = node.props.style;
+    if (Array.isArray(styles)) {
+      for (const style of styles) {
+        if (style && typeof style === 'object' && typeof (style as { paddingBottom?: unknown }).paddingBottom === 'number') {
+          return (style as { paddingBottom: number }).paddingBottom;
+        }
+      }
+    }
+    node = node.parent;
+  }
+  return undefined;
 }
 
 function typeInto(tree: Tree, label: string, text: string): Promise<void> {
@@ -106,6 +144,28 @@ test('an empty name is sent as such, which hands the conversation back to its fi
     threadId: THREAD,
     title: '',
   });
+
+  await unmount(tree);
+});
+
+test('the rename sheet lifts above the keyboard its own autofocus opens', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree, 'Infra maison');
+  await press(tree, 'Rename');
+  await waitFor(() => labelsOf(tree).includes('Name this conversation'));
+
+  const resting = sheetPaddingFor(tree, 'Name this conversation');
+  expect(resting).toBeDefined();
+
+  await moveKeyboard(320);
+
+  // The sheet sits outside the KeyboardAvoidingView, so it has to clear the keyboard itself.
+  expect(sheetPaddingFor(tree, 'Name this conversation')).toBe(320 + 20);
+  expect(sheetPaddingFor(tree, 'Name this conversation')).toBeGreaterThan(resting!);
+
+  // Back down: the gesture-bar padding takes over again, no leftover gap under the sheet.
+  await moveKeyboard(0);
+  expect(sheetPaddingFor(tree, 'Name this conversation')).toBe(resting);
 
   await unmount(tree);
 });

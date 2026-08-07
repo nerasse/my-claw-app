@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSheetBottomInset } from '../core/keyboard';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -31,7 +31,8 @@ export function PromptSheet({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
-  const insets = useSafeAreaInsets();
+  // The field is autofocused: without this the keyboard opens straight over the sheet.
+  const bottomInset = useSheetBottomInset(space.xl);
   const [value, setValue] = useState(initialValue);
 
   const submit = (): void => {
@@ -47,7 +48,7 @@ export function PromptSheet({
         accessibilityLabel="Close menu"
       />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }]}>
+      <View style={[styles.sheet, { paddingBottom: bottomInset }]}>
         <View style={styles.grabber} />
         <Text style={styles.title}>{title}</Text>
 

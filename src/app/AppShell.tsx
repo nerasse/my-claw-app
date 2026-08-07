@@ -22,7 +22,7 @@ import {
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
-import { sessionStore, useSessions } from '../core/sessions';
+import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { commandStore } from '../core/commands';
 import { prefs } from '../core/prefs';
 import {
@@ -37,11 +37,11 @@ import {
   encodeModelGet,
   encodeModelList,
   encodeSessionArchive,
-  encodeSessionClear,
   encodeSessionDelete,
   encodeSessionHistory,
   encodeSessionList,
   encodeSessionRename,
+  encodeSessionUnarchive,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
@@ -63,6 +63,7 @@ import { FilesScreen } from './FilesScreen';
 import { ImageViewer } from './ImageViewer';
 import { TextViewer } from './TextViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
+import { ArchivesScreen } from './ArchivesScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetOption } from '../components/ActionSheet';
@@ -98,6 +99,7 @@ export function AppShell(): React.JSX.Element {
   } | null>(null);
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
+  const [archivesOpen, setArchivesOpen] = useState(false);
   const [diagOpen, setDiagOpen] = useState(false);
   const [diagSnapshot, setDiagSnapshot] = useState('');
   const [diagLogs, setDiagLogs] = useState('');
@@ -109,13 +111,14 @@ export function AppShell(): React.JSX.Element {
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
+
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   // A run can ask several times in a row; each answer clears one, in order.
   const [approvals, setApprovals] = useState<ApprovalRequestFrame[]>([]);
 
   const items = useChatItems(activeThread);
   const sessions = useSessions();
+  const archivedSessions = useArchivedSessions();
   const unread = useUnreadThreads();
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
   const catalog = useModelCatalog();
@@ -138,6 +141,7 @@ export function AppShell(): React.JSX.Element {
       setAutoFocusHero(false);
       setDrawerOpen(false);
       setSettingsOpen(false);
+      setArchivesOpen(false);
       connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
       // The model of a conversation is per session: refresh it when the thread changes, so
       // the picker never shows the previous conversation's choice.
@@ -219,9 +223,10 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'session.list.result':
           sessionStore.replace(frame.sessions);
-          // Land straight in a conversation instead of an empty screen.
+          // Land straight in a conversation instead of an empty screen, but never in one the
+          // owner filed away: those are only reached from the archived list.
           if (!activeThreadRef.current) {
-            const first = frame.sessions[0];
+            const first = frame.sessions.find(summary => !summary.archived);
             if (first) openThread(first.threadId);
             else selectThread(uuid());
           }
@@ -342,10 +347,6 @@ export function AppShell(): React.JSX.Element {
         setApprovals(current => current.slice(1));
         return true;
       }
-      if (confirmClear) {
-        setConfirmClear(false);
-        return true;
-      }
       if (fileToDelete) {
         setFileToDelete(null);
         return true;
@@ -376,6 +377,10 @@ export function AppShell(): React.JSX.Element {
         setSettingsOpen(false);
         return true;
       }
+      if (archivesOpen) {
+        setArchivesOpen(false);
+        return true;
+      }
       if (diagOpen) {
         setDiagOpen(false);
         return true;
@@ -389,9 +394,9 @@ export function AppShell(): React.JSX.Element {
     return () => sub.remove();
   }, [
     approvals.length,
+    archivesOpen,
     bubbleMenu,
     commandMenuOpen,
-    confirmClear,
     drawerOpen,
     diagOpen,
     fileToDelete,
@@ -479,22 +484,30 @@ export function AppShell(): React.JSX.Element {
     prefs.set('serverUrl', next);
   }, []);
 
-  /**
-   * Send a destructive session frame and mirror it locally. `keepInList` is what separates
-   * Archive from Delete: archiving starts a fresh conversation on the same thread (the server
-   * keeps it), deleting removes it outright.
-   */
-  const dropThread = useCallback(
-    (threadId: string, frame: string, keepInList = false) => {
-      connection.send(frame);
+  /** Destroys the conversation: messages, uploads and name all go, here and on the server. */
+  const deleteThread = useCallback(
+    (threadId: string) => {
+      connection.send(encodeSessionDelete(threadId));
       chatStore.clearThread(threadId);
       modelStore.dropThread(threadId);
-      if (!keepInList) {
-        sessionStore.remove(threadId);
-        if (activeThreadRef.current === threadId) selectThread(null);
-      }
+      sessionStore.remove(threadId);
+      if (activeThreadRef.current === threadId) selectThread(null);
       setThreadMenu(null);
       connection.send(encodeSessionList());
+    },
+    [selectThread],
+  );
+
+  /**
+   * Moves a conversation between the drawer and the archived list. Nothing is cleared: the
+   * server answers with the refreshed listing, and letting go of the active thread makes that
+   * reply land on the first conversation still in the drawer.
+   */
+  const setThreadArchived = useCallback(
+    (threadId: string, archived: boolean) => {
+      connection.send(archived ? encodeSessionArchive(threadId) : encodeSessionUnarchive(threadId));
+      if (archived && activeThreadRef.current === threadId) selectThread(null);
+      setThreadMenu(null);
     },
     [selectThread],
   );
@@ -510,24 +523,21 @@ export function AppShell(): React.JSX.Element {
             setThreadMenu(null);
           },
         },
-        {
-          label: 'Archive',
-          hint: 'start this conversation over, keeping its name',
-          onPress: () =>
-            dropThread(
-              threadMenu.threadId,
-              encodeSessionArchive(threadMenu.threadId),
-              true,
-            ),
-        },
+        threadMenu.archived
+          ? {
+              label: 'Unarchive',
+              hint: 'put it back in the conversation list',
+              onPress: () => setThreadArchived(threadMenu.threadId, false),
+            }
+          : {
+              label: 'Archive',
+              hint: 'file it away, nothing is deleted',
+              onPress: () => setThreadArchived(threadMenu.threadId, true),
+            },
         {
           label: 'Delete',
           danger: true,
-          onPress: () =>
-            dropThread(
-              threadMenu.threadId,
-              encodeSessionDelete(threadMenu.threadId),
-            ),
+          onPress: () => deleteThread(threadMenu.threadId),
         },
       ]
     : [];
@@ -552,12 +562,6 @@ export function AppShell(): React.JSX.Element {
         case 'stop':
           if (threadId) connection.send(encodeChatStop(threadId));
           return true;
-        case 'archive':
-          if (threadId) {
-            dropThread(threadId, encodeSessionArchive(threadId), true);
-            return true;
-          }
-          return false;
         case 'rename':
           if (threadId) {
             const summary = sessions.find(session => session.threadId === threadId);
@@ -569,7 +573,7 @@ export function AppShell(): React.JSX.Element {
           return false;
       }
     },
-    [dropThread, newThread, sessions],
+    [newThread, sessions],
   );
 
   const currentModelLabel = threadModel
@@ -598,13 +602,6 @@ export function AppShell(): React.JSX.Element {
         ]
       : []),
     { label: 'New conversation', onPress: () => { setCommandMenuOpen(false); newThread(); } },
-    {
-      label: 'Clear history',
-      onPress: () => {
-        setCommandMenuOpen(false);
-        setConfirmClear(true);
-      },
-    },
     ...(activeThread
       ? [
           {
@@ -622,8 +619,9 @@ export function AppShell(): React.JSX.Element {
           } satisfies SheetOption,
           {
             label: 'Archive',
+            hint: 'file it away, nothing is deleted',
             onPress: () => {
-              dropThread(activeThread, encodeSessionArchive(activeThread), true);
+              setThreadArchived(activeThread, true);
               setCommandMenuOpen(false);
             },
           } satisfies SheetOption,
@@ -637,25 +635,13 @@ export function AppShell(): React.JSX.Element {
           } satisfies SheetOption,
         ]
       : []),
+    // Settings live in the drawer and Diagnostics inside them: this menu is for what acts on
+    // the conversation in front of you.
     {
       label: 'Files',
       onPress: () => {
         setCommandMenuOpen(false);
         openFiles();
-      },
-    },
-    {
-      label: 'Settings',
-      onPress: () => {
-        setCommandMenuOpen(false);
-        setSettingsOpen(true);
-      },
-    },
-    {
-      label: 'Diagnostics',
-      onPress: () => {
-        setCommandMenuOpen(false);
-        openDiagnostics();
       },
     },
   ];
@@ -728,6 +714,13 @@ export function AppShell(): React.JSX.Element {
               onLogs={fetchLogs}
               onBack={() => setDiagOpen(false)}
             />
+          ) : archivesOpen ? (
+            <ArchivesScreen
+              sessions={archivedSessions}
+              onBack={() => setArchivesOpen(false)}
+              onOpenThread={openThread}
+              onThreadMenu={setThreadMenu}
+            />
           ) : filesOpen ? (
             <FilesScreen
               mediaBase={mediaBase}
@@ -787,6 +780,11 @@ export function AppShell(): React.JSX.Element {
         onOpenSettings={() => {
           setDrawerOpen(false);
           setSettingsOpen(true);
+        }}
+        archivedCount={archivedSessions.length}
+        onOpenArchives={() => {
+          setDrawerOpen(false);
+          setArchivesOpen(true);
         }}
       />
 
@@ -888,27 +886,6 @@ export function AppShell(): React.JSX.Element {
         />
       ) : null}
 
-      {confirmClear ? (
-        <ActionSheet
-          preview="Clear this conversation's history? Its name and model stay; there is no undo."
-          options={[
-            {
-              label: 'Clear history',
-              danger: true,
-              onPress: () => {
-                setConfirmClear(false);
-                if (activeThread) {
-                  connection.send(encodeSessionClear(activeThread));
-                  chatStore.clearThread(activeThread);
-                }
-              },
-            },
-            { label: 'Cancel', onPress: () => setConfirmClear(false) },
-          ]}
-          onClose={() => setConfirmClear(false)}
-        />
-      ) : null}
-
       {confirmDelete ? (
         <ActionSheet
           preview="Delete this conversation? The agent loses access to it too."
@@ -917,7 +894,7 @@ export function AppShell(): React.JSX.Element {
               label: 'Delete',
               danger: true,
               onPress: () => {
-                dropThread(confirmDelete, encodeSessionDelete(confirmDelete));
+                deleteThread(confirmDelete);
                 setConfirmDelete(null);
               },
             },

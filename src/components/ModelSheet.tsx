@@ -50,7 +50,9 @@ export function ModelSheet({
       }
       if (groupPath === prefix) {
         visible.push(model);
-      } else if (segments.length === path.length + 1 && groupPath.startsWith(prefix ? `${prefix}/` : '')) {
+      } else if (segments.length > path.length && groupPath.startsWith(prefix ? `${prefix}/` : '')) {
+        // Any depth below, not just one level: a group whose models all sit in sub-groups has
+        // nothing of its own to show, and requiring an exact depth hid it entirely.
         const child = segments[path.length]!;
         if (!subgroupNames.includes(child)) subgroupNames.push(child);
       }

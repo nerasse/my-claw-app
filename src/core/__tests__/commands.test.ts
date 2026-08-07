@@ -6,7 +6,6 @@ const COMMANDS = [
   { name: 'models', description: 'List available models' },
   { name: 'help', description: 'List available commands' },
   { name: 'verbose', description: 'Toggle verbose tool output' },
-  { name: 'archive', description: 'Delete archives created by /new' },
 ];
 
 describe('commandQuery', () => {
@@ -28,7 +27,8 @@ describe('commandQuery', () => {
 
 describe('filterCommands', () => {
   test('prefix match, case-insensitive, capped', () => {
-    expect(filterCommands('', COMMANDS, 6)).toHaveLength(6);
+    expect(filterCommands('', COMMANDS, 6)).toHaveLength(COMMANDS.length);
+    expect(filterCommands('', COMMANDS, 3)).toHaveLength(3);
     expect(filterCommands('m', COMMANDS, 6).map(c => c.name)).toEqual(['model', 'models']);
     expect(filterCommands('MOD', COMMANDS).map(c => c.name)).toEqual(['model', 'models']);
     expect(filterCommands('x', COMMANDS)).toEqual([]);

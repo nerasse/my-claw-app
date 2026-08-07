@@ -109,6 +109,8 @@ export interface SessionSummary {
   messageCount: number;
   createdAt: string;
   lastActiveAt: string;
+  /** Filed away by the owner: shown in the archived list instead of the drawer, never deleted. */
+  archived?: boolean;
 }
 
 export interface CommandsListResultFrame {
@@ -358,6 +360,10 @@ export function encodeSessionArchive(threadId: string): string {
   return JSON.stringify({ type: 'session.archive', threadId });
 }
 
+export function encodeSessionUnarchive(threadId: string): string {
+  return JSON.stringify({ type: 'session.unarchive', threadId });
+}
+
 export function encodeSessionDelete(threadId: string): string {
   return JSON.stringify({ type: 'session.delete', threadId });
 }
@@ -386,6 +392,3 @@ export function encodeChatStop(threadId: string): string {
   return JSON.stringify({ type: 'chat.stop', threadId });
 }
 
-export function encodeSessionClear(threadId: string): string {
-  return JSON.stringify({ type: 'session.clear', threadId });
-}

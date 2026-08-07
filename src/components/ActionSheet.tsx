@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSheetBottomInset } from '../core/keyboard';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 export interface SheetOption {
@@ -31,12 +31,13 @@ export function ActionSheet({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const insets = useSafeAreaInsets();
+  // Opened from the composer, the keyboard is still up and would swallow the lower options.
+  const bottomInset = useSheetBottomInset(space.xl);
   return (
     <View style={styles.backdrop}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }]}>
+      <View style={[styles.sheet, { paddingBottom: bottomInset }]}>
         <View style={styles.grabber} />
         {preview ? (
           <Text style={styles.preview} numberOfLines={2}>
