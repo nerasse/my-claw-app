@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import {
   BackHandler,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -128,6 +129,9 @@ export function AppShell(): React.JSX.Element {
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.
   const activeThreadRef = useRef<string | null>(null);
+  // Where the thread on screen came from: the hardware back press sends a conversation
+  // opened from the archived list back to that list, instead of exiting the app.
+  const fromArchivesRef = useRef(false);
   const selectThread = useCallback((threadId: string | null) => {
     activeThreadRef.current = threadId;
     setActiveThread(threadId);
@@ -151,6 +155,7 @@ export function AppShell(): React.JSX.Element {
   );
 
   const newThread = useCallback(() => {
+    fromArchivesRef.current = false;
     selectThread(uuid());
     // The composer is the whole screen on a fresh thread: focus it, but only from the + tap,
     // never when the app boots into an empty list.
@@ -389,6 +394,14 @@ export function AppShell(): React.JSX.Element {
         setFilesOpen(false);
         return true;
       }
+      // A conversation opened from the archived list goes back there: backing out of it
+      // would otherwise fall through and close the app.
+      if (fromArchivesRef.current) {
+        fromArchivesRef.current = false;
+        selectThread(null);
+        setArchivesOpen(true);
+        return true;
+      }
       return false;
     });
     return () => sub.remove();
@@ -403,6 +416,7 @@ export function AppShell(): React.JSX.Element {
     filesOpen,
     imageViewer,
     modelOpen,
+    selectThread,
     settingsOpen,
     textViewer,
     threadMenu,
@@ -714,11 +728,14 @@ export function AppShell(): React.JSX.Element {
               onLogs={fetchLogs}
               onBack={() => setDiagOpen(false)}
             />
-          ) : archivesOpen ? (
+          )           : archivesOpen ? (
             <ArchivesScreen
               sessions={archivedSessions}
               onBack={() => setArchivesOpen(false)}
-              onOpenThread={openThread}
+              onOpenThread={threadId => {
+                fromArchivesRef.current = true;
+                openThread(threadId);
+              }}
               onThreadMenu={setThreadMenu}
             />
           ) : filesOpen ? (
@@ -744,7 +761,12 @@ export function AppShell(): React.JSX.Element {
               deviceInfo={deviceInfo}
               hint={hint}
               autoFocusHero={autoFocusHero}
-              onOpenDrawer={() => setDrawerOpen(true)}
+              onOpenDrawer={() => {
+                // The composer's keyboard eats the first Android back press: close it before
+                // the panel opens, so the first back closes the menu instead of doing nothing.
+                Keyboard.dismiss();
+                setDrawerOpen(true);
+              }}
               onStatusPress={() => {
                 setSettingsOpen(true);
                 setAutoFocusHero(false);
@@ -774,7 +796,10 @@ export function AppShell(): React.JSX.Element {
         connectionState={status.state}
         pending={pending}
         onClose={() => setDrawerOpen(false)}
-        onOpenThread={openThread}
+        onOpenThread={threadId => {
+          fromArchivesRef.current = false;
+          openThread(threadId);
+        }}
         onNewThread={newThread}
         onThreadMenu={setThreadMenu}
         onOpenSettings={() => {

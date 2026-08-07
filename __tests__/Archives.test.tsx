@@ -145,3 +145,64 @@ test('archiving never sends a delete, and the archived list offers no stale acti
 
   await settleAndUnmount(tree);
 });
+
+test('the hardware back button returns from an archived conversation to the list', async () => {
+  const tree = await renderApp();
+  await listSessions([summary(KEPT, 'Infra maison'), summary(FILED, 'Vieux projet', true)]);
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Open archived conversations');
+  await waitFor(() => textsOf(tree).includes('Vieux projet'));
+
+  await pressLabel(tree, 'Conversation Vieux projet');
+  await waitFor(() =>
+    sentFrames().some(frame => frame.type === 'session.history' && frame.threadId === FILED),
+  );
+
+  // The Android layer calls the last registered handler and stops when it returns true.
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+  };
+  const handlers = back.default.__handlers;
+
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]();
+  });
+
+  // Back from the archives goes to the archives list, never out of the app.
+  expect(handled).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Back to chat'));
+  expect(textsOf(tree)).toContain('Vieux projet');
+  expect(back.default.exitApp).not.toHaveBeenCalled();
+
+  await settleAndUnmount(tree);
+});
+
+test('the hardware back button with the drawer open only closes the menu', async () => {
+  const tree = await renderApp();
+  await listSessions([summary(KEPT, 'Infra maison')]);
+  await pressLabel(tree, 'Open conversations');
+  await waitFor(() => labelsOf(tree).includes('Open archived conversations'));
+
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+  };
+  const handlers = back.default.__handlers;
+
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]();
+  });
+
+  expect(handled).toBe(true);
+  // The panel is always mounted (it animates both ways), but the back press must take it
+  // out of the touch tree again.
+  await waitFor(
+    () => tree.root.findAll(node => node.props.pointerEvents === 'none', { deep: true }).length > 0,
+  );
+  expect(back.default.exitApp).not.toHaveBeenCalled();
+
+  await settleAndUnmount(tree);
+});
