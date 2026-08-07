@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSheetBottomInset } from '../core/keyboard';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
@@ -37,6 +37,13 @@ export function PromptSheet({
 
   const submit = (): void => {
     onSubmit(value);
+    close();
+  };
+
+  // The field is autofocused: the keyboard outlives the sheet if it is not told to go,
+  // and tapping outside or Cancel would leave it floating over the chat.
+  const close = (): void => {
+    Keyboard.dismiss();
     onClose();
   };
 
@@ -44,7 +51,7 @@ export function PromptSheet({
     <View style={styles.backdrop}>
       <Pressable
         style={StyleSheet.absoluteFill}
-        onPress={onClose}
+        onPress={close}
         accessibilityLabel="Close menu"
       />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
@@ -70,7 +77,7 @@ export function PromptSheet({
 
         <View style={styles.row}>
           <Pressable
-            onPress={onClose}
+            onPress={close}
             style={styles.button}
             accessibilityRole="button"
             accessibilityLabel="Cancel">
