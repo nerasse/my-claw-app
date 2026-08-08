@@ -665,6 +665,15 @@ export interface ConfigSavedFrame {
   error?: string;
 }
 
+/**
+ * The VAPID public key the device hands to its UnifiedPush distributor at registration.
+ * Sent by the server as soon as the socket opens. See docs/notifications.md.
+ */
+export interface NotificationsInfoFrame {
+  type: 'notifications.info';
+  vapidPublicKey: string;
+}
+
 export type ServerFrame =
   | ChatMessageFrame
   | StreamStartFrame
@@ -699,6 +708,7 @@ export type ServerFrame =
   | ConfigSavedFrame
   | StatusResultFrame
   | JobsListResultFrame
+  | NotificationsInfoFrame
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
@@ -733,6 +743,7 @@ const FRAME_TYPES = new Set([
   'config.saved',
   'status.result',
   'jobs.list.result',
+  'notifications.info',
   'chat.transcript',
   'approval.request',
   'error',
@@ -1060,5 +1071,34 @@ export function encodeJobsSave(fields: JobFieldsOut): string {
 
 export function encodeJobsDelete(id: string): string {
   return JSON.stringify({ type: 'jobs.delete', id });
+}
+
+/**
+ * Hands the device's UnifiedPush subscription to the server. An empty endpoint unregisters
+ * the device, which is how a distributor change or a revoked registration is reported.
+ */
+export function encodeNotificationsRegister(subscription: {
+  endpoint: string;
+  pubKey?: string;
+  auth?: string;
+}): string {
+  return JSON.stringify({
+    type: 'notifications.register',
+    endpoint: subscription.endpoint,
+    ...(subscription.pubKey ? { pubKey: subscription.pubKey } : {}),
+    ...(subscription.auth ? { auth: subscription.auth } : {}),
+  });
+}
+
+/**
+ * Reports whether the app is on screen and which thread it is showing, so the server can skip
+ * the run-completion notification for a thread the user is already watching.
+ */
+export function encodeNotificationsState(state: { foreground: boolean; threadId?: string }): string {
+  return JSON.stringify({
+    type: 'notifications.state',
+    foreground: state.foreground,
+    ...(state.threadId ? { threadId: state.threadId } : {}),
+  });
 }
 

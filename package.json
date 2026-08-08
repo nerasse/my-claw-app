@@ -15,6 +15,8 @@
   "dependencies": {
     "@likashefqet/react-native-image-zoom": "^4.3.0",
     "@react-native-clipboard/clipboard": "^1.16.3",
+    "expo": "~57.0.11",
+    "expo-unified-push": "^0.6.0",
     "react": "^19.2.8",
     "react-native": "0.86.2",
     "react-native-gesture-handler": "^3.1.0",
@@ -51,5 +53,21 @@
   },
   "engines": {
     "node": ">= 22.11.0"
+  },
+  "overrides": {
+    "react-native-worklets": "$react-native-worklets"
+  },
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "expo-asset",
+        "expo-constants",
+        "expo-file-system",
+        "expo-font",
+        "expo-keep-awake",
+        "@expo/dom-webview",
+        "@expo/log-box"
+      ]
+    }
   }
 }

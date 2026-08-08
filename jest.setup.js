@@ -11,6 +11,34 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   },
 }));
 
+// UnifiedPush talks to a distributor app over Android IPC; under Jest there is neither.
+// The registration callback is kept on the mock so a test can replay what the distributor
+// would have sent (see __tests__/Notifications.test.tsx).
+jest.mock('expo-unified-push', () => {
+  const listeners = [];
+  return {
+    __esModule: true,
+    default: {
+      getDistributors: jest.fn(() => [{ id: 'io.heckel.ntfy', name: 'ntfy', isInternal: false }]),
+      getSavedDistributor: jest.fn(() => null),
+      saveDistributor: jest.fn(),
+      registerDevice: jest.fn(() => Promise.resolve()),
+      unregisterDevice: jest.fn(() => Promise.resolve()),
+    },
+    checkPermissions: jest.fn(() => Promise.resolve(true)),
+    requestPermissions: jest.fn(() => Promise.resolve('granted')),
+    showLocalNotification: jest.fn(() => Promise.resolve()),
+    subscribeDistributorMessages: jest.fn(fn => {
+      listeners.push(fn);
+      return () => {
+        const index = listeners.indexOf(fn);
+        if (index >= 0) listeners.splice(index, 1);
+      };
+    }),
+    __emitDistributorMessage: message => listeners.forEach(fn => fn(message)),
+  };
+});
+
 // The shipped mock exposes everything under `default`; spread it so named imports resolve.
 jest.mock(
   'react-native-safe-area-context',

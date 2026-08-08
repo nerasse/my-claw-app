@@ -93,6 +93,12 @@ android {
             keyPassword 'android'
         }
     }
+    // The release APK is sideloaded from our own Forgejo, never submitted to a store: the
+    // vital lint pass costs a minute per build and gates nothing here.
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug

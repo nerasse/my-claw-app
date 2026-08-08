@@ -51,10 +51,17 @@ function packageDirs(modulesDir) {
   return out;
 }
 
+// Expo modules pulled in by the `expo` umbrella that we deliberately keep out of the build
+// (package.json > expo.autolinking.exclude, with metro resolving 'expo' straight to
+// expo-modules-core so none of their JavaScript is bundled either). Not linking them is the
+// point, so they are not missing dependencies. See docs/notifications.md.
+const excludedFromAutolinking = new Set(manifest.expo?.autolinking?.exclude ?? []);
+
 const missing = [];
 for (const [name, dir] of packageDirs(path.join(root, 'node_modules'))) {
   if (direct.has(name)) continue;
   if (isFrameworkPackage(name)) continue;
+  if (excludedFromAutolinking.has(name)) continue;
   if (!isNativeAndroidModule(dir)) continue;
   missing.push(name);
 }

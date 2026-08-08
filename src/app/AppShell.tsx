@@ -6,8 +6,10 @@ import React, {
   useState,
 } from 'react';
 import {
+  AppState,
   BackHandler,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StatusBar,
   Text,
@@ -94,7 +96,15 @@ import {
   type VoiceMode,
   type VoiceModeResultFrame,
   type WorkspaceEntry,
+  encodeNotificationsRegister,
+  encodeNotificationsState,
 } from '../core/protocol';
+import {
+  parseNotificationLink,
+  pushSupported,
+  registerForPush,
+  subscribeToPushRegistration,
+} from '../core/notifications';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
@@ -353,6 +363,9 @@ export function AppShell(): React.JSX.Element {
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.
   const activeThreadRef = useRef<string | null>(null);
+  // The server's push key, kept for a re-registration after the distributor rotates the
+  // endpoint (the "registered" event can fire long after the frame that triggered it).
+  const vapidRef = useRef<string | null>(null);
   // Where the thread on screen came from: the hardware back press sends a conversation
   // opened from the archived list back to that list, instead of exiting the app.
   const fromArchivesRef = useRef(false);
@@ -651,6 +664,12 @@ export function AppShell(): React.JSX.Element {
             setJobsSaving(false);
             setJobsEditor(null);
           }
+          break;
+        case 'notifications.info':
+          // The server hands its VAPID key on every connection; registering again is how the
+          // library verifies the distributor link is still alive (and picks up a rotation).
+          vapidRef.current = frame.vapidPublicKey;
+          registerForPush(frame.vapidPublicKey).catch(() => {});
           break;
         case 'chat.cleared':
           chatStore.clearThread(frame.threadId);
@@ -975,6 +994,57 @@ export function AppShell(): React.JSX.Element {
     },
     [selectThread],
   );
+
+  // Push notifications (docs/notifications.md). The distributor answers registrations on its
+  // own channel: whenever it hands out an endpoint the server gets it, and a lost registration
+  // clears the server side so it stops publishing into the void.
+  useEffect(() => {
+    if (!pushSupported) return;
+    return subscribeToPushRegistration(event => {
+      if (event.kind === 'registered') {
+        connection.send(encodeNotificationsRegister(event.subscription)).catch(() => {});
+        return;
+      }
+      if (event.kind === 'unregistered') {
+        connection.send(encodeNotificationsRegister({ endpoint: '' })).catch(() => {});
+      }
+    });
+  }, []);
+
+  // The one notification the user asked to never see is the run they are already watching, so
+  // the server needs to know what is on screen: app state and active thread, on every change.
+  useEffect(() => {
+    if (!pushSupported) return;
+    const report = (foreground: boolean) => {
+      connection
+        .send(
+          encodeNotificationsState({
+            foreground,
+            ...(activeThreadRef.current ? { threadId: activeThreadRef.current } : {}),
+          }),
+        )
+        .catch(() => {});
+    };
+    report(AppState.currentState === 'active');
+    const subscription = AppState.addEventListener('change', state => report(state === 'active'));
+    return () => subscription.remove();
+  }, [activeThread]);
+
+  // A notification tap opens the thread or the jobs page it came from. The cold start (the app
+  // was killed and the tap launched it) is the initial URL; a live app gets the event.
+  useEffect(() => {
+    const handle = (link: string | null) => {
+      const target = parseNotificationLink(link);
+      if (!target) return;
+      if (target.kind === 'thread') openThread(target.threadId);
+      else openJobs();
+    };
+    Linking.getInitialURL()
+      .then(handle)
+      .catch(() => {});
+    const subscription = Linking.addEventListener('url', event => handle(event.url));
+    return () => subscription.remove();
+  }, [openThread, openJobs]);
 
   // Asked for when the screen opens rather than at boot: it is the only place that shows it,
   // and a stale answer from an hour ago would render a switch that no longer matches the server.
