@@ -1,7 +1,7 @@
 # Notifications (côté app)
 
 L'app affiche une notification système quand un run de session ou un job cron se termine côté
-serveur. Le transport est **UnifiedPush** (pas de Firebase) — l'architecture complète, le
+serveur. Le transport est **UnifiedPush** (pas de Firebase) · l'architecture complète, le
 format du payload et les événements sont documentés côté serveur dans `docs/notifications.md`
 du dépôt my-claw. Ce document couvre ce qui vit dans l'app.
 
@@ -14,7 +14,7 @@ du dépôt my-claw. Ce document couvre ce qui vit dans l'app.
    enregistrement, Android 13+).
 3. Un serveur **ntfy** joignable, celui configuré côté my-claw.
 
-Sans distributeur installé, l'app fonctionne normalement — il n'y a simplement aucune
+Sans distributeur installé, l'app fonctionne normalement : il n'y a simplement aucune
 notification, et la raison est remontée par `registerForPush()`.
 
 ## Cycle de vie
@@ -51,6 +51,12 @@ par le JS : elle s'affiche donc même quand l'app est **tuée**. Le payload port
 | --- | --- |
 | `myclaw://thread/<threadId>` | ouvre la conversation |
 | `myclaw://job/<jobId>` | ouvre la page Jobs |
+
+**Bannière en haut de l'écran** : la lib crée son canal en `IMPORTANCE_DEFAULT` (son, pas de
+bannière). `MainApplication.kt` pré-crée au boot le canal `com.myclawapp:unified_push_channel:runs`
+en `IMPORTANCE_HIGH` — les réglages d'un canal sont figés à la première création, donc la
+bannière s'affiche et l'utilisateur peut toujours l'ajuster dans Paramètres → Apps →
+my-claw-app → Notifications → canal « Runs ».
 
 Le schéma `myclaw` est déclaré dans `AndroidManifest.xml` (intent-filter `VIEW` sur
 `MainActivity`). `AppShell` résout `Linking.getInitialURL()` au démarrage (cas du démarrage à
