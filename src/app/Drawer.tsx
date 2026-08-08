@@ -37,6 +37,7 @@ export function Drawer({
   onNewThread,
   onThreadMenu,
   onOpenSettings,
+  onOpenJobs,
   archivedCount,
   onOpenArchives,
 }: {
@@ -51,6 +52,7 @@ export function Drawer({
   onNewThread: () => void;
   onThreadMenu: (thread: SessionSummary) => void;
   onOpenSettings: () => void;
+  onOpenJobs: () => void;
   archivedCount: number;
   onOpenArchives: () => void;
 }): React.JSX.Element {
@@ -189,6 +191,18 @@ export function Drawer({
           </Pressable>
 
           <Pressable
+            style={[styles.footerRow, styles.jobsRow]}
+            onPress={onOpenJobs}
+            accessibilityRole="button"
+            accessibilityLabel="Open jobs">
+            <View style={styles.footerMain}>
+              <Text style={styles.footerTitle}>Jobs</Text>
+              <Text style={styles.footerMeta}>scheduled tasks</Text>
+            </View>
+            <Text style={styles.footerGlyph}>›</Text>
+          </Pressable>
+
+          <Pressable
             style={styles.footerRow}
             onPress={onOpenSettings}
             accessibilityRole="button"
@@ -271,6 +285,11 @@ const createStyles = (palette: Palette) => ({
   },
   footerRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
   archivedRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.border,
+    paddingBottom: space.md,
+  },
+  jobsRow: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: palette.border,
     paddingBottom: space.md,

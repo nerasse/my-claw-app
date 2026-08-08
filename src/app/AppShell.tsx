@@ -73,6 +73,9 @@ import {
   encodeWorkspacesRemove,
   encodeWorkspacesRename,
   encodeWorkspacesSetPath,
+  encodeJobsList,
+  encodeJobsSave,
+  encodeJobsDelete,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
@@ -80,6 +83,8 @@ import {
   type ApprovalRequestFrame,
   type AgentsConfigResultFrame,
   type FileScopeMode,
+  type JobEntry,
+  type JobFieldsOut,
   type LogsTailQuery,
   type McpEntry,
   type SessionFileMeta,
@@ -91,6 +96,7 @@ import {
   type WorkspaceEntry,
 } from '../core/protocol';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
+import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
@@ -127,6 +133,8 @@ import { TextViewer } from './TextViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
 import { StatusScreen } from './StatusScreen';
+import { JobsScreen } from './JobsScreen';
+import { JobsEditorScreen } from './JobsEditorScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetOption } from '../components/ActionSheet';
@@ -315,6 +323,15 @@ export function AppShell(): React.JSX.Element {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   /** The fullscreen status page of a conversation, an absolute layer over everything else. */
   const [statusOpen, setStatusOpen] = useState(false);
+  /** The scheduled-tasks page, another absolute layer; the editor stacks over the list. */
+  const [jobsOpen, setJobsOpen] = useState(false);
+  /** The job being edited: null = the list, 'new' = a blank editor, an entry = that job. */
+  const [jobsEditor, setJobsEditor] = useState<JobEntry | 'new' | null>(null);
+  const [jobsSaving, setJobsSaving] = useState(false);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [jobToDelete, setJobToDelete] = useState<JobEntry | null>(null);
+  /** The frame handler runs outside React: it needs to know a save/delete is in flight. */
+  const jobsSavingRef = useRef(false);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   // A run can ask several times in a row; each answer clears one, in order.
@@ -385,6 +402,51 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeStatusGet(threadId)).catch(() => {});
   }, []);
 
+  /** The jobs page asks on every opening: the listing is a snapshot, and cheap to refresh. */
+  const openJobs = useCallback(() => {
+    setJobsEditor(null);
+    setJobsError(null);
+    setJobsOpen(true);
+    setDrawerOpen(false);
+    setAutoFocusHero(false);
+    connection.send(encodeJobsList()).catch(() => {});
+  }, []);
+
+  const saveJob = useCallback(
+    (fields: JobFieldsOut) => {
+      jobsSavingRef.current = true;
+      setJobsSaving(true);
+      setJobsError(null);
+      connection
+        .send(encodeJobsSave(fields))
+        .then(() => {
+          // The fresh listing answers the save; the frame handler closes the editor.
+        })
+        .catch(() => {
+          jobsSavingRef.current = false;
+          setJobsSaving(false);
+        });
+    },
+    [],
+  );
+
+  const deleteJob = useCallback(
+    (job: JobEntry) => {
+      setJobToDelete(null);
+      jobsSavingRef.current = true;
+      setJobsSaving(true);
+      setJobsError(null);
+      connection
+        .send(encodeJobsDelete(job.id))
+        .then(() => {})
+        .catch(() => {
+          jobsSavingRef.current = false;
+          setJobsSaving(false);
+        });
+    },
+    [],
+  );
+
   useEffect(() => {
     /** Activity in a thread the user is not reading: badge it and make sure it is listed. */
     const noteActivity = (threadId: string, text: string): void => {
@@ -399,6 +461,7 @@ export function AppShell(): React.JSX.Element {
         connection.send(encodeSessionList());
         connection.send(encodeCommandsList());
         connection.send(encodeModelList());
+        connection.send(encodeJobsList());
       }
     });
     const offPending = connection.onPending(setPending);
@@ -578,6 +641,17 @@ export function AppShell(): React.JSX.Element {
           // while a request is in flight.
           if (statusStore.getSnapshot().fetch === 'loading') statusStore.receive(frame);
           break;
+        case 'jobs.list.result':
+          // The fresh listing is also the answer to a save or a delete: a pending one closes
+          // the editor on arrival, and a refused one lands as a jobs-scoped error instead.
+          jobsStore.replace(frame);
+          setJobsError(null);
+          if (jobsSavingRef.current) {
+            jobsSavingRef.current = false;
+            setJobsSaving(false);
+            setJobsEditor(null);
+          }
+          break;
         case 'chat.cleared':
           chatStore.clearThread(frame.threadId);
           break;
@@ -617,6 +691,10 @@ export function AppShell(): React.JSX.Element {
             } else if (frame.scope === 'workspaces') {
               setWorkspacesError(frame.message);
               setWorkspacesBusy(false);
+            } else if (frame.scope === 'jobs') {
+              jobsSavingRef.current = false;
+              setJobsSaving(false);
+              setJobsError(frame.message);
             } else if (frame.scope === 'status') {
               statusStore.fail(frame.message);
             } else if (frame.scope === 'agents') {
@@ -674,6 +752,15 @@ export function AppShell(): React.JSX.Element {
         // always close it before anything underneath can see the press.
         statusStore.close();
         setStatusOpen(false);
+        return true;
+      }
+      if (jobsOpen) {
+        // The editor stacks over the jobs list: back leaves it before the page itself.
+        if (jobsEditor) {
+          setJobsEditor(null);
+          return true;
+        }
+        setJobsOpen(false);
         return true;
       }
       if (imageViewer) {
@@ -835,6 +922,8 @@ export function AppShell(): React.JSX.Element {
     filesOpen,
     imageViewer,
     instructionsFrom,
+    jobsEditor,
+    jobsOpen,
     modelOpen,
     modelPath,
     scopeEditor,
@@ -902,6 +991,16 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeSkillsList()).catch(() => {});
     connection.send(encodeWorkspacesList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
+
+  // The jobs editor's pickers (model, workspace, skills, MCP, tools) are fed by the same live
+  // catalogs as the settings pages: ask for them when the jobs page opens too.
+  useEffect(() => {
+    if (!jobsOpen) return;
+    connection.send(encodeSkillsList()).catch(() => {});
+    connection.send(encodeToolsList()).catch(() => {});
+    connection.send(encodeMcpList()).catch(() => {});
+    connection.send(encodeWorkspacesList()).catch(() => {});
+  }, [jobsOpen]);
 
   // The index shows the skills/tools counts on its rows: asking for the catalogs when it opens
   // is what makes those numbers real without a first visit to either page. The pages still
@@ -1809,6 +1908,7 @@ export function AppShell(): React.JSX.Element {
           setDrawerOpen(false);
           openSettings();
         }}
+        onOpenJobs={openJobs}
         archivedCount={archivedSessions.length}
         onOpenArchives={() => {
           setDrawerOpen(false);
@@ -2003,6 +2103,52 @@ export function AppShell(): React.JSX.Element {
             statusStore.close();
             setStatusOpen(false);
           }}
+        />
+      ) : null}
+
+      {jobsOpen ? (
+        <>
+          <JobsScreen
+            error={jobsError}
+            onClose={() => {
+              setJobsEditor(null);
+              setJobsOpen(false);
+            }}
+            onAdd={() => setJobsEditor('new')}
+            onEdit={job => {
+              setJobsError(null);
+              setJobsEditor(job);
+            }}
+          />
+          {jobsEditor ? (
+            <JobsEditorScreen
+              job={jobsEditor === 'new' ? null : jobsEditor}
+              error={jobsError}
+              saving={jobsSaving}
+              skills={skills}
+              tools={tools}
+              mcpServers={mcpServers}
+              workspaces={workspaces}
+              onBack={() => setJobsEditor(null)}
+              onSave={saveJob}
+              onDelete={setJobToDelete}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {jobToDelete ? (
+        <ActionSheet
+          preview={`Delete "${jobToDelete.name}"? The task stops running, its output stays on the server.`}
+          options={[
+            {
+              label: 'Delete',
+              danger: true,
+              onPress: () => deleteJob(jobToDelete),
+            },
+            { label: 'Cancel', onPress: () => setJobToDelete(null) },
+          ]}
+          onClose={() => setJobToDelete(null)}
         />
       ) : null}
     </SafeAreaView>

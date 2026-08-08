@@ -399,6 +399,57 @@ export interface ChatClearedFrame {
   threadId: string;
 }
 
+/** A job's scope override in the app's editing vocabulary, mirroring the agent scope editor. */
+export type JobScopeMode = 'inherit' | 'all' | 'list';
+
+export interface JobScope {
+  mode: JobScopeMode;
+  names?: string[];
+}
+
+/** One scheduled task, as the server stores it plus the run-time unknowns painted red. */
+export interface JobEntry {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule: {
+    kind: 'cron' | 'interval' | 'once';
+    expr?: string;
+    minutes?: number;
+    runAt?: string;
+    display: string;
+  };
+  enabled: boolean;
+  state: 'scheduled' | 'paused' | 'completed';
+  pausedReason?: string;
+  repeat: number | null;
+  completedRuns: number;
+  deliver: string;
+  model?: string;
+  workspace?: string;
+  skillsMode: JobScopeMode;
+  skills?: string[];
+  mcpMode: JobScopeMode;
+  mcp?: string[];
+  toolsMode: JobScopeMode;
+  tools?: string[];
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: 'ok' | 'error' | null;
+  lastError: string | null;
+  createdAt: string;
+  unknownModel: boolean;
+  unknownWorkspace: boolean;
+  unknownSkills: string[];
+  unknownMcp: string[];
+  unknownTools: string[];
+}
+
+export interface JobsListResultFrame {
+  type: 'jobs.list.result';
+  jobs: JobEntry[];
+}
+
 /** Which request was refused. The screen that asked is the one that shows it. */
 export type ErrorScope =
   | 'chat'
@@ -415,7 +466,8 @@ export type ErrorScope =
   | 'instructions'
   | 'config'
   | 'workspaces'
-  | 'status';
+  | 'status'
+  | 'jobs';
 
 export interface ErrorFrame {
   type: 'error';
@@ -646,6 +698,7 @@ export type ServerFrame =
   | ConfigResultFrame
   | ConfigSavedFrame
   | StatusResultFrame
+  | JobsListResultFrame
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
@@ -679,6 +732,7 @@ const FRAME_TYPES = new Set([
   'config.result',
   'config.saved',
   'status.result',
+  'jobs.list.result',
   'chat.transcript',
   'approval.request',
   'error',
@@ -968,5 +1022,43 @@ export function encodeChatStop(threadId: string): string {
 /** The fullscreen status page of a conversation, asked when the menu opens it. */
 export function encodeStatusGet(threadId: string): string {
   return JSON.stringify({ type: 'status.get', threadId });
+}
+
+export interface JobFieldsOut {
+  id?: string;
+  name: string;
+  prompt: string;
+  schedule: string;
+  enabled: boolean;
+  model?: string;
+  workspace?: string;
+  skills: JobScope;
+  mcp: JobScope;
+  tools: JobScope;
+}
+
+/** Lists the scheduled tasks; every mutation answers with the same fresh listing. */
+export function encodeJobsList(): string {
+  return JSON.stringify({ type: 'jobs.list' });
+}
+
+/** Creates (no id) or updates a job. The schedule is parsed server-side. */
+export function encodeJobsSave(fields: JobFieldsOut): string {
+  const frame: Record<string, unknown> = { type: 'jobs.save' };
+  if (fields.id) frame.id = fields.id;
+  frame.name = fields.name;
+  frame.prompt = fields.prompt;
+  frame.schedule = fields.schedule;
+  frame.enabled = fields.enabled;
+  if (fields.model) frame.model = fields.model;
+  if (fields.workspace) frame.workspace = fields.workspace;
+  frame.skills = fields.skills;
+  frame.mcp = fields.mcp;
+  frame.tools = fields.tools;
+  return JSON.stringify(frame);
+}
+
+export function encodeJobsDelete(id: string): string {
+  return JSON.stringify({ type: 'jobs.delete', id });
 }
 

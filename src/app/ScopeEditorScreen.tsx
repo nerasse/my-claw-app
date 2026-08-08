@@ -37,7 +37,7 @@ export function ScopeEditorScreen({
 }: {
   title: string;
   subtitle: string;
-  kind: 'skills' | 'mcp';
+  kind: 'skills' | 'mcp' | 'tools';
   available: ScopeItem[];
   mode: ScopeMode;
   names: string[];
@@ -146,7 +146,7 @@ export function ScopeEditorScreen({
               style={styles.search}
               value={query}
               onChangeText={setQuery}
-              placeholder={`Filter ${kind === 'skills' ? 'skills' : 'servers'}...`}
+              placeholder={`Filter ${kind === 'skills' ? 'skills' : kind === 'mcp' ? 'servers' : 'tools'}...`}
               placeholderTextColor={styles.placeholder.color}
               autoCorrect={false}
               autoCapitalize="none"
@@ -167,7 +167,7 @@ export function ScopeEditorScreen({
                         accessibilityState={{ selected: picked.has(name) }}>
                         <Text style={[styles.itemName, styles.removed]}>{name}</Text>
                         <Text style={[styles.itemHint, styles.removed]} numberOfLines={1}>
-                          {kind === 'skills' ? 'no such skill installed' : 'no such MCP server declared'}
+                          {kind === 'skills' ? 'no such skill installed' : kind === 'mcp' ? 'no such MCP server declared' : 'no such tool in the catalog'}
                         </Text>
                         <Text style={[styles.glyph, styles.removed]}>{picked.has(name) ? '✓' : '✕'}</Text>
                       </Pressable>
@@ -177,7 +177,7 @@ export function ScopeEditorScreen({
               </View>
             ) : null}
             <View style={styles.category}>
-              <Text style={styles.section}>{kind === 'skills' ? 'installed skills' : 'declared servers'}</Text>
+              <Text style={styles.section}>{kind === 'skills' ? 'installed skills' : kind === 'mcp' ? 'declared servers' : 'tool catalog'}</Text>
               <View style={styles.card}>
                 {filtered.length === 0 ? (
                   <View style={styles.row}>
