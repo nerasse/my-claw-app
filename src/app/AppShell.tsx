@@ -78,6 +78,7 @@ import {
   encodeJobsList,
   encodeJobsSave,
   encodeJobsDelete,
+  encodeJobsRuns,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
@@ -86,6 +87,7 @@ import {
   type AgentsConfigResultFrame,
   type FileScopeMode,
   type JobEntry,
+  type JobRunEntry,
   type JobFieldsOut,
   type LogsTailQuery,
   type McpEntry,
@@ -145,6 +147,7 @@ import { ArchivesScreen } from './ArchivesScreen';
 import { StatusScreen } from './StatusScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
+import { JobSessionsScreen } from './JobSessionsScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetOption } from '../components/ActionSheet';
@@ -340,6 +343,14 @@ export function AppShell(): React.JSX.Element {
   const [jobsSaving, setJobsSaving] = useState(false);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [jobToDelete, setJobToDelete] = useState<JobEntry | null>(null);
+  /** The runs page of one job, stacked over the jobs list; a run opens as a chat over it. */
+  const [jobSessions, setJobSessions] = useState<{ jobId: string; jobName: string } | null>(null);
+  const [jobRuns, setJobRuns] = useState<JobRunEntry[] | null>(null);
+  const [runsError, setRunsError] = useState<string | null>(null);
+  /** The frame handler runs outside React: it checks the runs page by ref. */
+  const jobSessionsRef = useRef<{ jobId: string; jobName: string } | null>(null);
+  /** Run titles are server-side; the chat header shows one instead of the raw first message. */
+  const runTitlesRef = useRef<Record<string, string>>({});
   /** The frame handler runs outside React: it needs to know a save/delete is in flight. */
   const jobsSavingRef = useRef(false);
 
@@ -366,6 +377,8 @@ export function AppShell(): React.JSX.Element {
   // The server's push key, kept for a re-registration after the distributor rotates the
   // endpoint (the "registered" event can fire long after the frame that triggered it).
   const vapidRef = useRef<string | null>(null);
+  // A run opened from the job's runs page goes back there, like the archives flow.
+  const fromJobSessionsRef = useRef(false);
   // Where the thread on screen came from: the hardware back press sends a conversation
   // opened from the archived list back to that list, instead of exiting the app.
   const fromArchivesRef = useRef(false);
@@ -418,12 +431,37 @@ export function AppShell(): React.JSX.Element {
   /** The jobs page asks on every opening: the listing is a snapshot, and cheap to refresh. */
   const openJobs = useCallback(() => {
     setJobsEditor(null);
+    setJobSessions(null);
     setJobsError(null);
     setJobsOpen(true);
     setDrawerOpen(false);
     setAutoFocusHero(false);
     connection.send(encodeJobsList()).catch(() => {});
   }, []);
+
+  const openJobSessions = useCallback((job: JobEntry) => {
+    setJobsEditor(null);
+    setJobSessions({ jobId: job.id, jobName: job.name });
+    jobSessionsRef.current = { jobId: job.id, jobName: job.name };
+    setJobRuns(null);
+    setRunsError(null);
+    setDrawerOpen(false);
+    setAutoFocusHero(false);
+    connection.send(encodeJobsRuns(job.id)).catch(() => {});
+  }, []);
+
+  /** Opens a job run as a chat, exactly like a conversation: history, stream, and answers. */
+  const openJobRun = useCallback(
+    (threadId: string) => {
+      // The runs page and the jobs page close under the chat; the back key restores them
+      // (jobSessionsRef remembers which job the run belonged to).
+      fromJobSessionsRef.current = true;
+      setJobsOpen(false);
+      setJobSessions(null);
+      openThread(threadId);
+    },
+    [openThread],
+  );
 
   const saveJob = useCallback(
     (fields: JobFieldsOut) => {
@@ -665,6 +703,17 @@ export function AppShell(): React.JSX.Element {
             setJobsEditor(null);
           }
           break;
+        case 'jobs.runs.result': {
+          // The answer to the runs page that asked for it: only accepted while it is open, so
+          // a late answer does not resurrect a closed page.
+          if (!jobSessionsRef.current || jobSessionsRef.current.jobId !== frame.jobId) break;
+          const titles: Record<string, string> = {};
+          for (const run of frame.runs) titles[run.threadId] = run.title;
+          runTitlesRef.current = titles;
+          setJobRuns(frame.runs);
+          setRunsError(null);
+          break;
+        }
         case 'notifications.info':
           // The server hands its VAPID key on every connection; registering again is how the
           // library verifies the distributor link is still alive (and picks up a rotation).
@@ -774,9 +823,15 @@ export function AppShell(): React.JSX.Element {
         return true;
       }
       if (jobsOpen) {
-        // The editor stacks over the jobs list: back leaves it before the page itself.
+        // The runs page and the editor stack over the jobs list: back leaves them first.
         if (jobsEditor) {
           setJobsEditor(null);
+          return true;
+        }
+        if (jobSessions) {
+          setJobSessions(null);
+          jobSessionsRef.current = null;
+          setJobRuns(null);
           return true;
         }
         setJobsOpen(false);
@@ -925,6 +980,19 @@ export function AppShell(): React.JSX.Element {
         setArchivesOpen(true);
         return true;
       }
+      // A run opened from a job's runs page goes back to that page, then on to the jobs list.
+      if (fromJobSessionsRef.current) {
+        fromJobSessionsRef.current = false;
+        selectThread(null);
+        setJobsOpen(true);
+        const page = jobSessionsRef.current;
+        if (page) {
+          setJobSessions(page);
+          // The runs are still in state from the page that opened the run; no refetch needed.
+          setJobRuns(current => current);
+        }
+        return true;
+      }
       return false;
     });
     return () => sub.remove();
@@ -941,6 +1009,7 @@ export function AppShell(): React.JSX.Element {
     filesOpen,
     imageViewer,
     instructionsFrom,
+    jobSessions,
     jobsEditor,
     jobsOpen,
     modelOpen,
@@ -1372,7 +1441,7 @@ export function AppShell(): React.JSX.Element {
   ];
 
   const title =
-    (activeThread ? sessionStore.titleOf(activeThread) : null) ??
+    (activeThread ? runTitlesRef.current[activeThread] ?? sessionStore.titleOf(activeThread) : null) ??
     'new conversation';
   const offline = status.state !== 'connected';
   const subtitle = [
@@ -2065,7 +2134,7 @@ export function AppShell(): React.JSX.Element {
 
       {agentsEffortOpen && agentsConfig ? (
         <ActionSheet
-          preview={`Default effort — current: ${agentsConfig.defaultEffort || 'not set'}`}
+          preview={`Default effort · current: ${agentsConfig.defaultEffort || 'not set'}`}
           options={[
             ...agentsConfig.effortLevels.map(level => ({
               label: level,
@@ -2184,6 +2253,8 @@ export function AppShell(): React.JSX.Element {
             error={jobsError}
             onClose={() => {
               setJobsEditor(null);
+              setJobSessions(null);
+              jobSessionsRef.current = null;
               setJobsOpen(false);
             }}
             onAdd={() => setJobsEditor('new')}
@@ -2191,7 +2262,31 @@ export function AppShell(): React.JSX.Element {
               setJobsError(null);
               setJobsEditor(job);
             }}
+            onSessions={openJobSessions}
           />
+          {jobSessions ? (
+            <JobSessionsScreen
+              jobName={jobSessions.jobName}
+              runs={jobRuns}
+              error={runsError}
+              onClose={() => {
+                setJobSessions(null);
+                jobSessionsRef.current = null;
+                setJobRuns(null);
+              }}
+              onEditJob={() => {
+                // The shortcut: from the runs page straight into the job's editor.
+                const job = jobsStore.getSnapshot().jobs.find(entry => entry.id === jobSessions.jobId);
+                setJobSessions(null);
+                jobSessionsRef.current = null;
+                if (job) {
+                  setJobsError(null);
+                  setJobsEditor(job);
+                }
+              }}
+              onOpenRun={openJobRun}
+            />
+          ) : null}
           {jobsEditor ? (
             <JobsEditorScreen
               job={jobsEditor === 'new' ? null : jobsEditor}

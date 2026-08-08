@@ -450,6 +450,20 @@ export interface JobsListResultFrame {
   jobs: JobEntry[];
 }
 
+/** One run of a job, listed as a thread the app can reopen and chat on. */
+export interface JobRunEntry {
+  threadId: string;
+  runAt: number;
+  messageCount: number;
+  title: string;
+}
+
+export interface JobsRunsResultFrame {
+  type: 'jobs.runs.result';
+  jobId: string;
+  runs: JobRunEntry[];
+}
+
 /** Which request was refused. The screen that asked is the one that shows it. */
 export type ErrorScope =
   | 'chat'
@@ -708,6 +722,7 @@ export type ServerFrame =
   | ConfigSavedFrame
   | StatusResultFrame
   | JobsListResultFrame
+  | JobsRunsResultFrame
   | NotificationsInfoFrame
   | ErrorFrame;
 
@@ -743,6 +758,7 @@ const FRAME_TYPES = new Set([
   'config.saved',
   'status.result',
   'jobs.list.result',
+  'jobs.runs.result',
   'notifications.info',
   'chat.transcript',
   'approval.request',
@@ -1071,6 +1087,11 @@ export function encodeJobsSave(fields: JobFieldsOut): string {
 
 export function encodeJobsDelete(id: string): string {
   return JSON.stringify({ type: 'jobs.delete', id });
+}
+
+/** Asks for the run sessions of one job, newest first. */
+export function encodeJobsRuns(jobId: string): string {
+  return JSON.stringify({ type: 'jobs.runs', jobId });
 }
 
 /**

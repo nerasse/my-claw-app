@@ -7,9 +7,9 @@ import { useJobs } from '../core/jobs';
 import type { JobEntry } from '../core/protocol';
 
 function when(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '·';
   const date = new Date(iso);
-  if (isNaN(date.getTime())) return '—';
+  if (isNaN(date.getTime())) return '·';
   const day = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
   const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   return `${day} ${time}`;
@@ -23,11 +23,13 @@ export function JobsScreen({
   onClose,
   onAdd,
   onEdit,
+  onSessions,
 }: {
   error: string | null;
   onClose: () => void;
   onAdd: () => void;
   onEdit: (job: JobEntry) => void;
+  onSessions: (job: JobEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
@@ -68,12 +70,12 @@ export function JobsScreen({
 
       {jobs.length === 0 ? (
         <Text style={styles.empty}>
-          nothing scheduled — add a job to run a prompt on a schedule
+          nothing scheduled · add a job to run a prompt on a schedule
         </Text>
       ) : (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           {jobs.map((job, index) => (
-            <JobCard key={job.id} job={job} index={index} onEdit={onEdit} />
+            <JobCard key={job.id} job={job} index={index} onEdit={onEdit} onSessions={onSessions} />
           ))}
         </ScrollView>
       )}
@@ -85,10 +87,12 @@ function JobCard({
   job,
   index,
   onEdit,
+  onSessions,
 }: {
   job: JobEntry;
   index: number;
   onEdit: (job: JobEntry) => void;
+  onSessions: (job: JobEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const unknownNames = [
@@ -156,6 +160,14 @@ function JobCard({
               ? 'delivered to the chat it was created from'
               : `delivered to ${job.deliver}`}
         </Text>
+        <Pressable
+          style={styles.sessionsRow}
+          onPress={() => onSessions(job)}
+          accessibilityRole="button"
+          accessibilityLabel={`Job sessions ${job.name}`}>
+          <Text style={styles.sessionsText}>sessions</Text>
+          <Text style={styles.sessionsGlyph}>›</Text>
+        </Pressable>
       </Pressable>
     </View>
   );
@@ -233,4 +245,16 @@ const createStyles = (palette: Palette) => ({
   rowValue: { fontSize: font.small, color: palette.textMuted },
   valueRemoved: { fontSize: font.small, color: palette.danger },
   cardFooter: { fontSize: font.micro, color: palette.textFaint, marginTop: space.xs },
+  sessionsRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: space.sm,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceAlt,
+  },
+  sessionsText: { fontSize: font.small, color: palette.accent, fontWeight: '600' as const },
+  sessionsGlyph: { fontSize: font.body, color: palette.accent },
 });

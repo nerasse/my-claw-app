@@ -424,3 +424,109 @@ test('the back key walks the editor, then the page, and stops there', async () =
   expect(back.default.exitApp).not.toHaveBeenCalled();
   await unmount(tree);
 });
+
+test('a job card opens its runs page, which lists every run as an openable session', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emit({ type: 'jobs.list.result', jobs: [job()] });
+  await waitFor(() => labelsOf(tree).includes('Job sessions Morning report'));
+
+  await pressLabel(tree, 'Job sessions Morning report');
+  await waitFor(() => sentOfType('jobs.runs').length === 1);
+  expect(sentOfType('jobs.runs')[0]).toMatchObject({ jobId: 'job-1' });
+  expect(labelsOf(tree)).toContain('Edit job settings');
+
+  await emit({
+    type: 'jobs.runs.result',
+    jobId: 'job-1',
+    runs: [
+      { threadId: 'cron-job-1-1723200000000', runAt: 1723200000000, messageCount: 4, title: 'Morning report · 08/08 19:30' },
+      { threadId: 'cron-job-1-1723113600000', runAt: 1723113600000, messageCount: 0, title: 'Morning report · 08/08 17:00' },
+    ],
+  });
+  await waitFor(() => labelsOf(tree).includes('Open run Morning report · 08/08 19:30'));
+  expect(labelsOf(tree)).toContain('Open run Morning report · 08/08 17:00');
+  await unmount(tree);
+});
+
+test('tapping a run opens it as a real chat: history asked, thread on screen', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emit({ type: 'jobs.list.result', jobs: [job()] });
+  await pressLabel(tree, 'Job sessions Morning report');
+  await emit({
+    type: 'jobs.runs.result',
+    jobId: 'job-1',
+    runs: [
+      { threadId: 'cron-job-1-1723200000000', runAt: 1723200000000, messageCount: 4, title: 'Morning report · 08/08 19:30' },
+    ],
+  });
+  await waitFor(() => labelsOf(tree).includes('Open run Morning report · 08/08 19:30'));
+
+  await pressLabel(tree, 'Open run Morning report · 08/08 19:30');
+  await waitFor(() =>
+    bridge.sendMessage.mock.calls.some(([frame]) => {
+      const parsed = JSON.parse(String(frame)) as Record<string, unknown>;
+      return parsed.type === 'session.history' && parsed.threadId === 'cron-job-1-1723200000000';
+    }),
+  );
+  // The header shows the run title, not the raw first message.
+  expect(textsOf(tree).join('\n')).toContain('Morning report · 08/08 19:30');
+  await unmount(tree);
+});
+
+test('the back key walks a run chat to its runs page, then the jobs list', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emit({ type: 'jobs.list.result', jobs: [job()] });
+  await pressLabel(tree, 'Job sessions Morning report');
+  await emit({
+    type: 'jobs.runs.result',
+    jobId: 'job-1',
+    runs: [
+      { threadId: 'cron-job-1-1723200000000', runAt: 1723200000000, messageCount: 4, title: 'Morning report · 08/08 19:30' },
+    ],
+  });
+  await pressLabel(tree, 'Open run Morning report · 08/08 19:30');
+  await waitFor(() =>
+    bridge.sendMessage.mock.calls.some(([frame]) => JSON.parse(String(frame)).type === 'session.history'),
+  );
+
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+  };
+  const handlers = back.default.__handlers;
+  const tapBack = async (): Promise<boolean> => {
+    let result = false;
+    await ReactTestRenderer.act(async () => {
+      result = handlers[handlers.length - 1]();
+    });
+    return result;
+  };
+
+  // Back from the run: the runs page is back, with its runs still listed.
+  let handled = await tapBack();
+  expect(handled).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open run Morning report · 08/08 19:30'));
+
+  // Back from the runs page: the jobs list.
+  handled = await tapBack();
+  expect(handled).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Close jobs'));
+  await waitFor(() => !labelsOf(tree).includes('Edit job settings'));
+  await unmount(tree);
+});
+
+test('the runs page shortcuts into the job config', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emit({ type: 'jobs.list.result', jobs: [job()] });
+  await pressLabel(tree, 'Job sessions Morning report');
+  await waitFor(() => labelsOf(tree).includes('Edit job settings'));
+
+  await pressLabel(tree, 'Edit job settings');
+  await waitFor(() => labelsOf(tree).includes('Job name'));
+  expect(labelsOf(tree)).not.toContain('Edit job settings');
+  await unmount(tree);
+});
