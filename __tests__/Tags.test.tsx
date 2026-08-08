@@ -103,7 +103,8 @@ async function bootToTagsPage(): Promise<Tree> {
   await emit({
     type: 'model.list.result',
     models: [
-      { id: 'fast-1', label: 'Fast' },
+      { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'], context: 400000 },
+      { id: 'small-1', label: 'Small', effortLevels: ['low', 'medium'], context: 100000 },
       { id: 'tag:Default', label: 'Default', group: 'Tags' },
       { id: 'tag:opus', label: 'opus', group: 'Tags' },
     ],
@@ -148,32 +149,60 @@ test('the tags page lists the server catalog, Default row first and read-only', 
   await settleAndUnmount(tree);
 });
 
-test('picking a model saves the tag and chains into the context-cap editor', async () => {
+test('the tag flow walks model, effort and window, then applies one upsert', async () => {
   const tree = await bootToTagsPage();
   await pressLabel(tree, 'Open tag opus');
+  // Step 1: the model.
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
+  // Step 2: the effort, as its own screen rather than chips over the list.
+  await waitFor(() => labelsOf(tree).includes('low'));
+  await pressLabel(tree, 'low');
+  // Step 3: the window, graduated under the model's own full window.
+  await waitFor(() => labelsOf(tree).includes('Full: 400k'));
+  expect(labelsOf(tree)).toEqual(expect.arrayContaining(['256k', '128k', '64k']));
+  await pressLabel(tree, '128k');
+  // Nothing was sent while staging: the whole combo goes on Apply.
+  expect(sentFrames().some(frame => frame.type === 'tags.upsert')).toBe(false);
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
   await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.model === 'fast-1'),
-  );
-  // The flow is chained: the cap editor takes over right after the model pick.
-  await waitFor(() => labelsOf(tree).includes('Save number'));
-  await typeInto(tree, 'Tag opus · context cap value', '60000');
-  await pressLabel(tree, 'Save number');
-  await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.contextCap === 60000),
+    sentFrames().some(
+      frame =>
+        frame.type === 'tags.upsert' &&
+        frame.name === 'opus' &&
+        frame.model === 'fast-1' &&
+        frame.effort === 'low' &&
+        frame.contextCap === 128000,
+    ),
   );
   await settleAndUnmount(tree);
 });
 
-test('an effort chip on the editor saves the tag and keeps the sheet open', async () => {
+test('the window step never offers more than the model can hold', async () => {
   const tree = await bootToTagsPage();
   await pressLabel(tree, 'Open tag opus');
-  await waitFor(() => labelsOf(tree).includes('Reasoning effort low'));
-  await pressLabel(tree, 'Reasoning effort low');
-  await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.effort === 'low'),
-  );
+  await waitFor(() => labelsOf(tree).includes('Small'));
+  await pressLabel(tree, 'Small');
+  await waitFor(() => labelsOf(tree).includes('low'));
+  await pressLabel(tree, 'low');
+  // A 100k window keeps 64k and drops every graduation at or above it.
+  await waitFor(() => labelsOf(tree).includes('Full: 100k'));
+  const labels = labelsOf(tree);
+  expect(labels).toEqual(expect.arrayContaining(['64k']));
+  expect(labels).not.toEqual(expect.arrayContaining(['128k', '256k', '512k']));
+  await settleAndUnmount(tree);
+});
+
+test('back walks the flow one step at a time', async () => {
+  const tree = await bootToTagsPage();
+  await pressLabel(tree, 'Open tag opus');
+  await waitFor(() => labelsOf(tree).includes('Fast'));
+  await pressLabel(tree, 'Fast');
+  await waitFor(() => labelsOf(tree).includes('low'));
+  // From the effort step, back returns to the model list rather than closing the sheet.
+  await pressLabel(tree, '< Back');
+  await waitFor(() => labelsOf(tree).includes('Fast'));
   await settleAndUnmount(tree);
 });
 
@@ -208,13 +237,13 @@ test('/tag in the composer opens the tags page', async () => {
   await settleAndUnmount(tree);
 });
 
-test('/tag new "opus" in the composer opens the tag editor and chains into the cap editor', async () => {
+test('/tag new "opus" in the composer opens the tag flow', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await emit(agentsConfig());
   await emit({
     type: 'model.list.result',
-    models: [{ id: 'fast-1', label: 'Fast' }],
+    models: [{ id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'], context: 400000 }],
     defaultModel: 'fast-1',
   });
   await waitFor(() => labelsOf(tree).includes('Message to send'));
@@ -222,9 +251,21 @@ test('/tag new "opus" in the composer opens the tag editor and chains into the c
   await pressLabel(tree, 'Send message');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
+  await waitFor(() => labelsOf(tree).includes('medium'));
+  await pressLabel(tree, 'medium');
+  await waitFor(() => labelsOf(tree).includes('Full: 400k'));
+  await pressLabel(tree, 'Full: 400k');
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
   await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.model === 'fast-1'),
+    sentFrames().some(
+      frame =>
+        frame.type === 'tags.upsert' &&
+        frame.name === 'opus' &&
+        frame.model === 'fast-1' &&
+        frame.effort === 'medium' &&
+        frame.contextCap === undefined,
+    ),
   );
-  await waitFor(() => labelsOf(tree).includes('Save number'));
   await settleAndUnmount(tree);
 });

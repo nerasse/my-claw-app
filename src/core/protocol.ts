@@ -186,6 +186,14 @@ export interface ModelOption {
   group?: string;
   /** Provider key this model belongs to, so the app can group models by provider. */
   provider?: string;
+  /**
+   * Effort levels this model accepts; absent or empty means it discards effort, and the picker
+   * skips that step. Per model, so the step describes the model being staged rather than the one
+   * currently in force.
+   */
+  effortLevels?: string[];
+  /** The model's own full context window: the ceiling list is built under it, never above. */
+  context?: number;
 }
 
 export interface EffortState {
@@ -194,6 +202,22 @@ export interface EffortState {
   /** Levels the active model accepts; empty means no choice is offered. */
   levels: string[];
   supported: boolean;
+}
+
+/**
+ * What window this thread may use and what it may be lowered to. The ceiling list is built in
+ * the app from these numbers (see core/context.ts), the same way the server builds it for the
+ * other channels.
+ */
+export interface ContextState {
+  /** The model's full window. */
+  raw: number;
+  /** What the run may use once this conversation's choice and the standing cap are applied. */
+  effective: number;
+  /** The standing agent/global cap, when one is set below the full window. */
+  cap?: number;
+  /** This conversation's own choice: a ceiling, 'full', or absent when it follows policy. */
+  choice?: number | 'full';
 }
 
 export interface ModelListResultFrame {
@@ -282,6 +306,8 @@ export interface ModelResultFrame {
   model: string;
   defaultModel: string;
   effort: EffortState;
+  /** Absent on a server that predates the context step: the picker then skips it. */
+  context?: ContextState;
 }
 
 /** Output of a command the server executed; rendered as a distinct bubble, not an agent reply. */
@@ -919,6 +945,11 @@ export function encodeModelSet(threadId: string, model: string): string {
 
 export function encodeModelEffortSet(threadId: string, level: string): string {
   return JSON.stringify({ type: 'model.effort.set', threadId, level });
+}
+
+/** `'full'` hands the conversation back to the model's own window; a number is a ceiling. */
+export function encodeModelContextSet(threadId: string, choice: number | 'full'): string {
+  return JSON.stringify({ type: 'model.context.set', threadId, choice });
 }
 
 export function encodeAgentsConfigGet(): string {

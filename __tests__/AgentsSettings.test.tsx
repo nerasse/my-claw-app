@@ -162,6 +162,9 @@ test('picking a model for an agent sends agents.model.set and the page follows',
   await pressLabel(tree, 'Claude ›');
   await waitFor(() => labelsOf(tree).includes('Opus'));
   await pressLabel(tree, 'Opus');
+  // The picker is a flow now: the pick is applied from the confirmation step.
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
 
   expect(sentFrames()).toEqual(
     expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set', agent: 'general', model: 'opus' })]),

@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import type { EffortState, ModelListResultFrame, ModelResultFrame } from './protocol';
+import type { ContextState, EffortState, ModelListResultFrame, ModelResultFrame } from './protocol';
 
 type Listener = () => void;
 
@@ -13,6 +13,8 @@ interface ThreadModel {
   model: string;
   defaultModel: string;
   effort: EffortState;
+  /** Absent on a server that predates the context step: the picker then skips it. */
+  context?: ContextState;
 }
 
 /**
@@ -61,6 +63,7 @@ class ModelStoreImpl {
       model: frame.model,
       defaultModel: frame.defaultModel,
       effort: frame.effort ?? NO_EFFORT,
+      ...(frame.context === undefined ? {} : { context: frame.context }),
     });
     this.emit();
   }

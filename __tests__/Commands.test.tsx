@@ -110,6 +110,58 @@ test('the model picker lists models with the current one checked and applies on 
   await settleAndUnmount(tree);
 });
 
+test('the chat picker walks model, effort and window, and applies the combo on confirm', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello'), 60);
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
+  await pressLabel(tree, 'Model…');
+
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'], context: 400000 },
+      { id: 'strong-2', label: 'Strong', effortLevels: ['low', 'high'], context: 1048576 },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'fast-1',
+    defaultModel: 'fast-1',
+    effort: { level: 'medium', levels: ['low', 'medium', 'high'], supported: true },
+    context: { raw: 400000, effective: 256000, cap: 256000 },
+  });
+
+  await waitFor(() => labelsOf(tree).includes('Strong'), 60);
+  // Frames already sent by earlier steps of this file: staging must add none of its own.
+  const sentBeforeStaging = sentFrames().length;
+  await pressLabel(tree, 'Strong');
+  // The effort step is a menu of its own now, not a chip row over the model list.
+  await waitFor(() => labelsOf(tree).includes('high'), 60);
+  expect(labelsOf(tree)).toContain('Keep current: medium');
+  await pressLabel(tree, 'high');
+  // Then the window, graduated under the staged model's own full window.
+  await waitFor(() => labelsOf(tree).includes('Full: 1.0M'), 60);
+  expect(labelsOf(tree)).toEqual(expect.arrayContaining(['512k', '256k (cap)', '128k', '64k']));
+  await pressLabel(tree, '512k');
+
+  // Nothing is sent before the confirmation.
+  expect(sentFrames().length).toBe(sentBeforeStaging);
+  await waitFor(() => labelsOf(tree).includes('Apply'), 60);
+  await pressLabel(tree, 'Apply');
+
+  await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'strong-2' })), 60);
+  expect(sentFrames()).toContain(JSON.stringify({ type: 'model.effort.set', threadId: THREAD, level: 'high' }));
+  expect(sentFrames()).toContain(JSON.stringify({ type: 'model.context.set', threadId: THREAD, choice: 512000 }));
+
+  await settleAndUnmount(tree);
+});
+
 test('a group whose models all live in sub-groups is still reachable', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {

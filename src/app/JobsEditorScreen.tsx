@@ -6,7 +6,7 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { useModelCatalog } from '../core/model';
 import { ScopeEditorScreen } from './ScopeEditorScreen';
 import { WorkspacePickerScreen } from './WorkspacePickerScreen';
-import { ModelPickerSheet } from '../components/ModelSheet';
+import { ModelPickerSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import type { JobEntry, JobScope, JobScopeMode, SkillEntry, ToolEntry, McpEntry, WorkspaceEntry, JobFieldsOut } from '../core/protocol';
 
 /** The server's own schedule grammar (src/cron/store.ts), mirrored so an invalid value can be
@@ -109,9 +109,9 @@ export function JobsEditorScreen({
   const catalog = useModelCatalog();
   const [draft, setDraft] = useState<JobDraft>(() => draftOf(job));
   const [scopeEditor, setScopeEditor] = useState<'skills' | 'mcp' | 'tools' | null>(null);
-  /** The model picker is a sheet over the editor; its group stack is walked like the chat's. */
+  /** The model picker is a sheet over the editor; its steps are walked like the chat's. */
   const [modelPicker, setModelPicker] = useState(false);
-  const [modelPath, setModelPath] = useState<string[]>([]);
+  const [pickerState, setPickerState] = useState<PickerState>(pickerStart);
   const [workspacePicker, setWorkspacePicker] = useState(false);
 
   // The editor owns its layers, so the hardware back walks them before leaving the editor:
@@ -123,8 +123,9 @@ export function JobsEditorScreen({
         return true;
       }
       if (modelPicker) {
-        if (modelPath.length > 0) {
-          setModelPath(current => current.slice(0, -1));
+        const previous = pickerBack(pickerState);
+        if (previous) {
+          setPickerState(previous);
           return true;
         }
         setModelPicker(false);
@@ -138,7 +139,7 @@ export function JobsEditorScreen({
       return true;
     });
     return () => sub.remove();
-  }, [modelPath, modelPicker, onBack, scopeEditor, workspacePicker]);
+  }, [pickerState, modelPicker, onBack, scopeEditor, workspacePicker]);
 
   const invalid = scheduleInvalid(draft.schedule);
   const promptMissing = !draft.prompt.trim();
@@ -192,11 +193,12 @@ export function JobsEditorScreen({
         title="Model"
         models={catalog.models}
         activeId={draft.model}
-        path={modelPath}
-        onPathChange={setModelPath}
+        state={pickerState}
+        onStateChange={setPickerState}
         onClose={() => setModelPicker(false)}
-        onSelect={modelId => {
-          setDraft(current => ({ ...current, model: modelId }));
+        // A job pins the model only: its effort and window follow the cron agent's own settings.
+        onCommit={choice => {
+          setDraft(current => ({ ...current, model: choice.model }));
           setModelPicker(false);
         }}
         // For a job an absent model is not the server default but the cron agent's: the option
@@ -379,7 +381,10 @@ export function JobsEditorScreen({
           <View style={styles.card}>
             <Pressable
               style={[styles.row, styles.link]}
-              onPress={() => setModelPicker(true)}
+              onPress={() => {
+                setPickerState(pickerStart);
+                setModelPicker(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Edit job model">
               <Text style={styles.rowKey}>model</Text>

@@ -157,7 +157,7 @@ import { JobSessionsScreen } from './JobSessionsScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetOption } from '../components/ActionSheet';
-import { ModelSheet, ModelPickerSheet } from '../components/ModelSheet';
+import { ModelSheet, ModelPickerSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
@@ -185,19 +185,23 @@ function unknownOfList(names: string[], catalog: Array<{ name: string }>): strin
  * The model picker pointed at the server config instead of a session: "global" edits
  * llm.defaultModel, an agent key edits agents.<key>.llm. The root option hands an agent back
  * to its inheritance (clear), which is the "Use default" of the chat picker in reverse.
+ *
+ * An agent has no effort of its own (that is a global default), but it does have a context
+ * ceiling, so the flow is model then window then confirm. Picking the full window removes the
+ * agent's own cap, which is how it returns to the standing policy.
  */
 function AgentModelPickerSheet({
   target,
   config,
-  path,
-  onPathChange,
+  state,
+  onStateChange,
   onClose,
 }: {
   /** "global" or an agent key. */
   target: string;
   config: AgentsConfigResultFrame | null;
-  path: string[];
-  onPathChange: (path: string[]) => void;
+  state: PickerState;
+  onStateChange: (state: PickerState) => void;
   onClose: () => void;
 }): React.JSX.Element {
   const catalog = useModelCatalog();
@@ -215,11 +219,16 @@ function AgentModelPickerSheet({
       title={agent ? `Model for ${agent.label}` : 'Default model'}
       models={catalog.models}
       activeId={activeId}
-      path={path}
-      onPathChange={onPathChange}
+      state={state}
+      onStateChange={onStateChange}
       onClose={onClose}
-      onSelect={modelId => {
-        connection.send(encodeAgentsModelSet(target, modelId)).catch(() => {});
+      onCommit={choice => {
+        connection.send(encodeAgentsModelSet(target, choice.model)).catch(() => {});
+        if (agent && choice.context !== undefined) {
+          connection
+            .send(encodeAgentsContextCapSet(agent.key, choice.context === 'full' ? null : choice.context))
+            .catch(() => {});
+        }
       }}
       rootOption={
         agent
@@ -231,74 +240,69 @@ function AgentModelPickerSheet({
               selected: !agent.pinned,
               onPress: () => {
                 connection.send(encodeAgentsModelClear(agent.key)).catch(() => {});
+                onClose();
               },
             }
           : null
       }
       effort={null}
+      context={
+        agent
+          ? {
+              ...(agent.contextCap === null || agent.contextCap === undefined || agent.contextCap === 0
+                ? {}
+                : { current: agent.contextCap }),
+            }
+          : null
+      }
     />
   );
 }
 
 /**
- * The tag editor: the model picker of a tag plus its effort chips. Picking a model saves the
- * tag and chains straight into the context-cap editor, so a tag is created in one flow; an
- * effort chip saves immediately and keeps the sheet open, so a wrong tap is not a completed
- * edit. The context cap also has its own row on the tags page for later tweaks.
+ * The tag editor: one pass over the three things a tag pins (model, effort, context ceiling),
+ * applied as a single upsert on the confirmation step. Leaving the flow early changes nothing,
+ * and the cap row on the tags page stays for a value the graduations do not offer.
  */
 function TagEditorSheet({
   name,
-  path,
-  onPathChange,
+  state,
+  onStateChange,
   onClose,
-  onPicked,
 }: {
   name: string;
-  path: string[];
-  onPathChange: (path: string[]) => void;
+  state: PickerState;
+  onStateChange: (state: PickerState) => void;
   onClose: () => void;
-  /** The model was picked and saved: the caller opens the context-cap editor next. */
-  onPicked: (name: string) => void;
 }): React.JSX.Element {
   const catalog = useModelCatalog();
   const { tags } = useTags();
-  const agents = useAgentsConfig();
   const tag = tags?.find(entry => entry.name === name) ?? null;
-
-  const save = (model: string, effort: string | undefined, contextCap: number | undefined): void => {
-    connection.send(encodeTagsUpsert(name, model, effort, contextCap)).catch(() => {});
-    // The Tags group of the picker catalog and the provider-list row follow the server state.
-    connection.send(encodeModelList()).catch(() => {});
-    connection.send(encodeAgentsConfigGet()).catch(() => {});
-  };
-
-  const levels = agents.config?.effortLevels ?? [];
 
   return (
     <ModelPickerSheet
       title={`Tag ${name}`}
       models={catalog.models}
       activeId={tag?.model ?? ''}
-      path={path}
-      onPathChange={onPathChange}
+      state={state}
+      onStateChange={onStateChange}
       onClose={onClose}
-      onSelect={modelId => {
-        save(modelId, tag?.effort, tag?.contextCap);
-        onPicked(name);
+      onCommit={choice => {
+        const effort = choice.effort ?? tag?.effort;
+        // "full" means the tag pins no ceiling of its own, which is an absent contextCap.
+        const cap =
+          choice.context === undefined
+            ? tag?.contextCap
+            : choice.context === 'full'
+              ? undefined
+              : choice.context;
+        connection.send(encodeTagsUpsert(name, choice.model, effort, cap)).catch(() => {});
+        // The Tags group of the picker catalog and the provider-list row follow the server state.
+        connection.send(encodeModelList()).catch(() => {});
+        connection.send(encodeAgentsConfigGet()).catch(() => {});
       }}
-      effort={
-        levels.length > 0
-          ? {
-              level: tag?.effort ?? '',
-              levels,
-              onChange: level => {
-                // A new tag has no model yet: its effort is saved with the first model pick.
-                if (!tag?.model) return;
-                save(tag.model, level === '' ? undefined : level, tag.contextCap);
-              },
-            }
-          : null
-      }
+      effort={{ current: tag?.effort ?? '' }}
+      context={{ ...(tag?.contextCap === undefined ? {} : { current: tag.contextCap }) }}
     />
   );
 }
@@ -349,7 +353,7 @@ export function AppShell(): React.JSX.Element {
   const [instructionsFrom, setInstructionsFrom] = useState<'index' | 'agent'>('index');
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
-  const [agentModelPath, setAgentModelPath] = useState<string[]>([]);
+  const [agentPicker, setAgentPicker] = useState<PickerState>(pickerStart);
   const [agentsEffortOpen, setAgentsEffortOpen] = useState(false);
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [tools, setTools] = useState<ToolEntry[]>([]);
@@ -368,7 +372,7 @@ export function AppShell(): React.JSX.Element {
   const [workspacePickerAgent, setWorkspacePickerAgent] = useState<string | null>(null);
   const [numberEditor, setNumberEditor] = useState<{ field: 'iterations' | 'contextcap'; agent: string } | null>(null);
   /** The tag editor sheet: its group stack is walked by back, and the row to rename over it. */
-  const [tagEditor, setTagEditor] = useState<{ name: string; path: string[] } | null>(null);
+  const [tagEditor, setTagEditor] = useState<{ name: string; picker: PickerState } | null>(null);
   /** The context-cap number page for one tag, opened from the tags page. */
   const [tagContextEditor, setTagContextEditor] = useState<string | null>(null);
   /** The name prompt for a tag about to be created, opened by /tag new or the + button. */
@@ -410,7 +414,7 @@ export function AppShell(): React.JSX.Element {
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   /** Which group of the model picker is open: its own stack, walked by the back key. */
-  const [modelPath, setModelPath] = useState<string[]>([]);
+  const [modelPicker, setModelPicker] = useState<PickerState>(pickerStart);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   /** The fullscreen status page of a conversation, an absolute layer over everything else. */
   const [statusOpen, setStatusOpen] = useState(false);
@@ -943,10 +947,11 @@ export function AppShell(): React.JSX.Element {
         return true;
       }
       if (modelOpen) {
-        // The picker's groups are a stack of their own: back walks out of a group before it
-        // closes the sheet, which otherwise threw away the whole menu on the first press.
-        if (modelPath.length > 0) {
-          setModelPath(current => current.slice(0, -1));
+        // The picker is a flow of its own: back walks out of a group, then one step back through
+        // the model/effort/context screens, and only then closes the sheet.
+        const previous = pickerBack(modelPicker);
+        if (previous) {
+          setModelPicker(previous);
           return true;
         }
         setModelOpen(false);
@@ -957,16 +962,18 @@ export function AppShell(): React.JSX.Element {
         return true;
       }
       if (agentModelFor) {
-        if (agentModelPath.length > 0) {
-          setAgentModelPath(current => current.slice(0, -1));
+        const previous = pickerBack(agentPicker);
+        if (previous) {
+          setAgentPicker(previous);
           return true;
         }
         setAgentModelFor(null);
         return true;
       }
       if (tagEditor) {
-        if (tagEditor.path.length > 0) {
-          setTagEditor(current => (current ? { ...current, path: current.path.slice(0, -1) } : current));
+        const previous = pickerBack(tagEditor.picker);
+        if (previous) {
+          setTagEditor(current => (current ? { ...current, picker: previous } : current));
           return true;
         }
         setTagEditor(null);
@@ -1103,7 +1110,7 @@ export function AppShell(): React.JSX.Element {
   }, [
     approvals.length,
     agentModelFor,
-    agentModelPath,
+    agentPicker,
     agentsEffortOpen,
     archivesOpen,
     bubbleMenu,
@@ -1117,7 +1124,7 @@ export function AppShell(): React.JSX.Element {
     jobsEditor,
     jobsOpen,
     modelOpen,
-    modelPath,
+    modelPicker,
     newTagPrompt,
     scopeEditor,
     selectThread,
@@ -1370,7 +1377,7 @@ export function AppShell(): React.JSX.Element {
 
   /** Every entry point of the picker starts at its root, never inside yesterday's group. */
   const openModel = useCallback(() => {
-    setModelPath([]);
+    setModelPicker(pickerStart);
     setModelOpen(true);
   }, []);
 
@@ -1638,7 +1645,7 @@ export function AppShell(): React.JSX.Element {
     setTagContextEditor(null);
   };
   const openTagEditor = (name: string): void => {
-    setTagEditor({ name, path: [] });
+    setTagEditor({ name, picker: pickerStart });
   };
   /** The /tag command: bare opens the tags page, `new "name"` opens the tag editor. */
   const dispatchTagCommand = useCallback(
@@ -1684,7 +1691,7 @@ export function AppShell(): React.JSX.Element {
       error={agentsState.error}
       onBack={() => setSettingsPage('index')}
       onOpenDefaultModel={() => {
-        setAgentModelPath([]);
+        setAgentPicker(pickerStart);
         setAgentModelFor('global');
       }}
       onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
@@ -1987,7 +1994,7 @@ export function AppShell(): React.JSX.Element {
                   onBack={() => setSettingsPage('agents')}
                   onOpenModel={() => {
                     if (!selectedAgent) return;
-                    setAgentModelPath([]);
+                    setAgentPicker(pickerStart);
                     setAgentModelFor(selectedAgent);
                   }}
                   onOpenInstructions={() => {
@@ -2335,8 +2342,8 @@ export function AppShell(): React.JSX.Element {
       {modelOpen ? (
         <ModelSheet
           threadId={activeThread}
-          path={modelPath}
-          onPathChange={setModelPath}
+          state={modelPicker}
+          onStateChange={setModelPicker}
           onClose={() => setModelOpen(false)}
         />
       ) : null}
@@ -2345,8 +2352,8 @@ export function AppShell(): React.JSX.Element {
         <AgentModelPickerSheet
           target={agentModelFor}
           config={agentsConfig}
-          onPathChange={setAgentModelPath}
-          path={agentModelPath}
+          state={agentPicker}
+          onStateChange={setAgentPicker}
           onClose={() => setAgentModelFor(null)}
         />
       ) : null}
@@ -2354,17 +2361,9 @@ export function AppShell(): React.JSX.Element {
       {tagEditor ? (
         <TagEditorSheet
           name={tagEditor.name}
-          path={tagEditor.path}
-          onPathChange={path => setTagEditor(current => (current ? { ...current, path } : current))}
+          state={tagEditor.picker}
+          onStateChange={picker => setTagEditor(current => (current ? { ...current, picker } : current))}
           onClose={() => setTagEditor(null)}
-          onPicked={name => {
-            // Chain the flow: the model is saved, the cap editor takes over, and its back key
-            // lands on the tags page wherever the editor was opened from.
-            setTagEditor(null);
-            setTagContextEditor(name);
-            setSettingsOpen(true);
-            setSettingsPage('number');
-          }}
         />
       ) : null}
 

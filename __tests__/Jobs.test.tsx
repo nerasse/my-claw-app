@@ -186,6 +186,8 @@ test('a new job saves and the fresh listing closes the editor', async () => {
   await pressLabel(tree, 'Edit job model');
   await waitFor(() => labelsOf(tree).includes('Use default (Fast)') || labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
 
   await pressLabel(tree, 'Save job');
   const saves = sentOfType('jobs.save');
@@ -255,6 +257,9 @@ test('the model picker offers the live catalog and “Inherit” clears the over
   await pressLabel(tree, 'Edit job model');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Strong');
+  // A job pins the model only, so the flow goes straight to the confirmation step.
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
   await waitFor(() => labelsOf(tree).includes('Edit job model'));
   expect(textsOf(tree).join('\n')).toContain('strong-2');
 
