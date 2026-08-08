@@ -115,8 +115,8 @@ export function ModelPickerSheet({
     <ActionSheet
       preview={
         path.length > 0
-          ? `${path[path.length - 1]} — current: ${activeLabel}`
-          : `${title} — current: ${activeLabel}`
+          ? `${path[path.length - 1]} · current: ${activeLabel}`
+          : `${title} · current: ${activeLabel}`
       }
       options={options}
       onClose={onClose}>
