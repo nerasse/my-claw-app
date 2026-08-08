@@ -53,7 +53,7 @@ const CATEGORIES: Array<{
   },
   {
     title: 'Other',
-    hint: 'nothing here yet',
+    hint: 'appearance, troubleshooting',
     accessibilityLabel: 'Open other',
     key: 'other',
   },

@@ -200,13 +200,13 @@ test('the picker reopens at its root after a group was browsed', async () => {
   await settleAndUnmount(tree);
 });
 
-test('diagnostics is a page under General: back walks diagnostics, General, index', async () => {
+test('diagnostics is a page under Other: back walks diagnostics, Other, index', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Open other');
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
   await pressLabel(tree, 'Open diagnostics');
-  await waitFor(() => labelsOf(tree).includes('Back to general'));
+  await waitFor(() => labelsOf(tree).includes('Back to other'));
 
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
@@ -241,7 +241,7 @@ test('empty categories open their page and back out to the index', async () => {
   await waitFor(() => labelsOf(tree).includes('Open general'));
 
   await pressLabel(tree, 'Open other');
-  await waitFor(() => textsOf(tree).includes('nothing here yet'));
+  await waitFor(() => labelsOf(tree).includes('Theme System'));
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open general'));
 

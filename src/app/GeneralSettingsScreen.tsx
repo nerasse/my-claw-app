@@ -3,16 +3,9 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type { DeviceInfo } from '../core/device';
 import type { WsStatusPayload } from '../core/types';
-import type { ThemeMode } from '../core/prefs';
 import type { VoiceMode, VoiceModeResultFrame } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
-
-const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
-  { mode: 'system', label: 'System' },
-  { mode: 'light', label: 'Light' },
-  { mode: 'dark', label: 'Dark' },
-];
 
 const VOICE_OPTIONS: Array<{ mode: VoiceMode; label: string }> = [
   { mode: 'auto', label: 'Auto' },
@@ -44,8 +37,6 @@ function maskToken(token: string): string {
 export function GeneralSettingsScreen({
   url,
   onUrlChange,
-  themeMode,
-  onThemeModeChange,
   status,
   pending,
   deviceInfo,
@@ -53,15 +44,12 @@ export function GeneralSettingsScreen({
   onDisconnect,
   onClearOutbox,
   onBack,
-  onOpenDiagnostics,
   onOpenWorkspaces,
   voice,
   onVoiceModeChange,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
-  themeMode: ThemeMode;
-  onThemeModeChange: (mode: ThemeMode) => void;
   status: WsStatusPayload;
   pending: number;
   deviceInfo: DeviceInfo | null;
@@ -69,7 +57,6 @@ export function GeneralSettingsScreen({
   onDisconnect: () => void;
   onClearOutbox: () => void;
   onBack: () => void;
-  onOpenDiagnostics: () => void;
   onOpenWorkspaces: () => void;
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
@@ -78,7 +65,7 @@ export function GeneralSettingsScreen({
   const styles = useThemedStyles(createStyles);
   // the server field is never focused on the way in.
   useDismissKeyboard();
-  const { palette, dark } = useTheme();
+  const { palette } = useTheme();
   const connected = status.state === 'connected';
   const busy = connected || status.state === 'connecting';
   /**
@@ -98,53 +85,50 @@ export function GeneralSettingsScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <View style={styles.category}>
-          <Text style={styles.section}>global</Text>
-
-          <View style={styles.categoryItem}>
-            <Text style={styles.section}>device</Text>
-            <View style={styles.card}>
-              {deviceInfo ? (
-                <>
-                  <View style={styles.kv}>
-                    <Text style={styles.key}>device</Text>
-                    <Text style={[styles.value, styles.mono]} selectable>
-                      {deviceInfo.deviceId}
-                    </Text>
-                  </View>
-                  <View style={styles.kv}>
-                    <Text style={styles.key}>token</Text>
-                    <Text style={[styles.value, styles.mono]} selectable={showToken}>
-                      {showToken ? deviceInfo.token : maskToken(deviceInfo.token)}
-                    </Text>
-                    <Pressable
-                      onPress={() => setShowToken(value => !value)}
-                      hitSlop={8}
-                      style={styles.toggle}
-                      accessibilityRole="button"
-                      accessibilityLabel={showToken ? 'Hide token' : 'Show token'}>
-                      <Text style={styles.toggleText}>{showToken ? 'hide' : 'show'}</Text>
-                    </Pressable>
-                  </View>
+        <View style={styles.categoryItem}>
+          <Text style={styles.section}>device</Text>
+          <View style={styles.card}>
+            {deviceInfo ? (
+              <>
+                <View style={styles.kv}>
+                  <Text style={styles.key}>device</Text>
+                  <Text style={[styles.value, styles.mono]} selectable>
+                    {deviceInfo.deviceId}
+                  </Text>
+                </View>
+                <View style={styles.kv}>
+                  <Text style={styles.key}>token</Text>
+                  <Text style={[styles.value, styles.mono]} selectable={showToken}>
+                    {showToken ? deviceInfo.token : maskToken(deviceInfo.token)}
+                  </Text>
                   <Pressable
-                    style={[styles.button, styles.buttonGhost]}
-                    onPress={() =>
-                      Clipboard.setString(`device: ${deviceInfo.deviceId}\ntoken: ${deviceInfo.token}`)
-                    }
+                    onPress={() => setShowToken(value => !value)}
+                    hitSlop={8}
+                    style={styles.toggle}
                     accessibilityRole="button"
-                    accessibilityLabel="Copy device and token">
-                    <Text style={[styles.buttonText, styles.buttonGhostText]}>Copy device & token</Text>
+                    accessibilityLabel={showToken ? 'Hide token' : 'Show token'}>
+                    <Text style={styles.toggleText}>{showToken ? 'hide' : 'show'}</Text>
                   </Pressable>
-                  <Text style={styles.hint}>paste into channels["my-claw-app"].devices on the server</Text>
-                </>
-              ) : (
-                <Text style={styles.hint}>device not initialized</Text>
-              )}
-            </View>
+                </View>
+                <Pressable
+                  style={[styles.button, styles.buttonGhost]}
+                  onPress={() =>
+                    Clipboard.setString(`device: ${deviceInfo.deviceId}\ntoken: ${deviceInfo.token}`)
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy device and token">
+                  <Text style={[styles.buttonText, styles.buttonGhostText]}>Copy device & token</Text>
+                </Pressable>
+                <Text style={styles.hint}>paste into channels["my-claw-app"].devices on the server</Text>
+              </>
+            ) : (
+              <Text style={styles.hint}>device not initialized</Text>
+            )}
           </View>
+        </View>
 
-          <View style={styles.categoryItem}>
-            <Text style={styles.section}>server</Text>
+        <View style={styles.categoryItem}>
+          <Text style={styles.section}>server</Text>
           <View style={styles.card}>
             <TextInput
               style={styles.input}
@@ -205,97 +189,53 @@ export function GeneralSettingsScreen({
           </View>
         </View>
 
-          <View style={styles.categoryItem}>
-            <Text style={styles.section}>workspaces</Text>
-            <View style={styles.card}>
-              <Pressable
-                style={[styles.row, styles.link]}
-                onPress={onOpenWorkspaces}
-                accessibilityRole="button"
-                accessibilityLabel="Open workspaces">
-                <View style={styles.linkMain}>
-                  <Text style={styles.linkTitle}>Workspaces</Text>
-                  <Text style={styles.hint}>directories with their own prompts and skills</Text>
-                </View>
-                <Text style={styles.linkGlyph}>›</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.categoryItem}>
-            <Text style={styles.section}>voice</Text>
-            <View style={styles.card}>
-              <View style={styles.segment}>
-                {VOICE_OPTIONS.map(option => {
-                  const selected = voice ? option.mode === voice.mode : false;
-                  // Offering cloud without credentials would be a choice that fails on the next
-                  // recording, with the failure surfacing far from here.
-                  const usable = option.mode === 'local' || (voice?.cloudAvailable ?? true);
-                  return (
-                    <Pressable
-                      key={option.mode}
-                      style={[
-                        styles.segmentItem,
-                        selected && styles.segmentItemActive,
-                        !usable && styles.segmentItemOff,
-                      ]}
-                      disabled={!voice || !usable}
-                      onPress={() => onVoiceModeChange(option.mode)}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected, disabled: !usable }}
-                      accessibilityLabel={`Transcription ${option.label}`}>
-                      <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+        <View style={styles.categoryItem}>
+          <Text style={styles.section}>workspaces</Text>
+          <View style={styles.card}>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenWorkspaces}
+              accessibilityRole="button"
+              accessibilityLabel="Open workspaces">
+              <View style={styles.linkMain}>
+                <Text style={styles.linkTitle}>Workspaces</Text>
+                <Text style={styles.hint}>directories with their own prompts and skills</Text>
               </View>
-              <Text style={styles.hint}>{voiceHint(voice)}</Text>
-            </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
           </View>
         </View>
 
-        <View style={styles.category}>
-          <Text style={styles.section}>other</Text>
-
-          <View style={styles.categoryItem}>
-            <Text style={styles.section}>appearance</Text>
-            <View style={styles.card}>
-              <View style={styles.segment}>
-                {THEME_OPTIONS.map(option => {
-                  const selected = option.mode === themeMode;
-                  return (
-                    <Pressable
-                      key={option.mode}
-                      style={[styles.segmentItem, selected && styles.segmentItemActive]}
-                      onPress={() => onThemeModeChange(option.mode)}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={`Theme ${option.label}`}>
-                      <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>{option.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Text style={styles.hint}>
-                {themeMode === 'system' ? `follows the phone · currently ${dark ? 'dark' : 'light'}` : 'forced choice'}
-              </Text>
+        <View style={styles.categoryItem}>
+          <Text style={styles.section}>voice</Text>
+          <View style={styles.card}>
+            <View style={styles.segment}>
+              {VOICE_OPTIONS.map(option => {
+                const selected = voice ? option.mode === voice.mode : false;
+                // Offering cloud without credentials would be a choice that fails on the next
+                // recording, with the failure surfacing far from here.
+                const usable = option.mode === 'local' || (voice?.cloudAvailable ?? true);
+                return (
+                  <Pressable
+                    key={option.mode}
+                    style={[
+                      styles.segmentItem,
+                      selected && styles.segmentItemActive,
+                      !usable && styles.segmentItemOff,
+                    ]}
+                    disabled={!voice || !usable}
+                    onPress={() => onVoiceModeChange(option.mode)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected, disabled: !usable }}
+                    accessibilityLabel={`Transcription ${option.label}`}>
+                    <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          </View>
-
-          <View style={styles.categoryItem}>
-            <Text style={styles.section}>troubleshooting</Text>
-            <View style={styles.card}>
-              <Pressable
-                style={[styles.button, styles.buttonGhost]}
-                onPress={onOpenDiagnostics}
-                accessibilityRole="button"
-                accessibilityLabel="Open diagnostics">
-                <Text style={[styles.buttonText, styles.buttonGhostText]}>Diagnostics</Text>
-              </Pressable>
-              <Text style={styles.hint}>server snapshot and logs, ready to copy</Text>
-            </View>
+            <Text style={styles.hint}>{voiceHint(voice)}</Text>
           </View>
         </View>
       </ScrollView>

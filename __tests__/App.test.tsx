@@ -29,13 +29,13 @@ test('the settings expose the three theme modes', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open general');
+  await press(tree, 'Open other');
 
   const labels = labelsOf(tree);
   expect(labels).toContain('Theme System');
   expect(labels).toContain('Theme Light');
   expect(labels).toContain('Theme Dark');
-  expect(labels).toContain('Server address');
+  expect(labels).toContain('Open diagnostics');
   await unmount(tree);
 });
 

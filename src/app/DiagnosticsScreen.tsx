@@ -13,6 +13,7 @@ export function DiagnosticsScreen({
   logs,
   lastRun,
   busy,
+  backLabel = 'Back to general',
   onSnapshot,
   onLogs,
   onBack,
@@ -21,6 +22,8 @@ export function DiagnosticsScreen({
   logs: string;
   lastRun: string | null;
   busy: boolean;
+  /** Where back lands: diagnostics lives under Other in this app. */
+  backLabel?: string;
   onSnapshot: () => void;
   onLogs: (query: LogsTailQuery) => void;
   onBack: () => void;
@@ -62,7 +65,7 @@ export function DiagnosticsScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to general">
+        <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel={backLabel}>
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>

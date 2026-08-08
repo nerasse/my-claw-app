@@ -42,7 +42,7 @@ function pressLabel(tree: Tree, label: string): Promise<void> {
 async function openDiagnostics(tree: Tree): Promise<void> {
   const statusLabel = labelsOf(tree).find(l => l.startsWith('Connection status'))!;
   await pressLabel(tree, statusLabel);
-  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Open other');
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
   await pressLabel(tree, 'Open diagnostics');
   await waitFor(() => labelsOf(tree).includes('Refresh snapshot'));

@@ -103,6 +103,7 @@ import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
+import { OtherSettingsScreen } from './OtherSettingsScreen';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
 import { AgentDetailScreen } from './AgentDetailScreen';
 import { AgentFileScreen } from './AgentFileScreen';
@@ -751,8 +752,13 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage(instructionsFrom === 'agent' ? 'agent' : 'index');
           return true;
         }
-        if (settingsPage === 'diagnostics' || settingsPage === 'workspaces') {
+        // Workspaces lives under General, diagnostics under Other: back lands where they came from.
+        if (settingsPage === 'workspaces') {
           setSettingsPage('general');
+          return true;
+        }
+        if (settingsPage === 'diagnostics') {
+          setSettingsPage('other');
           return true;
         }
         setSettingsPage('index');
@@ -941,8 +947,8 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeVoiceModeSet(mode)).catch(() => {});
   }, []);
 
-  // Diagnostics is a page under General, not a screen of its own: reached from settings, the
-  // back key has to land back on General instead of dropping the user two levels down.
+  // Diagnostics is a page under Other, not a screen of its own: reached from settings, the
+  // back key has to land back on Other instead of dropping the user two levels down.
   const openDiagnostics = useCallback(() => {
     setSettingsOpen(true);
     setSettingsPage('diagnostics');
@@ -1394,8 +1400,6 @@ export function AppShell(): React.JSX.Element {
                 onUrlChange={changeUrl}
                 voice={voice}
                 onVoiceModeChange={changeVoiceMode}
-                themeMode={themeControl.mode}
-                onThemeModeChange={themeControl.setMode}
                 status={status}
                 pending={pending}
                 deviceInfo={deviceInfo}
@@ -1406,8 +1410,14 @@ export function AppShell(): React.JSX.Element {
                   setPending(0);
                 }}
                 onBack={() => setSettingsPage('index')}
-                onOpenDiagnostics={openDiagnostics}
                 onOpenWorkspaces={() => setSettingsPage('workspaces')}
+              />
+            ) : settingsPage === 'other' ? (
+              <OtherSettingsScreen
+                themeMode={themeControl.mode}
+                onThemeModeChange={themeControl.setMode}
+                onOpenDiagnostics={openDiagnostics}
+                onBack={() => setSettingsPage('index')}
               />
             ) : settingsPage === 'agents' ? (
               agentsPage
@@ -1636,7 +1646,8 @@ export function AppShell(): React.JSX.Element {
                 busy={diagBusy}
                 onSnapshot={openDiagnostics}
                 onLogs={fetchLogs}
-                onBack={() => setSettingsPage('general')}
+                backLabel="Back to other"
+                onBack={() => setSettingsPage('other')}
               />
             ) : settingsPage === 'tools' ? (
               <ToolsScreen
