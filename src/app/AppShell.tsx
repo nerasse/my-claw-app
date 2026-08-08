@@ -242,19 +242,23 @@ function AgentModelPickerSheet({
 
 /**
  * The tag editor: the model picker of a tag plus its effort chips. Picking a model saves the
- * tag and closes the sheet; an effort chip saves immediately and keeps it open, so a wrong
- * tap is not a completed edit. The context cap has its own row on the tags page.
+ * tag and chains straight into the context-cap editor, so a tag is created in one flow; an
+ * effort chip saves immediately and keeps the sheet open, so a wrong tap is not a completed
+ * edit. The context cap also has its own row on the tags page for later tweaks.
  */
 function TagEditorSheet({
   name,
   path,
   onPathChange,
   onClose,
+  onPicked,
 }: {
   name: string;
   path: string[];
   onPathChange: (path: string[]) => void;
   onClose: () => void;
+  /** The model was picked and saved: the caller opens the context-cap editor next. */
+  onPicked: (name: string) => void;
 }): React.JSX.Element {
   const catalog = useModelCatalog();
   const { tags } = useTags();
@@ -280,7 +284,7 @@ function TagEditorSheet({
       onClose={onClose}
       onSelect={modelId => {
         save(modelId, tag?.effort, tag?.contextCap);
-        onClose();
+        onPicked(name);
       }}
       effort={
         levels.length > 0
@@ -2353,6 +2357,14 @@ export function AppShell(): React.JSX.Element {
           path={tagEditor.path}
           onPathChange={path => setTagEditor(current => (current ? { ...current, path } : current))}
           onClose={() => setTagEditor(null)}
+          onPicked={name => {
+            // Chain the flow: the model is saved, the cap editor takes over, and its back key
+            // lands on the tags page wherever the editor was opened from.
+            setTagEditor(null);
+            setTagContextEditor(name);
+            setSettingsOpen(true);
+            setSettingsPage('number');
+          }}
         />
       ) : null}
 

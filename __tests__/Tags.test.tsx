@@ -148,7 +148,7 @@ test('the tags page lists the server catalog, Default row first and read-only', 
   await settleAndUnmount(tree);
 });
 
-test('picking a model for a tag sends tags.upsert and closes the editor', async () => {
+test('picking a model saves the tag and chains into the context-cap editor', async () => {
   const tree = await bootToTagsPage();
   await pressLabel(tree, 'Open tag opus');
   await waitFor(() => labelsOf(tree).includes('Fast'));
@@ -156,8 +156,13 @@ test('picking a model for a tag sends tags.upsert and closes the editor', async 
   await waitFor(() =>
     sentFrames().some(frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.model === 'fast-1'),
   );
-  // The editor is closed: the effort chips only exist inside it.
-  await waitFor(() => !labelsOf(tree).includes('Reasoning effort high'));
+  // The flow is chained: the cap editor takes over right after the model pick.
+  await waitFor(() => labelsOf(tree).includes('Save number'));
+  await typeInto(tree, 'Tag opus · context cap value', '60000');
+  await pressLabel(tree, 'Save number');
+  await waitFor(() =>
+    sentFrames().some(frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.contextCap === 60000),
+  );
   await settleAndUnmount(tree);
 });
 
@@ -203,7 +208,7 @@ test('/tag in the composer opens the tags page', async () => {
   await settleAndUnmount(tree);
 });
 
-test('/tag new "opus" in the composer opens the tag editor', async () => {
+test('/tag new "opus" in the composer opens the tag editor and chains into the cap editor', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await emit(agentsConfig());
@@ -220,5 +225,6 @@ test('/tag new "opus" in the composer opens the tag editor', async () => {
   await waitFor(() =>
     sentFrames().some(frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.model === 'fast-1'),
   );
+  await waitFor(() => labelsOf(tree).includes('Save number'));
   await settleAndUnmount(tree);
 });
