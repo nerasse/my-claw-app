@@ -153,14 +153,16 @@ export function AgentDetailScreen({
               onPress={() => onOpenScope('skills')}
               accessibilityRole="button"
               accessibilityLabel="Edit skills scope">
-              <View style={styles.linkMain}>
-                <View style={styles.linkTitleLine}>
-                  <Text style={styles.rowKey}>skills</Text>
+              <Text style={styles.rowKey}>skills</Text>
+              <View style={styles.valueArea}>
+                <View style={styles.valueLine}>
+                  <Text
+                    style={[unknownSkills.length > 0 ? styles.valueRemoved : styles.rowValue, styles.valueShrink]}
+                    numberOfLines={1}>
+                    {scopeText(agent.skills, 'inherited')}
+                  </Text>
                   {unknownSkills.length > 0 ? <Text style={styles.badgeRemoved}>removed</Text> : null}
                 </View>
-                <Text style={unknownSkills.length > 0 ? styles.valueRemoved : styles.rowValue} numberOfLines={1}>
-                  {scopeText(agent.skills, 'inherited')}
-                </Text>
                 {unknownSkills.length > 0 ? (
                   <Text style={styles.removedHint} numberOfLines={1}>
                     {`removed: ${unknownSkills.join(', ')}`}
@@ -175,14 +177,16 @@ export function AgentDetailScreen({
               onPress={() => onOpenScope('mcp')}
               accessibilityRole="button"
               accessibilityLabel="Edit MCP scope">
-              <View style={styles.linkMain}>
-                <View style={styles.linkTitleLine}>
-                  <Text style={styles.rowKey}>MCP</Text>
+              <Text style={styles.rowKey}>MCP</Text>
+              <View style={styles.valueArea}>
+                <View style={styles.valueLine}>
+                  <Text
+                    style={[unknownMcp.length > 0 ? styles.valueRemoved : styles.rowValue, styles.valueShrink]}
+                    numberOfLines={1}>
+                    {scopeText(agent.mcp, 'inherited')}
+                  </Text>
                   {unknownMcp.length > 0 ? <Text style={styles.badgeRemoved}>removed</Text> : null}
                 </View>
-                <Text style={unknownMcp.length > 0 ? styles.valueRemoved : styles.rowValue} numberOfLines={1}>
-                  {scopeText(agent.mcp, 'inherited')}
-                </Text>
                 {unknownMcp.length > 0 ? (
                   <Text style={styles.removedHint} numberOfLines={1}>
                     {`removed: ${unknownMcp.join(', ')}`}
@@ -197,14 +201,16 @@ export function AgentDetailScreen({
               onPress={onOpenWorkspace}
               accessibilityRole="button"
               accessibilityLabel="Edit workspace">
-              <View style={styles.linkMain}>
-                <View style={styles.linkTitleLine}>
-                  <Text style={styles.rowKey}>workspace</Text>
+              <Text style={styles.rowKey}>workspace</Text>
+              <View style={styles.valueArea}>
+                <View style={styles.valueLine}>
+                  <Text
+                    style={[agent.unknownWorkspace ? styles.valueRemoved : styles.rowValue, styles.valueShrink]}
+                    numberOfLines={1}>
+                    {agent.workspace ?? 'default'}
+                  </Text>
                   {agent.unknownWorkspace ? <Text style={styles.badgeRemoved}>removed</Text> : null}
                 </View>
-                <Text style={agent.unknownWorkspace ? styles.valueRemoved : styles.rowValue} numberOfLines={1}>
-                  {agent.workspace ?? 'default'}
-                </Text>
               </View>
               <Text style={styles.linkGlyph}>›</Text>
             </Pressable>
@@ -310,6 +316,10 @@ const createStyles = (palette: Palette) => ({
   rowKey: { fontSize: font.small, color: palette.textMuted },
   rowValue: { flex: 1, fontSize: font.small, color: palette.text, textAlign: 'right' as const },
   valueRemoved: { flex: 1, fontSize: font.small, color: palette.danger, textAlign: 'right' as const },
+  /** Values inside the right-aligned block truncate instead of pushing the card wide. */
+  valueArea: { flex: 1, alignItems: 'flex-end' as const, gap: 2 },
+  valueLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  valueShrink: { flex: 0, flexShrink: 1 },
   removedHint: { fontSize: font.micro, color: palette.danger },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
   badge: {
