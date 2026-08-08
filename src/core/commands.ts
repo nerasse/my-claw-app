@@ -12,6 +12,7 @@ export interface CommandDef {
  */
 const DEFAULT_COMMANDS: CommandDef[] = [
   { name: 'new', description: 'Start a fresh session' },
+  { name: 'tag', description: 'Model tags: /tag new "name"' },
   { name: 'model', description: 'Show or change current model, or an agent default: /model <agent>' },
   { name: 'models', description: 'List available models' },
   { name: 'effort', description: 'Show or set reasoning effort' },
@@ -77,4 +78,18 @@ export function filterCommands(query: string, list: CommandDef[], limit = 6): Co
   if (!query) return list.slice(0, limit);
   const needle = query.toLowerCase();
   return list.filter(command => command.name.startsWith(needle)).slice(0, limit);
+}
+
+/**
+ * What a submitted `/tag` text asks for: the tag name to create (`/tag new "name"`), or an
+ * empty string for a bare `/tag new` (the name prompt should open), or null for `/tag` alone
+ * (the tags page should open), or undefined when the text is not a tag command at all and must
+ * stay a typed command for the server.
+ */
+export function parseTagCommand(text: string): string | null | undefined {
+  const trimmed = text.trim();
+  if (/^\/tag\s*$/i.test(trimmed)) return null;
+  const match = /^\/tag\s+new(?:\s+"([^"]+)")?\s*$/i.exec(trimmed);
+  if (match) return match[1] ?? '';
+  return undefined;
 }

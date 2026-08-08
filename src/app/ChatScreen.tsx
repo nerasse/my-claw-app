@@ -70,6 +70,7 @@ export function ChatScreen({
   onOpenText,
   onOpenMenu,
   onCommandEntered,
+  onTagCommand,
   streaming,
   onStop,
   onNewThread,
@@ -94,6 +95,8 @@ export function ChatScreen({
   onOpenMenu: () => void;
   /** A slash command was chosen; true when the app handled it natively. */
   onCommandEntered: (command: string) => boolean;
+  /** A submitted /tag text was handled natively; true keeps it out of the wire. */
+  onTagCommand?: (text: string) => boolean;
   /** A run is streaming into this thread: the composer offers Stop instead of Send. */
   streaming: boolean;
   onStop: () => void;
@@ -206,6 +209,12 @@ export function ChatScreen({
   const submit = useCallback(() => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
+    // /tag is app-owned: it opens the tags page or the tag editor, never a message to the
+    // model. Intercepted here so it works even when the slash-menu is closed.
+    if (onTagCommand?.(text) === true) {
+      setDraft('');
+      return;
+    }
     // /new is the wire form of the + button: a fresh conversation, not a reset of this one.
     // Intercepted here so it works even when the slash-menu is closed, and never reaches the
     // server as a command about a conversation the user is leaving.
@@ -247,7 +256,7 @@ export function ChatScreen({
       onSend(text);
     }
     setDraft('');
-  }, [attachments, deviceInfo, draft, mediaBase, onNewThread, onSend, threadId]);
+  }, [attachments, deviceInfo, draft, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 
   const empty = items.length === 0;
 

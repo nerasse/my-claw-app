@@ -42,6 +42,7 @@ export function AgentsSettingsScreen({
   onOpenDefaultModel,
   onOpenDefaultEffort,
   onOpenProviders,
+  onOpenTags,
   onOpenAgent,
   onNewAgent,
 }: {
@@ -52,6 +53,7 @@ export function AgentsSettingsScreen({
   onOpenDefaultModel: () => void;
   onOpenDefaultEffort: () => void;
   onOpenProviders: () => void;
+  onOpenTags: () => void;
   onOpenAgent: (key: string) => void;
   onNewAgent: () => void;
 }): React.JSX.Element {
@@ -134,6 +136,20 @@ export function AgentsSettingsScreen({
                     {`${config.providers.length} configured · ${
                       config.providers.filter(provider => provider.keyPresent).length
                     } with a key set`}
+                  </Text>
+                </View>
+                <Text style={styles.linkGlyph}>›</Text>
+              </Pressable>
+              <View style={styles.separator} />
+              <Pressable
+                style={[styles.row, styles.link]}
+                onPress={onOpenTags}
+                accessibilityRole="button"
+                accessibilityLabel="Tags">
+                <View style={styles.linkMain}>
+                  <Text style={styles.linkTitle}>Tags</Text>
+                  <Text style={styles.hint}>
+                    aliases for a model combo · usable anywhere a model is expected
                   </Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>

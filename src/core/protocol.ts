@@ -481,7 +481,8 @@ export type ErrorScope =
   | 'config'
   | 'workspaces'
   | 'status'
-  | 'jobs';
+  | 'jobs'
+  | 'tags';
 
 export interface ErrorFrame {
   type: 'error';
@@ -557,6 +558,21 @@ export interface AgentsConfigResultFrame {
   effortLevels: string[];
   providers: ProviderInfo[];
   agents: AgentInfo[];
+}
+
+/** One tag: a named alias for a model/effort/context-cap combo (docs/tags.md on the server).
+ *  `model` is "" for the virtual Default tag, which always tracks the current default model. */
+export interface TagInfo {
+  name: string;
+  model: string;
+  effort?: string;
+  contextCap?: number;
+}
+
+/** Answer to tags.list and to every tags.* mutation. */
+export interface TagsResultFrame {
+  type: 'tags.result';
+  tags: TagInfo[];
 }
 
 /** Where the content of a prompt file comes from. See docs/instructions-page.md on the server. */
@@ -723,6 +739,7 @@ export type ServerFrame =
   | StatusResultFrame
   | JobsListResultFrame
   | JobsRunsResultFrame
+  | TagsResultFrame
   | NotificationsInfoFrame
   | ErrorFrame;
 
@@ -760,6 +777,7 @@ const FRAME_TYPES = new Set([
   'jobs.list.result',
   'jobs.runs.result',
   'notifications.info',
+  'tags.result',
   'chat.transcript',
   'approval.request',
   'error',
@@ -905,6 +923,30 @@ export function encodeModelEffortSet(threadId: string, level: string): string {
 
 export function encodeAgentsConfigGet(): string {
   return JSON.stringify({ type: 'agents.config.get' });
+}
+
+export function encodeTagsList(): string {
+  return JSON.stringify({ type: 'tags.list' });
+}
+
+/** `effort`/`contextCap` omitted reset the tag's pin on those axes. */
+export function encodeTagsUpsert(
+  name: string,
+  model: string,
+  effort: string | undefined,
+  contextCap: number | undefined,
+): string {
+  return JSON.stringify({
+    type: 'tags.upsert',
+    name,
+    model,
+    ...(effort ? { effort } : {}),
+    ...(contextCap === undefined ? {} : { contextCap }),
+  });
+}
+
+export function encodeTagsDelete(name: string): string {
+  return JSON.stringify({ type: 'tags.delete', name });
 }
 
 export function encodeInstructionsList(): string {

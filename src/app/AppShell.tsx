@@ -25,7 +25,7 @@ import {
   type TextItem,
 } from '../core/chat';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
-import { commandStore } from '../core/commands';
+import { commandStore, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
 import {
   encodeApprovalResponse,
@@ -100,6 +100,9 @@ import {
   type WorkspaceEntry,
   encodeNotificationsRegister,
   encodeNotificationsState,
+  encodeTagsDelete,
+  encodeTagsList,
+  encodeTagsUpsert,
 } from '../core/protocol';
 import {
   parseNotificationLink,
@@ -111,6 +114,7 @@ import {
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
+import { tagsStore, useTags } from '../core/tags';
 import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
 import { InstructionsScreen } from './InstructionsScreen';
@@ -125,6 +129,7 @@ import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
 import { OtherSettingsScreen } from './OtherSettingsScreen';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
+import { TagsScreen } from './TagsScreen';
 import { AgentDetailScreen } from './AgentDetailScreen';
 import { AgentFileScreen } from './AgentFileScreen';
 import { ScopeEditorScreen, type ScopeMode } from './ScopeEditorScreen';
@@ -235,6 +240,65 @@ function AgentModelPickerSheet({
   );
 }
 
+/**
+ * The tag editor: the model picker of a tag plus its effort chips. Picking a model saves the
+ * tag and closes the sheet; an effort chip saves immediately and keeps it open, so a wrong
+ * tap is not a completed edit. The context cap has its own row on the tags page.
+ */
+function TagEditorSheet({
+  name,
+  path,
+  onPathChange,
+  onClose,
+}: {
+  name: string;
+  path: string[];
+  onPathChange: (path: string[]) => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const catalog = useModelCatalog();
+  const { tags } = useTags();
+  const agents = useAgentsConfig();
+  const tag = tags?.find(entry => entry.name === name) ?? null;
+
+  const save = (model: string, effort: string | undefined, contextCap: number | undefined): void => {
+    connection.send(encodeTagsUpsert(name, model, effort, contextCap)).catch(() => {});
+    // The Tags group of the picker catalog and the provider-list row follow the server state.
+    connection.send(encodeModelList()).catch(() => {});
+    connection.send(encodeAgentsConfigGet()).catch(() => {});
+  };
+
+  const levels = agents.config?.effortLevels ?? [];
+
+  return (
+    <ModelPickerSheet
+      title={`Tag ${name}`}
+      models={catalog.models}
+      activeId={tag?.model ?? ''}
+      path={path}
+      onPathChange={onPathChange}
+      onClose={onClose}
+      onSelect={modelId => {
+        save(modelId, tag?.effort, tag?.contextCap);
+        onClose();
+      }}
+      effort={
+        levels.length > 0
+          ? {
+              level: tag?.effort ?? '',
+              levels,
+              onChange: level => {
+                // A new tag has no model yet: its effort is saved with the first model pick.
+                if (!tag?.model) return;
+                save(tag.model, level === '' ? undefined : level, tag.contextCap);
+              },
+            }
+          : null
+      }
+    />
+  );
+}
+
 export function AppShell(): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette, dark } = useTheme();
@@ -256,6 +320,7 @@ export function AppShell(): React.JSX.Element {
     | 'agent'
     | 'providers'
     | 'provider'
+    | 'tags'
     | 'skills'
     | 'workspaces'
     | 'instructions'
@@ -298,6 +363,14 @@ export function AppShell(): React.JSX.Element {
   const [scopeSaving, setScopeSaving] = useState(false);
   const [workspacePickerAgent, setWorkspacePickerAgent] = useState<string | null>(null);
   const [numberEditor, setNumberEditor] = useState<{ field: 'iterations' | 'contextcap'; agent: string } | null>(null);
+  /** The tag editor sheet: its group stack is walked by back, and the row to rename over it. */
+  const [tagEditor, setTagEditor] = useState<{ name: string; path: string[] } | null>(null);
+  /** The context-cap number page for one tag, opened from the tags page. */
+  const [tagContextEditor, setTagContextEditor] = useState<string | null>(null);
+  /** The name prompt for a tag about to be created, opened by /tag new or the + button. */
+  const [newTagPrompt, setNewTagPrompt] = useState(false);
+  /** The tag waiting for its delete confirmation. */
+  const [tagToDelete, setTagToDelete] = useState<string | null>(null);
   const [newAgentBusy, setNewAgentBusy] = useState(false);
   const [configEditor, setConfigEditor] = useState<ConfigEditorState | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
@@ -367,6 +440,7 @@ export function AppShell(): React.JSX.Element {
   const catalog = useModelCatalog();
   const threadModel = useThreadModel(activeThread);
   const agentsState = useAgentsConfig();
+  const tagsState = useTags();
   const agentsFile = useAgentsFile();
   const instructions = useInstructions();
   const agentsConfig = agentsState.config;
@@ -624,6 +698,9 @@ export function AppShell(): React.JSX.Element {
         case 'agents.config.result':
           agentsStore.receive(frame);
           break;
+        case 'tags.result':
+          tagsStore.receive(frame.tags);
+          break;
         case 'agents.file.result':
           agentsFileStore.receive(frame);
           break;
@@ -773,6 +850,8 @@ export function AppShell(): React.JSX.Element {
               agentsFileStore.fail(frame.message);
             } else if (frame.scope === 'instructions') {
               instructionsStore.fail(frame.message);
+            } else if (frame.scope === 'tags') {
+              tagsStore.fail(frame.message);
             } else if (activeThreadRef.current) {
               chatStore.addAgentMessage(
                 activeThreadRef.current,
@@ -881,6 +960,22 @@ export function AppShell(): React.JSX.Element {
         setAgentModelFor(null);
         return true;
       }
+      if (tagEditor) {
+        if (tagEditor.path.length > 0) {
+          setTagEditor(current => (current ? { ...current, path: current.path.slice(0, -1) } : current));
+          return true;
+        }
+        setTagEditor(null);
+        return true;
+      }
+      if (newTagPrompt) {
+        setNewTagPrompt(false);
+        return true;
+      }
+      if (tagToDelete) {
+        setTagToDelete(null);
+        return true;
+      }
       if (commandMenuOpen) {
         setCommandMenuOpen(false);
         return true;
@@ -917,6 +1012,10 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('agents');
           return true;
         }
+        if (settingsPage === 'tags') {
+          setSettingsPage('agents');
+          return true;
+        }
         if (settingsPage === 'agents') {
           setSettingsPage('index');
           return true;
@@ -927,7 +1026,7 @@ export function AppShell(): React.JSX.Element {
           return true;
         }
         if (settingsPage === 'workspace-picker' || settingsPage === 'number') {
-          setSettingsPage('agent');
+          setSettingsPage(tagContextEditor ? 'tags' : 'agent');
           return true;
         }
         if (settingsPage === 'file') {
@@ -1015,12 +1114,16 @@ export function AppShell(): React.JSX.Element {
     jobsOpen,
     modelOpen,
     modelPath,
+    newTagPrompt,
     scopeEditor,
     selectThread,
     settingsOpen,
     settingsPage,
     skillViewer,
     statusOpen,
+    tagContextEditor,
+    tagEditor,
+    tagToDelete,
     textViewer,
     threadMenu,
     threadToRename,
@@ -1225,6 +1328,16 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeModelList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
+  // The tag catalog, same pull pattern as the agents page: asked for when the page opens, and
+  // a server that predates the frames flips to "unsupported" after a beat instead of spinning.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'tags') return;
+    tagsStore.request();
+    connection.send(encodeTagsList()).catch(() => {});
+    const timer = setTimeout(() => tagsStore.markUnsupported(), 4000);
+    return () => clearTimeout(timer);
+  }, [settingsOpen, settingsPage]);
+
   // Same guard as the agents page: a server without the instructions frames answers nothing,
   // and the page must say so rather than spin. The list is re-asked on every visit because the
   // agent edits AGENTS.md too, so a list from ten minutes ago can already be wrong.
@@ -1378,6 +1491,11 @@ export function AppShell(): React.JSX.Element {
           setCommandMenuOpen(false);
           newThread();
           return true;
+        case 'tag':
+          setCommandMenuOpen(false);
+          setSettingsOpen(true);
+          setSettingsPage('tags');
+          return true;
         case 'stop':
           if (threadId) connection.send(encodeChatStop(threadId));
           return true;
@@ -1498,6 +1616,63 @@ export function AppShell(): React.JSX.Element {
   );
   // Both pages double as the fallback when a detail page has no subject yet (config not loaded,
   // or a key that no longer exists), so they are built once here.
+  const openTagContextEditor = (name: string): void => {
+    setTagContextEditor(name);
+    setSettingsPage('number');
+  };
+  const saveTagContextCap = (value: number | null): void => {
+    if (!tagContextEditor) return;
+    const tag = tagsState.tags?.find(entry => entry.name === tagContextEditor);
+    if (tag) {
+      connection
+        .send(encodeTagsUpsert(tagContextEditor, tag.model, tag.effort, value ?? undefined))
+        .catch(() => {});
+      connection.send(encodeModelList()).catch(() => {});
+      connection.send(encodeAgentsConfigGet()).catch(() => {});
+    }
+    setSettingsPage('tags');
+    setTagContextEditor(null);
+  };
+  const openTagEditor = (name: string): void => {
+    setTagEditor({ name, path: [] });
+  };
+  /** The /tag command: bare opens the tags page, `new "name"` opens the tag editor. */
+  const dispatchTagCommand = useCallback(
+    (text: string): boolean => {
+      const name = parseTagCommand(text);
+      if (name === undefined) return false;
+      if (name === null) {
+        setSettingsOpen(true);
+        setSettingsPage('tags');
+        return true;
+      }
+      if (name === '') {
+        setNewTagPrompt(true);
+        return true;
+      }
+      if (name === 'Default') {
+        setSettingsOpen(true);
+        setSettingsPage('tags');
+        return true;
+      }
+      openTagEditor(name);
+      return true;
+    },
+    [],
+  );
+  const createTagNamed = (name: string): void => {
+    setNewTagPrompt(false);
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === 'Default') return;
+    openTagEditor(trimmed);
+  };
+  const deleteTagConfirmed = (): void => {
+    if (!tagToDelete) return;
+    connection.send(encodeTagsDelete(tagToDelete)).catch(() => {});
+    connection.send(encodeModelList()).catch(() => {});
+    connection.send(encodeAgentsConfigGet()).catch(() => {});
+    setTagToDelete(null);
+  };
   const agentsPage = (
     <AgentsSettingsScreen
       config={agentsConfig}
@@ -1510,6 +1685,7 @@ export function AppShell(): React.JSX.Element {
       }}
       onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
       onOpenProviders={() => setSettingsPage('providers')}
+      onOpenTags={() => setSettingsPage('tags')}
       onOpenAgent={key => {
         setSelectedAgent(key);
         setSettingsPage('agent');
@@ -1522,9 +1698,25 @@ export function AppShell(): React.JSX.Element {
       providers={agentsConfig?.providers ?? []}
       onBack={() => setSettingsPage('agents')}
       onOpenProvider={key => {
+        if (key === 'tags') {
+          setSettingsPage('tags');
+          return;
+        }
         setSelectedProvider(key);
         setSettingsPage('provider');
       }}
+    />
+  );
+  const tagsPage = (
+    <TagsScreen
+      tags={tagsState.tags}
+      status={tagsState.status}
+      error={tagsState.error}
+      onBack={() => setSettingsPage('agents')}
+      onNewTag={() => setNewTagPrompt(true)}
+      onEditTag={openTagEditor}
+      onDeleteTag={setTagToDelete}
+      onOpenContextCap={openTagContextEditor}
     />
   );
 
@@ -1766,6 +1958,8 @@ export function AppShell(): React.JSX.Element {
               )
             ) : settingsPage === 'providers' ? (
               providersPage
+            ) : settingsPage === 'tags' ? (
+              tagsPage
             ) : settingsPage === 'provider' ? (
               selectedProviderInfo ? (
                 <ProviderScreen
@@ -1874,6 +2068,19 @@ export function AppShell(): React.JSX.Element {
                   saving={false}
                   onBack={() => setSettingsPage('agent')}
                   onSave={saveNumber}
+                />
+              ) : tagContextEditor ? (
+                <NumberEditorScreen
+                  title={`Tag ${tagContextEditor} · context cap`}
+                  hint="ceiling for runs through this tag · 0 lifts it"
+                  value={tagsState.tags?.find(tag => tag.name === tagContextEditor)?.contextCap ?? null}
+                  placeholder="0 lifts the ceiling, blank = agent/global setting"
+                  min={1}
+                  allowZero
+                  error={tagsState.error}
+                  saving={false}
+                  onBack={() => setSettingsPage('tags')}
+                  onSave={saveTagContextCap}
                 />
               ) : (
                 agentsPage
@@ -2028,6 +2235,7 @@ export function AppShell(): React.JSX.Element {
               onOpenText={setTextViewer}
               onOpenMenu={() => setCommandMenuOpen(true)}
               onCommandEntered={dispatchCommand}
+              onTagCommand={dispatchTagCommand}
               streaming={streaming}
               onStop={() => {
                 if (activeThread) connection.send(encodeChatStop(activeThread));
@@ -2136,6 +2344,41 @@ export function AppShell(): React.JSX.Element {
           onPathChange={setAgentModelPath}
           path={agentModelPath}
           onClose={() => setAgentModelFor(null)}
+        />
+      ) : null}
+
+      {tagEditor ? (
+        <TagEditorSheet
+          name={tagEditor.name}
+          path={tagEditor.path}
+          onPathChange={path => setTagEditor(current => (current ? { ...current, path } : current))}
+          onClose={() => setTagEditor(null)}
+        />
+      ) : null}
+
+      {newTagPrompt ? (
+        <PromptSheet
+          title="Name this tag"
+          hint="then pick the model, effort and context cap it pins"
+          initialValue=""
+          placeholder="opus, sonnet, research…"
+          maxLength={40}
+          onSubmit={createTagNamed}
+          onClose={() => setNewTagPrompt(false)}
+        />
+      ) : null}
+
+      {tagToDelete ? (
+        <ActionSheet
+          preview={`Delete the tag "${tagToDelete}"? Configs still referencing tag:${tagToDelete} will show it as unknown.`}
+          options={[
+            {
+              label: 'Delete',
+              danger: true,
+              onPress: deleteTagConfirmed,
+            },
+          ]}
+          onClose={() => setTagToDelete(null)}
         />
       ) : null}
 
