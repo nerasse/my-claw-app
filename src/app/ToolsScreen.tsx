@@ -13,9 +13,12 @@ const SOURCE_SECTIONS: Array<{ source: ToolEntry['source']; label: string; hint:
 ];
 
 /** The tools of one source in catalog order, with section headers. MCP tools are sub-grouped
- *  per server so the phone tells one server's namespace apart without guessing. */
+ *  per server so the phone tells one server's namespace apart without guessing. `missing` rows
+ *  are denylist names no tool carries anymore: rendered red, one tap toggles them off and away. */
 type Row =
   | { kind: 'header'; source: ToolEntry['source'] }
+  | { kind: 'missingHeader' }
+  | { kind: 'missing'; name: string }
   | { kind: 'mcpHeader'; server: string }
   | { kind: 'tool'; tool: ToolEntry };
 
@@ -48,13 +51,20 @@ function shortName(tool: ToolEntry): string {
 
 export function ToolsScreen({
   tools,
+  missing,
   error,
+  saving,
   onBack,
+  onToggle,
 }: {
   tools: ToolEntry[];
+  /** Denylist names no tool carries anymore: rendered red so they can be toggled off and away. */
+  missing: string[];
   /** Server refused the request: distinct from an empty catalog, which is itself a fact. */
   error?: string;
+  saving: boolean;
   onBack: () => void;
+  onToggle: (name: string, disabled: boolean) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // nothing to type into on this page.
@@ -62,6 +72,13 @@ export function ToolsScreen({
   const { scrollProps, indicator } = useScrollIndicator();
   const rows = buildRows(tools);
   const disabledCount = tools.filter(tool => tool.disabled).length;
+  // One string: a Text split across expressions reads as an array to textsOf in tests.
+  const subtitle = `${tools.length} tool${tools.length === 1 ? '' : 's'}${
+    disabledCount > 0 ? ` · ${disabledCount} disabled` : ''
+  }${missing.length > 0 ? ` · ${missing.length} removed` : ''}`;
+
+  const missingRows: Row[] =
+    missing.length > 0 ? [{ kind: 'missingHeader' }, ...missing.map(name => ({ kind: 'missing' as const, name }))] : [];
 
   return (
     <View style={styles.screen}>
@@ -76,10 +93,7 @@ export function ToolsScreen({
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Tools</Text>
-          <Text style={styles.subtitle}>
-            {tools.length} tool{tools.length === 1 ? '' : 's'}
-            {disabledCount > 0 ? ` · ${disabledCount} disabled` : ''}
-          </Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
       </View>
 
@@ -93,22 +107,51 @@ export function ToolsScreen({
         <FlatList
           {...scrollProps}
           style={styles.list}
-          data={rows}
+          data={[...missingRows, ...rows]}
           keyExtractor={row =>
             row.kind === 'header'
               ? `h:${row.source}`
-              : row.kind === 'mcpHeader'
-                ? `m:${row.server}`
-                : `t:${row.tool.source}:${row.tool.server ?? ''}:${row.tool.name}`
+              : row.kind === 'missingHeader'
+                ? 'missing:h'
+                : row.kind === 'missing'
+                  ? `missing:${row.name}`
+                  : row.kind === 'mcpHeader'
+                    ? `m:${row.server}`
+                    : `t:${row.tool.source}:${row.tool.server ?? ''}:${row.tool.name}`
           }
-          contentContainerStyle={rows.length === 0 ? styles.emptyContent : styles.listContent}
+          contentContainerStyle={rows.length === 0 && missing.length === 0 ? styles.emptyContent : styles.listContent}
           ListEmptyComponent={
             <Text style={styles.empty}>
               {error ? undefined : 'no tools found'}
             </Text>
           }
           renderItem={({ item }) =>
-            item.kind === 'header' ? (
+            item.kind === 'missingHeader' ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>removed</Text>
+                <Text style={styles.sectionHint}>in the denylist, no tool has the name</Text>
+              </View>
+            ) : item.kind === 'missing' ? (
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.removedName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.description} numberOfLines={1}>
+                    no tool carries this name anymore
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => onToggle(item.name, false)}
+                  disabled={saving}
+                  style={[styles.toggleButton, styles.toggleOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ checked: false }}
+                  accessibilityLabel={`Drop removed tool ${item.name}`}>
+                  <Text style={styles.toggleTextOn}>drop</Text>
+                </Pressable>
+              </View>
+            ) : item.kind === 'header' ? (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>{sectionLabel(item.source)}</Text>
                 <Text style={styles.sectionHint}>{sectionHint(item.source)}</Text>
@@ -135,6 +178,17 @@ export function ToolsScreen({
                     {item.tool.description}
                   </Text>
                 </View>
+                <Pressable
+                  onPress={() => onToggle(item.tool.name, !item.tool.disabled)}
+                  disabled={saving}
+                  style={[styles.toggleButton, item.tool.disabled ? styles.toggleOn : styles.toggleOff]}
+                  accessibilityRole="button"
+                  accessibilityState={{ checked: !item.tool.disabled }}
+                  accessibilityLabel={`${item.tool.disabled ? 'Enable' : 'Disable'} tool ${item.tool.name}`}>
+                  <Text style={item.tool.disabled ? styles.toggleTextOn : styles.toggleTextOff}>
+                    {item.tool.disabled ? 'off' : 'on'}
+                  </Text>
+                </Pressable>
               </View>
             )
           }
@@ -222,6 +276,7 @@ const createStyles = (palette: Palette) => ({
   rowMain: { flex: 1, gap: 2 },
   rowTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   toolName: { flexShrink: 1, fontSize: font.body, fontWeight: '600' as const, color: palette.text },
+  removedName: { fontSize: font.body, fontWeight: '600' as const, color: palette.danger },
   badge: {
     fontSize: font.micro,
     color: palette.textFaint,
@@ -233,5 +288,15 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
   },
+  toggleButton: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  toggleOn: { backgroundColor: palette.surfaceAlt, borderColor: palette.border },
+  toggleOff: { borderColor: palette.accent, backgroundColor: palette.surfaceAlt },
+  toggleTextOn: { fontSize: font.small, fontWeight: '600' as const, color: palette.textMuted },
+  toggleTextOff: { fontSize: font.small, fontWeight: '600' as const, color: palette.accent },
   description: { fontSize: font.small, color: palette.textMuted, lineHeight: 16 },
 });

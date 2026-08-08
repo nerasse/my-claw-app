@@ -14,10 +14,11 @@ function scopeText(scope: string[] | null | undefined, inheritedFrom: string): s
 }
 
 /**
- * One agent's defaults. The model is editable; the rest of the entry is shown read-only, because
- * it is what actually decides what this agent can reach and reading it here beats opening
- * config.json on the server. Everything renders from the server-sent AgentInfo, so the page
- * never hardcodes an agent name.
+ * One agent's defaults. The model was editable first; every scope row now opens its own editor,
+ * and a file-defined agent links to its definition file. Everything renders from the server-sent
+ * AgentInfo, so the page never hardcodes an agent name. Entries that match nothing in the live
+ * catalogs (unknownSkills/unknownMcp/unknownWorkspace) are painted red: they still exist in
+ * config, so they have to stay visible to be removed.
  */
 export function AgentDetailScreen({
   agent,
@@ -25,6 +26,12 @@ export function AgentDetailScreen({
   onBack,
   onOpenModel,
   onOpenInstructions,
+  onOpenScope,
+  onOpenWorkspace,
+  onOpenIterations,
+  onOpenContextCap,
+  onOpenFile,
+  onFork,
 }: {
   agent: AgentInfo;
   /** Server refused the last write: shown here, where the user asked for it. */
@@ -32,11 +39,20 @@ export function AgentDetailScreen({
   onBack: () => void;
   onOpenModel: () => void;
   onOpenInstructions: () => void;
+  onOpenScope: (field: 'skills' | 'mcp') => void;
+  onOpenWorkspace: () => void;
+  onOpenIterations: () => void;
+  onOpenContextCap: () => void;
+  onOpenFile: () => void;
+  onFork: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
   const catalog = useModelCatalog();
   const modelLabel = catalog.models.find(model => model.id === agent.model)?.label ?? agent.model;
+
+  const unknownSkills = agent.unknownSkills ?? [];
+  const unknownMcp = agent.unknownMcp ?? [];
 
   return (
     <View style={styles.screen}>
@@ -107,10 +123,24 @@ export function AgentDetailScreen({
                   {agent.path ?? ''}
                 </Text>
               </View>
+              <View style={styles.separator} />
+              <Pressable
+                style={[styles.row, styles.link]}
+                onPress={agent.source === 'built-in' ? onFork : onOpenFile}
+                accessibilityRole="button"
+                accessibilityLabel={agent.source === 'built-in' ? 'Fork agent to custom' : 'Edit agent file'}>
+                <Text style={styles.rowKey}>{agent.source === 'built-in' ? 'fork' : 'edit'}</Text>
+                <Text style={styles.rowValue} numberOfLines={1}>
+                  {agent.source === 'built-in'
+                    ? 'copy to a custom file you can edit'
+                    : 'change this file from the app'}
+                </Text>
+                <Text style={styles.linkGlyph}>›</Text>
+              </Pressable>
             </View>
             <Text style={styles.note}>
-              Edit the file on the server to change this agent. A higher tier replaces a lower one
-              entirely rather than extending it.
+              A higher tier replaces a lower one entirely: forking a built-in gives you the
+              definition to own.
             </Text>
           </View>
         ) : null}
@@ -118,26 +148,66 @@ export function AgentDetailScreen({
         <View style={styles.category}>
           <Text style={styles.section}>scope</Text>
           <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.rowKey}>skills</Text>
-              <Text style={styles.rowValue} numberOfLines={1}>
-                {scopeText(agent.skills, 'inherited')}
-              </Text>
-            </View>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={() => onOpenScope('skills')}
+              accessibilityRole="button"
+              accessibilityLabel="Edit skills scope">
+              <View style={styles.linkMain}>
+                <View style={styles.linkTitleLine}>
+                  <Text style={styles.rowKey}>skills</Text>
+                  {unknownSkills.length > 0 ? <Text style={styles.badgeRemoved}>removed</Text> : null}
+                </View>
+                <Text style={unknownSkills.length > 0 ? styles.valueRemoved : styles.rowValue} numberOfLines={1}>
+                  {scopeText(agent.skills, 'inherited')}
+                </Text>
+                {unknownSkills.length > 0 ? (
+                  <Text style={styles.removedHint} numberOfLines={1}>
+                    {`removed: ${unknownSkills.join(', ')}`}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
             <View style={styles.separator} />
-            <View style={styles.row}>
-              <Text style={styles.rowKey}>MCP</Text>
-              <Text style={styles.rowValue} numberOfLines={1}>
-                {scopeText(agent.mcp, 'inherited')}
-              </Text>
-            </View>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={() => onOpenScope('mcp')}
+              accessibilityRole="button"
+              accessibilityLabel="Edit MCP scope">
+              <View style={styles.linkMain}>
+                <View style={styles.linkTitleLine}>
+                  <Text style={styles.rowKey}>MCP</Text>
+                  {unknownMcp.length > 0 ? <Text style={styles.badgeRemoved}>removed</Text> : null}
+                </View>
+                <Text style={unknownMcp.length > 0 ? styles.valueRemoved : styles.rowValue} numberOfLines={1}>
+                  {scopeText(agent.mcp, 'inherited')}
+                </Text>
+                {unknownMcp.length > 0 ? (
+                  <Text style={styles.removedHint} numberOfLines={1}>
+                    {`removed: ${unknownMcp.join(', ')}`}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
             <View style={styles.separator} />
-            <View style={styles.row}>
-              <Text style={styles.rowKey}>workspace</Text>
-              <Text style={styles.rowValue} numberOfLines={1}>
-                {agent.workspace ?? 'default'}
-              </Text>
-            </View>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenWorkspace}
+              accessibilityRole="button"
+              accessibilityLabel="Edit workspace">
+              <View style={styles.linkMain}>
+                <View style={styles.linkTitleLine}>
+                  <Text style={styles.rowKey}>workspace</Text>
+                  {agent.unknownWorkspace ? <Text style={styles.badgeRemoved}>removed</Text> : null}
+                </View>
+                <Text style={agent.unknownWorkspace ? styles.valueRemoved : styles.rowValue} numberOfLines={1}>
+                  {agent.workspace ?? 'default'}
+                </Text>
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
             <View style={styles.separator} />
             {/* The workspace prompt files this agent sits on. A file-defined agent adds its own
                 mandate on top of them, which lives in its `.agents/` file rather than here. */}
@@ -153,7 +223,11 @@ export function AgentDetailScreen({
               <Text style={styles.linkGlyph}>›</Text>
             </Pressable>
             <View style={styles.separator} />
-            <View style={styles.row}>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenContextCap}
+              accessibilityRole="button"
+              accessibilityLabel="Edit context cap">
               <Text style={styles.rowKey}>context cap</Text>
               <Text style={styles.rowValue} numberOfLines={1}>
                 {agent.contextCap === null || agent.contextCap === undefined
@@ -162,18 +236,26 @@ export function AgentDetailScreen({
                     ? 'no ceiling'
                     : `${agent.contextCap} tokens`}
               </Text>
-            </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
             <View style={styles.separator} />
-            <View style={styles.row}>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onOpenIterations}
+              accessibilityRole="button"
+              accessibilityLabel="Edit iterations">
               <Text style={styles.rowKey}>iterations</Text>
               <Text style={styles.rowValue} numberOfLines={1}>
                 {agent.maxIterations === null || agent.maxIterations === undefined
                   ? 'default'
                   : String(agent.maxIterations)}
               </Text>
-            </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
           </View>
-          <Text style={styles.note}>read-only for now · edit these in the server config</Text>
+          <Text style={styles.note}>
+            edits are saved to the server config and apply on the next run
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -227,12 +309,25 @@ const createStyles = (palette: Palette) => ({
   hint: { fontSize: font.small, color: palette.textMuted },
   rowKey: { fontSize: font.small, color: palette.textMuted },
   rowValue: { flex: 1, fontSize: font.small, color: palette.text, textAlign: 'right' as const },
+  valueRemoved: { flex: 1, fontSize: font.small, color: palette.danger, textAlign: 'right' as const },
+  removedHint: { fontSize: font.micro, color: palette.danger },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
   badge: {
     fontSize: font.micro,
     color: palette.textFaint,
     borderWidth: 1,
     borderColor: palette.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  badgeRemoved: {
+    fontSize: font.micro,
+    color: palette.danger,
+    borderWidth: 1,
+    borderColor: palette.danger,
     borderRadius: radius.sm,
     paddingHorizontal: 4,
     paddingVertical: 1,

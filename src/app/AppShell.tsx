@@ -35,13 +35,27 @@ import {
   encodeAgentsEffortSet,
   encodeAgentsModelClear,
   encodeAgentsModelSet,
+  encodeAgentsScopeSet,
+  encodeAgentsWorkspaceSet,
+  encodeAgentsIterationsSet,
+  encodeAgentsContextCapSet,
+  encodeAgentFileGet,
+  encodeAgentFileSet,
+  encodeAgentFileCreate,
+  encodeAgentFileDelete,
   encodeChatSend,
   encodeChatStop,
   encodeCommandsList,
+  encodeConfigGet,
+  encodeConfigSet,
   encodeDiagSnapshot,
   encodeFileDelete,
   encodeFilesList,
   encodeLogsTail,
+  encodeMcpAdd,
+  encodeMcpEnable,
+  encodeMcpList,
+  encodeMcpRemove,
   encodeModelGet,
   encodeModelList,
   encodeSessionArchive,
@@ -52,13 +66,21 @@ import {
   encodeSessionUnarchive,
   encodeSkillsList,
   encodeToolsList,
+  encodeToolsToggle,
   encodeWorkspacesList,
+  encodeWorkspacesAdd,
+  encodeWorkspacesRemove,
+  encodeWorkspacesRename,
+  encodeWorkspacesSetPath,
   encodeVoiceModeGet,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
+  type AgentFileFieldsOut,
   type ApprovalRequestFrame,
   type AgentsConfigResultFrame,
+  type FileScopeMode,
   type LogsTailQuery,
+  type McpEntry,
   type SessionFileMeta,
   type SessionSummary,
   type SkillEntry,
@@ -69,6 +91,7 @@ import {
 } from '../core/protocol';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
 import { agentsStore, useAgentsConfig } from '../core/agents';
+import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
 import { InstructionsScreen } from './InstructionsScreen';
 import { InstructionEditorScreen } from './InstructionEditorScreen';
@@ -82,6 +105,13 @@ import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
 import { AgentDetailScreen } from './AgentDetailScreen';
+import { AgentFileScreen } from './AgentFileScreen';
+import { ScopeEditorScreen, type ScopeMode } from './ScopeEditorScreen';
+import { WorkspacePickerScreen } from './WorkspacePickerScreen';
+import { NumberEditorScreen } from './NumberEditorScreen';
+import { NewAgentScreen } from './NewAgentScreen';
+import { McpsScreen } from './McpsScreen';
+import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
 import { ProvidersScreen } from './ProvidersScreen';
 import { ProviderScreen } from './ProviderScreen';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
@@ -102,6 +132,23 @@ import { font, radius, space, useTheme, useThemedStyles, type Palette } from '..
 import { useThemeControl } from '../theme/ThemeProvider';
 
 const HISTORY_LIMIT = 50;
+
+/** The config scope shape ("["*"]" for all, absent for inherit) as the editor's mode union. */
+function scopeModeOf(scope: string[] | null | undefined): ScopeMode {
+  if (!Array.isArray(scope)) return 'inherit';
+  if (scope.includes('*')) return 'all';
+  return 'list';
+}
+
+function scopeModeOfFile(mode: FileScopeMode): ScopeMode {
+  return mode === 'absent' ? 'absent' : mode;
+}
+
+/** Names in a list that the live catalog no longer carries: the red section of a scope editor. */
+function unknownOfList(names: string[], catalog: Array<{ name: string }>): string[] {
+  const known = new Set(catalog.map(item => item.name));
+  return names.filter(name => !known.has(name));
+}
 
 /**
  * The model picker pointed at the server config instead of a session: "global" edits
@@ -191,6 +238,12 @@ export function AppShell(): React.JSX.Element {
     | 'mcps'
     | 'other'
     | 'diagnostics'
+    | 'scope'
+    | 'workspace-picker'
+    | 'number'
+    | 'file'
+    | 'newagent'
+    | 'config'
   >('index');
   /** The agent detail page shows this key, taken from the last agents.config.result. */
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
@@ -206,7 +259,24 @@ export function AppShell(): React.JSX.Element {
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [tools, setTools] = useState<ToolEntry[]>([]);
   const [toolsError, setToolsError] = useState<string | null>(null);
+  const [toolsMissing, setToolsMissing] = useState<string[]>([]);
+  const [toolsSaving, setToolsSaving] = useState(false);
+  const [mcpServers, setMcpServers] = useState<McpEntry[]>([]);
+  const [mcpError, setMcpError] = useState<string | null>(null);
+  const [mcpBusy, setMcpBusy] = useState(false);
+  /** Which scope editor is open: skills or MCP, writing to the config override or to a file. */
+  const [scopeEditor, setScopeEditor] = useState<{
+    kind: 'skills' | 'mcp';
+    target: 'config' | 'file';
+  } | null>(null);
+  const [scopeSaving, setScopeSaving] = useState(false);
+  const [workspacePickerAgent, setWorkspacePickerAgent] = useState<string | null>(null);
+  const [numberEditor, setNumberEditor] = useState<{ field: 'iterations' | 'contextcap'; agent: string } | null>(null);
+  const [newAgentBusy, setNewAgentBusy] = useState(false);
+  const [configEditor, setConfigEditor] = useState<ConfigEditorState | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
+  const [workspacesError, setWorkspacesError] = useState<string | null>(null);
+  const [workspacesBusy, setWorkspacesBusy] = useState(false);
   const [skillsError, setSkillsError] = useState<string | null>(null);
   const [skillViewer, setSkillViewer] = useState<{
     url: string;
@@ -252,6 +322,7 @@ export function AppShell(): React.JSX.Element {
   const catalog = useModelCatalog();
   const threadModel = useThreadModel(activeThread);
   const agentsState = useAgentsConfig();
+  const agentsFile = useAgentsFile();
   const instructions = useInstructions();
   const agentsConfig = agentsState.config;
   const streaming = items.some(item => item.kind === 'text' && item.streaming);
@@ -405,16 +476,59 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'tools.list.result':
           setTools(frame.tools);
+          setToolsMissing(frame.missing ?? []);
           setToolsError(null);
+          setToolsSaving(false);
+          break;
+        case 'mcp.list.result':
+          setMcpServers(frame.servers);
+          setMcpError(null);
+          setMcpBusy(false);
           break;
         case 'workspaces.list.result':
           setWorkspaces(frame.workspaces);
+          setWorkspacesError(null);
+          setWorkspacesBusy(false);
           break;
         case 'model.result':
           modelStore.replaceThread(frame);
           break;
         case 'agents.config.result':
           agentsStore.receive(frame);
+          break;
+        case 'agents.file.result':
+          agentsFileStore.receive(frame);
+          break;
+        case 'agents.file.saved':
+          agentsFileStore.receiveSaved(frame);
+          // The catalog changed (created/deleted agent): ask for a fresh snapshot instead of
+          // guessing what the registry now holds.
+          connection.send(encodeAgentsConfigGet()).catch(() => {});
+          break;
+        case 'config.result':
+          setConfigEditor({
+            status: 'ready',
+            draft: frame.content,
+            loaded: frame.content,
+            sha: frame.sha,
+            maxBytes: frame.maxBytes,
+            error: null,
+            changed: [],
+            rebootRequired: [],
+          });
+          break;
+        case 'config.saved':
+          setConfigEditor(current => {
+            if (!current) return current;
+            if (frame.ok) {
+              return { ...current, status: 'ready', loaded: current.draft, sha: frame.sha, error: null, changed: frame.changed, rebootRequired: frame.rebootRequired };
+            }
+            return {
+              ...current,
+              status: frame.conflict ? 'conflict' : 'ready',
+              error: frame.error ?? 'save refused',
+            };
+          });
           break;
         case 'instructions.list.result':
           instructionsStore.receive(frame);
@@ -462,8 +576,22 @@ export function AppShell(): React.JSX.Element {
               setSkillsError(frame.message);
             } else if (frame.scope === 'tools') {
               setToolsError(frame.message);
+              setToolsSaving(false);
+            } else if (frame.scope === 'mcp') {
+              setMcpError(frame.message);
+              setMcpBusy(false);
+            } else if (frame.scope === 'config') {
+              setConfigEditor(current =>
+                current ? { ...current, status: 'ready', error: frame.message } : current,
+              );
+            } else if (frame.scope === 'workspaces') {
+              setWorkspacesError(frame.message);
+              setWorkspacesBusy(false);
             } else if (frame.scope === 'agents') {
               agentsStore.fail(frame.message);
+              // A file edit can fail while the file page is open: the editor shows it where it
+              // was asked for, and a no-op for the list page.
+              agentsFileStore.fail(frame.message);
             } else if (frame.scope === 'instructions') {
               instructionsStore.fail(frame.message);
             } else if (activeThreadRef.current) {
@@ -592,6 +720,28 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('index');
           return true;
         }
+        if (settingsPage === 'scope') {
+          setSettingsPage(scopeEditor?.target === 'file' ? 'file' : 'agent');
+          setScopeEditor(null);
+          return true;
+        }
+        if (settingsPage === 'workspace-picker' || settingsPage === 'number') {
+          setSettingsPage('agent');
+          return true;
+        }
+        if (settingsPage === 'file') {
+          agentsFileStore.close();
+          setSettingsPage('agent');
+          return true;
+        }
+        if (settingsPage === 'newagent') {
+          setSettingsPage('agents');
+          return true;
+        }
+        if (settingsPage === 'mcps' || settingsPage === 'config') {
+          setSettingsPage('index');
+          return true;
+        }
         if (settingsPage === 'instruction') {
           instructionsStore.closeEditor();
           setSettingsPage('instructions');
@@ -642,6 +792,7 @@ export function AppShell(): React.JSX.Element {
     instructionsFrom,
     modelOpen,
     modelPath,
+    scopeEditor,
     selectThread,
     settingsOpen,
     settingsPage,
@@ -706,11 +857,26 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeWorkspacesList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
+  // The workspaces page owns the CRUD: asked for on every visit, like the other lists, because
+  // config.workspaces hot-reloads under it.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'workspaces') return;
+    connection.send(encodeWorkspacesList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
   // Same for the tools page: it is the only surface that shows the catalog, and plugins and
   // disabled tools change under hot-reload, so a list from earlier can already be wrong.
   useEffect(() => {
     if (!settingsOpen || settingsPage !== 'tools') return;
     connection.send(encodeToolsList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
+  // The MCP list is the wire version of /mcp: asked for on the MCPs page and alongside the
+  // agent pages, where the scope editor and the file editor offer its names.
+  useEffect(() => {
+    if (!settingsOpen) return;
+    if (settingsPage !== 'mcps' && settingsPage !== 'agents' && settingsPage !== 'agent' && settingsPage !== 'file') return;
+    connection.send(encodeMcpList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   // The agent defaults are asked for when the Agents page opens. A server that predates the
@@ -720,8 +886,35 @@ export function AppShell(): React.JSX.Element {
     if (!settingsOpen || (settingsPage !== 'agents' && settingsPage !== 'agent')) return;
     agentsStore.request();
     connection.send(encodeAgentsConfigGet()).catch(() => {});
+    // The scope editor and the workspace picker need the dynamic lists too: they are the whole
+    // point of the page. The skills list doubles as the catalog those editors check names against.
+    connection.send(encodeSkillsList()).catch(() => {});
+    connection.send(encodeWorkspacesList()).catch(() => {});
     const timer = setTimeout(() => agentsStore.markUnsupported(), 4000);
     return () => clearTimeout(timer);
+  }, [settingsOpen, settingsPage]);
+
+  // The agent file editor asks for its file when the page opens; a stale sha answers a conflict.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'file' || !selectedAgent) return;
+    agentsFileStore.open(selectedAgent);
+    connection.send(encodeAgentFileGet(selectedAgent)).catch(() => {});
+  }, [settingsOpen, settingsPage, selectedAgent]);
+
+  // The raw config editor: asked for when its page opens, and the sha round-trip guards saves.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'config') return;
+    setConfigEditor({
+      status: 'loading',
+      draft: '',
+      loaded: '',
+      sha: '',
+      maxBytes: 0,
+      error: null,
+      changed: [],
+      rebootRequired: [],
+    });
+    connection.send(encodeConfigGet()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   // The catalog is fetched at connect, but the provider pages group it by provider and the
@@ -1001,6 +1194,7 @@ export function AppShell(): React.JSX.Element {
         setSelectedAgent(key);
         setSettingsPage('agent');
       }}
+      onNewAgent={() => setSettingsPage('newagent')}
     />
   );
   const providersPage = (
@@ -1013,6 +1207,162 @@ export function AppShell(): React.JSX.Element {
       }}
     />
   );
+
+  // ---- Agent scope / workspace / number / file / config editors ------------------------------
+
+  const openScope = (kind: 'skills' | 'mcp', target: 'config' | 'file'): void => {
+    setScopeEditor({ kind, target });
+    setScopeSaving(false);
+    setSettingsPage('scope');
+  };
+  const configModeOf = (mode: ScopeMode): 'inherit' | 'all' | 'list' => (mode === 'absent' ? 'inherit' : mode);
+  const saveScope = (mode: ScopeMode, names: string[]): void => {
+    const editor = scopeEditor;
+    if (!editor || !selectedAgent) return;
+    if (editor.target === 'file') {
+      const file = agentsFile.editor;
+      if (!file?.frame) return;
+      const patch =
+        editor.kind === 'skills'
+          ? { skillsMode: mode as FileScopeMode, skills: mode === 'list' ? names : undefined }
+          : { mcpMode: mode as FileScopeMode, mcp: mode === 'list' ? names : undefined };
+      agentsFileStore.stage(file.name, patch);
+      setSettingsPage('file');
+      setScopeEditor(null);
+      return;
+    }
+    setScopeSaving(true);
+    connection.send(encodeAgentsScopeSet(selectedAgent, editor.kind, configModeOf(mode), names)).catch(() => {});
+    setSettingsPage('agent');
+    setScopeEditor(null);
+  };
+  const openWorkspacePicker = (): void => {
+    setWorkspacePickerAgent(selectedAgent);
+    setSettingsPage('workspace-picker');
+  };
+  const saveWorkspace = (key: string | null): void => {
+    if (!workspacePickerAgent) return;
+    connection.send(encodeAgentsWorkspaceSet(workspacePickerAgent, key)).catch(() => {});
+    setSettingsPage('agent');
+    setWorkspacePickerAgent(null);
+  };
+  const openNumberEditor = (field: 'iterations' | 'contextcap'): void => {
+    if (!selectedAgent) return;
+    setNumberEditor({ field, agent: selectedAgent });
+    setSettingsPage('number');
+  };
+  const saveNumber = (value: number | null): void => {
+    if (!numberEditor) return;
+    connection
+      .send(
+        numberEditor.field === 'iterations'
+          ? encodeAgentsIterationsSet(numberEditor.agent, value)
+          : encodeAgentsContextCapSet(numberEditor.agent, value),
+      )
+      .catch(() => {});
+    setSettingsPage('agent');
+    setNumberEditor(null);
+  };
+  const saveAgentFile = (): void => {
+    const editor = agentsFile.editor;
+    if (!editor?.frame || !editor.editable) return;
+    agentsFileStore.markSaving();
+    const frame = editor.frame;
+    const fields: AgentFileFieldsOut = {
+      sha: editor.sha,
+      description: frame.description,
+      base: frame.base,
+      tools: frame.tools,
+      skillsMode: frame.skillsMode,
+      skills: frame.skills,
+      mcpMode: frame.mcpMode,
+      mcp: frame.mcp,
+      model: frame.model,
+      workspace: frame.workspace,
+      maxIterations: frame.maxIterations,
+      contextCap: frame.contextCap,
+      instructions: frame.instructions,
+      prompt: frame.prompt,
+    };
+    connection.send(encodeAgentFileSet(editor.name, fields)).catch(() => {});
+  };
+  const closeAgentFile = (): void => {
+    agentsFileStore.close();
+    setSettingsPage('agent');
+  };
+  const forkAgent = (): void => {
+    if (!selectedAgentInfo) return;
+    // A fork is a create with the same name in the custom tier: it overrides the built-in,
+    // which is the whole point of the tier model. The agents list refreshes on the result.
+    connection.send(encodeAgentFileCreate(selectedAgentInfo.key, selectedAgentInfo.description)).catch(() => {});
+    connection.send(encodeAgentsConfigGet()).catch(() => {});
+    setSettingsPage('agents');
+  };
+  const deleteAgent = (): void => {
+    const editor = agentsFile.editor;
+    if (!editor) return;
+    connection.send(encodeAgentFileDelete(editor.name)).catch(() => {});
+    closeAgentFile();
+  };
+  const createAgent = (name: string, description: string): void => {
+    setNewAgentBusy(true);
+    connection.send(encodeAgentFileCreate(name, description)).catch(() => {});
+    setSettingsPage('agents');
+  };
+  const toggleTool = (name: string, disabled: boolean): void => {
+    setToolsSaving(true);
+    connection.send(encodeToolsToggle(name, disabled)).catch(() => {});
+  };
+  const addMcp = (
+    name: string,
+    transport: 'stdio' | 'sse' | 'http',
+    spec: { command?: string; args?: string[]; url?: string },
+  ): void => {
+    setMcpBusy(true);
+    connection.send(encodeMcpAdd(name, transport, spec)).catch(() => {});
+  };
+  const removeMcp = (name: string): void => {
+    setMcpBusy(true);
+    connection.send(encodeMcpRemove(name)).catch(() => {});
+  };
+  const enableMcp = (name: string, enabled: boolean): void => {
+    setMcpBusy(true);
+    connection.send(encodeMcpEnable(name, enabled)).catch(() => {});
+  };
+  const saveConfig = (): void => {
+    if (!configEditor) return;
+    setConfigEditor({ ...configEditor, status: 'saving' });
+    connection.send(encodeConfigSet(configEditor.sha, configEditor.draft)).catch(() => {});
+  };
+  const reloadConfig = (): void => {
+    setConfigEditor({
+      status: 'loading',
+      draft: '',
+      loaded: '',
+      sha: '',
+      maxBytes: 0,
+      error: null,
+      changed: [],
+      rebootRequired: [],
+    });
+    connection.send(encodeConfigGet()).catch(() => {});
+  };
+
+  // The scope editor reads its subject from the agent row (config) or the open file (file).
+  const scopeSubject =
+    scopeEditor && (scopeEditor.target === 'config' ? selectedAgentInfo : agentsFile.editor?.frame) ? (
+      scopeEditor.target === 'config'
+        ? selectedAgentInfo
+          ? scopeEditor.kind === 'skills'
+            ? { mode: scopeModeOf(selectedAgentInfo.skills), names: selectedAgentInfo.skills ?? [], unknown: selectedAgentInfo.unknownSkills ?? [] }
+            : { mode: scopeModeOf(selectedAgentInfo.mcp), names: selectedAgentInfo.mcp ?? [], unknown: selectedAgentInfo.unknownMcp ?? [] }
+          : null
+        : agentsFile.editor?.frame
+          ? scopeEditor.kind === 'skills'
+            ? { mode: scopeModeOfFile(agentsFile.editor.frame.skillsMode), names: agentsFile.editor.frame.skills ?? [], unknown: agentsFile.editor.frame.skills ? unknownOfList(agentsFile.editor.frame.skills, skills) : [] }
+            : { mode: scopeModeOfFile(agentsFile.editor.frame.mcpMode), names: agentsFile.editor.frame.mcp ?? [], unknown: agentsFile.editor.frame.mcp ? unknownOfList(agentsFile.editor.frame.mcp, mcpServers) : [] }
+          : null
+    ) : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -1123,9 +1473,123 @@ export function AppShell(): React.JSX.Element {
                     setInstructionsFrom('agent');
                     setSettingsPage('instructions');
                   }}
+                  onOpenScope={kind => openScope(kind, 'config')}
+                  onOpenWorkspace={openWorkspacePicker}
+                  onOpenIterations={() => openNumberEditor('iterations')}
+                  onOpenContextCap={() => openNumberEditor('contextcap')}
+                  onOpenFile={() => {
+                    if (!selectedAgent) return;
+                    setSettingsPage('file');
+                  }}
+                  onFork={forkAgent}
                 />
               ) : (
                 agentsPage
+              )
+            ) : settingsPage === 'scope' ? (
+              scopeEditor && scopeSubject && selectedAgent ? (
+                <ScopeEditorScreen
+                  title={scopeEditor.kind === 'skills' ? 'Skills' : 'MCP servers'}
+                  subtitle={`for ${selectedAgent} · ${
+                    scopeEditor.target === 'config' ? 'saved to the server config' : 'edited in the definition file'
+                  }`}
+                  kind={scopeEditor.kind}
+                  available={
+                    scopeEditor.kind === 'skills'
+                      ? skills.map(s => ({ name: s.name, description: s.description }))
+                      : mcpServers.map(s => ({
+                          name: s.name,
+                          description: `${s.transport} · ${s.state}${s.state === 'failed' ? ` · ${s.lastError ?? ''}` : ''}`,
+                        }))
+                  }
+                  mode={scopeSubject.mode}
+                  names={scopeSubject.names}
+                  unknown={scopeSubject.unknown}
+                  unsetLabel={scopeEditor.target === 'config' ? 'Inherit' : 'Unset'}
+                  unsetValue={scopeEditor.target === 'config' ? 'inherit' : 'absent'}
+                  error={agentsState.error}
+                  saving={scopeSaving}
+                  onBack={() => {
+                    setSettingsPage(scopeEditor.target === 'file' ? 'file' : 'agent');
+                    setScopeEditor(null);
+                  }}
+                  onSave={saveScope}
+                />
+              ) : (
+                agentsPage
+              )
+            ) : settingsPage === 'workspace-picker' ? (
+              selectedAgentInfo ? (
+                <WorkspacePickerScreen
+                  workspaces={workspaces}
+                  current={selectedAgentInfo.workspace ?? null}
+                  unknown={selectedAgentInfo.unknownWorkspace === true}
+                  error={agentsState.error}
+                  saving={false}
+                  onBack={() => setSettingsPage('agent')}
+                  onSave={saveWorkspace}
+                />
+              ) : (
+                agentsPage
+              )
+            ) : settingsPage === 'number' ? (
+              numberEditor && selectedAgentInfo ? (
+                <NumberEditorScreen
+                  title={numberEditor.field === 'iterations' ? 'Iterations' : 'Context cap'}
+                  hint={numberEditor.field === 'iterations' ? 'per-agent budget · default when unset' : 'ceiling · 0 lifts it'}
+                  value={numberEditor.field === 'iterations' ? selectedAgentInfo.maxIterations ?? null : selectedAgentInfo.contextCap ?? null}
+                  placeholder={
+                    numberEditor.field === 'iterations'
+                      ? 'a positive integer, blank = default'
+                      : '0 lifts the ceiling, blank = global cap'
+                  }
+                  min={1}
+                  allowZero={numberEditor.field === 'contextcap'}
+                  error={agentsState.error}
+                  saving={false}
+                  onBack={() => setSettingsPage('agent')}
+                  onSave={saveNumber}
+                />
+              ) : (
+                agentsPage
+              )
+            ) : settingsPage === 'file' ? (
+              agentsFile.editor ? (
+                <AgentFileScreen
+                  editor={agentsFile.editor}
+                  skills={skills.map(s => ({ name: s.name, description: s.description }))}
+                  mcpServers={mcpServers.map(s => ({ name: s.name, description: `${s.transport} · ${s.state}` }))}
+                  error={agentsFile.error}
+                  onBack={closeAgentFile}
+                  onChange={patch => {
+                    const editor = agentsFile.editor;
+                    if (editor) agentsFileStore.stage(editor.name, patch);
+                  }}
+                  onSave={saveAgentFile}
+                  onFork={forkAgent}
+                  onDelete={deleteAgent}
+                />
+              ) : (
+                agentsPage
+              )
+            ) : settingsPage === 'newagent' ? (
+              <NewAgentScreen
+                error={agentsState.error}
+                busy={newAgentBusy}
+                onBack={() => setSettingsPage('agents')}
+                onCreate={createAgent}
+              />
+            ) : settingsPage === 'config' ? (
+              configEditor ? (
+                <ConfigScreen
+                  editor={configEditor}
+                  onBack={() => setSettingsPage('index')}
+                  onChange={draft => setConfigEditor(current => (current ? { ...current, draft, error: null } : current))}
+                  onSave={saveConfig}
+                  onReload={reloadConfig}
+                />
+              ) : (
+                <EmptyCategoryScreen title="Config" onBack={() => setSettingsPage('index')} />
               )
             ) : settingsPage === 'skills' ? (
               <SkillsScreen
@@ -1144,7 +1608,25 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'workspaces' ? (
               <WorkspacesScreen
                 workspaces={workspaces}
+                error={workspacesError}
+                busy={workspacesBusy}
                 onBack={() => setSettingsPage('general')}
+                onAdd={(key, path) => {
+                  setWorkspacesBusy(true);
+                  connection.send(encodeWorkspacesAdd(key, path)).catch(() => {});
+                }}
+                onRemove={key => {
+                  setWorkspacesBusy(true);
+                  connection.send(encodeWorkspacesRemove(key)).catch(() => {});
+                }}
+                onRename={(from, to) => {
+                  setWorkspacesBusy(true);
+                  connection.send(encodeWorkspacesRename(from, to)).catch(() => {});
+                }}
+                onSetPath={(key, path) => {
+                  setWorkspacesBusy(true);
+                  connection.send(encodeWorkspacesSetPath(key, path)).catch(() => {});
+                }}
               />
             ) : settingsPage === 'diagnostics' ? (
               <DiagnosticsScreen
@@ -1159,11 +1641,22 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'tools' ? (
               <ToolsScreen
                 tools={tools}
+                missing={toolsMissing}
                 error={toolsError ?? undefined}
+                saving={toolsSaving}
                 onBack={() => setSettingsPage('index')}
+                onToggle={toggleTool}
               />
             ) : settingsPage === 'mcps' ? (
-              <EmptyCategoryScreen title="MCPs" onBack={() => setSettingsPage('index')} />
+              <McpsScreen
+                servers={mcpServers}
+                error={mcpError}
+                busy={mcpBusy}
+                onBack={() => setSettingsPage('index')}
+                onAdd={addMcp}
+                onRemove={removeMcp}
+                onEnable={enableMcp}
+              />
             ) : (
               <EmptyCategoryScreen title="Other" onBack={() => setSettingsPage('index')} />
             )

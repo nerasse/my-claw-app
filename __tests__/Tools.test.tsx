@@ -26,12 +26,12 @@ const TOOLS: ToolEntry[] = [
 
 /** Renders the page on its own: the catalog screen is pure props in, so a direct render is
  *  deterministic where the full-app one is at the mercy of the list's render window. */
-async function renderScreen(tools: ToolEntry[]): Promise<Tree> {
+async function renderScreen(tools: ToolEntry[], missing: string[] = []): Promise<Tree> {
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(
       <ThemeProvider>
-        <ToolsScreen tools={tools} onBack={() => {}} />
+        <ToolsScreen tools={tools} missing={missing} saving={false} onBack={() => {}} onToggle={() => {}} />
       </ThemeProvider>,
     );
   });

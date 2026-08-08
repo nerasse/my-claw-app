@@ -231,7 +231,12 @@ test('empty categories open their page and back out to the index', async () => {
   await waitFor(() => labelsOf(tree).includes('Open general'));
 
   await pressLabel(tree, 'Open MCPs');
-  await waitFor(() => textsOf(tree).includes('nothing here yet'));
+  await waitFor(() => textsOf(tree).includes('no servers declared'));
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open general'));
+
+  await pressLabel(tree, 'Open config');
+  await waitFor(() => textsOf(tree).includes('loading...'));
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open general'));
 

@@ -43,6 +43,7 @@ export function AgentsSettingsScreen({
   onOpenDefaultEffort,
   onOpenProviders,
   onOpenAgent,
+  onNewAgent,
 }: {
   config: AgentsConfigResultFrame | null;
   status: AgentsStatus;
@@ -52,6 +53,7 @@ export function AgentsSettingsScreen({
   onOpenDefaultEffort: () => void;
   onOpenProviders: () => void;
   onOpenAgent: (key: string) => void;
+  onNewAgent: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
@@ -159,6 +161,12 @@ export function AgentsSettingsScreen({
                           <Text style={styles.badge}>{tierBadge(agent)}</Text>
                         ) : null}
                         {!agent.pinned ? <Text style={styles.badge}>inherited</Text> : null}
+                        {agent.unknownSkills && agent.unknownSkills.length > 0 ? (
+                          <Text style={styles.badgeRemoved}>removed skills</Text>
+                        ) : null}
+                        {agent.unknownMcp && agent.unknownMcp.length > 0 ? (
+                          <Text style={styles.badgeRemoved}>removed servers</Text>
+                        ) : null}
                       </View>
                       <Text style={styles.hint} numberOfLines={1}>
                         {`${agent.model ? labelOf(agent.model) : 'no model'} · ${
@@ -172,6 +180,14 @@ export function AgentsSettingsScreen({
               ))}
             </View>
           </View>
+
+          <Pressable
+            onPress={onNewAgent}
+            style={styles.newAgentButton}
+            accessibilityRole="button"
+            accessibilityLabel="New agent">
+            <Text style={styles.newAgentText}>+ New agent</Text>
+          </Pressable>
         </ScrollView>
       ) : (
         <View style={styles.emptyArea}>
@@ -247,4 +263,23 @@ const createStyles = (palette: Palette) => ({
   },
   emptyArea: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: space.lg },
   empty: { fontSize: font.meta, color: palette.textFaint, textAlign: 'center' as const },
+  badgeRemoved: {
+    fontSize: font.micro,
+    color: palette.danger,
+    borderWidth: 1,
+    borderColor: palette.danger,
+    borderRadius: radius.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  newAgentButton: {
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: palette.accent,
+    alignItems: 'center' as const,
+  },
+  newAgentText: { fontSize: font.body, fontWeight: '600' as const, color: palette.accent },
 });

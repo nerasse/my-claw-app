@@ -233,6 +233,29 @@ export interface ToolEntry {
 export interface ToolsListResultFrame {
   type: 'tools.list.result';
   tools: ToolEntry[];
+  /** Names in tools.disabled that no tool carries anymore. Rendered red so the denylist can be
+   *  cleaned: an entry like that does nothing, so it has to be visible to be removed. */
+  missing: string[];
+}
+
+/** One declared MCP server, with the wiring the app may show and edit (minus secrets). */
+export interface McpEntry {
+  name: string;
+  transport: 'stdio' | 'sse' | 'http';
+  state: 'connected' | 'disabled' | 'failed';
+  toolCount: number;
+  lastError?: string;
+  lastAttemptAt?: string;
+  /** Declared mcp.<name>.enabled. Absent is enabled; the toggle writes this key. */
+  enabled?: boolean;
+  command?: string;
+  args?: string[];
+  url?: string;
+}
+
+export interface McpListResultFrame {
+  type: 'mcp.list.result';
+  servers: McpEntry[];
 }
 
 /** One workspace of the server, for display only: where its files and skills live. */
@@ -289,7 +312,9 @@ export type ErrorScope =
   | 'agents'
   | 'mcp'
   | 'tools'
-  | 'instructions';
+  | 'instructions'
+  | 'config'
+  | 'workspaces';
 
 export interface ErrorFrame {
   type: 'error';
@@ -319,6 +344,14 @@ export interface AgentInfo {
   workspace?: string | null;
   contextCap?: number | null;
   maxIterations?: number | null;
+  /**
+   * Scope entries (config override or the agent file) that match nothing in the live catalogs:
+   * a skill that was removed, an MCP server undeclared, a workspace key gone. Rendered red: the
+   * entry still exists in config, so it must stay visible to be cleaned up.
+   */
+  unknownSkills?: string[];
+  unknownMcp?: string[];
+  unknownWorkspace?: boolean;
   /**
    * Set only for file-defined agents. Absent marks one of the two reserved roles, which exist
    * without a file and so have no tier or path to show.
@@ -416,6 +449,69 @@ export interface InstructionsSavedFrame {
   error?: string;
 }
 
+/** The config scope modes of `agents.<key>.skills|mcp`: inherit, everything, or a picked list. */
+export type AgentScopeMode = 'inherit' | 'all' | 'list';
+/** The file frontmatter modes, where "absent" means the file carries no key at all. */
+export type FileScopeMode = 'absent' | 'all' | 'list';
+
+/**
+ * One file-defined agent as structured fields, never raw markdown: the app edits fields, the
+ * server serializes the flat frontmatter. `editable` is false for the built-in tier; the app
+ * offers a fork instead. `sha` is the file's current content hash, echoed back on save.
+ */
+export interface AgentFileResultFrame {
+  type: 'agents.file.result';
+  name: string;
+  source: 'built-in' | 'custom' | 'workspace';
+  path: string;
+  editable: boolean;
+  sha: string;
+  description: string;
+  base?: 'general' | 'research';
+  tools?: string[];
+  skillsMode: FileScopeMode;
+  skills?: string[];
+  mcpMode: FileScopeMode;
+  mcp?: string[];
+  model?: string;
+  workspace?: string;
+  maxIterations?: number;
+  contextCap?: number;
+  instructions?: string[];
+  prompt: string;
+  /** The names the tools picker may offer: this agent's baseline, narrowed to what exists. */
+  toolOptions: string[];
+  /** tools: entries outside the baseline. They are dropped at run time, so they are flagged. */
+  unknownTools: string[];
+}
+
+export interface AgentFileSavedFrame {
+  type: 'agents.file.saved';
+  name: string;
+  ok: boolean;
+  sha: string;
+  conflict: boolean;
+  error?: string;
+}
+
+/** The raw config.json text and the sha the next write must echo. */
+export interface ConfigResultFrame {
+  type: 'config.result';
+  content: string;
+  sha: string;
+  maxBytes: number;
+}
+
+export interface ConfigSavedFrame {
+  type: 'config.saved';
+  ok: boolean;
+  sha: string;
+  conflict: boolean;
+  changed: string[];
+  rebootRequired: string[];
+  error?: string;
+}
+
 export type ServerFrame =
   | ChatMessageFrame
   | StreamStartFrame
@@ -443,6 +539,11 @@ export type ServerFrame =
   | InstructionsListResultFrame
   | InstructionsFileFrame
   | InstructionsSavedFrame
+  | McpListResultFrame
+  | AgentFileResultFrame
+  | AgentFileSavedFrame
+  | ConfigResultFrame
+  | ConfigSavedFrame
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
@@ -470,6 +571,11 @@ const FRAME_TYPES = new Set([
   'instructions.list.result',
   'instructions.file',
   'instructions.saved',
+  'mcp.list.result',
+  'agents.file.result',
+  'agents.file.saved',
+  'config.result',
+  'config.saved',
   'chat.transcript',
   'approval.request',
   'error',
@@ -577,8 +683,28 @@ export function encodeToolsList(): string {
   return JSON.stringify({ type: 'tools.list' });
 }
 
+export function encodeMcpList(): string {
+  return JSON.stringify({ type: 'mcp.list' });
+}
+
 export function encodeWorkspacesList(): string {
   return JSON.stringify({ type: 'workspaces.list' });
+}
+
+export function encodeWorkspacesAdd(key: string, path: string): string {
+  return JSON.stringify({ type: 'workspaces.add', key, path });
+}
+
+export function encodeWorkspacesRemove(key: string): string {
+  return JSON.stringify({ type: 'workspaces.remove', key });
+}
+
+export function encodeWorkspacesRename(from: string, to: string): string {
+  return JSON.stringify({ type: 'workspaces.rename', from, to });
+}
+
+export function encodeWorkspacesSetPath(key: string, path: string): string {
+  return JSON.stringify({ type: 'workspaces.path.set', key, path });
 }
 
 export function encodeModelGet(threadId: string): string {
@@ -637,6 +763,99 @@ export function encodeAgentsModelClear(agent: string): string {
 /** Empty level removes the global effort so model/provider defaults apply again. */
 export function encodeAgentsEffortSet(level: string): string {
   return JSON.stringify({ type: 'agents.effort.set', level });
+}
+
+export function encodeAgentsScopeSet(
+  agent: string,
+  field: 'skills' | 'mcp',
+  mode: AgentScopeMode,
+  names: string[],
+): string {
+  return JSON.stringify(
+    mode === 'list'
+      ? { type: 'agents.scope.set', agent, field, mode, names }
+      : { type: 'agents.scope.set', agent, field, mode },
+  );
+}
+
+export function encodeAgentsWorkspaceSet(agent: string, workspace: string | null): string {
+  return JSON.stringify({ type: 'agents.workspace.set', agent, workspace });
+}
+
+export function encodeAgentsIterationsSet(agent: string, value: number | null): string {
+  return JSON.stringify({ type: 'agents.iterations.set', agent, value });
+}
+
+export function encodeAgentsContextCapSet(agent: string, value: number | null): string {
+  return JSON.stringify({ type: 'agents.contextcap.set', agent, value });
+}
+
+export function encodeAgentFileGet(agent: string): string {
+  return JSON.stringify({ type: 'agents.file.get', agent });
+}
+
+export interface AgentFileFieldsOut {
+  sha: string;
+  description: string;
+  base?: 'general' | 'research';
+  tools?: string[];
+  skillsMode: FileScopeMode;
+  skills?: string[];
+  mcpMode: FileScopeMode;
+  mcp?: string[];
+  model?: string;
+  workspace?: string;
+  maxIterations?: number;
+  contextCap?: number;
+  instructions?: string[];
+  prompt: string;
+}
+
+export function encodeAgentFileSet(agent: string, fields: AgentFileFieldsOut): string {
+  return JSON.stringify({ type: 'agents.file.set', agent, ...fields });
+}
+
+export function encodeAgentFileCreate(name: string, description: string): string {
+  return JSON.stringify({ type: 'agents.file.create', name, description });
+}
+
+export function encodeAgentFileDelete(agent: string): string {
+  return JSON.stringify({ type: 'agents.file.delete', agent });
+}
+
+export function encodeToolsToggle(name: string, disabled: boolean): string {
+  return JSON.stringify({ type: 'tools.toggle', name, disabled });
+}
+
+export function encodeMcpAdd(
+  name: string,
+  transport: 'stdio' | 'sse' | 'http',
+  spec: { command?: string; args?: string[]; url?: string },
+): string {
+  return JSON.stringify({
+    type: 'mcp.add',
+    name,
+    transport,
+    ...(spec.command ? { command: spec.command } : {}),
+    ...(spec.args && spec.args.length > 0 ? { args: spec.args } : {}),
+    ...(spec.url ? { url: spec.url } : {}),
+  });
+}
+
+export function encodeMcpRemove(name: string): string {
+  return JSON.stringify({ type: 'mcp.remove', name });
+}
+
+export function encodeMcpEnable(name: string, enabled: boolean): string {
+  return JSON.stringify({ type: 'mcp.enable', name, enabled });
+}
+
+export function encodeConfigGet(): string {
+  return JSON.stringify({ type: 'config.get' });
+}
+
+export function encodeConfigSet(sha: string, content: string): string {
+  return JSON.stringify({ type: 'config.set', sha, content });
 }
 
 export function encodeChatStop(threadId: string): string {

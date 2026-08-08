@@ -1,26 +1,74 @@
-import React from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
-import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 
+/** The loader's workspace key rules, mirrored so the form refuses before the server does. */
+const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
+
+type Editor = { mode: 'add' } | { mode: 'rename'; key: string; path: string } | { mode: 'path'; key: string };
+
 /**
- * The server's workspaces, read-only. Each is a directory with its own prompt files and
- * skills; a cron job references the key, never the path. The default workspace is where
- * the owner's conversations and memory live.
+ * The workspaces of the server, with full CRUD. The key is what agents and cron reference, the
+ * path is the only thing the key stands for: renaming moves the key and the agent pins that used
+ * it, repointing changes the directory, removing drops the entry (agent pins pointing at it are
+ * flagged red elsewhere and resolve to the default until fixed). Everything is written to
+ * config.workspaces, which is hot-reloaded in place: the skills and agent tiers follow live.
  */
 export function WorkspacesScreen({
   workspaces,
+  error,
+  busy,
   onBack,
+  onAdd,
+  onRemove,
+  onRename,
+  onSetPath,
 }: {
   workspaces: WorkspaceEntry[];
+  error: string | null;
+  busy: boolean;
   onBack: () => void;
+  onAdd: (key: string, path: string) => void;
+  onRemove: (key: string) => void;
+  onRename: (from: string, to: string) => void;
+  onSetPath: (key: string, path: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  // nothing to type into on this page.
   useDismissKeyboard();
-  const { scrollProps, indicator } = useScrollIndicator();
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [keyDraft, setKeyDraft] = useState('');
+  const [pathDraft, setPathDraft] = useState('');
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  const openEditor = (next: Editor): void => {
+    setEditor(next);
+    setKeyDraft(next.mode === 'rename' ? next.key : '');
+    setPathDraft(next.mode === 'add' ? '' : next.mode === 'rename' ? next.path : '');
+    setConfirmRemove(null);
+  };
+  const closeEditor = (): void => setEditor(null);
+
+  // The key is fixed in "path" mode: the form only edits the directory it points at.
+  const keyValid = editor?.mode === 'path' ? true : KEY_RE.test(keyDraft.trim()) && keyDraft.trim() !== 'default';
+  const pathValid = pathDraft.trim().startsWith('/');
+  const formValid = keyValid && pathValid && !busy;
+  const targetExists = workspaces.some(w => w.key === keyDraft.trim());
+
+  const submit = (): void => {
+    if (!editor || !formValid) return;
+    if (editor.mode === 'add') {
+      onAdd(keyDraft.trim(), pathDraft.trim());
+    } else if (editor.mode === 'rename') {
+      onRename(editor.key, keyDraft.trim());
+    } else {
+      onSetPath(editor.key, pathDraft.trim());
+    }
+    closeEditor();
+  };
+
+  const named = workspaces.filter(w => !w.default);
 
   return (
     <View style={styles.screen}>
@@ -29,44 +77,171 @@ export function WorkspacesScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back to settings"
-        >
+          accessibilityLabel="Back to settings">
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Workspaces</Text>
           <Text style={styles.subtitle}>
-            {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'}
+            {`${named.length} named · the default holds your conversations and memory`}
           </Text>
         </View>
+        <Pressable
+          onPress={() => (editor?.mode === 'add' ? closeEditor() : openEditor({ mode: 'add' }))}
+          style={[styles.addButton, editor?.mode === 'add' ? styles.addActive : styles.addIdle]}
+          accessibilityRole="button"
+          accessibilityLabel={editor?.mode === 'add' ? 'Cancel add workspace' : 'Add workspace'}>
+          <Text style={editor?.mode === 'add' ? styles.addTextActive : styles.addTextIdle}>
+            {editor?.mode === 'add' ? '✕' : '+'}
+          </Text>
+        </Pressable>
       </View>
 
-      <View style={styles.listArea}>
-        <FlatList
-          {...scrollProps}
-          style={styles.list}
-          data={workspaces}
-          keyExtractor={entry => entry.key}
-          contentContainerStyle={workspaces.length === 0 ? styles.emptyContent : styles.listContent}
-          ListEmptyComponent={<Text style={styles.empty}>no workspaces found</Text>}
-          renderItem={({ item }) => (
+      {error ? (
+        <Text style={styles.error} accessibilityLabel={`Workspaces error ${error}`}>
+          {error}
+        </Text>
+      ) : null}
+
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {editor ? (
+          <View style={styles.category}>
+            <Text style={styles.section}>
+              {editor.mode === 'add' ? 'new workspace' : editor.mode === 'rename' ? 'rename key' : 'repoint path'}
+            </Text>
+            <View style={styles.card}>
+              <View style={styles.formRow}>
+                <Text style={styles.rowKey}>{editor.mode === 'path' ? 'key' : 'key (what agents reference)'}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={keyDraft}
+                  onChangeText={setKeyDraft}
+                  editable={editor.mode !== 'path'}
+                  placeholder="sofa"
+                  placeholderTextColor={styles.placeholder.color}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  accessibilityLabel="Workspace key"
+                />
+              </View>
+              <View style={styles.separator} />
+              <View style={styles.formRow}>
+                <Text style={styles.rowKey}>path</Text>
+                <TextInput
+                  style={styles.input}
+                  value={pathDraft}
+                  onChangeText={setPathDraft}
+                  placeholder="/srv/sofa"
+                  placeholderTextColor={styles.placeholder.color}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  accessibilityLabel="Workspace path"
+                />
+              </View>
+            </View>
+            {editor.mode === 'add' && targetExists ? (
+              <Text style={styles.noteRemoved}>a workspace with this key already exists</Text>
+            ) : null}
+            <Pressable
+              onPress={submit}
+              disabled={!formValid}
+              style={[styles.saveButton, formValid ? styles.saveEnabled : styles.saveDisabled]}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !formValid }}
+              accessibilityLabel={busy ? 'Saving workspace' : 'Save workspace'}>
+              <Text style={formValid ? styles.saveText : styles.saveTextOff}>
+                {busy ? '...' : editor.mode === 'add' ? 'Create' : 'Save'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.category}>
+          <Text style={styles.section}>default</Text>
+          <View style={styles.card}>
             <View style={styles.row}>
               <View style={styles.rowMain}>
                 <View style={styles.rowTitleLine}>
                   <Text style={styles.key} numberOfLines={1}>
-                    {item.key}
+                    default
                   </Text>
-                  {item.default ? <Text style={styles.badge}>default</Text> : null}
+                  <Text style={styles.badge}>default</Text>
                 </View>
                 <Text style={styles.path} numberOfLines={1} selectable>
-                  {item.path}
+                  {workspaces.find(w => w.default)?.path ?? ''}
                 </Text>
               </View>
             </View>
-          )}
-        />
-        {indicator}
-      </View>
+          </View>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>named</Text>
+          <View style={styles.card}>
+            {named.length === 0 ? (
+              <View style={styles.row}>
+                <Text style={styles.itemHint}>no named workspaces yet</Text>
+              </View>
+            ) : (
+              named.map((item, index) => (
+                <View key={item.key}>
+                  {index > 0 ? <View style={styles.separator} /> : null}
+                  <View style={styles.serverRow}>
+                    <View style={styles.rowMain}>
+                      <View style={styles.rowTitleLine}>
+                        <Text style={styles.key} numberOfLines={1}>
+                          {item.key}
+                        </Text>
+                      </View>
+                      <Text style={styles.path} numberOfLines={1} selectable>
+                        {item.path}
+                      </Text>
+                    </View>
+                    {confirmRemove === item.key ? (
+                      <Pressable
+                        onPress={() => {
+                          onRemove(item.key);
+                          setConfirmRemove(null);
+                        }}
+                        style={styles.removeButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Confirm remove workspace ${item.key}`}>
+                        <Text style={styles.removeText}>remove</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={() => setConfirmRemove(item.key)}
+                        style={styles.actionButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove workspace ${item.key}`}>
+                        <Text style={styles.actionText}>remove</Text>
+                      </Pressable>
+                    )}
+                    <Pressable
+                      onPress={() => openEditor({ mode: 'rename', key: item.key, path: item.path })}
+                      style={styles.actionButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Rename workspace ${item.key}`}>
+                      <Text style={styles.actionText}>rename</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => openEditor({ mode: 'path', key: item.key })}
+                      style={styles.actionButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Repoint workspace ${item.key}`}>
+                      <Text style={styles.actionText}>path</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+          <Text style={styles.note}>
+            agents pinned to a removed workspace are flagged red and resolve to the default until
+            you fix them · the skills and agent tiers under a path follow live
+          </Text>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -93,22 +268,44 @@ const createStyles = (palette: Palette) => ({
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  listArea: { flex: 1 },
-  list: { flex: 1 },
-  listContent: { paddingBottom: space.xl },
-  emptyContent: { flexGrow: 1, alignItems: 'center' as const, justifyContent: 'center' as const },
-  empty: { fontSize: font.meta, color: palette.textFaint },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 1,
+  },
+  addActive: { borderColor: palette.danger, backgroundColor: palette.surfaceAlt },
+  addIdle: { borderColor: palette.accent, backgroundColor: palette.surfaceAlt },
+  addTextActive: { fontSize: 18, color: palette.danger },
+  addTextIdle: { fontSize: 18, color: palette.accent },
+  body: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
+  category: { gap: space.xs },
+  section: { fontSize: font.micro, color: palette.textFaint, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+  card: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+    overflow: 'hidden' as const,
+  },
   row: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.sm,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+  },
+  serverRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
   },
   rowMain: { flex: 1, gap: 2 },
-  rowTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  rowTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
   key: {
     flexShrink: 1,
     fontSize: font.body,
@@ -127,4 +324,59 @@ const createStyles = (palette: Palette) => ({
     letterSpacing: 0.3,
   },
   path: { fontSize: font.small, color: palette.textMuted, fontFamily: 'monospace' },
+  itemHint: { fontSize: font.small, color: palette.textMuted },
+  separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
+  formRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  rowKey: { fontSize: font.small, color: palette.textMuted, width: 96 },
+  input: {
+    flex: 1,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceAlt,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    fontSize: font.body,
+    color: palette.text,
+  },
+  placeholder: { color: palette.textFaint },
+  note: { fontSize: font.micro, color: palette.textFaint, paddingHorizontal: space.xs },
+  noteRemoved: { fontSize: font.micro, color: palette.danger, paddingHorizontal: space.xs },
+  saveButton: {
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    alignItems: 'center' as const,
+  },
+  saveEnabled: { backgroundColor: palette.accent },
+  saveDisabled: { backgroundColor: palette.surfaceAlt },
+  saveText: { fontSize: font.body, fontWeight: '600' as const, color: palette.surface },
+  saveTextOff: { fontSize: font.body, fontWeight: '600' as const, color: palette.textFaint },
+  actionButton: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  actionText: { fontSize: font.small, color: palette.textMuted },
+  removeButton: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.danger,
+  },
+  removeText: { fontSize: font.small, fontWeight: '600' as const, color: palette.danger },
+  error: {
+    textAlign: 'center' as const,
+    fontSize: font.meta,
+    color: palette.danger,
+    padding: space.md,
+  },
 });

@@ -34,6 +34,12 @@ class AgentsStoreImpl {
     return this.state;
   }
 
+  /** Drops everything. Only tests need it: the store outlives a screen, on purpose. */
+  reset(): void {
+    this.state = EMPTY;
+    this.emit();
+  }
+
   request(): void {
     this.state = { ...this.state, status: 'unknown', error: null };
     this.emit();
