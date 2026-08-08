@@ -7,14 +7,15 @@ import { useDismissKeyboard } from '../core/keyboard';
 /** The loader's workspace key rules, mirrored so the form refuses before the server does. */
 const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
 
-type Editor = { mode: 'add' } | { mode: 'rename'; key: string; path: string } | { mode: 'path'; key: string };
+type Editor = { mode: 'add' } | { mode: 'edit'; key: string; path: string };
 
 /**
  * The workspaces of the server, with full CRUD. The key is what agents and cron reference, the
- * path is the only thing the key stands for: renaming moves the key and the agent pins that used
- * it, repointing changes the directory, removing drops the entry (agent pins pointing at it are
- * flagged red elsewhere and resolve to the default until fixed). Everything is written to
- * config.workspaces, which is hot-reloaded in place: the skills and agent tiers follow live.
+ * path is the only thing the key stands for. One edit form handles both: renaming the key moves
+ * the agent pins that used it (server-side), changing the path repoints the directory. Removing
+ * drops the entry (agent pins pointing at it are flagged red elsewhere and resolve to the
+ * default until fixed). Everything is written to config.workspaces, which is hot-reloaded in
+ * place: the skills and agent tiers follow live.
  */
 export function WorkspacesScreen({
   workspaces,
@@ -44,26 +45,30 @@ export function WorkspacesScreen({
 
   const openEditor = (next: Editor): void => {
     setEditor(next);
-    setKeyDraft(next.mode === 'rename' ? next.key : '');
-    setPathDraft(next.mode === 'add' ? '' : next.mode === 'rename' ? next.path : '');
+    setKeyDraft(next.mode === 'edit' ? next.key : '');
+    setPathDraft(next.mode === 'edit' ? next.path : '');
     setConfirmRemove(null);
   };
   const closeEditor = (): void => setEditor(null);
 
-  // The key is fixed in "path" mode: the form only edits the directory it points at.
-  const keyValid = editor?.mode === 'path' ? true : KEY_RE.test(keyDraft.trim()) && keyDraft.trim() !== 'default';
+  const keyValid = KEY_RE.test(keyDraft.trim()) && keyDraft.trim() !== 'default';
   const pathValid = pathDraft.trim().startsWith('/');
-  const formValid = keyValid && pathValid && !busy;
-  const targetExists = workspaces.some(w => w.key === keyDraft.trim());
+  const editing = editor?.mode === 'edit';
+  const keyChanged = editing ? keyDraft.trim() !== editor.key : false;
+  const pathChanged = editing ? pathDraft.trim() !== editor.path : false;
+  const unchanged = editing && !keyChanged && !pathChanged;
+  const formValid = keyValid && pathValid && !busy && !unchanged;
+  const targetExists = workspaces.some(w => w.key === keyDraft.trim() && (!editing || keyDraft.trim() !== editor.key));
 
   const submit = (): void => {
     if (!editor || !formValid) return;
     if (editor.mode === 'add') {
       onAdd(keyDraft.trim(), pathDraft.trim());
-    } else if (editor.mode === 'rename') {
-      onRename(editor.key, keyDraft.trim());
     } else {
-      onSetPath(editor.key, pathDraft.trim());
+      // One save can move both: the key (renaming it, pins follow) and the path (repointing
+      // the directory). Each answer is a fresh listing, so the two frames settle in order.
+      if (keyChanged) onRename(editor.key, keyDraft.trim());
+      if (pathChanged) onSetPath(keyChanged ? keyDraft.trim() : editor.key, pathDraft.trim());
     }
     closeEditor();
   };
@@ -107,16 +112,15 @@ export function WorkspacesScreen({
         {editor ? (
           <View style={styles.category}>
             <Text style={styles.section}>
-              {editor.mode === 'add' ? 'new workspace' : editor.mode === 'rename' ? 'rename key' : 'repoint path'}
+              {editor.mode === 'add' ? 'new workspace' : 'edit workspace'}
             </Text>
             <View style={styles.card}>
               <View style={styles.formRow}>
-                <Text style={styles.rowKey}>{editor.mode === 'path' ? 'key' : 'key (what agents reference)'}</Text>
+                <Text style={styles.rowKey}>key (what agents reference)</Text>
                 <TextInput
                   style={styles.input}
                   value={keyDraft}
                   onChangeText={setKeyDraft}
-                  editable={editor.mode !== 'path'}
                   placeholder="sofa"
                   placeholderTextColor={styles.placeholder.color}
                   autoCorrect={false}
@@ -139,8 +143,14 @@ export function WorkspacesScreen({
                 />
               </View>
             </View>
-            {editor.mode === 'add' && targetExists ? (
+            {targetExists ? (
               <Text style={styles.noteRemoved}>a workspace with this key already exists</Text>
+            ) : null}
+            {editing ? (
+              <Text style={styles.note}>
+                renaming moves the agent pins that used this key · changing the path repoints the
+                directory
+              </Text>
             ) : null}
             <Pressable
               onPress={submit}
@@ -214,18 +224,11 @@ export function WorkspacesScreen({
                       </Pressable>
                     )}
                     <Pressable
-                      onPress={() => openEditor({ mode: 'rename', key: item.key, path: item.path })}
+                      onPress={() => openEditor({ mode: 'edit', key: item.key, path: item.path })}
                       style={styles.actionButton}
                       accessibilityRole="button"
-                      accessibilityLabel={`Rename workspace ${item.key}`}>
-                      <Text style={styles.actionText}>rename</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => openEditor({ mode: 'path', key: item.key })}
-                      style={styles.actionButton}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Repoint workspace ${item.key}`}>
-                      <Text style={styles.actionText}>edit path</Text>
+                      accessibilityLabel={`Edit workspace ${item.key}`}>
+                      <Text style={styles.actionText}>edit</Text>
                     </Pressable>
                   </View>
                 </View>

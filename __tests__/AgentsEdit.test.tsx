@@ -358,7 +358,7 @@ test('a refused agents write surfaces on the page that asked', async () => {
   await settleAndUnmount(tree);
 });
 
-test('the workspaces page adds, renames, repoints and removes workspaces', async () => {
+test('the workspaces page adds, edits key and path, and removes workspaces', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Back to settings');
   await waitFor(() => labelsOf(tree).includes('Open workspaces'));
@@ -370,7 +370,7 @@ test('the workspaces page adds, renames, repoints and removes workspaces', async
       { key: 'sofa', path: '/srv/sofa', default: false },
     ],
   });
-  await waitFor(() => labelsOf(tree).includes('Rename workspace sofa'));
+  await waitFor(() => labelsOf(tree).includes('Edit workspace sofa'));
 
   await pressLabel(tree, 'Remove workspace sofa');
   await waitFor(() => labelsOf(tree).includes('Confirm remove workspace sofa'));
@@ -386,10 +386,13 @@ test('the workspaces page adds, renames, repoints and removes workspaces', async
       { key: 'sofa', path: '/srv/sofa', default: false },
     ],
   });
-  await waitFor(() => labelsOf(tree).includes('Rename workspace sofa'));
+  await waitFor(() => labelsOf(tree).includes('Edit workspace sofa'));
 
-  await pressLabel(tree, 'Rename workspace sofa');
+  // One edit form handles the key: changing it renames and moves the agent pins.
+  await pressLabel(tree, 'Edit workspace sofa');
   await waitFor(() => labelsOf(tree).includes('Workspace key'));
+  // The form is pre-filled with the current values.
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['sofa', '/srv/sofa']));
   await typeInto(tree, 'Workspace key', 'couch');
   await pressLabel(tree, 'Save workspace');
   expect(sentFrames()).toEqual(
@@ -402,9 +405,10 @@ test('the workspaces page adds, renames, repoints and removes workspaces', async
       { key: 'couch', path: '/srv/sofa', default: false },
     ],
   });
-  await waitFor(() => labelsOf(tree).includes('Rename workspace couch'));
+  await waitFor(() => labelsOf(tree).includes('Edit workspace couch'));
 
-  await pressLabel(tree, 'Repoint workspace couch');
+  // The same form handles the path: changing it repoints the key at a new directory.
+  await pressLabel(tree, 'Edit workspace couch');
   await waitFor(() => labelsOf(tree).includes('Workspace path'));
   await typeInto(tree, 'Workspace path', '/srv/couch');
   await pressLabel(tree, 'Save workspace');
@@ -458,7 +462,7 @@ test('WorkspacesScreen direct render shows the default and the named workspaces'
   });
   const texts = textsOf(tree);
   expect(texts).toEqual(expect.arrayContaining(['default', '/srv/sofa', '1 named · the default holds your conversations and memory']));
-  expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Add workspace', 'Rename workspace sofa', 'Remove workspace sofa', 'Repoint workspace sofa']));
+  expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Add workspace', 'Edit workspace sofa', 'Remove workspace sofa']));
   await unmount(tree);
 });
 
