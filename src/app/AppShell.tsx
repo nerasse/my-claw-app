@@ -752,9 +752,10 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage(instructionsFrom === 'agent' ? 'agent' : 'index');
           return true;
         }
-        // Workspaces lives under General, diagnostics under Other: back lands where they came from.
+        // Workspaces is its own index entry; diagnostics lives under Other. Back lands where
+        // they came from.
         if (settingsPage === 'workspaces') {
-          setSettingsPage('general');
+          setSettingsPage('index');
           return true;
         }
         if (settingsPage === 'diagnostics') {
@@ -1410,7 +1411,6 @@ export function AppShell(): React.JSX.Element {
                   setPending(0);
                 }}
                 onBack={() => setSettingsPage('index')}
-                onOpenWorkspaces={() => setSettingsPage('workspaces')}
               />
             ) : settingsPage === 'other' ? (
               <OtherSettingsScreen
@@ -1620,7 +1620,7 @@ export function AppShell(): React.JSX.Element {
                 workspaces={workspaces}
                 error={workspacesError}
                 busy={workspacesBusy}
-                onBack={() => setSettingsPage('general')}
+                onBack={() => setSettingsPage('index')}
                 onAdd={(key, path) => {
                   setWorkspacesBusy(true);
                   connection.send(encodeWorkspacesAdd(key, path)).catch(() => {});

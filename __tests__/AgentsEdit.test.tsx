@@ -361,8 +361,6 @@ test('a refused agents write surfaces on the page that asked', async () => {
 test('the workspaces page adds, renames, repoints and removes workspaces', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Back to settings');
-  await waitFor(() => labelsOf(tree).includes('Open general'));
-  await pressLabel(tree, 'Open general');
   await waitFor(() => labelsOf(tree).includes('Open workspaces'));
   await pressLabel(tree, 'Open workspaces');
   await emit({

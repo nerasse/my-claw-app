@@ -162,8 +162,6 @@ test('the workspaces page lists every workspace and its path', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
   await openSettings(tree);
-  await pressLabel(tree, 'Open general');
-  await waitFor(() => labelsOf(tree).includes('Open workspaces'));
   await pressLabel(tree, 'Open workspaces');
   await emit({
     type: 'workspaces.list.result',
@@ -178,7 +176,7 @@ test('the workspaces page lists every workspace and its path', async () => {
     expect.arrayContaining(['default', 'sofa', '/home/neras/.my-claw/workspace']),
   );
 
-  // Back returns to the general page, not out of settings.
+  // Back returns to the settings index, not out of settings.
   await ReactTestRenderer.act(async () => {
     hardwareBack();
   });

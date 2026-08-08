@@ -44,7 +44,6 @@ export function GeneralSettingsScreen({
   onDisconnect,
   onClearOutbox,
   onBack,
-  onOpenWorkspaces,
   voice,
   onVoiceModeChange,
 }: {
@@ -57,7 +56,6 @@ export function GeneralSettingsScreen({
   onDisconnect: () => void;
   onClearOutbox: () => void;
   onBack: () => void;
-  onOpenWorkspaces: () => void;
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
   onVoiceModeChange: (mode: VoiceMode) => void;
@@ -190,23 +188,6 @@ export function GeneralSettingsScreen({
         </View>
 
         <View style={styles.categoryItem}>
-          <Text style={styles.section}>workspaces</Text>
-          <View style={styles.card}>
-            <Pressable
-              style={[styles.row, styles.link]}
-              onPress={onOpenWorkspaces}
-              accessibilityRole="button"
-              accessibilityLabel="Open workspaces">
-              <View style={styles.linkMain}>
-                <Text style={styles.linkTitle}>Workspaces</Text>
-                <Text style={styles.hint}>directories with their own prompts and skills</Text>
-              </View>
-              <Text style={styles.linkGlyph}>›</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.categoryItem}>
           <Text style={styles.section}>voice</Text>
           <View style={styles.card}>
             <View style={styles.segment}>
@@ -306,10 +287,6 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surfaceAlt,
   },
   row: { flexDirection: 'row' as const, gap: space.sm },
-  link: { alignItems: 'center' as const },
-  linkMain: { flex: 1, gap: 1 },
-  linkTitle: { fontSize: font.body, color: palette.text, fontWeight: '600' as const },
-  linkGlyph: { fontSize: font.screen, color: palette.textFaint },
   button: {
     flex: 1,
     backgroundColor: palette.accent,

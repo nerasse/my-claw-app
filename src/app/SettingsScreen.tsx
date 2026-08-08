@@ -7,13 +7,19 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'config' | 'other';
+  key: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other';
 }> = [
   {
     title: 'General',
     hint: 'appearance, voice, server',
     accessibilityLabel: 'Open general',
     key: 'general',
+  },
+  {
+    title: 'Workspaces',
+    hint: 'directories with their own prompts and skills',
+    accessibilityLabel: 'Open workspaces',
+    key: 'workspaces',
   },
   {
     title: 'Agents',
@@ -73,7 +79,7 @@ export function SettingsScreen({
   toolsCount: number;
   onBack: () => void;
   onOpenCategory: (
-    category: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'config' | 'other',
+    category: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other',
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
