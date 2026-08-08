@@ -253,6 +253,10 @@ class ClawConnectionService : Service() {
       .setSmallIcon(R.mipmap.ic_launcher)
       .setContentIntent(pending)
       .setOngoing(true)
+      // A status, not an event: the service may restart several times a day (network drops,
+      // the system reclaiming the process) and each startForeground would otherwise re-alert.
+      .setOnlyAlertOnce(true)
+      .setSilent(true)
       .build()
   }
 }

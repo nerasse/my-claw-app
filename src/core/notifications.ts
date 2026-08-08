@@ -75,13 +75,18 @@ function autoSelectDistributor(): string | null {
 }
 
 /**
- * Registers with the distributor. Called on every startup (and on every reconnect that brings
- * a fresh VAPID key): the library documents this as the way to verify the connection is still
- * alive, not just a one-time setup call.
+ * Registers with the distributor. Called once per app session, on the first VAPID key the
+ * server hands out: a reconnect brings the same key and the same registration, and calling
+ * registerDevice again would make the distributor rotate the endpoint for nothing (and leak a
+ * subscription on every reconnect). The link is re-established only when the distributor
+ * itself reports it lost (unregistered / registration failed).
  */
+let registeredThisSession = false;
+
 export async function registerForPush(vapidPublicKey: string): Promise<{ ok: boolean; reason?: string }> {
   if (!pushSupported) return { ok: false, reason: 'unsupported platform' };
   if (!vapidPublicKey) return { ok: false, reason: 'no server key' };
+  if (registeredThisSession) return { ok: true };
 
   const granted = (await checkPermissions()) || (await requestPermissions()) === 'granted';
   if (!granted) return { ok: false, reason: 'notification permission denied' };
@@ -92,10 +97,16 @@ export async function registerForPush(vapidPublicKey: string): Promise<{ ok: boo
 
   try {
     await ExpoUnifiedPush.registerDevice(vapidPublicKey);
+    registeredThisSession = true;
     return { ok: true };
   } catch (err) {
     return { ok: false, reason: String((err as Error)?.message ?? err) };
   }
+}
+
+/** The distributor reported the registration lost: the next key allows a fresh attempt. */
+export function resetPushRegistration(): void {
+  registeredThisSession = false;
 }
 
 export async function unregisterFromPush(): Promise<void> {

@@ -49,7 +49,7 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
-import { parseNotificationLink } from '../src/core/notifications';
+import { parseNotificationLink, resetPushRegistration } from '../src/core/notifications';
 import { labelsOf, renderApp, unmount, waitFor } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -83,6 +83,8 @@ beforeEach(() => {
   mockLinkHandlers.length = 0;
   mockAppStateHandlers.length = 0;
   mockInitialUrl = null;
+  // The registration guard is module state: a previous test may have already registered.
+  resetPushRegistration();
 });
 
 describe('parseNotificationLink', () => {
@@ -147,6 +149,29 @@ test('the app reports its foreground state so the thread on screen stays silent'
   });
   const afterBackground = sentOfType('notifications.state').pop()!;
   expect(afterBackground.foreground).toBe(false);
+  await unmount(tree);
+});
+
+test('a reconnect with the same key does not re-register: one registration per session', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'notifications.info', vapidPublicKey: 'server-key' });
+  await waitFor(() => unifiedPush.default.registerDevice.mock.calls.length === 1);
+
+  // The socket dropped and came back: the same key arrives again, nothing to do.
+  await emit({ type: 'notifications.info', vapidPublicKey: 'server-key' });
+  await new Promise<void>(resolve => setTimeout(() => resolve(), 20));
+  expect(unifiedPush.default.registerDevice.mock.calls.length).toBe(1);
+  await unmount(tree);
+});
+
+test('the distributor dropping the registration allows a fresh one', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'notifications.info', vapidPublicKey: 'server-key' });
+  await waitFor(() => unifiedPush.default.registerDevice.mock.calls.length === 1);
+
+  await emitDistributor({ action: 'unregistered', data: {} });
+  await emit({ type: 'notifications.info', vapidPublicKey: 'server-key' });
+  await waitFor(() => unifiedPush.default.registerDevice.mock.calls.length === 2);
   await unmount(tree);
 });
 

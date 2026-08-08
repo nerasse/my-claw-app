@@ -105,6 +105,7 @@ import {
   parseNotificationLink,
   pushSupported,
   registerForPush,
+  resetPushRegistration,
   subscribeToPushRegistration,
 } from '../core/notifications';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
@@ -1075,7 +1076,13 @@ export function AppShell(): React.JSX.Element {
         return;
       }
       if (event.kind === 'unregistered') {
+        // The distributor dropped us: allow a fresh registration on the next VAPID key, and
+        // tell the server to stop publishing into the void.
+        resetPushRegistration();
         connection.send(encodeNotificationsRegister({ endpoint: '' })).catch(() => {});
+      }
+      if (event.kind === 'failed') {
+        resetPushRegistration();
       }
     });
   }, []);

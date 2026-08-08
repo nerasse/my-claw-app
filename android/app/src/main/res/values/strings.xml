@@ -5,6 +5,6 @@
     <string name="notification_listener_label">MyClaw notifications</string>
     <string name="notification_listener_description">Lets the my-claw agent see incoming notifications on your phone.</string>
     <string name="connection_channel_name">my-claw connection</string>
-    <string name="connection_notification_title">my-claw connected</string>
-    <string name="connection_notification_text">The connection to your agent is active.</string>
+    <string name="connection_notification_title">my-claw</string>
+    <string name="connection_notification_text">Agent connection active</string>
 </resources>

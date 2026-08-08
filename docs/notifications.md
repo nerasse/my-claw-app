@@ -34,13 +34,24 @@ connexion WS ──► frame notifications.info { vapidPublicKey }
         frame notifications.register { endpoint, pubKey, auth }  ──► serveur
 ```
 
-- L'enregistrement est **rejoué à chaque `notifications.info`** (donc à chaque connexion) :
-  c'est la façon documentée par la lib de vérifier que le lien avec le distributeur est encore
-  vivant, et ça récupère une rotation d'endpoint.
+- L'enregistrement est fait **une seule fois par session d'app** (au premier `notifications.info`,
+  donc à la première connexion) : une reconnexion ramène la même clé VAPID et la même
+  registration, et ré-appeler `registerDevice` ferait tourner l'endpoint pour rien (et fuiter
+  une subscription chez le distributeur à chaque reconnexion). Il ne se refait que si le
+  distributeur signale la registration perdue (`unregistered` ou échec).
 - `unregistered` renvoie un endpoint vide au serveur, qui arrête de publier dans le vide.
 - L'app envoie `notifications.state { foreground, threadId }` à chaque changement d'état
   (`AppState`) et de thread actif : c'est ce qui permet au serveur de **taire** la notification
   du run que l'utilisateur regarde déjà.
+
+## La notification de connexion (foreground service)
+
+Android exige qu'un foreground service affiche une notification persistante. Celle de
+`ClawConnectionService` (« my-claw · Agent connection active », canal `IMPORTANCE_LOW`) est un
+**statut silencieux** : pas de son, pas de bannière, `setOnlyAlertOnce` (aucun re-alerte quand
+le service redémarre après une coupure réseau) et pas de badge. C'est elle qu'on voit dans le
+tiroir des notifications ; la supprimer entièrement ferait tuer le service par le système et
+couperait le lien avec le serveur en arrière-plan.
 
 ## Affichage et tap
 
