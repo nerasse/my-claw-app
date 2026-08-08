@@ -135,13 +135,23 @@ test('typing "/" opens the slash-menu, filters live, and inserts on tap', async 
   expect(textsOf(tree)).not.toContain('Show or change current model');
 
   // A command without native handling still inserts its text for typed arguments.
+  await typeInto(tree, '/he');
+  await waitFor(() => textsOf(tree).includes('List available commands'));
+  const helpItem = tree.root.find(node => node.props.accessibilityLabel?.startsWith('Command help'));
+  await ReactTestRenderer.act(async () => {
+    helpItem.props.onPress();
+  });
+  expect(inputOf(tree).props.value).toBe('/help ');
+
+  // /status is handled natively too: the tap opens the fullscreen page instead of typing.
   await typeInto(tree, '/st');
   await waitFor(() => textsOf(tree).includes('Session diagnostics: context, tokens, cost'));
   const statusItem = tree.root.find(node => node.props.accessibilityLabel?.startsWith('Command status'));
   await ReactTestRenderer.act(async () => {
     statusItem.props.onPress();
   });
-  expect(inputOf(tree).props.value).toBe('/status ');
+  expect(inputOf(tree).props.value).toBe('');
+  await waitFor(() => labelsOf(tree).includes('Close status'));
 
   await unmount(tree);
 });

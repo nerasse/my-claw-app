@@ -291,6 +291,106 @@ export interface CommandResultFrame {
   /** The chat.send id that carried the command, when one did. */
   replyToId?: string;
   text: string;
+  /** A `/status` result also travels structured, so the app draws a page instead of a bubble. */
+  status?: StatusPayload;
+}
+
+/**
+ * Structured `/status` report for the fullscreen diagnostics page. The text form stays the
+ * canonical rendering on the chat channels; this is the same report shaped as fields.
+ */
+export interface StatusPayload {
+  /** Null when this thread has no session yet: nothing has ever been asked here. */
+  session: {
+    id: string;
+    platform: string;
+    chatType: string;
+    createdAt: string;
+    lastActiveAt: string;
+    messages: number;
+    subAgent?: {
+      displayName: string;
+      type: string;
+      visibility: string;
+      parentSessionId: string;
+    };
+  } | null;
+  model: {
+    current: string;
+    /** The agent's configured default, present when the session overrides it. */
+    configDefault?: string;
+    effort?: string;
+    selfHosted: boolean;
+    contextLimit: number;
+    /** Why the window is what it is ("declared", "capped from …", …). */
+    contextNotes: string[];
+  };
+  context: {
+    /** The provider's count on the last call; undefined until a call is recorded. */
+    measured?: { tokens: number; pctOfLimit: number };
+    estimated: number;
+    /** What actually drives auto-compaction. */
+    occupied: number;
+    autoCompactOn: boolean;
+    autoCompactThresholdPct: number;
+    autoCompactThresholdTokens: number;
+    /** A context handed to another model (engine switch) is reported here. */
+    carried?: { model: string; messages: number; tokens: number; dropped: number };
+  };
+  /** Session-counter figures since /new; null when no call has been made. */
+  conversation: {
+    calls: number;
+    promptTokens: number;
+    cacheReadTokens: number;
+    completionTokens: number;
+  } | null;
+  /** The 90-day analytics for this session's own calls; null while there are none. */
+  analytics: {
+    calls: number;
+    errors: number;
+    durationMs?: number;
+    billedUsd: number;
+    referenceUsd: number;
+    unpriced: number;
+    rows: Array<{
+      model: string;
+      calls: number;
+      promptTokens: number;
+      cacheReadTokens: number;
+      completionTokens: number;
+      /** Absent when the model has no price on record. */
+      costUsd?: number;
+      costBilled: boolean;
+      costApproximate: boolean;
+    }>;
+  } | null;
+  /** Work driven by this session but run elsewhere (sub-agents, browser); null when there is none. */
+  delegated: {
+    calls: number;
+    tokens: number;
+    billedUsd: number;
+    referenceUsd: number;
+  } | null;
+  runtime: {
+    activeRun: string;
+    verbose: boolean;
+    approvedTools: string[];
+    sdkSessionId?: string;
+  };
+}
+
+/** The fullscreen status report of a conversation, asked by the page the menu opened. */
+export interface StatusGetFrame {
+  type: 'status.get';
+  threadId: string;
+}
+
+export interface StatusResultFrame {
+  type: 'status.result';
+  threadId: string;
+  /** The same report as text, for clients that only show plain output. */
+  text: string;
+  status: StatusPayload;
 }
 
 /** The thread's history is gone server-side; the app drops its copy. */
@@ -314,7 +414,8 @@ export type ErrorScope =
   | 'tools'
   | 'instructions'
   | 'config'
-  | 'workspaces';
+  | 'workspaces'
+  | 'status';
 
 export interface ErrorFrame {
   type: 'error';
@@ -544,6 +645,7 @@ export type ServerFrame =
   | AgentFileSavedFrame
   | ConfigResultFrame
   | ConfigSavedFrame
+  | StatusResultFrame
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
@@ -576,6 +678,7 @@ const FRAME_TYPES = new Set([
   'agents.file.saved',
   'config.result',
   'config.saved',
+  'status.result',
   'chat.transcript',
   'approval.request',
   'error',
@@ -860,5 +963,10 @@ export function encodeConfigSet(sha: string, content: string): string {
 
 export function encodeChatStop(threadId: string): string {
   return JSON.stringify({ type: 'chat.stop', threadId });
+}
+
+/** The fullscreen status page of a conversation, asked when the menu opens it. */
+export function encodeStatusGet(threadId: string): string {
+  return JSON.stringify({ type: 'status.get', threadId });
 }
 

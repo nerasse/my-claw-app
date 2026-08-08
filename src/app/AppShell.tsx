@@ -45,6 +45,7 @@ import {
   encodeAgentFileDelete,
   encodeChatSend,
   encodeChatStop,
+  encodeStatusGet,
   encodeCommandsList,
   encodeConfigGet,
   encodeConfigSet,
@@ -125,12 +126,14 @@ import { ImageViewer } from './ImageViewer';
 import { TextViewer } from './TextViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
+import { StatusScreen } from './StatusScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetOption } from '../components/ActionSheet';
 import { ModelSheet, ModelPickerSheet } from '../components/ModelSheet';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
+import { statusStore } from '../core/status';
 
 const HISTORY_LIMIT = 50;
 
@@ -310,6 +313,8 @@ export function AppShell(): React.JSX.Element {
   /** Which group of the model picker is open: its own stack, walked by the back key. */
   const [modelPath, setModelPath] = useState<string[]>([]);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+  /** The fullscreen status page of a conversation, an absolute layer over everything else. */
+  const [statusOpen, setStatusOpen] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   // A run can ask several times in a row; each answer clears one, in order.
@@ -371,6 +376,13 @@ export function AppShell(): React.JSX.Element {
     setSettingsPage('index');
     setSettingsOpen(true);
     setAutoFocusHero(false);
+  }, []);
+
+  /** The status page is asked on every opening: the report is a snapshot, not a live gauge. */
+  const openStatus = useCallback((threadId: string) => {
+    statusStore.open(threadId);
+    setStatusOpen(true);
+    connection.send(encodeStatusGet(threadId)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -541,13 +553,30 @@ export function AppShell(): React.JSX.Element {
           instructionsStore.receiveSaved(frame);
           break;
         case 'chat.command.result':
-          chatStore.addCommandResult(
-            frame.threadId,
-            `cmd-${frame.replyToId ?? 'x'}-${Date.now()}`,
-            frame.text,
-            frame.replyToId,
-          );
-          noteActivity(frame.threadId, frame.text);
+          if (frame.status) {
+            // A /status answered by the server: the page replaces the bubble, so the report
+            // never takes space in the conversation.
+            statusStore.receive({
+              type: 'status.result',
+              threadId: frame.threadId,
+              text: frame.text,
+              status: frame.status,
+            });
+            setStatusOpen(true);
+          } else {
+            chatStore.addCommandResult(
+              frame.threadId,
+              `cmd-${frame.replyToId ?? 'x'}-${Date.now()}`,
+              frame.text,
+              frame.replyToId,
+            );
+            noteActivity(frame.threadId, frame.text);
+          }
+          break;
+        case 'status.result':
+          // A late answer to a page that was already closed must not reopen it: only accept
+          // while a request is in flight.
+          if (statusStore.getSnapshot().fetch === 'loading') statusStore.receive(frame);
           break;
         case 'chat.cleared':
           chatStore.clearThread(frame.threadId);
@@ -588,6 +617,8 @@ export function AppShell(): React.JSX.Element {
             } else if (frame.scope === 'workspaces') {
               setWorkspacesError(frame.message);
               setWorkspacesBusy(false);
+            } else if (frame.scope === 'status') {
+              statusStore.fail(frame.message);
             } else if (frame.scope === 'agents') {
               agentsStore.fail(frame.message);
               // A file edit can fail while the file page is open: the editor shows it where it
@@ -638,6 +669,13 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       // Topmost layer first: the image covers everything else.
+      if (statusOpen) {
+        // The status page is an absolute layer over the whole shell, so the back key must
+        // always close it before anything underneath can see the press.
+        statusStore.close();
+        setStatusOpen(false);
+        return true;
+      }
       if (imageViewer) {
         setImageViewer(null);
         return true;
@@ -804,6 +842,7 @@ export function AppShell(): React.JSX.Element {
     settingsOpen,
     settingsPage,
     skillViewer,
+    statusOpen,
     textViewer,
     threadMenu,
     threadToRename,
@@ -1029,6 +1068,14 @@ export function AppShell(): React.JSX.Element {
             setThreadMenu(null);
           },
         },
+        {
+          label: 'Status',
+          hint: 'context, tokens, cost for this conversation',
+          onPress: () => {
+            setThreadMenu(null);
+            openStatus(threadMenu.threadId);
+          },
+        },
         threadMenu.archived
           ? {
               label: 'Unarchive',
@@ -1075,11 +1122,18 @@ export function AppShell(): React.JSX.Element {
             return true;
           }
           return false;
+        case 'status':
+          if (threadId) {
+            setCommandMenuOpen(false);
+            openStatus(threadId);
+            return true;
+          }
+          return false;
         default:
           return false;
       }
     },
-    [newThread, openModel, sessions],
+    [newThread, openModel, openStatus, sessions],
   );
 
   const currentModelLabel = threadModel
@@ -1936,6 +1990,15 @@ export function AppShell(): React.JSX.Element {
             { label: 'Cancel', onPress: () => setFileToDelete(null) },
           ]}
           onClose={() => setFileToDelete(null)}
+        />
+      ) : null}
+
+      {statusOpen ? (
+        <StatusScreen
+          onClose={() => {
+            statusStore.close();
+            setStatusOpen(false);
+          }}
         />
       ) : null}
     </SafeAreaView>
