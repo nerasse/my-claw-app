@@ -158,19 +158,12 @@ export function WorkspacesScreen({
 
         <View style={styles.category}>
           <Text style={styles.section}>default</Text>
+          {/* The section header already names it: a row repeating "default" reads as a duplicate. */}
           <View style={styles.card}>
             <View style={styles.row}>
-              <View style={styles.rowMain}>
-                <View style={styles.rowTitleLine}>
-                  <Text style={styles.key} numberOfLines={1}>
-                    default
-                  </Text>
-                  <Text style={styles.badge}>default</Text>
-                </View>
-                <Text style={styles.path} numberOfLines={1} selectable>
-                  {workspaces.find(w => w.default)?.path ?? ''}
-                </Text>
-              </View>
+              <Text style={styles.path} numberOfLines={1} selectable>
+                {workspaces.find(w => w.default)?.path ?? ''}
+              </Text>
             </View>
           </View>
         </View>
