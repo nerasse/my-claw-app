@@ -149,6 +149,20 @@ test('an old server answers an error instead of a spinning page', async () => {
   await settleAndUnmount(tree);
 });
 
+test('the settings index asks for the catalogs so the counts are ready without a visit', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Open settings');
+
+  const asked = bridge.sendMessage.mock.calls.map(
+    ([frame]) => JSON.parse(String(frame)) as { type: string },
+  );
+  expect(asked.map(f => f.type)).toEqual(expect.arrayContaining(['skills.list', 'tools.list']));
+
+  await settleAndUnmount(tree);
+});
+
 test('the settings index shows the tool count', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });

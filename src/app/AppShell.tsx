@@ -864,6 +864,16 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeWorkspacesList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
+  // The index shows the skills/tools counts on its rows: asking for the catalogs when it opens
+  // is what makes those numbers real without a first visit to either page. The pages still
+  // refresh their own list on entry, so a hot-reload or an edit made elsewhere lands on the
+  // next visit.
+  useEffect(() => {
+    if (!settingsOpen || settingsPage !== 'index') return;
+    connection.send(encodeSkillsList()).catch(() => {});
+    connection.send(encodeToolsList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
   // The workspaces page owns the CRUD: asked for on every visit, like the other lists, because
   // config.workspaces hot-reloads under it.
   useEffect(() => {
