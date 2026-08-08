@@ -158,10 +158,11 @@ export function WorkspacesScreen({
 
         <View style={styles.category}>
           <Text style={styles.section}>default</Text>
-          {/* The section header already names it: a row repeating "default" reads as a duplicate. */}
+          {/* The section header already names it: a row repeating "default" reads as a duplicate.
+              The path is the whole point of this row, so it wraps instead of being clipped. */}
           <View style={styles.card}>
             <View style={styles.row}>
-              <Text style={styles.path} numberOfLines={1} selectable>
+              <Text style={styles.path} selectable>
                 {workspaces.find(w => w.default)?.path ?? ''}
               </Text>
             </View>
@@ -180,16 +181,18 @@ export function WorkspacesScreen({
                 <View key={item.key}>
                   {index > 0 ? <View style={styles.separator} /> : null}
                   <View style={styles.serverRow}>
-                    <View style={styles.rowMain}>
-                      <View style={styles.rowTitleLine}>
-                        <Text style={styles.key} numberOfLines={1}>
-                          {item.key}
-                        </Text>
-                      </View>
-                      <Text style={styles.path} numberOfLines={1} selectable>
-                        {item.path}
+                  <View style={styles.rowMain}>
+                    <View style={styles.rowTitleLine}>
+                      <Text style={styles.key} numberOfLines={1}>
+                        {item.key}
                       </Text>
                     </View>
+                    {/* No line cap: a path is a path, and a truncated one would point nowhere
+                        visible. It wraps instead, pushing the actions to their own lines. */}
+                    <Text style={styles.path} selectable>
+                      {item.path}
+                    </Text>
+                  </View>
                     {confirmRemove === item.key ? (
                       <Pressable
                         onPress={() => {
@@ -222,7 +225,7 @@ export function WorkspacesScreen({
                       style={styles.actionButton}
                       accessibilityRole="button"
                       accessibilityLabel={`Repoint workspace ${item.key}`}>
-                      <Text style={styles.actionText}>path</Text>
+                      <Text style={styles.actionText}>edit path</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -316,7 +319,7 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
   },
-  path: { fontSize: font.small, color: palette.textMuted, fontFamily: 'monospace' },
+  path: { flex: 1, fontSize: font.small, color: palette.textMuted, fontFamily: 'monospace' },
   itemHint: { fontSize: font.small, color: palette.textMuted },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
   formRow: {
