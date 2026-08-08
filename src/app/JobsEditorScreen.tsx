@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useModelCatalog } from '../core/model';
@@ -103,6 +104,7 @@ export function JobsEditorScreen({
   onDelete: (job: JobEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   useDismissKeyboard();
   const catalog = useModelCatalog();
   const [draft, setDraft] = useState<JobDraft>(() => draftOf(job));
@@ -111,6 +113,32 @@ export function JobsEditorScreen({
   const [modelPicker, setModelPicker] = useState(false);
   const [modelPath, setModelPath] = useState<string[]>([]);
   const [workspacePicker, setWorkspacePicker] = useState(false);
+
+  // The editor owns its layers, so the hardware back walks them before leaving the editor:
+  // a press from the scope picker must close the picker, not the whole editor.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (scopeEditor) {
+        setScopeEditor(null);
+        return true;
+      }
+      if (modelPicker) {
+        if (modelPath.length > 0) {
+          setModelPath(current => current.slice(0, -1));
+          return true;
+        }
+        setModelPicker(false);
+        return true;
+      }
+      if (workspacePicker) {
+        setWorkspacePicker(false);
+        return true;
+      }
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [modelPath, modelPicker, onBack, scopeEditor, workspacePicker]);
 
   const invalid = scheduleInvalid(draft.schedule);
   const promptMissing = !draft.prompt.trim();
@@ -242,8 +270,8 @@ export function JobsEditorScreen({
   };
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.header}>
+    <View style={[StyleSheet.absoluteFill, styles.screen]}>
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onBack}
           style={styles.backButton}
@@ -339,7 +367,7 @@ export function JobsEditorScreen({
           />
           {invalid ? (
             <Text style={styles.invalidHint}>
-              the server would refuse this — use a cron expression, “every Xm/h/d”, or a date
+              the server would refuse this · use a cron expression, “every Xm/h/d”, or a date
             </Text>
           ) : (
             <Text style={styles.note}>cron expression · every 30m / 2h / 1d · ISO timestamp or duration</Text>
@@ -361,7 +389,7 @@ export function JobsEditorScreen({
                 </Text>
                 {!modelKnown ? (
                   <Text style={styles.removedHint} numberOfLines={1}>
-                    no such model — pick one, or keep it
+                    no such model · pick one, or keep it
                   </Text>
                 ) : null}
               </View>
@@ -380,7 +408,7 @@ export function JobsEditorScreen({
                 </Text>
                 {!workspaceKnown ? (
                   <Text style={styles.removedHint} numberOfLines={1}>
-                    workspace gone — the job would pause at its next run
+                    workspace gone · the job would pause at its next run
                   </Text>
                 ) : null}
               </View>
@@ -435,7 +463,9 @@ function toFields(job: JobEntry | null, draft: JobDraft): JobFieldsOut {
 }
 
 const createStyles = (palette: Palette) => ({
-  screen: { flex: 1 },
+  // Full-page overlay, like the jobs list and the runs page: the shell container is shared
+  // with the chat, and an in-flow editor would split the screen with it.
+  screen: { backgroundColor: palette.bg },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

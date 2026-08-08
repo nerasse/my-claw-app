@@ -2275,10 +2275,9 @@ export function AppShell(): React.JSX.Element {
                 setJobRuns(null);
               }}
               onEditJob={() => {
-                // The shortcut: from the runs page straight into the job's editor.
+                // The shortcut: from the runs page straight into the job's editor. The runs
+                // page stays mounted underneath, so the back key returns to it.
                 const job = jobsStore.getSnapshot().jobs.find(entry => entry.id === jobSessions.jobId);
-                setJobSessions(null);
-                jobSessionsRef.current = null;
                 if (job) {
                   setJobsError(null);
                   setJobsEditor(job);
