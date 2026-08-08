@@ -15,6 +15,8 @@ export function WorkspacePickerScreen({
   unknown,
   error,
   saving,
+  subtitle,
+  backLabel,
   onBack,
   onSave,
 }: {
@@ -25,6 +27,10 @@ export function WorkspacePickerScreen({
   unknown: boolean;
   error: string | null;
   saving: boolean;
+  /** What the page explains; the agent page and the jobs editor say different things. */
+  subtitle: string;
+  /** Where back lands; the agent page and the jobs editor stack differently. */
+  backLabel: string;
   onBack: () => void;
   onSave: (workspace: string | null) => void;
 }): React.JSX.Element {
@@ -40,12 +46,12 @@ export function WorkspacePickerScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back to agent">
+          accessibilityLabel={backLabel}>
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Workspace</Text>
-          <Text style={styles.subtitle}>where this agent runs its sessions</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
       </View>
 

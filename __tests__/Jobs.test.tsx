@@ -183,7 +183,9 @@ test('a new job saves and the fresh listing closes the editor', async () => {
 
   await typeInto(tree, 'Job name', 'Nightly digest');
   await typeInto(tree, 'Job prompt', 'Summarize the day');
-  await typeInto(tree, 'Job model id', 'fast-1');
+  await pressLabel(tree, 'Edit job model');
+  await waitFor(() => labelsOf(tree).includes('Use default (Fast)') || labelsOf(tree).includes('Fast'));
+  await pressLabel(tree, 'Fast');
 
   await pressLabel(tree, 'Save job');
   const saves = sentOfType('jobs.save');
@@ -195,7 +197,7 @@ test('a new job saves and the fresh listing closes the editor', async () => {
     enabled: true,
     model: 'fast-1',
   });
-  expect(saves[0]?.id).toBeUndefined();
+  expect((saves[0] as Record<string, unknown>)?.id).toBeUndefined();
 
   await emit({
     type: 'jobs.list.result',
@@ -227,19 +229,88 @@ test('a model outside the catalog is flagged red but the save still goes', async
   const tree = await renderApp();
   await openJobs(tree);
   await emitCatalogs(tree);
-  await pressLabel(tree, 'Add job');
-  await waitFor(() => labelsOf(tree).includes('Job name'));
+  await emit({
+    type: 'jobs.list.result',
+    jobs: [job({ model: 'ghost-model', unknownModel: true })],
+  });
+  await pressLabel(tree, 'Edit job Morning report');
+  await waitFor(() => labelsOf(tree).includes('Edit job model'));
 
-  await typeInto(tree, 'Job prompt', 'do things');
-  await typeInto(tree, 'Job model id', 'ghost-model');
-  await waitFor(() =>
-    textsOf(tree).some(text => text.includes('no such model in the catalog')),
-  );
-
+  // The picker is a live catalog; a job's stale model is kept as-is until the owner picks.
+  await waitFor(() => textsOf(tree).some(text => text.includes('no such model')));
   await pressLabel(tree, 'Save job');
   const saves = sentOfType('jobs.save');
   expect(saves.length).toBe(1);
   expect(saves[0]).toMatchObject({ model: 'ghost-model' });
+  await unmount(tree);
+});
+
+test('the model picker offers the live catalog and “Inherit” clears the override', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emitCatalogs(tree);
+  await pressLabel(tree, 'Add job');
+  await waitFor(() => labelsOf(tree).includes('Edit job model'));
+
+  await pressLabel(tree, 'Edit job model');
+  await waitFor(() => labelsOf(tree).includes('Fast'));
+  await pressLabel(tree, 'Strong');
+  await waitFor(() => labelsOf(tree).includes('Edit job model'));
+  expect(textsOf(tree).join('\n')).toContain('strong-2');
+
+  await pressLabel(tree, 'Edit job model');
+  await pressLabel(tree, 'Inherit (no override)');
+  await waitFor(() => textsOf(tree).join('\n').includes('inherited'));
+  await typeInto(tree, 'Job prompt', 'do things');
+  await pressLabel(tree, 'Save job');
+  const saves = sentOfType('jobs.save');
+  expect(saves.length).toBe(1);
+  expect((saves[0] as Record<string, unknown>)?.model).toBeUndefined();
+  await unmount(tree);
+});
+
+test('the workspace picker lists the dynamic workspaces and the default', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emitCatalogs(tree);
+  await pressLabel(tree, 'Add job');
+  await waitFor(() => labelsOf(tree).includes('Edit job workspace'));
+
+  await pressLabel(tree, 'Edit job workspace');
+  await waitFor(() => labelsOf(tree).includes('Use workspace sofa'));
+  await pressLabel(tree, 'Use workspace sofa');
+  await waitFor(() => labelsOf(tree).includes('Edit job workspace'));
+  expect(textsOf(tree).join('\n')).toContain('sofa');
+
+  await typeInto(tree, 'Job prompt', 'do things');
+  await pressLabel(tree, 'Save job');
+  const saves = sentOfType('jobs.save');
+  expect(saves.length).toBe(1);
+  expect(saves[0]).toMatchObject({ workspace: 'sofa' });
+  await unmount(tree);
+});
+
+test('a workspace that left the config is pinned red and “default” drops it', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emitCatalogs(tree);
+  await emit({
+    type: 'jobs.list.result',
+    jobs: [job({ workspace: 'gone-ws', unknownWorkspace: true })],
+  });
+  await pressLabel(tree, 'Edit job Morning report');
+  await waitFor(() => labelsOf(tree).includes('Edit job workspace'));
+  await waitFor(() => textsOf(tree).some(text => text.includes('workspace gone')));
+
+  await pressLabel(tree, 'Edit job workspace');
+  await waitFor(() => labelsOf(tree).includes('Drop removed workspace gone-ws'));
+  await pressLabel(tree, 'Drop removed workspace gone-ws');
+  await waitFor(() => labelsOf(tree).includes('Edit job workspace'));
+
+  await pressLabel(tree, 'Save job');
+  const saves = sentOfType('jobs.save');
+  expect(saves.length).toBe(1);
+  expect((saves[0] as Record<string, unknown>)?.workspace).toBeUndefined();
   await unmount(tree);
 });
 

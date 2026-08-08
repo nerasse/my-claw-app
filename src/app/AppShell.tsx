@@ -1703,6 +1703,8 @@ export function AppShell(): React.JSX.Element {
                   unknown={selectedAgentInfo.unknownWorkspace === true}
                   error={agentsState.error}
                   saving={false}
+                  subtitle="where this agent runs its sessions"
+                  backLabel="Back to agent"
                   onBack={() => setSettingsPage('agent')}
                   onSave={saveWorkspace}
                 />

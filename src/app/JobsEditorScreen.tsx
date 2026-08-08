@@ -4,6 +4,8 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useModelCatalog } from '../core/model';
 import { ScopeEditorScreen } from './ScopeEditorScreen';
+import { WorkspacePickerScreen } from './WorkspacePickerScreen';
+import { ModelPickerSheet } from '../components/ModelSheet';
 import type { JobEntry, JobScope, JobScopeMode, SkillEntry, ToolEntry, McpEntry, WorkspaceEntry, JobFieldsOut } from '../core/protocol';
 
 /** The server's own schedule grammar (src/cron/store.ts), mirrored so an invalid value can be
@@ -105,6 +107,10 @@ export function JobsEditorScreen({
   const catalog = useModelCatalog();
   const [draft, setDraft] = useState<JobDraft>(() => draftOf(job));
   const [scopeEditor, setScopeEditor] = useState<'skills' | 'mcp' | 'tools' | null>(null);
+  /** The model picker is a sheet over the editor; its group stack is walked like the chat's. */
+  const [modelPicker, setModelPicker] = useState(false);
+  const [modelPath, setModelPath] = useState<string[]>([]);
+  const [workspacePicker, setWorkspacePicker] = useState(false);
 
   const invalid = scheduleInvalid(draft.schedule);
   const promptMissing = !draft.prompt.trim();
@@ -147,6 +153,52 @@ export function JobsEditorScreen({
         onSave={(mode, names) => {
           setScope(kind, { mode: mode as JobScopeMode, names });
           setScopeEditor(null);
+        }}
+      />
+    );
+  }
+
+  if (modelPicker) {
+    return (
+      <ModelPickerSheet
+        title="Model"
+        models={catalog.models}
+        activeId={draft.model}
+        path={modelPath}
+        onPathChange={setModelPath}
+        onClose={() => setModelPicker(false)}
+        onSelect={modelId => {
+          setDraft(current => ({ ...current, model: modelId }));
+          setModelPicker(false);
+        }}
+        // For a job an absent model is not the server default but the cron agent's: the option
+        // says what it means here, and clearing is exactly how the override is removed.
+        rootOption={{
+          label: 'Inherit (no override)',
+          selected: !draft.model,
+          onPress: () => {
+            setDraft(current => ({ ...current, model: '' }));
+            setModelPicker(false);
+          },
+        }}
+      />
+    );
+  }
+
+  if (workspacePicker) {
+    return (
+      <WorkspacePickerScreen
+        workspaces={workspaces}
+        current={draft.workspace || null}
+        unknown={!workspaceKnown && Boolean(draft.workspace)}
+        error={null}
+        saving={false}
+        subtitle="where this job runs its sessions"
+        backLabel="Back to jobs editor"
+        onBack={() => setWorkspacePicker(false)}
+        onSave={key => {
+          setDraft(current => ({ ...current, workspace: key ?? '' }));
+          setWorkspacePicker(false);
         }}
       />
     );
@@ -296,34 +348,48 @@ export function JobsEditorScreen({
 
         <View style={styles.category}>
           <Text style={styles.section}>runtime</Text>
-          <TextInput
-            style={[styles.input, !modelKnown ? styles.inputInvalid : null]}
-            value={draft.model}
-            onChangeText={model => setDraft(current => ({ ...current, model }))}
-            placeholder="a model id from the configured providers"
-            placeholderTextColor={styles.placeholder.color}
-            autoCapitalize="none"
-            autoCorrect={false}
-            accessibilityLabel="Job model id"
-          />
-          {!modelKnown ? (
-            <Text style={styles.invalidHint}>no such model in the catalog — saved anyway, painted red here</Text>
-          ) : null}
-          <TextInput
-            style={[styles.input, !workspaceKnown ? styles.inputInvalid : null]}
-            value={draft.workspace}
-            onChangeText={workspace => setDraft(current => ({ ...current, workspace }))}
-            placeholder="a key from config.workspaces · empty = default"
-            placeholderTextColor={styles.placeholder.color}
-            autoCapitalize="none"
-            autoCorrect={false}
-            accessibilityLabel="Job workspace key"
-          />
-          {!workspaceKnown ? (
-            <Text style={styles.invalidHint}>
-              no such workspace — saved anyway, and the job pauses at its next run
-            </Text>
-          ) : null}
+          <View style={styles.card}>
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={() => setModelPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit job model">
+              <Text style={styles.rowKey}>model</Text>
+              <View style={styles.valueArea}>
+                <Text style={[styles.rowValue, !modelKnown ? styles.valueRemoved : null]} numberOfLines={1}>
+                  {draft.model || 'inherited'}
+                </Text>
+                {!modelKnown ? (
+                  <Text style={styles.removedHint} numberOfLines={1}>
+                    no such model — pick one, or keep it
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
+            <View style={styles.separator} />
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={() => setWorkspacePicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit job workspace">
+              <Text style={styles.rowKey}>workspace</Text>
+              <View style={styles.valueArea}>
+                <Text style={[styles.rowValue, !workspaceKnown ? styles.valueRemoved : null]} numberOfLines={1}>
+                  {draft.workspace || 'default'}
+                </Text>
+                {!workspaceKnown ? (
+                  <Text style={styles.removedHint} numberOfLines={1}>
+                    workspace gone — the job would pause at its next run
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.note}>
+            absent = the cron agent's own model and workspace
+          </Text>
         </View>
 
         <View style={styles.category}>
