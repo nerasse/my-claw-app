@@ -109,16 +109,23 @@ beforeEach(() => {
   chatStore.clearAll();
 });
 
-test('the conversation menu opens the status page, between rename and archive', async () => {
+/** The four actions a conversation carries, in the order both menus must show them. */
+const CONVERSATION_ACTIONS = ['Rename…', 'Status', 'Archive', 'Delete'];
+
+/** Labels appear once per rendered node, so the order is read from the first sighting of each. */
+function actionOrder(tree: Tree): string[] {
+  const seen: string[] = [];
+  for (const label of labelsOf(tree)) {
+    if (CONVERSATION_ACTIONS.includes(label) && !seen.includes(label)) seen.push(label);
+  }
+  return seen;
+}
+
+test('the drawer menu carries the conversation actions, status between rename and archive', async () => {
   const tree = await renderApp();
   await openThreadMenu(tree);
 
-  const labels = labelsOf(tree);
-  expect(labels).toContain('Rename');
-  expect(labels).toContain('Status');
-  expect(labels).toContain('Archive');
-  expect(labels.indexOf('Status')).toBeGreaterThan(labels.indexOf('Rename'));
-  expect(labels.indexOf('Archive')).toBeGreaterThan(labels.indexOf('Status'));
+  expect(actionOrder(tree)).toEqual(CONVERSATION_ACTIONS);
 
   await pressLabel(tree, 'Status');
   await waitFor(() => labelsOf(tree).includes('Close status'));
@@ -129,8 +136,42 @@ test('the conversation menu opens the status page, between rename and archive', 
   await unmount(tree);
 });
 
-test('the status page renders the report as cards', async () => {
+test('the header menu answers the same list, in the same order', async () => {
   const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Conversation Infra maison');
+  await pressLabel(tree, 'Commands');
+
+  // Model leads (only the conversation on screen knows its own), then the shared list.
+  expect(labelsOf(tree)).toContain('Model…');
+  expect(actionOrder(tree)).toEqual(CONVERSATION_ACTIONS);
+
+  await pressLabel(tree, 'Status');
+  await waitFor(() => labelsOf(tree).includes('Close status'));
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'status.get', threadId: THREAD })]),
+  );
+
+  await unmount(tree);
+});
+
+test('deleting from the drawer asks first, like the header always did', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree);
+  await pressLabel(tree, 'Delete');
+
+  // The first tap opens the confirmation, it does not delete.
+  await waitFor(() => textsOf(tree).some(text => text.includes('Delete')));
+  expect(sentFrames().some(frame => frame.type === 'session.delete')).toBe(false);
+
+  await pressLabel(tree, 'Delete');
+  await waitFor(() => sentFrames().some(frame => frame.type === 'session.delete'));
+
+  await unmount(tree);
+});
+
+async function openReport(tree: Tree): Promise<void> {
   await openThreadMenu(tree);
   await pressLabel(tree, 'Status');
   await emit({
@@ -139,26 +180,75 @@ test('the status page renders the report as cards', async () => {
     text: '**Session**\n  platform      my-claw-app - dm',
     status: PAYLOAD,
   });
-
   await waitFor(() => textsOf(tree).some(text => text.includes('claude-opus-5')));
+}
+
+test('the status page leads with context, tokens and cost', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+
   const texts = textsOf(tree).join('\n');
-  expect(texts).toContain('my-claw-app · dm');
-  expect(texts).toContain('messages');
-  expect(texts).toContain('context limit');
-  expect(texts).toContain('512k · declared, capped from 1,000,000');
-  expect(texts).toContain('12k on the last call');
-  expect(texts).toContain('measured');
-  expect(texts).toContain('occupied');
-  expect(texts).toContain('auto-compact');
-  expect(texts).toContain('on, threshold 80% = 410k');
-  expect(texts).toContain('analytics · 90 d');
+  expect(texts).toContain('claude-opus-5');
+  expect(texts).toContain('context');
+  // 70k occupied of a 512k window, and the auto-compact line that explains the meter.
+  expect(texts).toContain('70k');
+  expect(texts).toContain('/ 512k');
+  expect(texts).toContain('13.7%');
+  expect(texts).toContain('auto-compact at 80% · 410k');
+  expect(texts).toContain('measured 12k · estimated 60k');
+  expect(texts).toContain('tokens in');
+  expect(texts).toContain('tokens out');
+  expect(texts).toContain('cost · 90 days');
   expect(texts).toContain('$2.00');
-  expect(texts).toContain('reference');
-  expect(texts).toContain('runtime');
-  expect(texts).toContain('active run');
-  expect(texts).toContain('bash');
-  // The plain-text form of the same report is kept at the bottom of the page.
-  expect(texts).toContain('text output');
+  expect(texts).toContain('$5.00 reference');
+  expect(texts).toContain('my-claw-app · dm');
+
+  await unmount(tree);
+});
+
+test('a conversation is a thread here, so no counter is labelled "since /new"', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+
+  expect(textsOf(tree).join('\n')).not.toContain('/new');
+
+  await unmount(tree);
+});
+
+test('the raw text and the ids stay folded until asked for', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+
+  // Both folds are shut on arrival: the page is the report, not a text dump.
+  expect(textsOf(tree).join('\n')).not.toContain('**Session**');
+  expect(textsOf(tree).join('\n')).not.toContain('my-claw-app/dm/dev/thread-status');
+  expect(labelsOf(tree)).toContain('raw output');
+  expect(labelsOf(tree)).toContain('details');
+
+  await pressLabel(tree, 'raw output');
+  expect(textsOf(tree).join('\n')).toContain('**Session**');
+
+  await pressLabel(tree, 'details');
+  const opened = textsOf(tree).join('\n');
+  expect(opened).toContain('my-claw-app/dm/dev/thread-status');
+  expect(opened).toContain('512k · declared, capped from 1,000,000');
+  expect(opened).toContain('bash');
+
+  await unmount(tree);
+});
+
+test('a run in flight is called out above the cards', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree);
+  await pressLabel(tree, 'Status');
+  await emit({
+    type: 'status.result',
+    threadId: THREAD,
+    text: 'report',
+    status: { ...PAYLOAD, runtime: { ...PAYLOAD.runtime, activeRun: 'main' } },
+  });
+
+  await waitFor(() => textsOf(tree).some(text => text.includes('running · main')));
 
   await unmount(tree);
 });

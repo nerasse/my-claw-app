@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -7,11 +7,15 @@ import { useStatus } from '../core/status';
 import type { StatusPayload } from '../core/protocol';
 
 /**
- * Fullscreen status page, drawn from the structured `/status` report: everything the command
- * prints in chat, laid out as cards. It lives outside the conversation (and outside the agent's
- * context -- a command never reaches the model), opened from the thread menu or by typing
- * `/status`. Rendered as an absolute layer of the shell, like the image viewer, so the back key
- * walks one level instead of closing the app.
+ * Fullscreen status page, drawn from the structured `/status` report. It lives outside the
+ * conversation (and outside the agent's context -- a command never reaches the model), opened
+ * from the thread menu or by typing `/status`. Rendered as an absolute layer of the shell, like
+ * the image viewer, so the back key walks one level instead of closing the app.
+ *
+ * Laid out by what a phone glance actually needs: how full the context is, what it cost, then
+ * the conversation itself. Ids, notes and the chat command's raw text are one tap away rather
+ * than in the way. The chat text says "since /new", a command the app never surfaces -- here a
+ * conversation is a thread, so the counters are simply this conversation's.
  */
 
 function short(n: number): string {
@@ -49,6 +53,7 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
   const insets = useSafeAreaInsets();
   const status = useStatus();
   useDismissKeyboard();
+  const payload = status.payload;
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
@@ -64,7 +69,7 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
         <View style={styles.headerMain}>
           <Text style={styles.title}>Status</Text>
           <Text style={styles.headerSub} numberOfLines={1}>
-            this conversation
+            {payload ? payload.model.current : 'this conversation'}
           </Text>
         </View>
       </View>
@@ -73,27 +78,62 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
         <Text style={styles.empty}>asking the server…</Text>
       ) : status.fetch === 'error' ? (
         <Text style={styles.empty}>{status.error}</Text>
-      ) : status.payload ? (
+      ) : payload ? (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          <SessionSection payload={status.payload} />
-          <ModelSection payload={status.payload} />
-          <ContextSection payload={status.payload} />
-          <ConversationSection payload={status.payload} />
-          <AnalyticsSection payload={status.payload} />
-          <DelegatedSection payload={status.payload} />
-          <RuntimeSection payload={status.payload} />
+          {payload.runtime.activeRun !== 'none' ? (
+            <View style={styles.runBadge}>
+              <Text style={styles.runBadgeText}>{`running · ${payload.runtime.activeRun}`}</Text>
+            </View>
+          ) : null}
+          <ContextCard payload={payload} />
+          <StatGrid payload={payload} />
+          <CostCard payload={payload} />
+          <DelegatedCard payload={payload} />
+          <ConversationCard payload={payload} />
+          <DetailsFold payload={payload} />
           {status.text ? (
-            <>
-              <Text style={styles.section}>text output</Text>
+            <Fold label="raw output" hint="the chat command's text">
               <View style={styles.codeBlock}>
                 <Text style={styles.code} selectable>
                   {status.text}
                 </Text>
               </View>
-            </>
+            </Fold>
           ) : null}
         </ScrollView>
       ) : null}
+    </View>
+  );
+}
+
+function Fold({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.fold}>
+      <Pressable
+        onPress={() => setOpen(value => !value)}
+        style={styles.foldHead}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={label}>
+        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+        <Text style={styles.foldLabel}>{label}</Text>
+        {hint ? (
+          <Text style={styles.foldHint} numberOfLines={1}>
+            {hint}
+          </Text>
+        ) : null}
+      </Pressable>
+      {open ? <View style={styles.foldBody}>{children}</View> : null}
     </View>
   );
 }
@@ -115,108 +155,45 @@ function Card({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <View style={styles.card}>{children}</View>;
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }): React.JSX.Element {
+function CardHead({ title, trailing }: { title: string; trailing?: string }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  return <Text style={styles.section}>{children}</Text>;
-}
-
-function SessionSection({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
-  const styles = useThemedStyles(createStyles);
-  if (!payload.session) {
-    return (
-      <>
-        <SectionTitle>session</SectionTitle>
-        <Card>
-          <Text style={styles.note}>no session yet: nothing has been asked in this conversation.</Text>
-        </Card>
-      </>
-    );
-  }
-  const s = payload.session;
   return (
-    <>
-      <SectionTitle>session</SectionTitle>
-      <Card>
-        <Row label="platform" value={`${s.platform} · ${s.chatType}`} />
-        <Row label="created" value={`${s.createdAt.slice(0, 16).replace('T', ' ')} (${ago(s.createdAt)})`} />
-        <Row label="last active" value={`${s.lastActiveAt.slice(0, 16).replace('T', ' ')} (${ago(s.lastActiveAt)})`} />
-        <Row label="messages" value={String(s.messages)} />
-        {s.subAgent ? (
-          <>
-            <Row label="sub-agent" value={`${s.subAgent.displayName} (${s.subAgent.type}, ${s.subAgent.visibility})`} />
-            <Row label="spawned by" value={s.subAgent.parentSessionId} monospace />
-          </>
-        ) : null}
-        <Row label="id" value={s.id} monospace />
-      </Card>
-    </>
+    <View style={styles.cardHead}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      {trailing ? <Text style={styles.cardTrailing}>{trailing}</Text> : null}
+    </View>
   );
 }
 
-function ModelSection({ payload }: { payload: StatusPayload }): React.JSX.Element {
-  return (
-    <>
-      <SectionTitle>model</SectionTitle>
-      <Card>
-        <Row label="current" value={payload.model.current} />
-        {payload.model.configDefault ? <Row label="config default" value={payload.model.configDefault} /> : null}
-        {payload.model.effort ? <Row label="effort" value={payload.model.effort} /> : null}
-        <Row label="context limit" value={`${short(payload.model.contextLimit)} · ${payload.model.contextNotes.join(', ')}`} />
-        {payload.model.selfHosted ? <Row label="billing" value="self-hosted, no marginal cost" /> : null}
-      </Card>
-    </>
-  );
-}
-
-function ContextSection({ payload }: { payload: StatusPayload }): React.JSX.Element {
+/** The one thing worth a glance: how close this conversation is to auto-compaction. */
+function ContextCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const c = payload.context;
   const limit = payload.model.contextLimit;
-  const measuredPct = c.measured ? c.measured.pctOfLimit : null;
   const occupiedPct = limit > 0 ? (c.occupied / limit) * 100 : 0;
   const overThreshold = c.autoCompactOn && occupiedPct >= c.autoCompactThresholdPct;
-  const barColor = overThreshold ? styles.barWarn.color : styles.barFill.color;
+  const color = overThreshold ? styles.barWarn.color : styles.barFill.color;
   return (
-    <>
-      <SectionTitle>context</SectionTitle>
-      <Card>
-        {c.measured ? (
-          <>
-            <View style={styles.statRow}>
-              <Text style={styles.statKey}>measured</Text>
-              <Text style={styles.statValue}>{`${short(c.measured.tokens)} on the last call`}</Text>
-            </View>
-            <Meter pct={measuredPct ?? 0} color={barColor} />
-            <Text style={styles.statSub}>{`${c.measured.pctOfLimit.toFixed(1)}% of the limit`}</Text>
-          </>
-        ) : (
-          <Row label="measured" value="no call recorded yet" />
-        )}
-        <Row label="estimated" value={`${short(c.estimated)} · chars/4, under-counts`} />
-        <View style={styles.statRow}>
-          <Text style={styles.statKey}>occupied</Text>
-          <Text style={styles.statValue}>{`${short(c.occupied)} · drives auto-compaction`}</Text>
-        </View>
-        <Meter pct={Math.min(100, occupiedPct)} color={barColor} />
-        <Text style={styles.statSub}>
-          {`${occupiedPct.toFixed(1)}% of the limit${overThreshold ? ' · at the auto-compact threshold' : ''}`}
-        </Text>
-        <Row
-          label="auto-compact"
-          value={
-            c.autoCompactOn
-              ? `on, threshold ${c.autoCompactThresholdPct}% = ${short(c.autoCompactThresholdTokens)}`
-              : 'off'
-          }
-        />
-        {c.carried ? (
-          <Row
-            label="carried to"
-            value={`${c.carried.model}: ${c.carried.messages} messages (~${short(c.carried.tokens)} tokens)${c.carried.dropped > 0 ? `, ${c.carried.dropped} oldest dropped` : ''}`}
-          />
-        ) : null}
-      </Card>
-    </>
+    <Card>
+      <CardHead title="context" trailing={`${occupiedPct.toFixed(1)}%`} />
+      <View style={styles.heroRow}>
+        <Text style={styles.hero}>{short(c.occupied)}</Text>
+        <Text style={styles.heroUnit}>{`/ ${short(limit)}`}</Text>
+      </View>
+      <Meter pct={Math.min(100, occupiedPct)} color={color} />
+      <Text style={[styles.cardNote, overThreshold && styles.cardNoteWarn]}>
+        {c.autoCompactOn
+          ? `auto-compact at ${c.autoCompactThresholdPct}% · ${short(c.autoCompactThresholdTokens)}${
+              overThreshold ? ' · reached' : ''
+            }`
+          : 'auto-compact off'}
+      </Text>
+      <Text style={styles.cardNote}>
+        {`${c.measured ? `measured ${short(c.measured.tokens)}` : 'no call recorded yet'} · estimated ${short(
+          c.estimated,
+        )}`}
+      </Text>
+    </Card>
   );
 }
 
@@ -229,102 +206,146 @@ function Meter({ pct, color }: { pct: number; color: string }): React.JSX.Elemen
   );
 }
 
-function ConversationSection({ payload }: { payload: StatusPayload }): React.JSX.Element {
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const c = payload.conversation;
-  if (!c) {
-    return (
-      <>
-        <SectionTitle>this conversation · since /new</SectionTitle>
-        <Card>
-          <Text style={styles.note}>no calls yet.</Text>
-        </Card>
-      </>
-    );
-  }
   return (
-    <>
-      <SectionTitle>this conversation · since /new</SectionTitle>
-      <Card>
-        <Row label="calls" value={String(c.calls)} />
-        <Row label="in" value={`${short(c.promptTokens)}${c.cacheReadTokens > 0 ? ` · cached ${short(c.cacheReadTokens)}` : ''}`} />
-        <Row label="out" value={short(c.completionTokens)} />
-      </Card>
-    </>
+    <View style={styles.statCell}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+      {sub ? (
+        <Text style={styles.statSub} numberOfLines={1}>
+          {sub}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
-function AnalyticsSection({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
+/** Four numbers, no scrolling: what this conversation has spent in messages and tokens. */
+function StatGrid({ payload }: { payload: StatusPayload }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const c = payload.conversation;
+  return (
+    <View style={styles.grid}>
+      <Stat label="messages" value={payload.session ? String(payload.session.messages) : '-'} />
+      <Stat label="calls" value={c ? String(c.calls) : '0'} />
+      <Stat
+        label="tokens in"
+        value={c ? short(c.promptTokens) : '-'}
+        sub={c && c.cacheReadTokens > 0 ? `cached ${short(c.cacheReadTokens)}` : undefined}
+      />
+      <Stat label="tokens out" value={c ? short(c.completionTokens) : '-'} />
+    </View>
+  );
+}
+
+function CostCard({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   const a = payload.analytics;
   if (!a) return null;
-  const title = [
-    'analytics · 90 d',
-    ...(a.calls > 0 || a.errors > 0 ? [`${a.calls} calls · ${a.errors} errors`] : []),
-    ...(a.durationMs ? [duration(a.durationMs)] : []),
-  ].join(' · ');
   return (
-    <>
-      <SectionTitle>{title}</SectionTitle>
-      <Card>
-        {a.billedUsd > 0 ? <Row label="billed" value={money(a.billedUsd)} /> : null}
-        {a.referenceUsd > 0 ? (
-          <Row label="reference" value={`${money(a.referenceUsd)} · flat plans, subscriptions, self-hosted`} />
-        ) : null}
-        {a.unpriced > 0 ? <Row label="unpriced" value={`${a.unpriced} model(s) without a price`} /> : null}
-        {a.rows.length > 0 ? (
-          <View style={styles.modelTable}>
-            <Text style={[styles.modelHead, styles.code]}>
-              {'model'.padEnd(24)} calls  in      cached  out      cost
-            </Text>
-            {a.rows.map((row, index) => (
-              <Text key={`${row.model}-${index}`} style={styles.code}>
-                {row.model.split('/').pop()!.slice(0, 24).padEnd(24)}
-                {String(row.calls).padStart(5)}
-                {short(row.promptTokens).padStart(8)}
-                {(row.cacheReadTokens > 0 ? short(row.cacheReadTokens) : '-').padStart(8)}
-                {short(row.completionTokens).padStart(8)}
-                {(row.costUsd === undefined
-                  ? '  -'
-                  : `${row.costBilled ? ' ' : '*'}${row.costApproximate ? '~' : ''}${money(row.costUsd)}`
-                ).padStart(9)}
+    <Card>
+      <CardHead title="cost · 90 days" trailing={money(a.billedUsd)} />
+      <Text style={styles.cardNote}>
+        {`${a.calls} calls · ${a.errors} errors${a.durationMs ? ` · ${duration(a.durationMs)} of API time` : ''}`}
+      </Text>
+      {a.referenceUsd > 0 ? (
+        <Text style={styles.cardNote}>{`${money(a.referenceUsd)} reference · flat plans, subscriptions, self-hosted`}</Text>
+      ) : null}
+      {a.unpriced > 0 ? (
+        <Text style={styles.cardNote}>{`${a.unpriced} model(s) without a price`}</Text>
+      ) : null}
+      {a.rows.length > 0 ? (
+        <View style={styles.modelTable}>
+          {a.rows.map((row, index) => (
+            <View key={`${row.model}-${index}`} style={styles.modelRow}>
+              <Text style={styles.modelName} numberOfLines={1}>
+                {row.model.split('/').pop()}
               </Text>
-            ))}
-            <Text style={styles.codeNote}>{`* not a charge · ~ price of a matched model id`}</Text>          </View>
-        ) : null}
-      </Card>
-    </>
+              <Text style={styles.modelNums}>
+                {`${row.calls}× · ${short(row.promptTokens)} in · ${short(row.completionTokens)} out`}
+              </Text>
+              <Text style={styles.modelCost}>
+                {row.costUsd === undefined
+                  ? '-'
+                  : `${row.costBilled ? '' : '*'}${row.costApproximate ? '~' : ''}${money(row.costUsd)}`}
+              </Text>
+            </View>
+          ))}
+          <Text style={styles.codeNote}>* not a charge · ~ price of a matched model id</Text>
+        </View>
+      ) : null}
+    </Card>
   );
 }
 
-function DelegatedSection({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
+function DelegatedCard({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
   const d = payload.delegated;
   if (!d) return null;
   return (
-    <>
-      <SectionTitle>delegated · sub-agents, browser</SectionTitle>
-      <Card>
-        <Row label="calls" value={String(d.calls)} />
-        <Row label="tokens" value={short(d.tokens)} />
-        <Row label="billed" value={money(d.billedUsd)} />
-        {d.referenceUsd > 0 ? <Row label="reference" value={money(d.referenceUsd)} /> : null}
-      </Card>
-    </>
+    <Card>
+      <CardHead title="delegated · sub-agents, browser" trailing={money(d.billedUsd)} />
+      <Text style={styles.cardNote}>
+        {`${d.calls} calls · ${short(d.tokens)} tokens${d.referenceUsd > 0 ? ` · ${money(d.referenceUsd)} reference` : ''}`}
+      </Text>
+    </Card>
   );
 }
 
-function RuntimeSection({ payload }: { payload: StatusPayload }): React.JSX.Element {
-  const r = payload.runtime;
-  return (
-    <>
-      <SectionTitle>runtime</SectionTitle>
+function ConversationCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const s = payload.session;
+  if (!s) {
+    return (
       <Card>
-        <Row label="active run" value={r.activeRun} />
+        <CardHead title="conversation" />
+        <Text style={styles.cardNote}>nothing has been asked here yet.</Text>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardHead title="conversation" />
+      <Row label="platform" value={`${s.platform} · ${s.chatType}`} />
+      <Row label="started" value={ago(s.createdAt)} />
+      <Row label="last active" value={ago(s.lastActiveAt)} />
+      <Row label="active run" value={payload.runtime.activeRun} />
+      {s.subAgent ? (
+        <Row label="sub-agent" value={`${s.subAgent.displayName} (${s.subAgent.type}, ${s.subAgent.visibility})`} />
+      ) : null}
+    </Card>
+  );
+}
+
+/** Everything true but rarely asked: ids, window provenance, tool approvals. */
+function DetailsFold({ payload }: { payload: StatusPayload }): React.JSX.Element {
+  const s = payload.session;
+  const r = payload.runtime;
+  const c = payload.context;
+  return (
+    <Fold label="details" hint="ids, context window, approvals">
+      <Card>
+        <Row label="context limit" value={`${short(payload.model.contextLimit)} · ${payload.model.contextNotes.join(', ')}`} />
+        {payload.model.configDefault ? <Row label="config default" value={payload.model.configDefault} /> : null}
+        {payload.model.effort ? <Row label="effort" value={payload.model.effort} /> : null}
+        {payload.model.selfHosted ? <Row label="billing" value="self-hosted, no marginal cost" /> : null}
+        {c.carried ? (
+          <Row
+            label="carried to"
+            value={`${c.carried.model}: ${c.carried.messages} messages (~${short(c.carried.tokens)} tokens)${
+              c.carried.dropped > 0 ? `, ${c.carried.dropped} oldest dropped` : ''
+            }`}
+          />
+        ) : null}
         <Row label="verbose" value={r.verbose ? 'on' : 'off'} />
         {r.approvedTools.length > 0 ? <Row label="approved" value={r.approvedTools.join(', ')} /> : null}
+        {s ? <Row label="created" value={s.createdAt.slice(0, 16).replace('T', ' ')} /> : null}
+        {s ? <Row label="session id" value={s.id} monospace /> : null}
+        {s?.subAgent ? <Row label="spawned by" value={s.subAgent.parentSessionId} monospace /> : null}
         {r.sdkSessionId ? <Row label="sdk session" value={r.sdkSessionId} monospace /> : null}
       </Card>
-    </>
+    </Fold>
   );
 }
 
@@ -352,62 +373,70 @@ const createStyles = (palette: Palette) => ({
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   headerSub: { fontSize: font.small, color: palette.textFaint },
   empty: { padding: space.xl, fontSize: font.body, color: palette.textFaint },
-  body: { paddingHorizontal: space.md, paddingBottom: space.xl },
-  section: {
-    marginTop: space.lg,
-    marginBottom: space.xs,
-    paddingHorizontal: space.xs,
-    fontSize: font.micro,
-    color: palette.textFaint,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
+  body: { paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.xl, gap: space.sm },
+  runBadge: {
+    alignSelf: 'flex-start' as const,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: palette.accentSoft,
   },
+  runBadgeText: { fontSize: font.small, fontWeight: '600' as const, color: palette.accent },
   card: {
     backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: palette.border,
     borderRadius: radius.md,
     paddingHorizontal: space.md,
-    paddingVertical: space.xs,
+    paddingVertical: space.md,
+    gap: space.xs,
   },
+  cardHead: {
+    flexDirection: 'row' as const,
+    alignItems: 'baseline' as const,
+    justifyContent: 'space-between' as const,
+    gap: space.sm,
+  },
+  cardTitle: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+  },
+  cardTrailing: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text },
+  cardNote: { fontSize: font.small, color: palette.textMuted },
+  cardNoteWarn: { color: palette.warn },
+  heroRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.sm },
+  hero: { fontSize: 28, lineHeight: 32, fontWeight: '700' as const, color: palette.text },
+  heroUnit: { fontSize: font.body, color: palette.textFaint },
+  grid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.sm },
+  statCell: {
+    flexGrow: 1,
+    flexBasis: '47%' as const,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  statLabel: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+  },
+  statValue: { fontSize: font.screen, fontWeight: '600' as const, color: palette.text },
+  statSub: { fontSize: font.micro, color: palette.textFaint },
   row: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     gap: space.md,
-    paddingVertical: space.sm,
+    paddingVertical: space.xs,
   },
-  rowKey: {
-    width: 110,
-    fontSize: font.small,
-    color: palette.textFaint,
-    paddingTop: 1,
-  },
-  rowValue: {
-    flex: 1,
-    fontSize: font.body,
-    color: palette.text,
-    textAlign: 'right' as const,
-  },
-  rowValueMono: {
-    fontFamily: 'monospace',
-    fontSize: font.small,
-  },
-  note: { paddingVertical: space.md, fontSize: font.body, color: palette.textMuted },
-  statRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    gap: space.md,
-    paddingTop: space.sm,
-    paddingBottom: space.xs,
-  },
-  statKey: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  statValue: { fontSize: font.body, color: palette.text },
-  statSub: {
-    fontSize: font.micro,
-    color: palette.textFaint,
-    paddingTop: space.xs,
-    paddingBottom: space.sm,
-  },
+  rowKey: { width: 96, fontSize: font.small, color: palette.textFaint, paddingTop: 1 },
+  rowValue: { flex: 1, fontSize: font.meta, color: palette.text, textAlign: 'right' as const },
+  rowValueMono: { fontFamily: 'monospace', fontSize: font.small },
   meterTrack: {
     height: 6,
     borderRadius: radius.pill,
@@ -417,16 +446,43 @@ const createStyles = (palette: Palette) => ({
   meterFill: { height: 6, borderRadius: radius.pill },
   barFill: { color: palette.accent },
   barWarn: { color: palette.warn },
-  modelTable: {
-    marginTop: space.xs,
-    padding: space.md,
-    borderRadius: radius.sm,
-    backgroundColor: palette.codeBg,
-    gap: 2,
+  modelTable: { marginTop: space.xs, gap: space.xs },
+  modelRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingVertical: space.xxs,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
   },
-  modelHead: { color: palette.textFaint },
+  modelName: { flex: 1, fontSize: font.small, color: palette.text },
+  modelNums: { fontSize: font.micro, color: palette.textFaint },
+  modelCost: { width: 58, fontSize: font.small, color: palette.text, textAlign: 'right' as const },
+  codeNote: { fontSize: font.micro, color: palette.textFaint },
+  fold: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
+    overflow: 'hidden' as const,
+  },
+  foldHead: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+  },
+  foldGlyph: { fontSize: font.meta, color: palette.textFaint, width: 12 },
+  foldLabel: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+  },
+  foldHint: { flex: 1, fontSize: font.micro, color: palette.textFaint, textAlign: 'right' as const },
+  foldBody: { paddingHorizontal: space.sm, paddingBottom: space.sm },
   code: { fontFamily: 'monospace' as const, fontSize: font.micro, color: palette.text },
-  codeNote: { fontSize: font.micro, color: palette.textFaint, paddingTop: space.xs },
   codeBlock: {
     backgroundColor: palette.codeBg,
     borderWidth: 1,

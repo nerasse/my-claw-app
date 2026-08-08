@@ -111,7 +111,7 @@ test('a conversation can be named, and the list shows the name the server stored
   const tree = await renderApp();
   await openThreadMenu(tree, 'comment je configure le dns');
 
-  await press(tree, 'Rename');
+  await press(tree, 'Rename…');
   await waitFor(() => labelsOf(tree).includes('Name this conversation'));
 
   await typeInto(tree, 'Name this conversation', 'Infra maison');
@@ -135,7 +135,7 @@ test('an empty name is sent as such, which hands the conversation back to its fi
   const tree = await renderApp();
   await openThreadMenu(tree, 'Infra maison');
 
-  await press(tree, 'Rename');
+  await press(tree, 'Rename…');
   await typeInto(tree, 'Name this conversation', '');
   await press(tree, 'Save');
 
@@ -151,7 +151,7 @@ test('an empty name is sent as such, which hands the conversation back to its fi
 test('the rename sheet lifts above the keyboard its own autofocus opens', async () => {
   const tree = await renderApp();
   await openThreadMenu(tree, 'Infra maison');
-  await press(tree, 'Rename');
+  await press(tree, 'Rename…');
   await waitFor(() => labelsOf(tree).includes('Name this conversation'));
 
   const resting = sheetPaddingFor(tree, 'Name this conversation');
@@ -174,7 +174,7 @@ test('cancelling the rename sends nothing', async () => {
   const tree = await renderApp();
   await openThreadMenu(tree, 'Infra maison');
 
-  await press(tree, 'Rename');
+  await press(tree, 'Rename…');
   await typeInto(tree, 'Name this conversation', 'jamais envoye');
   await press(tree, 'Cancel');
 
@@ -187,7 +187,7 @@ test('cancelling the rename sends nothing', async () => {
 test('cancelling the rename closes the keyboard its autofocus opened', async () => {
   const tree = await renderApp();
   await openThreadMenu(tree, 'Infra maison');
-  await press(tree, 'Rename');
+  await press(tree, 'Rename…');
   await waitFor(() => labelsOf(tree).includes('Name this conversation'));
 
   const dismiss = jest.spyOn(Keyboard, 'dismiss');
@@ -203,7 +203,7 @@ test('cancelling the rename closes the keyboard its autofocus opened', async () 
 test('tapping outside the rename sheet closes the keyboard too', async () => {
   const tree = await renderApp();
   await openThreadMenu(tree, 'Infra maison');
-  await press(tree, 'Rename');
+  await press(tree, 'Rename…');
   await waitFor(() => labelsOf(tree).includes('Name this conversation'));
 
   const dismiss = jest.spyOn(Keyboard, 'dismiss');

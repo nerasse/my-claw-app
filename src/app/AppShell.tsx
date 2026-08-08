@@ -1057,42 +1057,63 @@ export function AppShell(): React.JSX.Element {
     [selectThread],
   );
 
-  const threadActions: SheetOption[] = threadMenu
-    ? [
-        {
-          label: 'Rename',
-          onPress: () => {
-            // Handing the menu straight to the sheet: closing first would drop the thread it
-            // was opened for, and the sheet needs the current name to start from.
-            setThreadToRename(threadMenu);
-            setThreadMenu(null);
-          },
+  /**
+   * What a conversation can do, wherever it is named: the drawer's per-conversation sheet and
+   * the header's menu answer the same list, same order, same words. They had drifted -- only
+   * one carried Status, the labels disagreed, and the drawer deleted without asking while the
+   * header confirmed. The subject is a conversation in both places, so no label says so.
+   */
+  const conversationActions = useCallback(
+    (target: SessionSummary, close: () => void): SheetOption[] => [
+      {
+        label: 'Rename…',
+        onPress: () => {
+          // The rename sheet needs the current name to start from, so it is handed the thread
+          // as a value: closing the menu first would drop the one it was opened for.
+          setThreadToRename(target);
+          close();
         },
-        {
-          label: 'Status',
-          hint: 'context, tokens, cost for this conversation',
-          onPress: () => {
-            setThreadMenu(null);
-            openStatus(threadMenu.threadId);
-          },
+      },
+      {
+        label: 'Status',
+        hint: 'context, tokens, cost',
+        onPress: () => {
+          close();
+          openStatus(target.threadId);
         },
-        threadMenu.archived
-          ? {
-              label: 'Unarchive',
-              hint: 'put it back in the conversation list',
-              onPress: () => setThreadArchived(threadMenu.threadId, false),
-            }
-          : {
-              label: 'Archive',
-              hint: 'file it away, nothing is deleted',
-              onPress: () => setThreadArchived(threadMenu.threadId, true),
+      },
+      target.archived
+        ? {
+            label: 'Unarchive',
+            hint: 'put it back in the list',
+            onPress: () => {
+              setThreadArchived(target.threadId, false);
+              close();
             },
-        {
-          label: 'Delete',
-          danger: true,
-          onPress: () => deleteThread(threadMenu.threadId),
+          }
+        : {
+            label: 'Archive',
+            hint: 'file it away, nothing is deleted',
+            onPress: () => {
+              setThreadArchived(target.threadId, true);
+              close();
+            },
+          },
+      {
+        label: 'Delete',
+        danger: true,
+        onPress: () => {
+          // Always through the confirmation: the drawer used to delete on the first tap.
+          setConfirmDelete(target.threadId);
+          close();
         },
-      ]
+      },
+    ],
+    [openStatus, setThreadArchived],
+  );
+
+  const threadActions: SheetOption[] = threadMenu
+    ? conversationActions(threadMenu, () => setThreadMenu(null))
     : [];
 
   /**
@@ -1161,38 +1182,21 @@ export function AppShell(): React.JSX.Element {
           } satisfies SheetOption,
         ]
       : []),
+    // Model and Stop lead because only the conversation on screen can answer for them: the app
+    // knows the live model and the running turn of the one in front of it, not of a thread
+    // picked in the drawer. Everything below is the shared conversation list.
     ...(activeThread
-      ? [
+      ? conversationActions(
           {
-            label: 'Rename conversation…',
-            onPress: () => {
-              setThreadToRename({
-                threadId: activeThread,
-                title: sessionStore.titleOf(activeThread) ?? '',
-                messageCount: 0,
-                createdAt: '',
-                lastActiveAt: '',
-              });
-              setCommandMenuOpen(false);
-            },
-          } satisfies SheetOption,
-          {
-            label: 'Archive',
-            hint: 'file it away, nothing is deleted',
-            onPress: () => {
-              setThreadArchived(activeThread, true);
-              setCommandMenuOpen(false);
-            },
-          } satisfies SheetOption,
-          {
-            label: 'Delete conversation',
-            danger: true,
-            onPress: () => {
-              setConfirmDelete(activeThread);
-              setCommandMenuOpen(false);
-            },
-          } satisfies SheetOption,
-        ]
+            threadId: activeThread,
+            title: sessionStore.titleOf(activeThread) ?? '',
+            messageCount: 0,
+            createdAt: '',
+            lastActiveAt: '',
+            archived: archivedSessions.some(entry => entry.threadId === activeThread),
+          },
+          () => setCommandMenuOpen(false),
+        )
       : []),
     // New conversations live on the + in the drawer (and the /new command); Files has its
     // own header button. This menu stays for what acts on the conversation in front of you.

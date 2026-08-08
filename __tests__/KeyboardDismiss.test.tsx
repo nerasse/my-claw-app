@@ -127,9 +127,9 @@ test('the settings index and every page under it drop the keyboard', async () =>
 test('the rename sheet keeps the keyboard: it is the one that asks for typing', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Rename conversation…'));
+  await waitFor(() => labelsOf(tree).includes('Rename…'));
   dismiss.mockClear();
-  await pressLabel(tree, 'Rename conversation…');
+  await pressLabel(tree, 'Rename…');
 
   await waitFor(() => labelsOf(tree).includes('Name this conversation'));
   expect(dismiss).not.toHaveBeenCalled();
