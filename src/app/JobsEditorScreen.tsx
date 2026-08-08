@@ -33,6 +33,7 @@ export interface JobDraft {
   schedule: string;
   enabled: boolean;
   model: string;
+  effort: string;
   workspace: string;
   skills: JobScope;
   mcp: JobScope;
@@ -47,6 +48,7 @@ function draftOf(job: JobEntry | null): JobDraft {
       schedule: 'every 24h',
       enabled: true,
       model: '',
+      effort: '',
       workspace: '',
       skills: { mode: 'inherit' },
       mcp: { mode: 'inherit' },
@@ -66,6 +68,7 @@ function draftOf(job: JobEntry | null): JobDraft {
     schedule,
     enabled: job.enabled,
     model: job.model ?? '',
+    effort: job.effort ?? '',
     workspace: job.workspace ?? '',
     skills: scopeOf(job.skillsMode, job.skills),
     mcp: scopeOf(job.mcpMode, job.mcp),
@@ -196,18 +199,24 @@ export function JobsEditorScreen({
         state={pickerState}
         onStateChange={setPickerState}
         onClose={() => setModelPicker(false)}
-        // A job pins the model only: its effort and window follow the cron agent's own settings.
         onCommit={choice => {
-          setDraft(current => ({ ...current, model: choice.model }));
+          // The effort travels with the model: null clears the pin, a level pins it.
+          setDraft(current => ({
+            ...current,
+            model: choice.model,
+            ...(choice.effort === undefined ? {} : { effort: choice.effort ?? '' }),
+          }));
           setModelPicker(false);
         }}
+        skipEffortOnTag
+        effort={{ current: draft.effort }}
         // For a job an absent model is not the server default but the cron agent's: the option
         // says what it means here, and clearing is exactly how the override is removed.
         rootOption={{
           label: 'Inherit (no override)',
           selected: !draft.model,
           onPress: () => {
-            setDraft(current => ({ ...current, model: '' }));
+            setDraft(current => ({ ...current, model: '', effort: '' }));
             setModelPicker(false);
           },
         }}
@@ -460,6 +469,8 @@ function toFields(job: JobEntry | null, draft: JobDraft): JobFieldsOut {
     schedule: draft.schedule,
     enabled: draft.enabled,
     ...(draft.model.trim() ? { model: draft.model.trim() } : {}),
+    // Always carried: "" reads as "no pin" on create and as a deliberate clear on update.
+    effort: draft.effort,
     ...(draft.workspace.trim() ? { workspace: draft.workspace.trim() } : {}),
     skills: draft.skills,
     mcp: draft.mcp,

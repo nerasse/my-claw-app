@@ -179,6 +179,29 @@ test('the tag flow walks model, effort and window, then applies one upsert', asy
   await settleAndUnmount(tree);
 });
 
+test('a pinned effort can go back to default from the effort step', async () => {
+  const tree = await bootToTagsPage();
+  // The opus fixture pins effort high; the flow must offer a way back to an absent pin.
+  await pressLabel(tree, 'Open tag opus');
+  await waitFor(() => labelsOf(tree).includes('Fast'));
+  await pressLabel(tree, 'Fast');
+  // The pin shows up as the current value; the default row must be there to remove it.
+  await waitFor(() => labelsOf(tree).includes('default (inherit)'));
+  expect(labelsOf(tree)).toContain('Keep current: high');
+  await pressLabel(tree, 'default (inherit)');
+  // The window step follows the effort step, as in any other run of the flow.
+  await waitFor(() => labelsOf(tree).includes('Full: 400k'));
+  await pressLabel(tree, '128k');
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
+  await waitFor(() =>
+    sentFrames().some(
+      frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.effort === undefined,
+    ),
+  );
+  await settleAndUnmount(tree);
+});
+
 test('the window step never offers more than the model can hold', async () => {
   const tree = await bootToTagsPage();
   await pressLabel(tree, 'Open tag opus');

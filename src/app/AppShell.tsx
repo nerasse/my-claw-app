@@ -34,7 +34,6 @@ import {
   encodeInstructionsGetNested,
   encodeInstructionsList,
   encodeInstructionsSet,
-  encodeAgentsEffortSet,
   encodeAgentsModelClear,
   encodeAgentsModelSet,
   encodeAgentsScopeSet,
@@ -186,9 +185,10 @@ function unknownOfList(names: string[], catalog: Array<{ name: string }>): strin
  * llm.defaultModel, an agent key edits agents.<key>.llm. The root option hands an agent back
  * to its inheritance (clear), which is the "Use default" of the chat picker in reverse.
  *
- * An agent has no effort of its own (that is a global default), but it does have a context
- * ceiling, so the flow is model then window then confirm. Picking the full window removes the
- * agent's own cap, which is how it returns to the standing policy.
+ * An agent pins its effort next to its model, and a window too, so the flow is model then
+ * effort then window then confirm. The effort step is skipped when the staged model is a tag:
+ * the tag's own pin always wins, and the confirmation names it instead. Picking the full
+ * window removes the agent's own cap, which is how it returns to the standing policy.
  */
 function AgentModelPickerSheet({
   target,
@@ -223,13 +223,16 @@ function AgentModelPickerSheet({
       onStateChange={onStateChange}
       onClose={onClose}
       onCommit={choice => {
-        connection.send(encodeAgentsModelSet(target, choice.model)).catch(() => {});
+        // undefined keeps the target's effort, null clears it, a level pins it.
+        const effort = choice.effort === undefined ? undefined : choice.effort ?? '';
+        connection.send(encodeAgentsModelSet(target, choice.model, effort)).catch(() => {});
         if (agent && choice.context !== undefined) {
           connection
             .send(encodeAgentsContextCapSet(agent.key, choice.context === 'full' ? null : choice.context))
             .catch(() => {});
         }
       }}
+      skipEffortOnTag
       rootOption={
         agent
           ? {
@@ -245,7 +248,7 @@ function AgentModelPickerSheet({
             }
           : null
       }
-      effort={null}
+      effort={{ current: agent ? agent.effort ?? '' : config?.defaultEffort ?? '' }}
       context={
         agent
           ? {
@@ -288,7 +291,9 @@ function TagEditorSheet({
       onStateChange={onStateChange}
       onClose={onClose}
       onCommit={choice => {
-        const effort = choice.effort ?? tag?.effort;
+        // undefined keeps the tag's own pin, null clears it, a level pins it. The upsert
+        // replaces the whole entry, so an omitted effort key is how a tag returns to "default".
+        const effort = choice.effort === undefined ? tag?.effort : (choice.effort ?? undefined);
         // "full" means the tag pins no ceiling of its own, which is an absent contextCap.
         const cap =
           choice.context === undefined
@@ -301,6 +306,7 @@ function TagEditorSheet({
         connection.send(encodeModelList()).catch(() => {});
         connection.send(encodeAgentsConfigGet()).catch(() => {});
       }}
+      skipEffortOnTag
       effort={{ current: tag?.effort ?? '' }}
       context={{ ...(tag?.contextCap === undefined ? {} : { current: tag.contextCap }) }}
     />
@@ -354,7 +360,6 @@ export function AppShell(): React.JSX.Element {
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
   const [agentPicker, setAgentPicker] = useState<PickerState>(pickerStart);
-  const [agentsEffortOpen, setAgentsEffortOpen] = useState(false);
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [tools, setTools] = useState<ToolEntry[]>([]);
   const [toolsError, setToolsError] = useState<string | null>(null);
@@ -957,10 +962,6 @@ export function AppShell(): React.JSX.Element {
         setModelOpen(false);
         return true;
       }
-      if (agentsEffortOpen) {
-        setAgentsEffortOpen(false);
-        return true;
-      }
       if (agentModelFor) {
         const previous = pickerBack(agentPicker);
         if (previous) {
@@ -1111,7 +1112,6 @@ export function AppShell(): React.JSX.Element {
     approvals.length,
     agentModelFor,
     agentPicker,
-    agentsEffortOpen,
     archivesOpen,
     bubbleMenu,
     commandMenuOpen,
@@ -1694,7 +1694,6 @@ export function AppShell(): React.JSX.Element {
         setAgentPicker(pickerStart);
         setAgentModelFor('global');
       }}
-      onOpenDefaultEffort={() => setAgentsEffortOpen(true)}
       onOpenProviders={() => setSettingsPage('providers')}
       onOpenTags={() => setSettingsPage('tags')}
       onOpenAgent={key => {
@@ -2390,29 +2389,6 @@ export function AppShell(): React.JSX.Element {
             },
           ]}
           onClose={() => setTagToDelete(null)}
-        />
-      ) : null}
-
-      {agentsEffortOpen && agentsConfig ? (
-        <ActionSheet
-          preview={`Default effort · current: ${agentsConfig.defaultEffort || 'not set'}`}
-          options={[
-            ...agentsConfig.effortLevels.map(level => ({
-              label: level,
-              selected: level === agentsConfig.defaultEffort,
-              onPress: () => {
-                connection.send(encodeAgentsEffortSet(level)).catch(() => {});
-              },
-            })),
-            {
-              label: 'Not set',
-              selected: agentsConfig.defaultEffort === '',
-              onPress: () => {
-                connection.send(encodeAgentsEffortSet('')).catch(() => {});
-              },
-            },
-          ]}
-          onClose={() => setAgentsEffortOpen(false)}
         />
       ) : null}
 

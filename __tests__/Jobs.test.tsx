@@ -84,8 +84,8 @@ async function emitCatalogs(tree: Tree): Promise<void> {
   await emit({
     type: 'model.list.result',
     models: [
-      { id: 'fast-1', label: 'Fast', provider: 'openai' },
-      { id: 'strong-2', label: 'Strong', provider: 'anthropic' },
+      { id: 'fast-1', label: 'Fast', provider: 'openai', effortLevels: ['low', 'medium', 'high'] },
+      { id: 'strong-2', label: 'Strong', provider: 'anthropic', effortLevels: ['low', 'medium', 'high'] },
     ],
     defaultModel: 'fast-1',
   });
@@ -186,6 +186,9 @@ test('a new job saves and the fresh listing closes the editor', async () => {
   await pressLabel(tree, 'Edit job model');
   await waitFor(() => labelsOf(tree).includes('Use default (Fast)') || labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
+  // The effort step is part of the flow now; the job carries its pick on the save.
+  await waitFor(() => labelsOf(tree).includes('medium'));
+  await pressLabel(tree, 'medium');
   await waitFor(() => labelsOf(tree).includes('Apply'));
   await pressLabel(tree, 'Apply');
 
@@ -198,6 +201,7 @@ test('a new job saves and the fresh listing closes the editor', async () => {
     schedule: 'every 24h',
     enabled: true,
     model: 'fast-1',
+    effort: 'medium',
   });
   expect((saves[0] as Record<string, unknown>)?.id).toBeUndefined();
 
@@ -257,7 +261,10 @@ test('the model picker offers the live catalog and “Inherit” clears the over
   await pressLabel(tree, 'Edit job model');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Strong');
-  // A job pins the model only, so the flow goes straight to the confirmation step.
+  // A job pins its effort next to its model, like every other scope: model, then effort, then
+  // the confirmation. The picked effort rides on the jobs.save.
+  await waitFor(() => labelsOf(tree).includes('high'));
+  await pressLabel(tree, 'high');
   await waitFor(() => labelsOf(tree).includes('Apply'));
   await pressLabel(tree, 'Apply');
   await waitFor(() => labelsOf(tree).includes('Edit job model'));
@@ -271,6 +278,28 @@ test('the model picker offers the live catalog and “Inherit” clears the over
   const saves = sentOfType('jobs.save');
   expect(saves.length).toBe(1);
   expect((saves[0] as Record<string, unknown>)?.model).toBeUndefined();
+  await unmount(tree);
+});
+
+test('a job pins its effort and “default (inherit)” clears it again', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emitCatalogs(tree);
+  await pressLabel(tree, 'Add job');
+  await waitFor(() => labelsOf(tree).includes('Edit job model'));
+
+  await pressLabel(tree, 'Edit job model');
+  await waitFor(() => labelsOf(tree).includes('Fast'));
+  await pressLabel(tree, 'Strong');
+  await waitFor(() => labelsOf(tree).includes('default (inherit)'));
+  await pressLabel(tree, 'medium');
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
+
+  await typeInto(tree, 'Job prompt', 'do things');
+  await pressLabel(tree, 'Save job');
+  const saves = sentOfType('jobs.save');
+  expect((saves[0] as Record<string, unknown>)?.effort).toBe('medium');
   await unmount(tree);
 });
 

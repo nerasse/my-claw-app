@@ -40,7 +40,6 @@ export function AgentsSettingsScreen({
   error,
   onBack,
   onOpenDefaultModel,
-  onOpenDefaultEffort,
   onOpenProviders,
   onOpenTags,
   onOpenAgent,
@@ -51,7 +50,6 @@ export function AgentsSettingsScreen({
   error: string | null;
   onBack: () => void;
   onOpenDefaultModel: () => void;
-  onOpenDefaultEffort: () => void;
   onOpenProviders: () => void;
   onOpenTags: () => void;
   onOpenAgent: (key: string) => void;
@@ -105,22 +103,12 @@ export function AgentsSettingsScreen({
                 <View style={styles.linkMain}>
                   <Text style={styles.linkTitle}>{config.defaultModel ? labelOf(config.defaultModel) : 'none set'}</Text>
                   <Text style={styles.hint} numberOfLines={1}>
-                    {config.defaultProvider
-                      ? `${config.defaultModel} · provider ${config.defaultProvider}`
-                      : 'what every agent falls back to'}
+                    {config.defaultEffort
+                      ? `${config.defaultModel} · provider ${config.defaultProvider ?? 'default'} · effort ${config.defaultEffort}`
+                      : config.defaultProvider
+                        ? `${config.defaultModel} · provider ${config.defaultProvider}`
+                        : 'what every agent falls back to'}
                   </Text>
-                </View>
-                <Text style={styles.linkGlyph}>›</Text>
-              </Pressable>
-              <View style={styles.separator} />
-              <Pressable
-                style={[styles.row, styles.link]}
-                onPress={onOpenDefaultEffort}
-                accessibilityRole="button"
-                accessibilityLabel="Default effort">
-                <View style={styles.linkMain}>
-                  <Text style={styles.linkTitle}>{config.defaultEffort || 'not set'}</Text>
-                  <Text style={styles.hint}>reasoning effort when a model sets none of its own</Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
               </Pressable>

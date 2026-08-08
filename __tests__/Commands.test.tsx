@@ -106,6 +106,8 @@ test('the model picker lists models with the current one checked and applies on 
   await waitFor(() => labelsOf(tree).includes('Use default (Fast)'), 60);
   await pressLabel(tree, 'Use default (Fast)');
   await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'fast-1' })), 60);
+  // Returning to the default is the whole couple: the session effort goes back too.
+  expect(sentFrames()).toContain(JSON.stringify({ type: 'model.effort.set', threadId: THREAD, level: '' }));
 
   await settleAndUnmount(tree);
 });

@@ -124,8 +124,8 @@ async function boot(): Promise<Tree> {
   await emit({
     type: 'model.list.result',
     models: [
-      { id: 'fast-1', label: 'Fast' },
-      { id: 'opus', label: 'Opus', group: 'Claude' },
+      { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'] },
+      { id: 'opus', label: 'Opus', group: 'Claude', effortLevels: ['low', 'medium', 'high'] },
     ],
     defaultModel: 'fast-1',
   });
@@ -162,12 +162,16 @@ test('picking a model for an agent sends agents.model.set and the page follows',
   await pressLabel(tree, 'Claude ›');
   await waitFor(() => labelsOf(tree).includes('Opus'));
   await pressLabel(tree, 'Opus');
-  // The picker is a flow now: the pick is applied from the confirmation step.
+  // The flow continues: model, then effort, then the confirmation applies both in one frame.
+  await waitFor(() => labelsOf(tree).includes('medium'));
+  await pressLabel(tree, 'medium');
   await waitFor(() => labelsOf(tree).includes('Apply'));
   await pressLabel(tree, 'Apply');
 
   expect(sentFrames()).toEqual(
-    expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set', agent: 'general', model: 'opus' })]),
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'agents.model.set', agent: 'general', model: 'opus', effort: 'medium' }),
+    ]),
   );
 
   // The answer is the state the server stored: the detail page shows the pin.
@@ -241,14 +245,20 @@ test('a refused write shows the reason on the page that asked for it', async () 
   await settleAndUnmount(tree);
 });
 
-test('the effort sheet sends agents.effort.set with the chosen level', async () => {
+test('the default model flow walks model then effort, and Apply sends both in one frame', async () => {
   const tree = await boot();
-  await pressLabel(tree, 'Default effort');
-  await waitFor(() => labelsOf(tree).includes('Reasoning effort not set') || labelsOf(tree).includes('Not set'));
-  await pressLabel(tree, 'high');
+  await pressLabel(tree, 'Default model');
+  await waitFor(() => labelsOf(tree).includes('Fast'));
+  await pressLabel(tree, 'Fast');
+  await waitFor(() => labelsOf(tree).includes('medium'));
+  await pressLabel(tree, 'medium');
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
 
   expect(sentFrames()).toEqual(
-    expect.arrayContaining([expect.objectContaining({ type: 'agents.effort.set', level: 'high' })]),
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'agents.model.set', agent: 'global', model: 'fast-1', effort: 'medium' }),
+    ]),
   );
   await settleAndUnmount(tree);
 });

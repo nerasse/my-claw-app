@@ -29,7 +29,9 @@ export interface PickerState {
   trail: PickerStage[];
   /** Staged choices: nothing is sent until the confirm step. */
   model?: string;
-  effort?: string;
+  /** The staged effort: a level, or null for a deliberate "back to default". Absent means the
+   *  effort step was not visited, which is not the same thing. */
+  effort?: string | null;
   context?: number | 'full';
 }
 
@@ -52,7 +54,7 @@ export interface PickerRootOption {
   onPress: () => void;
 }
 
-/** The effort step, or null for a subject that has no effort of its own (an agent pin, a job). */
+/** The effort step: the pin the subject already holds, if any. */
 export interface PickerEffort {
   /** The level in force now, "" when none is set. */
   current: string;
@@ -87,6 +89,7 @@ export function ModelPickerSheet({
   rootOption,
   effort,
   context,
+  skipEffortOnTag = false,
 }: {
   /** Label used in the sheet preview when the user is not inside a group. */
   title: string;
@@ -94,18 +97,25 @@ export function ModelPickerSheet({
   activeId: string;
   state: PickerState;
   onStateChange: (state: PickerState) => void;
-  /** The staged combo, applied in one go from the confirm step. */
-  onCommit: (choice: { model: string; effort?: string; context?: number | 'full' }) => void;
+  /** The staged combo, applied in one go from the confirm step. `effort: null` is a deliberate
+   *  "back to default", distinct from an effort step never visited. */
+  onCommit: (choice: { model: string; effort?: string | null; context?: number | 'full' }) => void;
   onClose: () => void;
   rootOption?: PickerRootOption | null;
   effort?: PickerEffort | null;
   context?: PickerContext | null;
+  /** Config flows (agent, global, job) skip the effort step when the staged model is a tag: the
+   *  tag's own pin always wins, so a scope-level pin would be dead config. The chat keeps the
+   *  step because the session's /effort still sits above the tag. */
+  skipEffortOnTag?: boolean;
 }): React.JSX.Element {
   const { stage, path } = state;
   const activeLabel = models.find(model => model.id === activeId)?.label ?? activeId;
   const stagedModel = state.model ?? activeId;
   const stagedEntry = models.find(model => model.id === stagedModel);
   const stagedLabel = stagedEntry?.label ?? stagedModel;
+  const stagedIsTag = stagedModel.startsWith('tag:');
+  const effortCurrent = effort?.current ?? '';
 
   const effortLevels = effort ? stagedEntry?.effortLevels ?? [] : [];
   const tiers = context
@@ -141,8 +151,12 @@ export function ModelPickerSheet({
     const model = next.model ?? activeId;
     const entry = models.find(option => option.id === model);
     const levels = effort ? entry?.effortLevels ?? [] : [];
+    // A subject that already pins an effort keeps the step even on a model with no levels: the
+    // pin is dead weight there and must stay removable. Only the "default" row is shown then.
+    const effortStep = effort && (levels.length > 0 || effortCurrent !== '');
+    const showEffort = Boolean(effortStep) && !(skipEffortOnTag && model.startsWith('tag:'));
     const ceilings = context ? contextTiers(entry?.context, context.cap, next.context ?? context.current) : [];
-    if (from === 'model' && levels.length > 0) {
+    if (from === 'model' && showEffort) {
       onStateChange({ ...next, stage: 'effort' });
       return;
     }
@@ -186,18 +200,25 @@ export function ModelPickerSheet({
     }
     if (path.length > 0) options.push({ label: '< Back', onPress: back });
   } else if (stage === 'effort') {
-    preview = `Effort for ${stagedLabel} · current: ${effort?.current || 'not set'}`;
+    preview = `Effort for ${stagedLabel} · current: ${effortCurrent || 'default'}`;
     for (const level of effortLevels) {
       options.push({
         label: level,
-        selected: (state.effort ?? effort?.current) === level,
+        selected: (state.effort ?? effortCurrent) === level,
         onPress: () => advance('effort', { effort: level }),
       });
     }
     options.push({
-      label: `Keep current: ${effort?.current || 'not set'}`,
-      onPress: () => advance('effort', { effort: undefined }),
+      label: 'default (inherit)',
+      selected: (state.effort ?? effortCurrent) === '',
+      onPress: () => advance('effort', { effort: null }),
     });
+    if (effortLevels.length > 0) {
+      options.push({
+        label: `Keep current: ${effortCurrent || 'default'}`,
+        onPress: () => advance('effort', { effort: undefined }),
+      });
+    }
     options.push({ label: '< Back', onPress: back });
   } else if (stage === 'context') {
     preview = `Context for ${stagedLabel} · ${contextSummary(stagedEntry?.context, context?.effective)}`;
@@ -214,9 +235,17 @@ export function ModelPickerSheet({
     });
     options.push({ label: '< Back', onPress: back });
   } else {
+    const effortLine =
+      state.effort === null
+        ? 'effort: default'
+        : state.effort !== undefined
+          ? `effort: ${state.effort}`
+          : skipEffortOnTag && stagedIsTag && stagedEntry?.effort
+            ? `effort: ${stagedEntry.effort} (tag pin)`
+            : null;
     const parts = [
       `model: ${stagedLabel}`,
-      state.effort ? `effort: ${state.effort}` : null,
+      effortLine,
       state.context === undefined
         ? null
         : `context: ${state.context === 'full' ? 'full window' : `${state.context} tokens`}`,
@@ -242,7 +271,8 @@ export function ModelPickerSheet({
 /**
  * The model picker of the chat, built from the same list as /model on the other channels: the
  * model, then its effort, then the window this conversation may use. The staged combo is sent
- * on Apply and the server answers with the state it stored.
+ * on Apply and the server answers with the state it stored. The session's /effort sits above a
+ * tag's pin, so the effort step stays even when the staged model is a tag.
  */
 export function ModelSheet({
   threadId,
@@ -278,22 +308,27 @@ export function ModelSheet({
         if (choice.model !== activeModel) {
           connection.send(encodeModelSet(threadId, choice.model)).catch(() => {});
         }
+        // null stages a deliberate clear: the session hands its effort back to the defaults.
         if (choice.effort !== undefined) {
-          connection.send(encodeModelEffortSet(threadId, choice.effort)).catch(() => {});
+          connection.send(encodeModelEffortSet(threadId, choice.effort ?? '')).catch(() => {});
         }
         if (choice.context !== undefined) {
           connection.send(encodeModelContextSet(threadId, choice.context)).catch(() => {});
         }
       }}
       // The default is the one option that exists even when no session does: picking it clears
-      // the override, which is how a conversation is handed back to the server config.
+      // the override and the session effort, which is how a conversation is handed back to the
+      // server config as a whole rather than model and effort one at a time.
       rootOption={
         state.stage === 'model' && state.path.length === 0
           ? {
               label: `Use default (${defaultLabel})`,
               selected: activeModel === catalog.defaultModel || thread === null,
               onPress: () => {
-                if (threadId) connection.send(encodeModelSet(threadId, catalog.defaultModel)).catch(() => {});
+                if (threadId) {
+                  connection.send(encodeModelSet(threadId, catalog.defaultModel)).catch(() => {});
+                  connection.send(encodeModelEffortSet(threadId, '')).catch(() => {});
+                }
                 onClose();
               },
             }

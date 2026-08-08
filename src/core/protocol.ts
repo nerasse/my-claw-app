@@ -194,6 +194,8 @@ export interface ModelOption {
   effortLevels?: string[];
   /** The model's own full context window: the ceiling list is built under it, never above. */
   context?: number;
+  /** For a tag entry: the effort the tag pins, so a config flow can name what applies. */
+  effort?: string;
 }
 
 export interface EffortState {
@@ -452,6 +454,8 @@ export interface JobEntry {
   completedRuns: number;
   deliver: string;
   model?: string;
+  /** The job's own effort pin, the sibling of `model`. */
+  effort?: string;
   workspace?: string;
   skillsMode: JobScopeMode;
   skills?: string[];
@@ -531,6 +535,8 @@ export interface AgentInfo {
   provider?: string;
   /** There is an entry in `agents.<key>.llm`. */
   pinned: boolean;
+  /** The agent's own effort pin, absent when it has none (then the global applies). */
+  effort?: string;
   /** Where the effective default comes from: "global", "orchestrator", or the key itself. */
   inheritsFrom: string;
   skills?: string[] | null;
@@ -1009,17 +1015,21 @@ export function encodeInstructionsSet(
   );
 }
 
-export function encodeAgentsModelSet(agent: string, model: string): string {
-  return JSON.stringify({ type: 'agents.model.set', agent, model });
+/**
+ * Pins the model (and optionally the effort) of an agent, or of the global default when
+ * `agent` is "global". `effort` is "" to remove the pin, a level to set it, and absent to
+ * leave the target's own value alone.
+ */
+export function encodeAgentsModelSet(agent: string, model: string, effort?: string): string {
+  return JSON.stringify(
+    effort === undefined
+      ? { type: 'agents.model.set', agent, model }
+      : { type: 'agents.model.set', agent, model, effort },
+  );
 }
 
 export function encodeAgentsModelClear(agent: string): string {
   return JSON.stringify({ type: 'agents.model.clear', agent });
-}
-
-/** Empty level removes the global effort so model/provider defaults apply again. */
-export function encodeAgentsEffortSet(level: string): string {
-  return JSON.stringify({ type: 'agents.effort.set', level });
 }
 
 export function encodeAgentsScopeSet(
@@ -1131,6 +1141,8 @@ export interface JobFieldsOut {
   schedule: string;
   enabled: boolean;
   model?: string;
+  /** The job's own effort pin; "" clears it so the cron agent's setting applies. */
+  effort?: string;
   workspace?: string;
   skills: JobScope;
   mcp: JobScope;
@@ -1151,6 +1163,8 @@ export function encodeJobsSave(fields: JobFieldsOut): string {
   frame.schedule = fields.schedule;
   frame.enabled = fields.enabled;
   if (fields.model) frame.model = fields.model;
+  // An empty string is a deliberate clear on update, so it must reach the server.
+  if (fields.effort !== undefined) frame.effort = fields.effort;
   if (fields.workspace) frame.workspace = fields.workspace;
   frame.skills = fields.skills;
   frame.mcp = fields.mcp;

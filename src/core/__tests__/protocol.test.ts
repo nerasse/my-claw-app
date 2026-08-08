@@ -1,9 +1,10 @@
 import {
   encodeAgentsConfigGet,
-  encodeAgentsEffortSet,
   encodeAgentsModelClear,
   encodeAgentsModelSet,
   encodeChatSend,
+  encodeJobsSave,
+  encodeModelEffortSet,
   encodeCommandsList,
   encodeFileDelete,
   encodeFilesList,
@@ -90,7 +91,20 @@ describe('encoders', () => {
     expect(JSON.parse(encodeSessionDelete('t'))).toEqual({ type: 'session.delete', threadId: 't' });
     expect(JSON.parse(encodeAgentsConfigGet())).toEqual({ type: 'agents.config.get' });
     expect(JSON.parse(encodeAgentsModelSet('cron', 'opus'))).toEqual({ type: 'agents.model.set', agent: 'cron', model: 'opus' });
+    expect(JSON.parse(encodeAgentsModelSet('global', 'opus', 'high'))).toEqual({
+      type: 'agents.model.set',
+      agent: 'global',
+      model: 'opus',
+      effort: 'high',
+    });
+    expect(JSON.parse(encodeAgentsModelSet('cron', 'opus', ''))).toEqual({
+      type: 'agents.model.set',
+      agent: 'cron',
+      model: 'opus',
+      effort: '',
+    });
     expect(JSON.parse(encodeAgentsModelClear('cron'))).toEqual({ type: 'agents.model.clear', agent: 'cron' });
-    expect(JSON.parse(encodeAgentsEffortSet('high'))).toEqual({ type: 'agents.effort.set', level: 'high' });
+    expect(JSON.parse(encodeModelEffortSet('t', ''))).toEqual({ type: 'model.effort.set', threadId: 't', level: '' });
+    expect(JSON.parse(encodeJobsSave({ name: 'j', prompt: 'p', schedule: 'every 1h', enabled: true, effort: '', skills: { mode: 'inherit' }, mcp: { mode: 'inherit' }, tools: { mode: 'inherit' } }))).toMatchObject({ type: 'jobs.save', effort: '' });
   });
 });

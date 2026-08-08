@@ -89,15 +89,19 @@ export function TagsScreen({
                 <View style={styles.linkMain}>
                   <View style={styles.linkTitleLine}>
                     <Text style={styles.linkTitle}>{tag.name}</Text>
-                    {isDefault(tag) ? <Text style={styles.badge}>default</Text> : null}
                     {tag.effort ? <Text style={styles.badge}>{tag.effort}</Text> : null}
                   </View>
                   <Text style={styles.hint} numberOfLines={1}>
-                    {isDefault(tag)
-                      ? `follows the default model · ${tag.model ? labelOf(tag.model) : ''}`
-                      : `${labelOf(tag.model)} · ${tag.model}${
-                          tag.contextCap === undefined ? '' : ` · cap ${tag.contextCap}`
-                        }`}
+                    {isDefault(tag) ? (
+                      <>
+                        follows the default model · {tag.model ? labelOf(tag.model) : ''}{' '}
+                        <Text style={styles.badge}>default</Text>
+                      </>
+                    ) : (
+                      `${labelOf(tag.model)} · ${tag.model}${
+                        tag.contextCap === undefined ? '' : ` · cap ${tag.contextCap}`
+                      }`
+                    )}
                   </Text>
                 </View>
                 {isDefault(tag) ? null : <Text style={styles.linkGlyph}>›</Text>}
