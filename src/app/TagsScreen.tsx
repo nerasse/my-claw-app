@@ -74,66 +74,65 @@ export function TagsScreen({
 
       {tags ? (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
-            {tags.map((tag, index) => (
-              <View key={tag.name}>
-                {index > 0 ? <View style={styles.separator} /> : null}
-                <Pressable
-                  style={[styles.row, styles.link]}
-                  onPress={() => {
-                    if (!isDefault(tag)) onEditTag(tag.name);
-                  }}
-                  disabled={isDefault(tag)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open tag ${tag.name}`}>
-                  <View style={styles.linkMain}>
-                    <View style={styles.linkTitleLine}>
-                      <Text style={styles.linkTitle}>{tag.name}</Text>
-                      {isDefault(tag) ? <Text style={styles.badge}>default</Text> : null}
-                      {tag.effort ? <Text style={styles.badge}>{tag.effort}</Text> : null}
-                    </View>
-                    <Text style={styles.hint} numberOfLines={1}>
-                      {isDefault(tag)
-                        ? `follows the default model · ${tag.model ? labelOf(tag.model) : ''}`
-                        : `${labelOf(tag.model)} · ${tag.model}${
-                            tag.contextCap === undefined ? '' : ` · cap ${tag.contextCap}`
-                          }`}
-                    </Text>
+          {tags.map(tag => (
+            // One tag is one card: the actions footer sits visibly inside the same unit, so
+            // the next tag's card can never be mistaken for this tag's settings.
+            <View key={tag.name} style={styles.card}>
+              <Pressable
+                style={[styles.row, styles.link]}
+                onPress={() => {
+                  if (!isDefault(tag)) onEditTag(tag.name);
+                }}
+                disabled={isDefault(tag)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open tag ${tag.name}`}>
+                <View style={styles.linkMain}>
+                  <View style={styles.linkTitleLine}>
+                    <Text style={styles.linkTitle}>{tag.name}</Text>
+                    {isDefault(tag) ? <Text style={styles.badge}>default</Text> : null}
+                    {tag.effort ? <Text style={styles.badge}>{tag.effort}</Text> : null}
                   </View>
-                  {isDefault(tag) ? null : <Text style={styles.linkGlyph}>›</Text>}
-                </Pressable>
-                {isDefault(tag) ? null : (
-                  <>
-                    <View style={styles.separator} />
-                    <View style={styles.subRow}>
-                      <Pressable
-                        style={styles.subLink}
-                        onPress={() => onOpenContextCap(tag.name)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Context cap for tag ${tag.name}`}>
-                        <Text style={styles.rowKey}>context cap</Text>
-                        <Text style={styles.rowValue} numberOfLines={1}>
-                          {tag.contextCap === undefined
-                            ? 'agent/global setting'
-                            : tag.contextCap === 0
-                              ? 'no ceiling'
-                              : `${tag.contextCap} tokens`}
-                        </Text>
-                        <Text style={styles.linkGlyph}>›</Text>
-                      </Pressable>
-                      <Pressable
-                        style={styles.deleteLink}
-                        onPress={() => onDeleteTag(tag.name)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Delete tag ${tag.name}`}>
-                        <Text style={styles.deleteText}>delete</Text>
-                      </Pressable>
-                    </View>
-                  </>
-                )}
-              </View>
-            ))}
-          </View>
+                  <Text style={styles.hint} numberOfLines={1}>
+                    {isDefault(tag)
+                      ? `follows the default model · ${tag.model ? labelOf(tag.model) : ''}`
+                      : `${labelOf(tag.model)} · ${tag.model}${
+                          tag.contextCap === undefined ? '' : ` · cap ${tag.contextCap}`
+                        }`}
+                  </Text>
+                </View>
+                {isDefault(tag) ? null : <Text style={styles.linkGlyph}>›</Text>}
+              </Pressable>
+              {isDefault(tag) ? null : (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.footer}>
+                    <Pressable
+                      style={styles.footerLink}
+                      onPress={() => onOpenContextCap(tag.name)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Context cap for tag ${tag.name}`}>
+                      <Text style={styles.footerKey}>context cap</Text>
+                      <Text style={styles.footerValue} numberOfLines={1}>
+                        {tag.contextCap === undefined
+                          ? 'agent/global setting'
+                          : tag.contextCap === 0
+                            ? 'no ceiling'
+                            : `${tag.contextCap} tokens`}
+                      </Text>
+                      <Text style={styles.linkGlyph}>›</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.deleteLink}
+                      onPress={() => onDeleteTag(tag.name)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete tag ${tag.name}`}>
+                      <Text style={styles.deleteText}>delete</Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </View>
+          ))}
         </ScrollView>
       ) : null}
     </View>
@@ -171,7 +170,7 @@ const createStyles = (palette: Palette) => ({
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  body: { padding: space.md, paddingBottom: space.xl },
+  body: { padding: space.md, gap: space.md, paddingBottom: space.xl },
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -192,17 +191,18 @@ const createStyles = (palette: Palette) => ({
   linkTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   linkGlyph: { fontSize: 20, color: palette.textFaint },
   hint: { fontSize: font.small, color: palette.textMuted },
-  separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
-  subRow: {
+  divider: { height: 1, backgroundColor: palette.border },
+  footer: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
     paddingHorizontal: space.md,
-    paddingBottom: space.sm,
+    paddingVertical: space.sm,
+    backgroundColor: palette.surfaceAlt,
   },
-  subLink: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
-  rowKey: { fontSize: font.small, color: palette.textMuted, minWidth: 84 },
-  rowValue: { flex: 1, fontSize: font.small, color: palette.text },
+  footerLink: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  footerKey: { fontSize: font.small, color: palette.textMuted, minWidth: 84 },
+  footerValue: { flex: 1, fontSize: font.small, color: palette.text },
   deleteLink: { paddingHorizontal: space.sm, paddingVertical: 4 },
   deleteText: { fontSize: font.small, color: palette.danger },
   error: { padding: space.md, color: palette.danger },
