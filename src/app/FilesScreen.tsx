@@ -212,14 +212,14 @@ function createStyles(palette: Palette) {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       gap: space.md,
-      paddingVertical: space.sm,
+      paddingVertical: space.md,
       borderBottomWidth: 1,
       borderBottomColor: palette.border,
     },
     thumb: {
-      width: 44,
-      height: 44,
-      borderRadius: radius.sm,
+      width: 56,
+      height: 56,
+      borderRadius: radius.md,
       backgroundColor: palette.surfaceAlt,
     },
     thumbLabel: {
@@ -227,7 +227,7 @@ function createStyles(palette: Palette) {
       justifyContent: 'center' as const,
     },
     thumbLabelText: {
-      fontSize: font.micro,
+      fontSize: font.small,
       color: palette.textFaint,
       fontWeight: '700' as const,
     },
