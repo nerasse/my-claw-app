@@ -457,6 +457,7 @@ const createStyles = (palette: Palette) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
+    paddingHorizontal: space.md,
     paddingBottom: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
