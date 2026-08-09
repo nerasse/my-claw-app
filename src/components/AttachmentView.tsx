@@ -33,6 +33,9 @@ export function AttachmentView({
     ? `${mediaBase}/media/${att.id}?device=${deviceInfo.deviceId}&token=${deviceInfo.token}`
     : '';
   const uri = att.uri ?? remote;
+  // The server generates a preview frame for videos; without one the stage would stay black
+  // until play. The thumbnail request is per-id, cached server-side after the first fetch.
+  const thumbUri = att.type === 'video' && remote ? `${remote}&thumb=1` : undefined;
   const name = att.filename ?? att.type;
   // Everything reachable opens something: previews where there is one, a download card else.
   // A deleted attachment has nothing left to open.
@@ -61,9 +64,19 @@ export function AttachmentView({
               accessibilityLabel={name}
             />
           ) : (
-            <View style={styles.play}>
-              <PlayPauseIcon playing={false} size={44} color="#fff" />
-            </View>
+            <>
+              {thumbUri ? (
+                <Image
+                  source={{ uri: thumbUri }}
+                  style={styles.image}
+                  resizeMode="cover"
+                  accessibilityLabel={name}
+                />
+              ) : null}
+              <View style={styles.play}>
+                <PlayPauseIcon playing={false} size={44} color="#fff" />
+              </View>
+            </>
           )}
         </View>
         <Text style={[styles.caption, onAccent && styles.captionOnAccent]} numberOfLines={1}>
@@ -116,10 +129,14 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   play: {
+    position: 'absolute' as const,
+    top: '50%' as const,
+    left: '50%' as const,
+    transform: [{ translateX: -28 }, { translateY: -28 }],
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
