@@ -180,6 +180,17 @@ test('the tag flow walks model, effort and window, then applies one upsert', asy
   await settleAndUnmount(tree);
 });
 
+test('the tag model picker offers no tag entries: a tag cannot pin a tag', async () => {
+  const tree = await bootToTagsPage();
+  await pressLabel(tree, 'Open tag opus');
+  await waitFor(() => labelsOf(tree).includes('Fast'));
+  // The catalog carries tag:Default and tag:opus, but the editor must not offer them: a tag
+  // pinning a tag reference is how cycles are born (the server refuses those writes).
+  const labels = labelsOf(tree);
+  expect(labels).not.toEqual(expect.arrayContaining(['Tags ›', 'Default', 'opus']));
+  await settleAndUnmount(tree);
+});
+
 test('a pinned effort can go back to default from the effort step', async () => {
   const tree = await bootToTagsPage();
   // The opus fixture pins effort high; the flow must offer a way back to an absent pin.

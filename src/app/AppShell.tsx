@@ -313,7 +313,9 @@ function TagEditorPage({
     <ModelPickerPage
       title={`Tag ${name}`}
       backLabel="Back to the tags list"
-      models={catalog.models}
+      // No tag entries: a tag pinning a tag reference is how cycles are born (self-pins crash
+      // the server's resolver). Real provider models only; agents may still pin tags elsewhere.
+      models={catalog.models.filter(model => !model.id.startsWith('tag:'))}
       activeId={tag?.model ?? ''}
       state={state}
       onStateChange={onStateChange}
