@@ -3,7 +3,7 @@ import { StyleSheet, useColorScheme } from 'react-native';
 import { darkPalette, lightPalette, type Palette } from './palettes';
 import type { ThemeMode } from '../core/prefs';
 
-export { space, radius, font, DRAWER_WIDTH, lineHeightFor } from './palettes';
+export { space, radius, font, DRAWER_WIDTH, lineHeightFor, lineBoxFor } from './palettes';
 export type { Palette } from './palettes';
 
 export interface Theme {

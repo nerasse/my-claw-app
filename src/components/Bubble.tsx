@@ -4,7 +4,7 @@ import type { TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
-import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
 function clock(ts: number): string {
   const date = new Date(ts);
@@ -61,13 +61,19 @@ export function Bubble({
           agent && !item.command ? (
             <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
           ) : (
-            <Text selectable style={[styles.text, item.command ? styles.textCommand : styles.textUser]}>
+            <Text
+              selectable
+              style={[
+                styles.text,
+                item.command ? styles.textCommand : styles.textUser,
+                lineBoxFor(font.body, item.text),
+              ]}>
               {item.text}
               {item.streaming ? '▍' : ''}
             </Text>
           )
         ) : item.streaming ? (
-          <Text style={[styles.text, agent ? null : styles.textUser]}>▍</Text>
+          <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(font.body) }]}>▍</Text>
         ) : null}
 
         {item.error ? (
@@ -110,7 +116,8 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.border,
     maxWidth: '95%' as const,
   },
-  text: { fontSize: font.body, lineHeight: lineHeightFor(font.body), color: palette.text },
+  // The line box is stated at the call site: a message carrying an emoji must not pin it.
+  text: { fontSize: font.body, color: palette.text },
   textUser: { color: palette.accentText },
   // Command output keeps its line breaks: /status is a table, not prose.
   textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: font.small },

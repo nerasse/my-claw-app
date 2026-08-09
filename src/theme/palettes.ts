@@ -108,4 +108,26 @@ export function lineHeightFor(fontSize: number): number {
   return Math.round(fontSize * 1.5);
 }
 
+/** Anything the platform draws from the colour emoji font rather than the Latin face. */
+const PICTOGRAPHIC = /\p{Extended_Pictographic}/u;
+
+/**
+ * The line box for a run of text, left unpinned when that run carries an emoji.
+ *
+ * An explicit lineHeight installs RN's CustomLineHeightSpan, which sizes the line solely from
+ * the first available font -- the Latin face -- and then clamps the first and last line to that
+ * box (`fm.top = fm.ascent`, `fm.bottom = fm.descent`). Interior lines stay loose, so a tall
+ * glyph may overflow them and still be drawn; the outer two may not. An emoji that wraps onto a
+ * line of its own at the end of a message therefore loses its bottom, with no Latin glyph beside
+ * it to hold the box open.
+ *
+ * Raising the ratio barely helps: half the leading is floored into the descent, so at 14sp the
+ * box has to reach 25pt to buy two pixels. Dropping the pin instead lets Android measure the
+ * line from the fonts it actually used, which is the only way the emoji gets its full height.
+ * Lines lose the 1.5x rhythm, which is the price of showing the glyph at all.
+ */
+export function lineBoxFor(fontSize: number, text: string): { lineHeight?: number } {
+  return PICTOGRAPHIC.test(text) ? {} : { lineHeight: lineHeightFor(fontSize) };
+}
+
 export const DRAWER_WIDTH = 288;

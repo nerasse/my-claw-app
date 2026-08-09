@@ -1,13 +1,18 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
-import { font, lineHeightFor, space, useTheme, type Palette } from '../theme';
+import { font, lineBoxFor, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
-export function markedStyles(palette: Palette): MarkedStyles {
+/**
+ * @param prose The message being rendered: a run carrying an emoji must not pin its line box,
+ * or the glyph is clamped away on the first or last line. See lineBoxFor.
+ */
+export function markedStyles(palette: Palette, prose = ''): MarkedStyles {
+  const box = lineBoxFor(font.body, prose);
   return {
     // Inline runs sit in the row that a list item builds (bullet, then content), so they must
     // yield width there or a long item would push its own line off the bubble.
-    text: { fontSize: font.body, color: palette.text, lineHeight: lineHeightFor(font.body), flexShrink: 1 },
+    text: { fontSize: font.body, color: palette.text, ...box, flexShrink: 1 },
     paragraph: { marginVertical: 2, flexShrink: 0 },
     strong: { fontWeight: '700', color: palette.text },
     em: { fontStyle: 'italic' },
@@ -36,7 +41,7 @@ export function markedStyles(palette: Palette): MarkedStyles {
     },
     hr: { marginVertical: space.sm, borderBottomColor: palette.border },
     list: { marginVertical: 2, flexShrink: 0 },
-    li: { fontSize: font.body, color: palette.text, lineHeight: lineHeightFor(font.body) },
+    li: { fontSize: font.body, color: palette.text, ...box },
     table: { marginVertical: space.xs, flexShrink: 0 },
     tableRow: { borderBottomWidth: 1, borderBottomColor: palette.border },
     tableCell: { padding: space.xs, borderWidth: 1, borderColor: palette.border },
@@ -47,8 +52,20 @@ export function markedStyles(palette: Palette): MarkedStyles {
 // The default renderer puts code blocks in a horizontal ScrollView (lines never wrap and the
 // block looks cut on a phone). Chat bubbles render better with wrapped monospace text.
 class WrappingRenderer extends Renderer {
-  constructor(private codeColor: string) {
+  constructor(
+    private codeColor: string,
+    private typography: TextStyle,
+  ) {
     super();
+  }
+
+  // A paragraph's inline runs are wrapped in a Text node that react-native-marked styles with
+  // `{}`, dropping the sheet it was handed (Parser.getNormalizedSiblingNodesForBlockAndInline-
+  // Tokens). Restating it keeps the wrapper on the same typography as the spans it holds. Only
+  // typography: flexShrink belongs to the row a list item builds, and on this node -- a child of
+  // the paragraph's column -- it would govern height and let the prose be crushed again.
+  text(children: string | React.ReactNode[], styles?: TextStyle): React.ReactNode {
+    return super.text(children, { ...this.typography, ...styles });
   }
 
   code(text: string, _language?: string, containerStyle?: ViewStyle, textStyle?: TextStyle) {
@@ -64,8 +81,16 @@ class WrappingRenderer extends Renderer {
 
 export function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   const { palette } = useTheme();
-  const renderer = useMemo(() => new WrappingRenderer(palette.text), [palette.text]);
-  const mdStyles = useMemo(() => markedStyles(palette), [palette]);
+  const mdStyles = useMemo(() => markedStyles(palette, text), [palette, text]);
+  const renderer = useMemo(
+    () =>
+      new WrappingRenderer(palette.text, {
+        fontSize: font.body,
+        color: palette.text,
+        ...lineBoxFor(font.body, text),
+      }),
+    [palette.text, text],
+  );
   const elements = useMarkdown(text, { styles: mdStyles, renderer });
   return <View style={styles.wrap}>{elements}</View>;
 }
