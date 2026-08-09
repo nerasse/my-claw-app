@@ -8,9 +8,9 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Markdown from 'react-native-marked';
 import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { formatBytes } from '../core/utils';
+import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -108,22 +108,7 @@ export function TextViewer({
       {content !== null ? (
         <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
           {isMarkdown ? (
-            <Markdown
-              value={content}
-              styles={{
-                text: { color: palette.text, fontSize: font.body, lineHeight: 22 },
-                link: { color: palette.accent },
-                h1: { color: palette.text, fontSize: font.screen },
-                h2: { color: palette.text, fontSize: font.title },
-                h3: { color: palette.text, fontSize: font.body },
-                blockquote: {
-                  borderLeftColor: palette.border,
-                  backgroundColor: palette.surfaceAlt,
-                },
-                codespan: { color: palette.accent, backgroundColor: palette.surfaceAlt },
-                code: { backgroundColor: palette.surfaceAlt },
-              }}
-            />
+            <DocumentMarkdown value={content} />
           ) : (
             <Text style={styles.plainText} selectable>
               {content}

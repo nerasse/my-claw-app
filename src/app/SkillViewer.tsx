@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Markdown from 'react-native-marked';
 import { splitSkillDoc } from '../core/skills';
 import type { SkillEntry } from '../core/protocol';
+import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -88,22 +88,7 @@ export function SkillViewer({
             {doc.meta.description ? (
               <Text style={styles.lede}>{doc.meta.description}</Text>
             ) : null}
-            <Markdown
-              value={doc.body}
-              styles={{
-                text: { color: palette.text, fontSize: font.body, lineHeight: 22 },
-                link: { color: palette.accent },
-                h1: { color: palette.text, fontSize: font.screen },
-                h2: { color: palette.text, fontSize: font.title },
-                h3: { color: palette.text, fontSize: font.body },
-                blockquote: {
-                  borderLeftColor: palette.border,
-                  backgroundColor: palette.surfaceAlt,
-                },
-                codespan: { color: palette.accent, backgroundColor: palette.surfaceAlt },
-                code: { backgroundColor: palette.surfaceAlt },
-              }}
-            />
+            <DocumentMarkdown value={doc.body} />
           </ScrollView>
           {indicator}
         </View>
