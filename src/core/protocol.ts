@@ -39,6 +39,21 @@ export interface ChatMessageFrame {
   run?: string;
 }
 
+/** A run started answering on a thread: the Stop button stays until the matching end. */
+export interface RunStartFrame {
+  type: 'chat.run.start';
+  threadId: string;
+  run?: string;
+}
+
+/** A run finished on a thread. `aborted` is a Stop from any surface; `error` is a failed run. */
+export interface RunEndFrame {
+  type: 'chat.run.end';
+  threadId: string;
+  reason: 'done' | 'aborted' | 'error';
+  run?: string;
+}
+
 export interface StreamStartFrame {
   type: 'chat.stream.start';
   id: string;
@@ -111,6 +126,8 @@ export interface SessionSummary {
   lastActiveAt: string;
   /** Filed away by the owner: shown in the archived list instead of the drawer, never deleted. */
   archived?: boolean;
+  /** A run is answering on this thread right now: the app keeps the Stop button visible. */
+  activeRun?: boolean;
 }
 
 export interface CommandsListResultFrame {
@@ -742,6 +759,8 @@ export interface NotificationsInfoFrame {
 
 export type ServerFrame =
   | ChatMessageFrame
+  | RunStartFrame
+  | RunEndFrame
   | StreamStartFrame
   | StreamDeltaFrame
   | StreamDoneFrame
@@ -781,6 +800,8 @@ export type ServerFrame =
 
 const FRAME_TYPES = new Set([
   'chat.message',
+  'chat.run.start',
+  'chat.run.end',
   'chat.stream.start',
   'chat.stream.delta',
   'chat.stream.done',

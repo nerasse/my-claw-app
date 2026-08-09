@@ -261,14 +261,22 @@ test('chat.cleared empties the thread on the server word', async () => {
   await settleAndUnmount(tree);
 });
 
-test('a streaming run turns the send arrow into Stop', async () => {
+test('a run keeps Stop visible across tool calls and until it ends', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
+    chatStore.startRun(THREAD);
     chatStore.startStream(THREAD, 's1', 'u1');
     chatStore.appendDelta(THREAD, 's1', 'one ');
   });
   await waitFor(() => labelsOf(tree).includes('Stop generating'));
   expect(labelsOf(tree)).not.toContain('Send message');
+
+  // The bubble seals while a tool runs: the button must survive it.
+  await ReactTestRenderer.act(async () => {
+    chatStore.endStream(THREAD, 's1');
+    chatStore.addToolCall(THREAD, { id: 'c1', name: 'bash', args: {}, ok: true, output: 'out', truncated: false });
+  });
+  await waitFor(() => labelsOf(tree).includes('Stop generating'));
 
   await pressLabel(tree, 'Stop generating');
   await waitFor(() =>
@@ -276,7 +284,7 @@ test('a streaming run turns the send arrow into Stop', async () => {
   );
 
   await ReactTestRenderer.act(async () => {
-    chatStore.endStream(THREAD, 's1');
+    chatStore.endRun(THREAD);
   });
   await waitFor(() => !labelsOf(tree).includes('Stop generating'));
 

@@ -101,7 +101,7 @@ export function ChatScreen({
   onCommandEntered: (command: string) => boolean;
   /** A submitted /tag text was handled natively; true keeps it out of the wire. */
   onTagCommand?: (text: string) => boolean;
-  /** A run is streaming into this thread: the composer offers Stop instead of Send. */
+  /** A run is answering on this thread (streaming or between tools): the composer offers Stop. */
   streaming: boolean;
   onStop: () => void;
   /** Wire /new: starts a fresh conversation, like the + button. */

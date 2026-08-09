@@ -20,6 +20,8 @@ describe('parseServerFrame', () => {
   test('accepts every frame the server can send', () => {
     const frames = [
       { type: 'chat.message', id: 'a', text: 'x', threadId: 't', attachments: [] },
+      { type: 'chat.run.start', threadId: 't' },
+      { type: 'chat.run.end', threadId: 't', reason: 'aborted' },
       { type: 'chat.stream.start', id: 'a', threadId: 't' },
       { type: 'chat.stream.delta', id: 'a', threadId: 't', text: 'x' },
       { type: 'chat.stream.done', id: 'a', threadId: 't' },

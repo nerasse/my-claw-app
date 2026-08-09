@@ -21,6 +21,7 @@ import { connection } from '../core/connection';
 import {
   chatStore,
   useChatItems,
+  useActiveRun,
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
@@ -502,7 +503,9 @@ export function AppShell(): React.JSX.Element {
   const agentsFile = useAgentsFile();
   const instructions = useInstructions();
   const agentsConfig = agentsState.config;
-  const streaming = items.some(item => item.kind === 'text' && item.streaming);
+  // The Stop button is pinned to the run, not to a streaming bubble: it survives tool calls
+  // and model turns, and only disappears when the run itself ends.
+  const streaming = useActiveRun(activeThread);
 
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.
@@ -670,6 +673,12 @@ export function AppShell(): React.JSX.Element {
           );
           noteActivity(frame.threadId, frame.text);
           break;
+        case 'chat.run.start':
+          chatStore.startRun(frame.threadId);
+          break;
+        case 'chat.run.end':
+          chatStore.endRun(frame.threadId);
+          break;
         case 'chat.stream.start':
           chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
           noteActivity(frame.threadId, '');
@@ -696,6 +705,9 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'session.list.result':
           sessionStore.replace(frame.sessions);
+          // The server's run view survives a reconnect mid-run: flags it missed (or lost)
+          // come back through the list, so the Stop button reappears without a new token.
+          chatStore.seedRuns(frame.sessions.filter(session => session.activeRun).map(session => session.threadId));
           // Land straight in a conversation instead of an empty screen, but never in one the
           // owner filed away: those are only reached from the archived list.
           if (!activeThreadRef.current) {

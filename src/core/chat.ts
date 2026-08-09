@@ -38,6 +38,8 @@ function textOf(entry: HistoryEntry): string {
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
   private streams = new Map<string, string>();
+  /** Threads with a run in flight on the server: drives the Stop button across the whole run. */
+  private activeRuns = new Set<string>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
   private listeners = new Set<Listener>();
@@ -63,6 +65,33 @@ class ChatStoreImpl {
 
   isUnread(threadId: string): boolean {
     return this.unread.has(threadId);
+  }
+
+  /** A run is answering on this thread right now, streaming or between tool calls. */
+  hasActiveRun(threadId: string): boolean {
+    return this.activeRuns.has(threadId);
+  }
+
+  startRun(threadId: string): void {
+    if (this.activeRuns.has(threadId)) return;
+    this.activeRuns.add(threadId);
+    this.emit();
+  }
+
+  endRun(threadId: string): void {
+    if (!this.activeRuns.delete(threadId)) return;
+    this.emit();
+  }
+
+  /**
+   * Syncs the run flags with the server's own view (session list). Replaces, not merges: a
+   * run the server no longer lists is over, even if its end frame was lost to a disconnect.
+   */
+  seedRuns(threadIds: string[]): void {
+    const next = new Set(threadIds);
+    if (next.size === this.activeRuns.size && [...next].every(id => this.activeRuns.has(id))) return;
+    this.activeRuns = next;
+    this.emit();
   }
 
   markUnread(threadId: string): void {
@@ -231,6 +260,7 @@ class ChatStoreImpl {
 
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
+    this.activeRuns.delete(threadId);
     if (this.unread.delete(threadId)) this.refreshUnread();
     this.emit();
   }
@@ -238,6 +268,7 @@ class ChatStoreImpl {
   clearAll(): void {
     this.threads.clear();
     this.streams.clear();
+    this.activeRuns.clear();
     this.unread.clear();
     this.unreadSnapshot = EMPTY_THREADS;
     this.emit();
@@ -287,6 +318,11 @@ const subscribeToChat = (listener: Listener): (() => void) => chatStore.subscrib
 
 export function useChatItems(threadId: string | null): ChatItem[] {
   const snapshot = useCallback(() => (threadId ? chatStore.getItems(threadId) : EMPTY_ITEMS), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+export function useActiveRun(threadId: string | null): boolean {
+  const snapshot = useCallback(() => (threadId ? chatStore.hasActiveRun(threadId) : false), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 

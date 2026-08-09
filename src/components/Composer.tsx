@@ -66,7 +66,7 @@ export function Composer({
   /** A finished voice note. Absent means the composer offers no microphone at all. */
   onRecorded?: (recording: VoiceRecording) => void;
   onRecordingError?: (message: string) => void;
-  /** A run is streaming into the conversation: the send arrow becomes Stop. */
+  /** A run is answering in the conversation: the send arrow becomes Stop. */
   streaming?: boolean;
   onStop?: () => void;
 }): React.JSX.Element {

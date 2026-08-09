@@ -100,6 +100,39 @@ describe('chatStore.seedHistory', () => {
   });
 });
 
+describe('chatStore run lifecycle', () => {
+  test('a run is active until its matching end, and only for its own thread', () => {
+    chatStore.startRun(THREAD);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(true);
+    expect(chatStore.hasActiveRun('other')).toBe(false);
+
+    chatStore.endRun(THREAD);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+  });
+
+  test('an end without a start is a no-op', () => {
+    chatStore.endRun(THREAD);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+  });
+
+  test('the run flag survives tool calls: nothing clears it but the end frame', () => {
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.addToolCall(THREAD, { id: 'c1', name: 'bash', args: {}, ok: true, output: 'out', truncated: false });
+    expect(chatStore.hasActiveRun(THREAD)).toBe(true);
+  });
+
+  test('seedRuns replaces the view with the server list', () => {
+    chatStore.startRun(THREAD);
+    chatStore.seedRuns([]);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+
+    chatStore.seedRuns([THREAD]);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(true);
+  });
+});
+
 describe('chatStore unread', () => {
   test('unread snapshot keeps its identity between changes', () => {
     const empty = chatStore.getUnreadThreads();
