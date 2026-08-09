@@ -196,6 +196,8 @@ export interface ModelOption {
   context?: number;
   /** For a tag entry: the effort the tag pins, so a config flow can name what applies. */
   effort?: string;
+  /** Whether the model accepts image input; the fallback picker only offers vision-capable ones. */
+  vision?: boolean;
 }
 
 export interface EffortState {
@@ -588,6 +590,8 @@ export interface AgentsConfigResultFrame {
   defaultEffort: string;
   /** Levels on offer for the global effort, in canonical order. */
   effortLevels: string[];
+  /** The vision fallback model ("" when none): what image runs reroute to when the model can't take them. */
+  fallback: string;
   providers: ProviderInfo[];
   agents: AgentInfo[];
 }
@@ -1030,6 +1034,11 @@ export function encodeAgentsModelSet(agent: string, model: string, effort?: stri
 
 export function encodeAgentsModelClear(agent: string): string {
   return JSON.stringify({ type: 'agents.model.clear', agent });
+}
+
+/** Pins the vision fallback model; "" removes the pin. */
+export function encodeAgentsFallbackSet(model: string): string {
+  return JSON.stringify({ type: 'agents.fallback.set', model });
 }
 
 export function encodeAgentsScopeSet(

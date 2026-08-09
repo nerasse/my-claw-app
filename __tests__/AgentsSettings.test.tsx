@@ -83,6 +83,7 @@ function agentsConfig(over: Record<string, unknown> = {}): Record<string, unknow
     defaultModel: 'fast-1',
     defaultEffort: '',
     effortLevels: ['low', 'medium', 'high'],
+    fallback: '',
     providers: [],
     agents: [
       {
@@ -125,7 +126,7 @@ async function boot(): Promise<Tree> {
     type: 'model.list.result',
     models: [
       { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'] },
-      { id: 'opus', label: 'Opus', group: 'Claude', effortLevels: ['low', 'medium', 'high'] },
+      { id: 'opus', label: 'Opus', group: 'Claude', effortLevels: ['low', 'medium', 'high'], vision: true },
     ],
     defaultModel: 'fast-1',
   });
@@ -259,6 +260,46 @@ test('the default model flow walks model then effort, and Apply sends both in on
     expect.arrayContaining([
       expect.objectContaining({ type: 'agents.model.set', agent: 'global', model: 'fast-1', effort: 'medium' }),
     ]),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('the fallback row opens a picker limited to vision models and Apply pins it', async () => {
+  const tree = await boot();
+  await emit(
+    agentsConfig({
+      fallback: 'opus',
+    }),
+  );
+  await pressLabel(tree, 'Fallback model');
+  // Only vision-capable models are on offer: Opus is, the text-only Fast is not.
+  await waitFor(() => labelsOf(tree).includes('Claude ›'));
+  expect(labelsOf(tree)).not.toContain('Fast');
+  await pressLabel(tree, 'Claude ›');
+  await waitFor(() => labelsOf(tree).includes('Opus'));
+  await pressLabel(tree, 'Opus');
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  await pressLabel(tree, 'Apply');
+
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'agents.fallback.set', model: 'opus' })]),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('the fallback root option removes the pin with an empty frame', async () => {
+  const tree = await boot();
+  await emit(
+    agentsConfig({
+      fallback: 'opus',
+    }),
+  );
+  await pressLabel(tree, 'Fallback model');
+  await waitFor(() => labelsOf(tree).includes('No fallback'));
+  await pressLabel(tree, 'No fallback');
+
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'agents.fallback.set', model: '' })]),
   );
   await settleAndUnmount(tree);
 });

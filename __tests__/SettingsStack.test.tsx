@@ -81,6 +81,7 @@ function agentsConfig(): Record<string, unknown> {
     type: 'agents.config.result',
     defaultModel: 'fast-1',
     defaultEffort: '',
+    fallback: '',
     effortLevels: ['low', 'medium', 'high'],
     providers: [],
     agents: [

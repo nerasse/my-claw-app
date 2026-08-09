@@ -40,6 +40,7 @@ export function AgentsSettingsScreen({
   error,
   onBack,
   onOpenDefaultModel,
+  onOpenFallback,
   onOpenProviders,
   onOpenTags,
   onOpenAgent,
@@ -50,6 +51,7 @@ export function AgentsSettingsScreen({
   error: string | null;
   onBack: () => void;
   onOpenDefaultModel: () => void;
+  onOpenFallback: () => void;
   onOpenProviders: () => void;
   onOpenTags: () => void;
   onOpenAgent: (key: string) => void;
@@ -108,6 +110,24 @@ export function AgentsSettingsScreen({
                       : config.defaultProvider
                         ? `${config.defaultModel} · provider ${config.defaultProvider}`
                         : 'what every agent falls back to'}
+                  </Text>
+                </View>
+                <Text style={styles.linkGlyph}>›</Text>
+              </Pressable>
+              <View style={styles.separator} />
+              <Pressable
+                style={[styles.row, styles.link]}
+                onPress={onOpenFallback}
+                accessibilityRole="button"
+                accessibilityLabel="Fallback model">
+                <View style={styles.linkMain}>
+                  <Text style={styles.linkTitle}>
+                    {config.fallback ? labelOf(config.fallback) : 'Fallback model'}
+                  </Text>
+                  <Text style={styles.hint} numberOfLines={1}>
+                    {config.fallback
+                      ? `image runs switch to it when ${labelOf(config.defaultModel)} can't take images`
+                      : 'what image runs switch to when the model cannot take images'}
                   </Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
