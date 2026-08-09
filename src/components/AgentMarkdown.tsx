@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
+import { isDangerousHtml } from '../core/markdownSafe';
 import { font, lineBoxFor, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
 /**
@@ -66,6 +67,11 @@ class WrappingRenderer extends Renderer {
   // the paragraph's column -- it would govern height and let the prose be crushed again.
   text(children: string | React.ReactNode[], styles?: TextStyle): React.ReactNode {
     return super.text(children, { ...this.typography, ...styles });
+  }
+
+  html(text: string | React.ReactNode[], styles?: TextStyle): React.ReactNode {
+    if (typeof text === 'string' && isDangerousHtml(text)) return null;
+    return super.html(text, styles);
   }
 
   code(text: string, _language?: string, containerStyle?: ViewStyle, textStyle?: TextStyle) {
