@@ -38,6 +38,9 @@ function textOf(entry: HistoryEntry): string {
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
   private streams = new Map<string, string>();
+  /** The id of the bubble a thread's answer is streaming into; the media delivery that ends
+   *  the answer lands on it instead of opening a second bubble. */
+  private lastStream = new Map<string, string>();
   /** Threads with a run in flight on the server: drives the Stop button across the whole run. */
   private activeRuns = new Set<string>();
   private unread = new Set<string>();
@@ -192,6 +195,7 @@ class ChatStoreImpl {
   startStream(threadId: string, id: string, replyToId?: string): void {
     if (this.streams.has(id)) return;
     this.streams.set(id, '');
+    this.lastStream.set(threadId, id);
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
     this.append(threadId, {
       kind: 'text',
@@ -241,6 +245,16 @@ class ChatStoreImpl {
   }
 
   addAgentMessage(threadId: string, id: string, text: string, attachments: AttachmentMeta[], replyToId?: string): void {
+    // The server streams the answer, then delivers the media as a message of its own with no
+    // text. As its own bubble, the image would sit apart from the words that go with it;
+    // it belongs under the text that was just streamed.
+    if (!text.trim() && attachments.length > 0) {
+      const streamId = this.lastStream.get(threadId);
+      if (streamId && this.getItems(threadId).some(item => item.kind === 'text' && item.id === streamId)) {
+        this.patch(threadId, streamId, { attachments });
+        return;
+      }
+    }
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
     this.append(threadId, {
       kind: 'text',
@@ -261,6 +275,7 @@ class ChatStoreImpl {
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
     this.activeRuns.delete(threadId);
+    this.lastStream.delete(threadId);
     if (this.unread.delete(threadId)) this.refreshUnread();
     this.emit();
   }
@@ -268,6 +283,7 @@ class ChatStoreImpl {
   clearAll(): void {
     this.threads.clear();
     this.streams.clear();
+    this.lastStream.clear();
     this.activeRuns.clear();
     this.unread.clear();
     this.unreadSnapshot = EMPTY_THREADS;

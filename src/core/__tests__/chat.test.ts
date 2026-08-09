@@ -52,6 +52,42 @@ describe('chatStore streaming', () => {
   });
 });
 
+describe('chatStore attachment merge', () => {
+  const image = { id: 'm1', type: 'image' as const, filename: 'x.png' };
+
+  test('an attachment-only delivery lands on the bubble that just streamed', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'here you go');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.addAgentMessage(THREAD, 'final', '', [image]);
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id: 's1', text: 'here you go', streaming: false, attachments: [image] });
+  });
+
+  test('a text message after a stream still appends its own bubble', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'streamed');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.addAgentMessage(THREAD, 'f1', 'final text', []);
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(2);
+    expect(items[1]).toMatchObject({ id: 'f1', text: 'final text' });
+  });
+
+  test('without a stream, an attachment-only message is its own bubble', () => {
+    chatStore.addAgentMessage(THREAD, 'a1', '', [image]);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ id: 'a1', attachments: [image] });
+  });
+
+  test('a stream that vanished leaves no bubble for the delivery to land on', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.addAgentMessage(THREAD, 'a1', '', [image]);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ id: 'a1' });
+  });
+});
+
 describe('chatStore tool cards', () => {
   test('a tool call becomes its own item and repeats are ignored', () => {
     const payload = { id: 'c1', name: 'bash', args: {}, ok: true, output: 'out', truncated: false };
