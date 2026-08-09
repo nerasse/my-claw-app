@@ -184,6 +184,7 @@ test('a gallery photo (content:// uri) is copied to the cache before staging', a
     'photo.jpg',
     'image',
     THREAD,
+    expect.any(String),
   );
   await waitFor(() =>
     bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('media-1')),

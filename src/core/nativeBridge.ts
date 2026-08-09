@@ -1,4 +1,5 @@
 import { DeviceEventEmitter, NativeModules } from 'react-native';
+import { useEffect, useState } from 'react';
 
 export interface DeviceInfoNative {
   deviceId: string;
@@ -40,6 +41,37 @@ export interface VoicePlaybackEvent {
 export const VOICE_LEVEL_EVENT = 'claw:voice:level';
 export const VOICE_PLAYBACK_EVENT = 'claw:voice:playback';
 
+/** Pushed while a file moves between the device and the server (upload, download, cache, save). */
+export const TRANSFER_PROGRESS_EVENT = 'claw:transfer:progress';
+
+export interface TransferProgress {
+  /** Matches the transferId passed to the bridge call that started the transfer. */
+  id: string;
+  bytes: number;
+  total: number;
+}
+
+/** Subscribes to transfer progress; the returned function unsubscribes. */
+export function onTransferProgress(cb: (progress: TransferProgress) => void): () => void {
+  const sub = DeviceEventEmitter.addListener(TRANSFER_PROGRESS_EVENT, cb);
+  return () => sub.remove();
+}
+
+/** Latest progress event for one transfer id, null before the first event. */
+export function useTransferProgress(transferId: string | null): TransferProgress | null {
+  const [progress, setProgress] = useState<TransferProgress | null>(null);
+  useEffect(() => {
+    if (!transferId) {
+      setProgress(null);
+      return;
+    }
+    return onTransferProgress(p => {
+      if (p.id === transferId) setProgress(p);
+    });
+  }, [transferId]);
+  return progress;
+}
+
 /**
  * Single typed door to the Kotlin module. Everything else imports this instead of
  * NativeModules, so tests can mock one file and a renamed native method breaks
@@ -63,7 +95,8 @@ export interface DeviceBridgeNative {
   ): Promise<{ uri: string; name: string; size: number }>;
   /**
    * POSTs a local file as a raw body. Native because RN's fetch cannot read file:// or
-   * content:// uris on Android (OkHttp only accepts http(s) urls).
+   * content:// uris on Android (OkHttp only accepts http(s) urls). Progress events carry the
+   * `transferId`.
    */
   uploadFile(
     uri: string,
@@ -71,22 +104,34 @@ export interface DeviceBridgeNative {
     filename: string,
     type: string,
     threadId: string,
+    transferId: string,
   ): Promise<{ status: number; body: string }>;
   /**
    * GETs a media url and stores the bytes: in Pictures (visible to the gallery app) when
    * `toGallery`, in Downloads otherwise. Runs on the native side because the URL carries the
-   * auth token and the bytes never touch the JS heap.
+   * auth token and the bytes never touch the JS heap. Progress events carry the `transferId`.
    */
   downloadFile(
     url: string,
     filename: string,
     toGallery: boolean,
+    transferId: string,
   ): Promise<{ path: string }>;
   /**
-   * Opens the system "Save as" dialog, then downloads the media url into the chosen
-   * location. Resolves null when the picker is dismissed.
+   * GETs a media url into the app cache and resolves the local file:// uri. For big media the
+   * viewers download with visible progress first, then render the local copy.
    */
-  saveFile(url: string, filename: string): Promise<{ path: string } | null>;
+  cacheFile(
+    url: string,
+    filename: string,
+    transferId: string,
+  ): Promise<{ uri: string; name: string; size: number }>;
+  /**
+   * Opens the system "Save as" dialog, then downloads the media url into the chosen
+   * location. Resolves null when the picker is dismissed. Progress events carry the
+   * `transferId`.
+   */
+  saveFile(url: string, filename: string, transferId: string): Promise<{ path: string } | null>;
   /**
    * Starts microphone capture and resolves the destination file:// uri. Rejects with
    * NO_MIC_PERMISSION when the permission was never granted, so the caller can ask.
@@ -133,14 +178,18 @@ export const deviceBridge: DeviceBridgeNative = {
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   prepareFile: uri =>
     native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),
-  uploadFile: (uri, url, filename, type, threadId) =>
-    native?.uploadFile(uri, url, filename, type, threadId) ??
+  uploadFile: (uri, url, filename, type, threadId, transferId) =>
+    native?.uploadFile(uri, url, filename, type, threadId, transferId) ??
     Promise.reject(new Error('DeviceBridge unavailable')),
-  downloadFile: (url, filename, toGallery) =>
-    native?.downloadFile(url, filename, toGallery) ??
+  downloadFile: (url, filename, toGallery, transferId) =>
+    native?.downloadFile(url, filename, toGallery, transferId) ??
     Promise.reject(new Error('DeviceBridge unavailable')),
-  saveFile: (url, filename) =>
-    native?.saveFile(url, filename) ?? Promise.reject(new Error('DeviceBridge unavailable')),
+  cacheFile: (url, filename, transferId) =>
+    native?.cacheFile(url, filename, transferId) ??
+    Promise.reject(new Error('DeviceBridge unavailable')),
+  saveFile: (url, filename, transferId) =>
+    native?.saveFile(url, filename, transferId) ??
+    Promise.reject(new Error('DeviceBridge unavailable')),
   // No silent fallback: a recorder that resolves without recording would hand the composer an
   // empty take to upload, and the failure would only surface as an unexplained refusal.
   startRecording: () =>

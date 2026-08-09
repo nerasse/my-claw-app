@@ -173,6 +173,9 @@ jest.mock('./src/core/nativeBridge', () => ({
     downloadFile: jest.fn(() =>
       Promise.resolve({ path: '/storage/Pictures/my-claw/file' }),
     ),
+    cacheFile: jest.fn(() =>
+      Promise.resolve({ uri: 'file:///cache/media', name: 'file', size: 0 }),
+    ),
     saveFile: jest.fn(() => Promise.resolve({ path: 'content://saved/file' })),
     startRecording: jest.fn(() => Promise.resolve('file:///cache/voice.m4a')),
     stopRecording: jest.fn(() =>
@@ -191,6 +194,9 @@ jest.mock('./src/core/nativeBridge', () => ({
   deviceEvents: require('react-native').DeviceEventEmitter,
   VOICE_LEVEL_EVENT: 'claw:voice:level',
   VOICE_PLAYBACK_EVENT: 'claw:voice:playback',
+  TRANSFER_PROGRESS_EVENT: 'claw:transfer:progress',
+  onTransferProgress: jest.fn(() => () => {}),
+  useTransferProgress: jest.fn(() => null),
 }));
 
 jest.mock('./src/core/device', () => ({

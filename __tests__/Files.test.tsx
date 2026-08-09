@@ -80,8 +80,9 @@ beforeEach(() => {
     Promise.resolve({
       ok: true,
       status: 200,
+      headers: { get: () => null },
       text: () => Promise.resolve('# Hello\n\nrendered markdown'),
-    } as Response),
+    } as unknown as Response),
   );
 });
 
@@ -125,6 +126,7 @@ test('tapping a markdown file shows its rendered content and offers a download',
   expect(bridge.saveFile).toHaveBeenCalledWith(
     `${MEDIA_URL}/f1?device=dev-test&token=token-test`,
     'notes.md',
+    expect.any(String),
   );
 
   await unmount(tree);
@@ -165,6 +167,7 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
     `${MEDIA_URL}/img1?device=dev-test&token=token-test`,
     'photo.png',
     true,
+    expect.any(String),
   );
 
   await unmount(tree);
@@ -388,6 +391,7 @@ test('a file without a preview still offers a download', async () => {
   expect(bridge.saveFile).toHaveBeenCalledWith(
     `${MEDIA_URL}/a1?device=dev-test&token=token-test`,
     'clip.mp3',
+    expect.any(String),
   );
 
   await unmount(tree);

@@ -1,6 +1,6 @@
 import type { AttachmentMeta } from './protocol';
 import type { DeviceInfo } from './device';
-import { deviceBridge } from './nativeBridge';
+import { deviceBridge, onTransferProgress } from './nativeBridge';
 
 export interface PendingAttachment {
   id: string;
@@ -43,18 +43,31 @@ export async function uploadMedia(
   deviceInfo: DeviceInfo,
   threadId: string,
   attachment: PendingAttachment,
+  onProgress?: (bytes: number, total: number) => void,
 ): Promise<UploadedAttachment> {
   const url = `${mediaBase}/media?device=${encodeURIComponent(deviceInfo.deviceId)}&token=${encodeURIComponent(deviceInfo.token)}`;
-  const response = await deviceBridge.uploadFile(
-    attachment.uri,
-    url,
-    attachment.filename,
-    attachment.type,
-    threadId,
-  );
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error(`upload failed: ${response.body || `HTTP ${response.status}`}`);
+  const transferId = `upload-${attachment.id}`;
+  let unsubscribe: (() => void) | undefined;
+  if (onProgress) {
+    unsubscribe = onTransferProgress(p => {
+      if (p.id === transferId && p.total > 0) onProgress(p.bytes, p.total);
+    });
   }
-  const meta = JSON.parse(response.body) as { id: string };
-  return { id: meta.id, type: attachment.type };
+  try {
+    const response = await deviceBridge.uploadFile(
+      attachment.uri,
+      url,
+      attachment.filename,
+      attachment.type,
+      threadId,
+      transferId,
+    );
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`upload failed: ${response.body || `HTTP ${response.status}`}`);
+    }
+    const meta = JSON.parse(response.body) as { id: string };
+    return { id: meta.id, type: attachment.type };
+  } finally {
+    unsubscribe?.();
+  }
 }

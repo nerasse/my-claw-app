@@ -31,6 +31,7 @@ export function Composer({
   onRemoveAttachment,
   uploading,
   uploadError,
+  uploadProgress,
   onRecorded,
   onRecordingError,
   streaming,
@@ -60,6 +61,8 @@ export function Composer({
   onRemoveAttachment?: (id: string) => void;
   uploading?: boolean;
   uploadError?: string | null;
+  /** Percent of each staged file already on the server, keyed by attachment id. */
+  uploadProgress?: Record<string, number>;
   /** A finished voice note. Absent means the composer offers no microphone at all. */
   onRecorded?: (recording: VoiceRecording) => void;
   onRecordingError?: (message: string) => void;
@@ -157,23 +160,32 @@ export function Composer({
       ) : null}
       {files.length > 0 ? (
         <View style={styles.chips}>
-          {files.map(attachment => (
-            <View key={attachment.id} style={styles.chip}>
-              <Text style={styles.chipText} numberOfLines={1}>
-                {attachment.filename}
-                {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
-              </Text>
-              {onRemoveAttachment ? (
-                <Pressable
-                  onPress={() => onRemoveAttachment(attachment.id)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove attachment ${attachment.filename}`}>
-                  <Text style={styles.chipRemove}>✕</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
+          {files.map(attachment => {
+            const percent = uploadProgress?.[attachment.id];
+            return (
+              <View key={attachment.id} style={styles.chip}>
+                <Text style={styles.chipText} numberOfLines={1}>
+                  {attachment.filename}
+                  {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
+                  {percent !== undefined && percent < 100 ? ` · ${percent}%` : ''}
+                </Text>
+                {onRemoveAttachment ? (
+                  <Pressable
+                    onPress={() => onRemoveAttachment(attachment.id)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove attachment ${attachment.filename}`}>
+                    <Text style={styles.chipRemove}>✕</Text>
+                  </Pressable>
+                ) : null}
+                {percent !== undefined ? (
+                  <View style={styles.chipTrack}>
+                    <View style={[styles.chipFill, { width: `${percent}%` as never }]} />
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
         </View>
       ) : null}
       <View style={styles.row}>
@@ -290,6 +302,17 @@ const createStyles = (palette: Palette) => ({
   },
   chipText: { flexShrink: 1, fontSize: font.small, color: palette.text },
   chipRemove: { fontSize: font.meta, lineHeight: 15, color: palette.textMuted },
+  chipTrack: {
+    position: 'absolute' as const,
+    left: 2,
+    right: 2,
+    bottom: 1,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: palette.surfaceAlt,
+    overflow: 'hidden' as const,
+  },
+  chipFill: { height: 2, backgroundColor: palette.accent },
   uploadError: { fontSize: font.small, color: palette.danger, paddingHorizontal: space.xs },
   input: {
     flex: 1,

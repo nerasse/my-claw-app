@@ -32,7 +32,6 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.Response
 import okio.BufferedSink
-import okio.source
 
 class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule() {
 
@@ -49,6 +48,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   private var pendingSavePromise: Promise? = null
   private var pendingSaveUrl: String? = null
   private var pendingSaveName: String? = null
+  private var pendingSaveTransferId: String? = null
 
   // Uploads can be slow on mobile data; only the connect timeout stays short.
   private val uploadClient: OkHttpClient by lazy {
@@ -66,15 +66,17 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       if (requestCode == FILE_SAVE_REQUEST_CODE) {
         val promise = pendingSavePromise ?: return
         val url = pendingSaveUrl ?: return
+        val transferId = pendingSaveTransferId ?: ""
         pendingSavePromise = null
         pendingSaveUrl = null
         pendingSaveName = null
+        pendingSaveTransferId = null
         if (resultCode != Activity.RESULT_OK || data == null || data.data == null) {
           // The user walked away from the picker: not an error, just nothing saved.
           promise.resolve(null)
           return
         }
-        downloadInto(reactContext.contentResolver.openOutputStream(data.data!!), url, promise)
+        downloadInto(reactContext.contentResolver.openOutputStream(data.data!!), url, transferId, promise)
         return
       }
 
@@ -275,11 +277,42 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     }
   }
 
+  /** Throttled transfer progress: at most one event per 256 KB, plus one at the end. */
+  private fun emitTransferProgress(id: String, bytes: Long, total: Long) {
+    val map = Arguments.createMap()
+    map.putString("id", id)
+    map.putDouble("bytes", bytes.toDouble())
+    map.putDouble("total", total.toDouble())
+    DeviceBus.emit("claw:transfer:progress", map)
+  }
+
+  private fun copyWithProgress(
+    input: java.io.InputStream,
+    output: java.io.OutputStream,
+    total: Long,
+    transferId: String,
+  ) {
+    val buffer = ByteArray(64 * 1024)
+    var written = 0L
+    var lastEmit = 0L
+    while (true) {
+      val read = input.read(buffer)
+      if (read < 0) break
+      output.write(buffer, 0, read)
+      written += read
+      if (written - lastEmit >= 256L * 1024 || (total > 0 && written == total)) {
+        lastEmit = written
+        emitTransferProgress(transferId, written, total)
+      }
+    }
+  }
+
   /**
    * Uploads a local file as a raw request body. This has to happen natively: RN's fetch goes
    * through OkHttp, which only accepts http(s) urls, so reading a file:// or content:// uri from
    * JS always fails with "Network request failed". Streams from the resolver so a large file is
-   * never held in memory, and sets Content-Length so the server can reject it before buffering.
+   * never held in memory, sets Content-Length so the server can reject it before buffering, and
+   * emits progress events so the composer can show how far a big file has gone.
    */
   @ReactMethod
   fun uploadFile(
@@ -288,6 +321,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     filename: String,
     type: String,
     threadId: String,
+    transferId: String,
     promise: Promise,
   ) {
     val parsed = try {
@@ -310,7 +344,21 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       override fun writeTo(sink: BufferedSink) {
         val input = reactContext.contentResolver.openInputStream(parsed)
           ?: throw IOException("cannot open $parsed")
-        input.use { stream -> sink.writeAll(stream.source()) }
+        input.use { stream ->
+          val buffer = ByteArray(64 * 1024)
+          var written = 0L
+          var lastEmit = 0L
+          while (true) {
+            val read = stream.read(buffer)
+            if (read < 0) break
+            sink.write(buffer, 0, read)
+            written += read
+            if (written - lastEmit >= 256L * 1024 || written == length) {
+              lastEmit = written
+              emitTransferProgress(transferId, written, length)
+            }
+          }
+        }
       }
     }
     val request = Request.Builder()
@@ -371,7 +419,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    * DownloadManager writes on our behalf.
    */
   @ReactMethod
-  fun downloadFile(url: String, filename: String, toGallery: Boolean, promise: Promise) {
+  fun downloadFile(url: String, filename: String, toGallery: Boolean, transferId: String, promise: Promise) {
     val safeName = filename.replace(Regex("[/\\\\]"), "_").ifBlank { "file" }
     val request = Request.Builder().url(url).get().build()
     uploadClient.newCall(request).enqueue(object : Callback {
@@ -385,13 +433,13 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
             promise.reject("DOWNLOAD_FAILED", "server answered ${it.code}")
             return
           }
-          val bytes = it.body?.bytes()
-          if (bytes == null) {
+          val body = it.body
+          if (body == null) {
             promise.reject("DOWNLOAD_FAILED", "empty response")
             return
           }
           try {
-            val path = storeBytes(bytes, safeName, toGallery)
+            val path = storeStream(body.byteStream(), body.contentLength(), safeName, toGallery, transferId)
             val map = Arguments.createMap()
             map.putString("path", path)
             promise.resolve(map)
@@ -404,12 +452,57 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   /**
+   * Downloads a media url into a cache file (no user-visible folder) and resolves its file://
+   * uri. The viewer path for big media: a progress-bearing download first, then display from
+   * the local copy instead of an unknowable network fetch.
+   */
+  @ReactMethod
+  fun cacheFile(url: String, filename: String, transferId: String, promise: Promise) {
+    val safeName = filename.replace(Regex("[/\\\\]"), "_").ifBlank { "file" }
+    val request = Request.Builder().url(url).get().build()
+    uploadClient.newCall(request).enqueue(object : Callback {
+      override fun onFailure(call: Call, e: IOException) {
+        promise.reject("CACHE_FAILED", e.message ?: "download failed")
+      }
+
+      override fun onResponse(call: Call, response: Response) {
+        response.use {
+          if (!it.isSuccessful) {
+            promise.reject("CACHE_FAILED", "server answered ${it.code}")
+            return
+          }
+          val body = it.body
+          if (body == null) {
+            promise.reject("CACHE_FAILED", "empty response")
+            return
+          }
+          val target = File(
+            reactContext.cacheDir,
+            "media_${System.currentTimeMillis()}_${ThreadLocalRandom.current().nextLong().toString(16)}",
+          )
+          try {
+            target.outputStream().use { out -> copyWithProgress(body.byteStream(), out, body.contentLength(), transferId) }
+            val map = Arguments.createMap()
+            map.putString("uri", Uri.fromFile(target).toString())
+            map.putString("name", safeName)
+            map.putDouble("size", target.length().toDouble())
+            promise.resolve(map)
+          } catch (e: Exception) {
+            target.delete()
+            promise.reject("CACHE_FAILED", e.message ?: "cache failed")
+          }
+        }
+      }
+    })
+  }
+
+  /**
    * Asks the user where to save first: opens the system "Save as" dialog (Storage Access
    * Framework) pre-filled with the filename, then downloads the media url into the chosen
    * location. Resolves null when the picker is dismissed — that is a cancel, not an error.
    */
   @ReactMethod
-  fun saveFile(url: String, filename: String, promise: Promise) {
+  fun saveFile(url: String, filename: String, transferId: String, promise: Promise) {
     val activity = reactContext.currentActivity
     if (activity == null) {
       promise.reject("NO_ACTIVITY", "no current activity")
@@ -422,6 +515,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     pendingSavePromise = promise
     pendingSaveUrl = url
     pendingSaveName = filename
+    pendingSaveTransferId = transferId
     val safeName = filename.replace(Regex("[/\\\\]"), "_").ifBlank { "file" }
     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
       addCategory(Intent.CATEGORY_OPENABLE)
@@ -431,7 +525,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     activity.startActivityForResult(intent, FILE_SAVE_REQUEST_CODE)
   }
 
-  private fun downloadInto(output: java.io.OutputStream?, url: String, promise: Promise) {
+  private fun downloadInto(output: java.io.OutputStream?, url: String, transferId: String, promise: Promise) {
     if (output == null) {
       promise.reject("SAVE_FAILED", "cannot open chosen location")
       return
@@ -449,8 +543,9 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
             return
           }
           try {
+            val body = it.body
             output.use { out ->
-              it.body?.byteStream()?.use { input -> input.copyTo(out) }
+              body?.byteStream()?.use { input -> copyWithProgress(input, out, body.contentLength(), transferId) }
             }
             val map = Arguments.createMap()
             map.putString("path", url)
@@ -463,7 +558,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     })
   }
 
-  private fun storeBytes(bytes: ByteArray, filename: String, toGallery: Boolean): String {
+  private fun storeStream(input: java.io.InputStream, total: Long, filename: String, toGallery: Boolean, transferId: String): String {
     val safe = uniqueDownloadName(filename, toGallery)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       val values = ContentValues().apply {
@@ -483,8 +578,9 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
         }
       val uri = reactContext.contentResolver.insert(collection, values)
         ?: throw IOException("media store insert failed")
-      reactContext.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+      val out = reactContext.contentResolver.openOutputStream(uri)
         ?: throw IOException("cannot open output stream")
+      out.use { output -> copyWithProgress(input, output, total, transferId) }
       values.clear()
       values.put(MediaStore.MediaColumns.IS_PENDING, 0)
       reactContext.contentResolver.update(uri, values, null, null)
@@ -492,7 +588,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     }
     // API 24-28: the DownloadManager is the system's scoped-storage helper, no permission needed.
     val cache = File(reactContext.cacheDir, safe)
-    cache.writeBytes(bytes)
+    cache.outputStream().use { out -> copyWithProgress(input, out, total, transferId) }
     val manager = reactContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     val request = DownloadManager.Request(Uri.fromFile(cache))
       .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safe)

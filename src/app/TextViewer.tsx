@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Markdown from 'react-native-marked';
-import { deviceBridge } from '../core/nativeBridge';
+import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
+import { formatBytes } from '../core/utils';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -35,8 +36,12 @@ export function TextViewer({
   const insets = useSafeAreaInsets();
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
+  /** Announced size from the response headers, so a big file shows what it is loading. */
+  const [contentSize, setContentSize] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
+  const saveId = `text-save-${filename}`;
+  const saveProgress = useTransferProgress(saveId);
 
   const isMarkdown = filename.toLowerCase().endsWith('.md');
 
@@ -45,6 +50,8 @@ export function TextViewer({
     fetch(url)
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const announced = res.headers.get('content-length');
+        if (announced) setContentSize(Number(announced));
         return res.text();
       })
       .then(text => {
@@ -71,7 +78,7 @@ export function TextViewer({
   const save = () => {
     setSaving(true);
     deviceBridge
-      .saveFile(url, filename)
+      .saveFile(url, filename, saveId)
       .then(path => {
         if (path) setSavedTo('saved');
       })
@@ -130,7 +137,12 @@ export function TextViewer({
               could not fetch content ({contentError})
             </Text>
           ) : (
-            <ActivityIndicator color={palette.textFaint} />
+            <View style={styles.loading}>
+              <ActivityIndicator color={palette.textFaint} />
+              {contentSize ? (
+                <Text style={styles.loadingText}>loading {formatBytes(contentSize)}…</Text>
+              ) : null}
+            </View>
           )}
         </View>
       )}
@@ -141,7 +153,11 @@ export function TextViewer({
           { paddingBottom: space.sm + Math.max(insets.bottom - space.sm, 0) },
         ]}
       >
-        {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : null}
+        {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : saveProgress && saveProgress.total > 0 ? (
+          <Text style={styles.saved}>
+            {formatBytes(saveProgress.bytes)} of {formatBytes(saveProgress.total)}
+          </Text>
+        ) : null}
         <Pressable
           onPress={save}
           disabled={saving}
@@ -197,6 +213,12 @@ const createStyles = (palette: Palette) => ({
     color: palette.textFaint,
     padding: space.lg,
   },
+  loading: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: space.sm,
+  },
+  loadingText: { fontSize: font.small, color: palette.textFaint },
   bottomBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

@@ -45,7 +45,7 @@ export function FilesScreen({
   onBack: () => void;
   /** Asks for the delete; the shell confirms before anything leaves. */
   onDelete: (file: SessionFileMeta) => void;
-  onOpenImage: (file: { url: string; filename: string }) => void;
+  onOpenImage: (file: { url: string; filename: string; sizeBytes?: number }) => void;
   onOpenText: (file: { url: string; filename: string }) => void;
   onOpenVideo: (file: { url: string; filename: string }) => void;
   /** Server-side refusal for this screen. Without it a failed delete just looks inert. */
@@ -109,6 +109,7 @@ export function FilesScreen({
                   const target = {
                     url: mediaUrl(mediaBase, deviceInfo, item.id),
                     filename: item.filename,
+                    sizeBytes: item.sizeBytes,
                   };
                   const kind = viewerFor(item.type, item.filename);
                   if (kind === 'image') onOpenImage(target);

@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { deviceBridge } from '../core/nativeBridge';
+import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { DownloadIcon } from '../components/icons';
+import { formatBytes } from '../core/utils';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -31,6 +32,8 @@ export function VideoViewer({
   });
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
+  const downloadId = `video-download-${filename}`;
+  const downloadProgress = useTransferProgress(downloadId);
 
   useEffect(() => {
     if (!savedTo) return;
@@ -42,11 +45,13 @@ export function VideoViewer({
     if (!url) return;
     setSaving(true);
     deviceBridge
-      .downloadFile(url, filename, false)
+      .downloadFile(url, filename, false, downloadId)
       .then(() => setSavedTo('saved to Downloads'))
       .catch(() => setSavedTo('download failed'))
       .finally(() => setSaving(false));
   };
+
+  const busy = saving && downloadProgress && downloadProgress.total > 0;
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
@@ -63,6 +68,11 @@ export function VideoViewer({
           {filename}
         </Text>
         {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : null}
+        {busy ? (
+          <Text style={styles.saved}>
+            {formatBytes(downloadProgress!.bytes)} of {formatBytes(downloadProgress!.total)}
+          </Text>
+        ) : null}
         <Pressable
           onPress={save}
           disabled={saving}

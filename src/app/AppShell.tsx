@@ -435,6 +435,7 @@ export function AppShell(): React.JSX.Element {
   const [imageViewer, setImageViewer] = useState<{
     url: string;
     filename: string;
+    sizeBytes?: number;
   } | null>(null);
   const [textViewer, setTextViewer] = useState<{
     url: string;
@@ -2393,6 +2394,7 @@ export function AppShell(): React.JSX.Element {
         <ImageViewer
           url={imageViewer.url}
           filename={imageViewer.filename}
+          sizeBytes={imageViewer.sizeBytes}
           onClose={() => setImageViewer(null)}
         />
       ) : null}

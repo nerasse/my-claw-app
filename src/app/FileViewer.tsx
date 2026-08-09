@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { deviceBridge } from '../core/nativeBridge';
+import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { formatBytes } from '../core/utils';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -25,6 +25,8 @@ export function FileViewer({
   const styles = useThemedStyles(createStyles);
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
+  const saveId = `file-save-${filename}`;
+  const saveProgress = useTransferProgress(saveId);
 
   useEffect(() => {
     if (!savedTo) return;
@@ -36,7 +38,7 @@ export function FileViewer({
     if (!url) return;
     setSaving(true);
     deviceBridge
-      .saveFile(url, filename)
+      .saveFile(url, filename, saveId)
       .then(path => {
         if (path) setSavedTo('saved');
       })
@@ -77,6 +79,10 @@ export function FileViewer({
           <View style={styles.modalActions}>
             {savedTo ? (
               <Text style={styles.saveFeedback}>{savedTo}</Text>
+            ) : saveProgress && saveProgress.total > 0 ? (
+              <Text style={styles.saveFeedback}>
+                {formatBytes(saveProgress.bytes)} of {formatBytes(saveProgress.total)}
+              </Text>
             ) : null}
             <Pressable
               style={[styles.button, saving && styles.buttonOff]}

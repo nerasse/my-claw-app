@@ -29,7 +29,7 @@ export function Bubble({
   onMenu: () => void;
   onOpenAttachment?: (
     kind: 'image' | 'text' | 'video' | 'file',
-    target: { url: string; filename: string },
+    target: { url: string; filename: string; sizeBytes?: number },
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

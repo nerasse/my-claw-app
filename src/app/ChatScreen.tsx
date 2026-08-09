@@ -91,10 +91,10 @@ export function ChatScreen({
   onFilesPress: () => void;
   onSend: (text: string, attachments?: OutgoingAttachment[]) => void;
   onBubbleMenu: (item: TextItem) => void;
-  onOpenImage: (target: { url: string; filename: string }) => void;
+  onOpenImage: (target: { url: string; filename: string; sizeBytes?: number }) => void;
   onOpenText: (target: { url: string; filename: string }) => void;
   onOpenVideo: (target: { url: string; filename: string }) => void;
-  onOpenFile: (target: { url: string; filename: string }) => void;
+  onOpenFile: (target: { url: string; filename: string; sizeBytes?: number }) => void;
   /** The command menu of the app (model, stop, clear, ...). */
   onOpenMenu: () => void;
   /** A slash command was chosen; true when the app handled it natively. */
@@ -118,6 +118,8 @@ export function ChatScreen({
   const [attachOpen, setAttachOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  /** Percent of each staged file that has reached the server, keyed by attachment id. */
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!atBottom) return;
@@ -238,7 +240,9 @@ export function ChatScreen({
         try {
           const refs: OutgoingAttachment[] = [];
           for (const attachment of attachments) {
-            const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, attachment);
+            const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, attachment, (bytes, total) => {
+              setUploadProgress(current => ({ ...current, [attachment.id]: Math.round((bytes / total) * 100) }));
+            });
             refs.push({
               id: uploaded.id,
               type: uploaded.type,
@@ -337,6 +341,7 @@ export function ChatScreen({
             onCommandEntered={onCommandEntered}
             uploading={uploading}
             uploadError={uploadError}
+            uploadProgress={uploadProgress}
             streaming={streaming}
             onStop={onStop}
           />

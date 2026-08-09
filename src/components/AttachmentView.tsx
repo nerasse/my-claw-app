@@ -21,7 +21,7 @@ export function AttachmentView({
   /** Routed to the same full-screen viewers as the file explorer. */
   onOpen?: (
     kind: 'image' | 'text' | 'video' | 'file',
-    target: { url: string; filename: string },
+    target: { url: string; filename: string; sizeBytes?: number },
   ) => void;
   /** What the server heard, shown under its own recording. */
   transcript?: string;
@@ -40,7 +40,7 @@ export function AttachmentView({
   // A local preview has no server copy yet, so the viewer would have nothing to fetch.
   const open =
     onOpen && kind && remote
-      ? () => onOpen(kind, { url: remote, filename: name })
+      ? () => onOpen(kind, { url: remote, filename: name, sizeBytes: att.sizeBytes })
       : undefined;
 
   // A voice note plays where it sits. Falling through to the chip would have named a file the

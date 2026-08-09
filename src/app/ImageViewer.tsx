@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageZoom } from '@likashefqet/react-native-image-zoom';
-import { deviceBridge } from '../core/nativeBridge';
+import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+
+/** Images at or above this size are downloaded to the cache with a progress overlay first. */
+const CACHE_THRESHOLD = 2 * 1024 * 1024;
 
 /**
  * Full-screen image viewer, gallery style: pinch to zoom, double-tap to toggle, and a tap
@@ -19,10 +22,13 @@ import { useDismissKeyboard } from '../core/keyboard';
 export function ImageViewer({
   url,
   filename,
+  sizeBytes,
   onClose,
 }: {
   url: string;
   filename: string;
+  /** Known size lets the viewer decide between direct display and a progress-bearing download. */
+  sizeBytes?: number;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -35,6 +41,33 @@ export function ImageViewer({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
+  // null = not cached yet (or not needed); a string = local copy to render.
+  const [cacheUri, setCacheUri] = useState<string | null>(null);
+
+  const needsCache = !!sizeBytes && sizeBytes >= CACHE_THRESHOLD;
+  const cacheId = needsCache ? `image-cache-${filename}` : null;
+  const cacheProgress = useTransferProgress(cacheId);
+  const downloadId = `image-download-${filename}`;
+  const downloadProgress = useTransferProgress(downloadId);
+  const galleryId = `image-gallery-${filename}`;
+  const galleryProgress = useTransferProgress(galleryId);
+
+  useEffect(() => {
+    if (!needsCache) return;
+    let cancelled = false;
+    deviceBridge
+      .cacheFile(url, filename, cacheId!)
+      .then(res => {
+        if (!cancelled) setCacheUri(res.uri);
+      })
+      .catch(() => {
+        // Fall back to the direct network fetch; the image just appears without progress.
+        if (!cancelled) setCacheUri('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheId, filename, needsCache, url]);
 
   useEffect(() => {
     if (!controlsVisible) return;
@@ -52,26 +85,43 @@ export function ImageViewer({
     if (!url) return;
     setSaving(true);
     deviceBridge
-      .downloadFile(url, filename, toGallery)
+      .downloadFile(url, filename, toGallery, toGallery ? galleryId : downloadId)
       .then(() => setSavedTo(toGallery ? 'saved to the gallery' : 'saved to Downloads'))
       .catch(() => setSavedTo('save failed'))
       .finally(() => setSaving(false));
   };
 
+  const percent = cacheProgress && cacheProgress.total > 0
+    ? Math.round((cacheProgress.bytes / cacheProgress.total) * 100)
+    : null;
+
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      <ImageZoom
-        uri={url}
-        minScale={1}
-        maxScale={6}
-        doubleTapScale={3}
-        isSingleTapEnabled
-        isDoubleTapEnabled
-        onSingleTap={() => setControlsVisible(visible => !visible)}
-        style={styles.image}
-        resizeMode="contain"
-      />
+      {needsCache && cacheUri === null ? (
+        <View style={styles.image}>
+          {percent !== null ? (
+            <View style={styles.cacheBox}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.cacheText}>loading {percent}%</Text>
+            </View>
+          ) : (
+            <ActivityIndicator color="#fff" />
+          )}
+        </View>
+      ) : (
+        <ImageZoom
+          uri={cacheUri ?? url}
+          minScale={1}
+          maxScale={6}
+          doubleTapScale={3}
+          isSingleTapEnabled
+          isDoubleTapEnabled
+          onSingleTap={() => setControlsVisible(visible => !visible)}
+          style={styles.image}
+          resizeMode="contain"
+        />
+      )}
 
       {controlsVisible ? (
         <>
@@ -109,7 +159,11 @@ export function ImageViewer({
               accessibilityLabel="Save image to downloads"
             >
               <Text style={styles.saveText}>
-                {saving ? 'saving…' : 'Download'}
+                {saving && downloadProgress && downloadProgress.total > 0
+                  ? `${Math.round((downloadProgress.bytes / downloadProgress.total) * 100)}%`
+                  : saving
+                    ? 'saving…'
+                    : 'Download'}
               </Text>
             </Pressable>
             <Pressable
@@ -120,7 +174,11 @@ export function ImageViewer({
               accessibilityLabel="Save image to gallery"
             >
               <Text style={styles.saveText}>
-                {saving ? 'saving…' : 'Save to gallery'}
+                {saving && galleryProgress && galleryProgress.total > 0
+                  ? `${Math.round((galleryProgress.bytes / galleryProgress.total) * 100)}%`
+                  : saving
+                    ? 'saving…'
+                    : 'Save to gallery'}
               </Text>
             </Pressable>
           </View>
@@ -160,6 +218,12 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   closeGlyph: { fontSize: 17, lineHeight: 20, color: '#fff' },
+  cacheBox: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: space.md,
+  },
+  cacheText: { color: '#cfd6e4', fontSize: font.body },
   bottomBar: {
     position: 'absolute' as const,
     bottom: 0,
