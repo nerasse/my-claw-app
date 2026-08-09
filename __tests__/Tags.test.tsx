@@ -223,8 +223,9 @@ test('back walks the flow one step at a time', async () => {
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
   await waitFor(() => labelsOf(tree).includes('low'));
-  // From the effort step, back returns to the model list rather than closing the sheet.
-  await pressLabel(tree, '< Back');
+  // From the effort step, the page's back entry returns to the model list rather than
+  // leaving the page: the flow is walked one step at a time.
+  await pressLabel(tree, 'Back to the tags list');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await settleAndUnmount(tree);
 });

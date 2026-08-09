@@ -191,8 +191,10 @@ test('the picker reopens at its root after a group was browsed', async () => {
   await waitFor(() => labelsOf(tree).includes('Claude ›'));
   await pressLabel(tree, 'Claude ›');
   await waitFor(() => labelsOf(tree).includes('Opus'));
-  await pressLabel(tree, 'Close menu');
-
+  // The page's back entry walks out of the group, then leaves the page.
+  await pressLabel(tree, 'Back to the agents list');
+  await waitFor(() => labelsOf(tree).includes('Claude ›'));
+  await pressLabel(tree, 'Back to the agents list');
   await waitFor(() => labelsOf(tree).includes('Default model'));
   await pressLabel(tree, 'Default model');
   await waitFor(() => labelsOf(tree).includes('Claude ›'));

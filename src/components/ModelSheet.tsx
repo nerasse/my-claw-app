@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ActionSheet, type SheetOption } from './ActionSheet';
 import { connection } from '../core/connection';
 import { useModelCatalog, useThreadModel } from '../core/model';
 import { contextSummary, contextTiers } from '../core/context';
+import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import {
   encodeModelContextSet,
   encodeModelEffortSet,
@@ -71,14 +73,13 @@ export interface PickerContext {
 }
 
 /**
- * The model picker, presentation-only and sequential: one screen per decision (model, then
- * effort, then context ceiling), each with a back entry, and a last screen that applies the
- * whole combo at once. Nothing is sent while staging, so leaving the sheet changes nothing.
- *
- * Every surface that pins a model renders this one component (chat, agent defaults, tags, jobs),
- * so the flow cannot diverge between them; the steps a subject does not have are skipped.
+ * The model picker flow, presentation-only and sequential: one screen per decision (model,
+ * then effort, then context ceiling), each with a back entry, and a last screen that applies
+ * the whole combo at once. Nothing is sent while staging, so leaving the flow changes nothing.
+ * The same flow renders as a bottom sheet (chat, jobs) or as a full settings page (agents,
+ * tags): every surface that pins a model uses it, so the flow cannot diverge between them.
  */
-export function ModelPickerSheet({
+export function useModelPickerFlow({
   title,
   models,
   activeId,
@@ -90,6 +91,7 @@ export function ModelPickerSheet({
   effort,
   context,
   skipEffortOnTag = false,
+  page = false,
 }: {
   /** Label used in the sheet preview when the user is not inside a group. */
   title: string;
@@ -108,7 +110,9 @@ export function ModelPickerSheet({
    *  tag's own pin always wins, so a scope-level pin would be dead config. The chat keeps the
    *  step because the session's /effort still sits above the tag. */
   skipEffortOnTag?: boolean;
-}): React.JSX.Element {
+  /** Full-page presentation: the page's own back entry replaces the in-flow "< Back" rows. */
+  page?: boolean;
+}): { preview: string; options: SheetOption[]; back: () => void } {
   const { stage, path } = state;
   const activeLabel = models.find(model => model.id === activeId)?.label ?? activeId;
   const stagedModel = state.model ?? activeId;
@@ -173,6 +177,9 @@ export function ModelPickerSheet({
     else onStateChange(previous);
   };
 
+  /** In-flow back rows exist only in the sheet: the page has a back entry of its own. */
+  const backRow = page ? [] : [{ label: '< Back', onPress: back }];
+
   const options: SheetOption[] = [];
   let preview = '';
 
@@ -198,7 +205,7 @@ export function ModelPickerSheet({
         onPress: () => advance('model', { model: model.id }),
       });
     }
-    if (path.length > 0) options.push({ label: '< Back', onPress: back });
+    if (path.length > 0) options.push(...backRow);
   } else if (stage === 'effort') {
     preview = `Effort for ${stagedLabel} · current: ${effortCurrent || 'default'}`;
     for (const level of effortLevels) {
@@ -219,7 +226,7 @@ export function ModelPickerSheet({
         onPress: () => advance('effort', { effort: undefined }),
       });
     }
-    options.push({ label: '< Back', onPress: back });
+    options.push(...backRow);
   } else if (stage === 'context') {
     preview = `Context for ${stagedLabel} · ${contextSummary(stagedEntry?.context, context?.effective)}`;
     for (const tier of tiers) {
@@ -233,7 +240,7 @@ export function ModelPickerSheet({
       label: 'Keep current',
       onPress: () => advance('context', { context: undefined }),
     });
-    options.push({ label: '< Back', onPress: back });
+    options.push(...backRow);
   } else {
     const effortLine =
       state.effort === null
@@ -262,11 +269,108 @@ export function ModelPickerSheet({
         onClose();
       },
     });
-    options.push({ label: '< Back', onPress: back });
+    options.push(...backRow);
   }
 
-  return <ActionSheet preview={preview} options={options} onClose={onClose} />;
+  return { preview, options, back };
 }
+
+/** The bottom-sheet presentation of the flow: chat, and the jobs editor. */
+export function ModelPickerSheet(props: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'>): React.JSX.Element {
+  const flow = useModelPickerFlow(props);
+  return <ActionSheet preview={flow.preview} options={flow.options} onClose={props.onClose} />;
+}
+
+/**
+ * The full-page presentation of the flow, for the settings stack (agents, tags): the page's
+ * own back entry walks the flow the same way the hardware back key does, and closes the page
+ * when the flow is at its first screen. The in-flow "< Back" rows are dropped: one back
+ * affordance per page, never config content peeking under a half-open sheet.
+ */
+export function ModelPickerPage({
+  backLabel,
+  ...flowProps
+}: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'> & { backLabel: string }): React.JSX.Element {
+  const flow = useModelPickerFlow({ ...flowProps, page: true });
+  const styles = useThemedStyles(createPageStyles);
+  return (
+    <View style={styles.screen}>
+      <View style={styles.header}>
+        <Pressable
+          onPress={flow.back}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={backLabel}>
+          <Text style={styles.backGlyph}>‹</Text>
+        </Pressable>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>{flowProps.title}</Text>
+          <Text style={styles.subtitle} numberOfLines={2}>
+            {flow.preview}
+          </Text>
+        </View>
+      </View>
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {flow.options.map(option => (
+          <Pressable
+            key={option.label}
+            style={styles.option}
+            onPress={option.onPress}
+            accessibilityRole="button"
+            accessibilityState={{ selected: option.selected ?? false }}
+            accessibilityLabel={option.label}>
+            <View style={styles.optionMain}>
+              <Text style={styles.optionLabel}>{option.label}</Text>
+              {option.hint ? (
+                <Text style={styles.optionHint} numberOfLines={2}>
+                  {option.hint}
+                </Text>
+              ) : null}
+            </View>
+            {option.selected ? <Text style={styles.check}>✓</Text> : null}
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+const createPageStyles = (palette: Palette) => ({
+  screen: { flex: 1 },
+  header: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.md,
+    paddingBottom: space.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  headerText: { flex: 1, gap: 1 },
+  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
+  subtitle: { fontSize: font.small, color: palette.textFaint },
+  body: { paddingHorizontal: space.lg, paddingBottom: space.xl },
+  option: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.md,
+    paddingVertical: space.md,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  optionMain: { flex: 1, gap: 1 },
+  optionLabel: { fontSize: font.title, color: palette.text },
+  optionHint: { fontSize: font.small, color: palette.textFaint },
+  check: { fontSize: font.body, color: palette.accent, fontWeight: '700' as const },
+});
 
 /**
  * The model picker of the chat, built from the same list as /model on the other channels: the

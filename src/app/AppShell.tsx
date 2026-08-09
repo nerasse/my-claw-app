@@ -156,7 +156,7 @@ import { JobSessionsScreen } from './JobSessionsScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetOption } from '../components/ActionSheet';
-import { ModelSheet, ModelPickerSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
+import { ModelPickerPage, ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
@@ -189,20 +189,24 @@ function unknownOfList(names: string[], catalog: Array<{ name: string }>): strin
  * effort then window then confirm. The effort step is skipped when the staged model is a tag:
  * the tag's own pin always wins, and the confirmation names it instead. Picking the full
  * window removes the agent's own cap, which is how it returns to the standing policy.
+ *
+ * Rendered as a full settings page: the picker replaces the agents list entirely, and its own
+ * back entry walks the flow before leaving the page, so no config ever peeks over the list.
  */
-function AgentModelPickerSheet({
+function AgentModelPickerPage({
   target,
   config,
   state,
   onStateChange,
-  onClose,
+  onBack,
 }: {
   /** "global" or an agent key. */
   target: string;
   config: AgentsConfigResultFrame | null;
   state: PickerState;
   onStateChange: (state: PickerState) => void;
-  onClose: () => void;
+  /** Leaves the page; the flow's own back entry walks the steps first. */
+  onBack: () => void;
 }): React.JSX.Element {
   const catalog = useModelCatalog();
   const agent = target === 'global' ? null : config?.agents.find(entry => entry.key === target) ?? null;
@@ -215,13 +219,14 @@ function AgentModelPickerSheet({
     config?.agents.find(entry => entry.key === 'orchestrator')?.model ?? defaultLabel;
 
   return (
-    <ModelPickerSheet
+    <ModelPickerPage
       title={agent ? `Model for ${agent.label}` : 'Default model'}
+      backLabel={agent ? 'Back to the agent' : 'Back to the agents list'}
       models={catalog.models}
       activeId={activeId}
       state={state}
       onStateChange={onStateChange}
-      onClose={onClose}
+      onClose={onBack}
       onCommit={choice => {
         // undefined keeps the target's effort, null clears it, a level pins it.
         const effort = choice.effort === undefined ? undefined : choice.effort ?? '';
@@ -243,7 +248,7 @@ function AgentModelPickerSheet({
               selected: !agent.pinned,
               onPress: () => {
                 connection.send(encodeAgentsModelClear(agent.key)).catch(() => {});
-                onClose();
+                onBack();
               },
             }
           : null
@@ -263,33 +268,36 @@ function AgentModelPickerSheet({
 }
 
 /**
- * The tag editor: one pass over the three things a tag pins (model, effort, context ceiling),
- * applied as a single upsert on the confirmation step. Leaving the flow early changes nothing,
- * and the cap row on the tags page stays for a value the graduations do not offer.
+ * The tag editor page: one pass over the three things a tag pins (model, effort, context
+ * ceiling), applied as a single upsert on the confirmation step. Leaving the flow early
+ * changes nothing, and the cap row on the tags page stays for a value the graduations do
+ * not offer. Like the agent picker, it is a full page: the tags list is replaced entirely.
  */
-function TagEditorSheet({
+function TagEditorPage({
   name,
   state,
   onStateChange,
-  onClose,
+  onBack,
 }: {
   name: string;
   state: PickerState;
   onStateChange: (state: PickerState) => void;
-  onClose: () => void;
+  /** Leaves the page; the flow's own back entry walks the steps first. */
+  onBack: () => void;
 }): React.JSX.Element {
   const catalog = useModelCatalog();
   const { tags } = useTags();
   const tag = tags?.find(entry => entry.name === name) ?? null;
 
   return (
-    <ModelPickerSheet
+    <ModelPickerPage
       title={`Tag ${name}`}
+      backLabel="Back to the tags list"
       models={catalog.models}
       activeId={tag?.model ?? ''}
       state={state}
       onStateChange={onStateChange}
-      onClose={onClose}
+      onClose={onBack}
       onCommit={choice => {
         // undefined keeps the tag's own pin, null clears it, a level pins it. The upsert
         // replaces the whole entry, so an omitted effort key is how a tag returns to "default".
@@ -349,6 +357,8 @@ export function AppShell(): React.JSX.Element {
     | 'file'
     | 'newagent'
     | 'config'
+    | 'model-picker'
+    | 'tag-editor'
   >('index');
   /** The agent detail page shows this key, taken from the last agents.config.result. */
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
@@ -962,24 +972,6 @@ export function AppShell(): React.JSX.Element {
         setModelOpen(false);
         return true;
       }
-      if (agentModelFor) {
-        const previous = pickerBack(agentPicker);
-        if (previous) {
-          setAgentPicker(previous);
-          return true;
-        }
-        setAgentModelFor(null);
-        return true;
-      }
-      if (tagEditor) {
-        const previous = pickerBack(tagEditor.picker);
-        if (previous) {
-          setTagEditor(current => (current ? { ...current, picker: previous } : current));
-          return true;
-        }
-        setTagEditor(null);
-        return true;
-      }
       if (newTagPrompt) {
         setNewTagPrompt(false);
         return true;
@@ -1010,6 +1002,31 @@ export function AppShell(): React.JSX.Element {
         // so a habit press from a subpage can never fall through to the launcher.
         if (settingsPage === 'index') {
           setSettingsOpen(false);
+          return true;
+        }
+        // The picker pages are flows of their own: back walks out of a group, then one step
+        // back through the model/effort/context screens, and only then leaves the page. The
+        // model picker returns where it was opened from: the agents list for "global", the
+        // agent page for an agent key.
+        if (settingsPage === 'model-picker') {
+          const previous = pickerBack(agentPicker);
+          if (previous) {
+            setAgentPicker(previous);
+            return true;
+          }
+          const from = agentModelFor === 'global' ? 'agents' : 'agent';
+          setAgentModelFor(null);
+          setSettingsPage(from);
+          return true;
+        }
+        if (settingsPage === 'tag-editor') {
+          const previous = pickerBack(tagEditor?.picker ?? pickerStart);
+          if (previous && tagEditor) {
+            setTagEditor({ ...tagEditor, picker: previous });
+            return true;
+          }
+          setTagEditor(null);
+          setSettingsPage('tags');
           return true;
         }
         if (settingsPage === 'agent') {
@@ -1645,7 +1662,11 @@ export function AppShell(): React.JSX.Element {
     setTagContextEditor(null);
   };
   const openTagEditor = (name: string): void => {
+    // The editor is a settings page now, whatever opened it: a /tag command from the chat
+    // lands in Settings the same way the bare /tag does.
     setTagEditor({ name, picker: pickerStart });
+    setSettingsOpen(true);
+    setSettingsPage('tag-editor');
   };
   /** The /tag command: bare opens the tags page, `new "name"` opens the tag editor. */
   const dispatchTagCommand = useCallback(
@@ -1693,6 +1714,7 @@ export function AppShell(): React.JSX.Element {
       onOpenDefaultModel={() => {
         setAgentPicker(pickerStart);
         setAgentModelFor('global');
+        setSettingsPage('model-picker');
       }}
       onOpenProviders={() => setSettingsPage('providers')}
       onOpenTags={() => setSettingsPage('tags')}
@@ -1936,6 +1958,38 @@ export function AppShell(): React.JSX.Element {
               />
             ) : settingsPage === 'agents' ? (
               agentsPage
+            ) : settingsPage === 'model-picker' ? (
+              agentModelFor ? (
+                <AgentModelPickerPage
+                  target={agentModelFor}
+                  config={agentsConfig}
+                  state={agentPicker}
+                  onStateChange={setAgentPicker}
+                  onBack={() => {
+                    // The picker returns where it was opened from: the agents list for the
+                    // global default, the agent page for an agent key.
+                    const from = agentModelFor === 'global' ? 'agents' : 'agent';
+                    setAgentModelFor(null);
+                    setSettingsPage(from);
+                  }}
+                />
+              ) : (
+                agentsPage
+              )
+            ) : settingsPage === 'tag-editor' ? (
+              tagEditor ? (
+                <TagEditorPage
+                  name={tagEditor.name}
+                  state={tagEditor.picker}
+                  onStateChange={picker => setTagEditor(current => (current ? { ...current, picker } : current))}
+                  onBack={() => {
+                    setTagEditor(null);
+                    setSettingsPage('tags');
+                  }}
+                />
+              ) : (
+                tagsPage
+              )
             ) : settingsPage === 'instructions' ? (
               instructionsPage
             ) : settingsPage === 'instruction' ? (
@@ -1995,6 +2049,7 @@ export function AppShell(): React.JSX.Element {
                     if (!selectedAgent) return;
                     setAgentPicker(pickerStart);
                     setAgentModelFor(selectedAgent);
+                    setSettingsPage('model-picker');
                   }}
                   onOpenInstructions={() => {
                     setInstructionsFrom('agent');
@@ -2344,25 +2399,6 @@ export function AppShell(): React.JSX.Element {
           state={modelPicker}
           onStateChange={setModelPicker}
           onClose={() => setModelOpen(false)}
-        />
-      ) : null}
-
-      {agentModelFor ? (
-        <AgentModelPickerSheet
-          target={agentModelFor}
-          config={agentsConfig}
-          state={agentPicker}
-          onStateChange={setAgentPicker}
-          onClose={() => setAgentModelFor(null)}
-        />
-      ) : null}
-
-      {tagEditor ? (
-        <TagEditorSheet
-          name={tagEditor.name}
-          state={tagEditor.picker}
-          onStateChange={picker => setTagEditor(current => (current ? { ...current, picker } : current))}
-          onClose={() => setTagEditor(null)}
         />
       ) : null}
 
