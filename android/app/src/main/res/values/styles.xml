@@ -4,6 +4,32 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!--
+          React Native measures text with a TextPaint of its own and draws it in a TextView.
+          Android 15 changed what that TextView does by default for apps targeting API 35+, and
+          React Native was never told: the string "elegant" does not appear anywhere in its Android
+          source, so its measuring paint keeps the compact metrics while the view it hands the text
+          to paints with the taller elegant ones. Every line then draws a little taller than it was
+          measured, the deficit accumulates down the block, and the last line falls outside the
+          view. It is worst with emoji and other tall glyphs, which is where the two metric sets
+          differ most. Restoring the pre-15 defaults makes measuring and drawing agree again.
+          https://github.com/facebook/react-native/issues/53286 (fix landed in 0.84, then reverted)
+        -->
+        <item name="android:textViewStyle">@style/TextViewStyle</item>
+        <item name="editTextStyle">@style/EditTextStyle</item>
+        <item name="android:editTextStyle">@style/EditTextStyle</item>
+    </style>
+
+    <!-- Attributes unknown to a platform are ignored there, so these are inert below API 35. -->
+    <style name="TextViewStyle" parent="Widget.AppCompat.TextView">
+        <item name="android:elegantTextHeight">false</item>
+        <item name="android:useBoundsForWidth">false</item>
+        <item name="android:shiftDrawingOffsetForStartOverhang">false</item>
+    </style>
+
+    <style name="EditTextStyle" parent="Widget.AppCompat.EditText">
+        <item name="android:elegantTextHeight">false</item>
+        <item name="android:useLocalePreferredLineHeightForMinimum">false</item>
     </style>
 
 </resources>
