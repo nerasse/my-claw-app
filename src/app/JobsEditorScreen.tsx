@@ -7,25 +7,9 @@ import { useModelCatalog } from '../core/model';
 import { ScopeEditorScreen } from './ScopeEditorScreen';
 import { WorkspacePickerScreen } from './WorkspacePickerScreen';
 import { ModelPickerSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
+import { ScheduleEditor } from '../components/ScheduleEditor';
+import { scheduleInvalid } from '../core/cron';
 import type { JobEntry, JobScope, JobScopeMode, SkillEntry, ToolEntry, McpEntry, WorkspaceEntry, JobFieldsOut } from '../core/protocol';
-
-/** The server's own schedule grammar (src/cron/store.ts), mirrored so an invalid value can be
- *  painted red before the save is even sent — the server refuses it, so this is the one field
- *  that blocks, unlike the catalog membership of a model or a scope name. */
-const EVERY_RE = /^every\s+(\d+)\s*(m|min|mins?|minutes?|h|hr|hrs?|hours?|d|days?)$/i;
-const DURATION_RE = /^(\d+)\s*(m|min|mins?|minutes?|h|hr|hrs?|hours?|d|days?)$/i;
-const CRON_RE = /^([\d*,/-]+\s+){4}[\d*,/-]+$/;
-
-export function scheduleInvalid(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return true;
-  if (EVERY_RE.test(trimmed)) return false;
-  if (CRON_RE.test(trimmed)) return false;
-  if (trimmed.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    return isNaN(new Date(trimmed).getTime());
-  }
-  return !DURATION_RE.test(trimmed);
-}
 
 export interface JobDraft {
   name: string;
@@ -366,23 +350,10 @@ export function JobsEditorScreen({
 
         <View style={styles.category}>
           <Text style={styles.section}>schedule</Text>
-          <TextInput
-            style={[styles.input, invalid ? styles.inputInvalid : null]}
+          <ScheduleEditor
             value={draft.schedule}
-            onChangeText={schedule => setDraft(current => ({ ...current, schedule }))}
-            placeholder="every 24h · 0 9 * * 1 · 2026-08-09T09:00"
-            placeholderTextColor={styles.placeholder.color}
-            autoCapitalize="none"
-            autoCorrect={false}
-            accessibilityLabel="Job schedule"
+            onChange={schedule => setDraft(current => ({ ...current, schedule }))}
           />
-          {invalid ? (
-            <Text style={styles.invalidHint}>
-              the server would refuse this · use a cron expression, “every Xm/h/d”, or a date
-            </Text>
-          ) : (
-            <Text style={styles.note}>cron expression · every 30m / 2h / 1d · ISO timestamp or duration</Text>
-          )}
         </View>
 
         <View style={styles.category}>

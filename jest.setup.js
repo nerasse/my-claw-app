@@ -196,3 +196,18 @@ jest.mock('./src/core/device', () => ({
 // that difference is exactly what we want under test.
 // eslint-disable-next-line @react-native/no-deep-imports
 global.URL = require('react-native/Libraries/Blob/URL').URL;
+
+// The Android date/time pickers are native dialogs (an inline spinner on iOS); under Jest
+// nothing renders. The holder lets a test drive onChange with a chosen Date, the same way the
+// expo-unified-push mock replays distributor messages.
+jest.mock('@react-native-community/datetimepicker', () => {
+  let last = null;
+  return {
+    __esModule: true,
+    default: props => {
+      last = props;
+      return null;
+    },
+    __lastProps: () => last,
+  };
+});

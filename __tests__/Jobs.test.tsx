@@ -595,3 +595,76 @@ test('the runs page shortcuts into the job config, and back returns to the runs'
   expect(labelsOf(tree)).toContain('Close jobs');
   await unmount(tree);
 });
+
+test('a new job opens in custom mode with the default every-24h schedule', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await pressLabel(tree, 'Add job');
+  await waitFor(() => labelsOf(tree).includes('Job name'));
+
+  const labels = labelsOf(tree);
+  expect(labels).toEqual(expect.arrayContaining(['Schedule mode Once', 'Schedule mode Repeat', 'Schedule mode Custom']));
+  const textField = tree.root.find(node => node.props.accessibilityLabel === 'Job schedule');
+  expect(textField.props.value).toBe('every 24h');
+  await unmount(tree);
+});
+
+test('once mode turns the schedule into an ISO timestamp from the native pickers', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await pressLabel(tree, 'Add job');
+  await waitFor(() => labelsOf(tree).includes('Job name'));
+  await typeInto(tree, 'Job name', 'One shot');
+  await typeInto(tree, 'Job prompt', 'do things');
+  await pressLabel(tree, 'Schedule mode Once');
+  await waitFor(() => labelsOf(tree).includes('Pick a time'));
+  expect(labelsOf(tree)).not.toContain('Job schedule');
+
+  await pressLabel(tree, 'Pick a date');
+  const picker = require('@react-native-community/datetimepicker').__lastProps();
+  expect(picker.mode).toBe('date');
+  await ReactTestRenderer.act(async () => {
+    picker.onChange({ type: 'set' }, new Date(2026, 7, 15, 14, 30));
+  });
+  expect(textsOf(tree)).toContain('15 Aug 2026');
+  await pressLabel(tree, 'Save job');
+  await waitFor(() => sentOfType('jobs.save').length === 1);
+  expect(sentOfType('jobs.save')[0]).toMatchObject({ schedule: '2026-08-15T14:30:00' });
+  await unmount(tree);
+});
+
+test('repeat mode presets and field menus build the cron expression', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await pressLabel(tree, 'Add job');
+  await waitFor(() => labelsOf(tree).includes('Job name'));
+  await typeInto(tree, 'Job name', 'Recurring');
+  await typeInto(tree, 'Job prompt', 'do things');
+  await pressLabel(tree, 'Schedule mode Repeat');
+  await waitFor(() => labelsOf(tree).includes('Preset Daily'));
+
+  await pressLabel(tree, 'Preset Daily');
+  await waitFor(() => textsOf(tree).some(text => text.includes('At 12:00 AM')));
+
+  await pressLabel(tree, 'Field Minute');
+  await waitFor(() => labelsOf(tree).includes('Value 30'));
+  await pressLabel(tree, 'Value 30');
+  await pressLabel(tree, 'Save job');
+  await waitFor(() => sentOfType('jobs.save').length === 1);
+  expect(sentOfType('jobs.save')[0]).toMatchObject({ schedule: '30 0 * * *' });
+  await unmount(tree);
+});
+
+test('a cron job opens in repeat mode with its fields pre-filled', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emit({
+    type: 'jobs.list.result',
+    jobs: [job({ schedule: { kind: 'cron', expr: '0 9 * * 1', display: '0 9 * * 1' } })],
+  });
+  await waitFor(() => labelsOf(tree).includes('Edit job Morning report'));
+  await pressLabel(tree, 'Edit job Morning report');
+  await waitFor(() => labelsOf(tree).includes('Field Weekday'));
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['9', 'Mon']));
+  await unmount(tree);
+});

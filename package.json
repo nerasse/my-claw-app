@@ -15,6 +15,8 @@
   "dependencies": {
     "@likashefqet/react-native-image-zoom": "^4.3.0",
     "@react-native-clipboard/clipboard": "^1.16.3",
+    "@react-native-community/datetimepicker": "^9.1.0",
+    "cronstrue": "^3.24.0",
     "expo": "~57.0.11",
     "expo-unified-push": "^0.6.0",
     "react": "^19.2.8",
