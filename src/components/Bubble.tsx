@@ -27,7 +27,10 @@ export function Bubble({
   grouped: boolean;
   showTime: boolean;
   onMenu: () => void;
-  onOpenAttachment?: (kind: 'image' | 'text', target: { url: string; filename: string }) => void;
+  onOpenAttachment?: (
+    kind: 'image' | 'text' | 'video' | 'file',
+    target: { url: string; filename: string },
+  ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const agent = item.role === 'agent';

@@ -68,6 +68,8 @@ export function ChatScreen({
   onBubbleMenu,
   onOpenImage,
   onOpenText,
+  onOpenVideo,
+  onOpenFile,
   onOpenMenu,
   onCommandEntered,
   onTagCommand,
@@ -91,6 +93,8 @@ export function ChatScreen({
   onBubbleMenu: (item: TextItem) => void;
   onOpenImage: (target: { url: string; filename: string }) => void;
   onOpenText: (target: { url: string; filename: string }) => void;
+  onOpenVideo: (target: { url: string; filename: string }) => void;
+  onOpenFile: (target: { url: string; filename: string }) => void;
   /** The command menu of the app (model, stop, clear, ...). */
   onOpenMenu: () => void;
   /** A slash command was chosen; true when the app handled it natively. */
@@ -359,7 +363,13 @@ export function ChatScreen({
                 showTime={!isGrouped(items, index + 1)}
                 onMenu={() => onBubbleMenu(item)}
                 onOpenAttachment={(kind, target) =>
-                  kind === 'image' ? onOpenImage(target) : onOpenText(target)
+                  kind === 'image'
+                    ? onOpenImage(target)
+                    : kind === 'text'
+                      ? onOpenText(target)
+                      : kind === 'video'
+                        ? onOpenVideo(target)
+                        : onOpenFile(target)
                 }
               />
             )

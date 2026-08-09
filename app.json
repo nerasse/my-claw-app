@@ -1,4 +1,7 @@
 {
   "name": "MyClawApp",
-  "displayName": "MyClaw"
+  "displayName": "MyClaw",
+  "plugins": [
+    "expo-video"
+  ]
 }

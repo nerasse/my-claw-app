@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageZoom } from '@likashefqet/react-native-image-zoom';
@@ -48,15 +48,15 @@ export function ImageViewer({
     return () => clearTimeout(timer);
   }, [savedTo]);
 
-  const save = useCallback(() => {
+  const save = (toGallery: boolean) => {
     if (!url) return;
     setSaving(true);
     deviceBridge
-      .downloadFile(url, filename, true)
-      .then(() => setSavedTo('saved to the gallery'))
+      .downloadFile(url, filename, toGallery)
+      .then(() => setSavedTo(toGallery ? 'saved to the gallery' : 'saved to Downloads'))
       .catch(() => setSavedTo('save failed'))
       .finally(() => setSaving(false));
-  }, [filename, url]);
+  };
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
@@ -102,7 +102,18 @@ export function ImageViewer({
               <View style={styles.spacer} />
             )}
             <Pressable
-              onPress={save}
+              onPress={() => save(false)}
+              disabled={saving}
+              style={[styles.save, saving && styles.saveOff]}
+              accessibilityRole="button"
+              accessibilityLabel="Save image to downloads"
+            >
+              <Text style={styles.saveText}>
+                {saving ? 'saving…' : 'Download'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => save(true)}
               disabled={saving}
               style={[styles.save, saving && styles.saveOff]}
               accessibilityRole="button"

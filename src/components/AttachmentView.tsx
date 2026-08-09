@@ -4,6 +4,7 @@ import type { AttachmentMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
 import { viewerFor } from '../core/utils';
 import { VoiceNote } from './VoiceNote';
+import { PlayPauseIcon } from './icons';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 export function AttachmentView({
@@ -18,7 +19,10 @@ export function AttachmentView({
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
   /** Routed to the same full-screen viewers as the file explorer. */
-  onOpen?: (kind: 'image' | 'text', target: { url: string; filename: string }) => void;
+  onOpen?: (
+    kind: 'image' | 'text' | 'video' | 'file',
+    target: { url: string; filename: string },
+  ) => void;
   /** What the server heard, shown under its own recording. */
   transcript?: string;
   /** Sitting on an accent-filled bubble: the page colours have no contrast there. */
@@ -30,7 +34,9 @@ export function AttachmentView({
     : '';
   const uri = att.uri ?? remote;
   const name = att.filename ?? att.type;
-  const kind = att.deleted ? null : viewerFor(att.type, att.filename);
+  // Everything reachable opens something: previews where there is one, a download card else.
+  // A deleted attachment has nothing left to open.
+  const kind = att.deleted ? null : (viewerFor(att.type, att.filename) ?? 'file');
   // A local preview has no server copy yet, so the viewer would have nothing to fetch.
   const open =
     onOpen && kind && remote
@@ -43,28 +49,36 @@ export function AttachmentView({
     return <VoiceNote att={att} uri={uri} transcript={transcript} onAccent={onAccent} />;
   }
 
-  if (att.type === 'image' && uri) {
-    const image = (
+  if ((att.type === 'image' || att.type === 'video') && uri) {
+    const media = (
       <>
-        <Image
-          source={{ uri }}
-          style={styles.image}
-          resizeMode="contain"
-          accessibilityLabel={name}
-        />
+        <View style={[styles.image, att.type === 'video' ? styles.videoStage : null]}>
+          {att.type === 'image' ? (
+            <Image
+              source={{ uri }}
+              style={styles.image}
+              resizeMode="contain"
+              accessibilityLabel={name}
+            />
+          ) : (
+            <View style={styles.play}>
+              <PlayPauseIcon playing={false} size={44} color="#fff" />
+            </View>
+          )}
+        </View>
         <Text style={[styles.caption, onAccent && styles.captionOnAccent]} numberOfLines={1}>
           {name}
         </Text>
       </>
     );
-    if (!open) return <View style={styles.imageWrap}>{image}</View>;
+    if (!open) return <View style={styles.imageWrap}>{media}</View>;
     return (
       <Pressable
         style={styles.imageWrap}
         onPress={open}
         accessibilityRole="button"
         accessibilityLabel={`Open attachment ${name}`}>
-        {image}
+        {media}
       </Pressable>
     );
   }
@@ -95,6 +109,19 @@ const createStyles = (palette: Palette) => ({
     height: 190,
     borderRadius: radius.sm,
     backgroundColor: palette.surfaceAlt,
+  },
+  videoStage: {
+    backgroundColor: '#000',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  play: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   caption: { fontSize: font.micro, color: palette.textFaint, maxWidth: 190, marginTop: 1 },
   captionOnAccent: { color: palette.onAccentMuted },

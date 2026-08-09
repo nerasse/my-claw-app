@@ -45,6 +45,26 @@ jest.mock(
   () => require('react-native-safe-area-context/jest/mock').default,
 );
 
+// expo-video's Android player is a native TurboModule; under Jest it becomes a stub player
+// on a plain View, so VideoViewer renders without pulling in Media3.
+jest.mock('expo-video', () => {
+  const React = require('react');
+  const player = () => ({
+    play: jest.fn(),
+    pause: jest.fn(),
+    release: jest.fn(),
+    muted: false,
+    currentTime: 0,
+    duration: 0,
+  });
+  return {
+    __esModule: true,
+    useVideoPlayer: jest.fn(() => player()),
+    VideoView: props => React.createElement('View', props),
+    VideoPlayer: { prototype: {} },
+  };
+});
+
 // Mock the native gesture handler module the app registers at boot, and reset any
 // listeners between test files.
 require('react-native-gesture-handler/jestSetup');

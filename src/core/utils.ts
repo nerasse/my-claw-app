@@ -26,8 +26,9 @@ export function httpOrigin(wsUrl: string, fallback = 'http://10.10.20.10:8080'):
 export function viewerFor(
   type: 'image' | 'audio' | 'video' | 'file',
   filename: string | undefined,
-): 'image' | 'text' | null {
+): 'image' | 'text' | 'video' | null {
   if (type === 'image') return 'image';
+  if (type === 'video') return 'video';
   const name = (filename ?? '').toLowerCase();
   if (name.endsWith('.md') || name.endsWith('.txt')) return 'text';
   return null;

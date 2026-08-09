@@ -57,3 +57,7 @@ export function PlayPauseIcon({
 }: IconProps & { playing: boolean }): React.JSX.Element {
   return <Icon {...props} d={playing ? 'M6 5h4v14H6zm8 0h4v14h-4z' : 'M8 5v14l11-7z'} />;
 }
+
+export function DownloadIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />;
+}

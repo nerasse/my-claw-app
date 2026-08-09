@@ -148,6 +148,8 @@ import { WorkspacesScreen } from './WorkspacesScreen';
 import { FilesScreen } from './FilesScreen';
 import { ImageViewer } from './ImageViewer';
 import { TextViewer } from './TextViewer';
+import { VideoViewer } from './VideoViewer';
+import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
 import { StatusScreen } from './StatusScreen';
@@ -437,6 +439,16 @@ export function AppShell(): React.JSX.Element {
   const [textViewer, setTextViewer] = useState<{
     url: string;
     filename: string;
+  } | null>(null);
+  const [videoViewer, setVideoViewer] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
+  /** A file with no preview: name, size and a download button. */
+  const [fileViewer, setFileViewer] = useState<{
+    url: string;
+    filename: string;
+    sizeBytes?: number;
   } | null>(null);
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
@@ -970,6 +982,14 @@ export function AppShell(): React.JSX.Element {
         setTextViewer(null);
         return true;
       }
+      if (videoViewer) {
+        setVideoViewer(null);
+        return true;
+      }
+      if (fileViewer) {
+        setFileViewer(null);
+        return true;
+      }
       if (approvals.length > 0) {
         setApprovals(current => current.slice(1));
         return true;
@@ -1177,6 +1197,8 @@ export function AppShell(): React.JSX.Element {
     textViewer,
     threadMenu,
     threadToRename,
+    videoViewer,
+    fileViewer,
   ]);
 
   const sendChat = useCallback(
@@ -2306,6 +2328,7 @@ export function AppShell(): React.JSX.Element {
               onDelete={setFileToDelete}
               onOpenImage={setImageViewer}
               onOpenText={setTextViewer}
+              onOpenVideo={setVideoViewer}
             />
           ) : (
             <ChatScreen
@@ -2325,6 +2348,8 @@ export function AppShell(): React.JSX.Element {
               onBubbleMenu={setBubbleMenu}
               onOpenImage={setImageViewer}
               onOpenText={setTextViewer}
+              onOpenVideo={setVideoViewer}
+              onOpenFile={setFileViewer}
               onOpenMenu={() => setCommandMenuOpen(true)}
               onCommandEntered={dispatchCommand}
               onTagCommand={dispatchTagCommand}
@@ -2377,6 +2402,23 @@ export function AppShell(): React.JSX.Element {
           url={textViewer.url}
           filename={textViewer.filename}
           onClose={() => setTextViewer(null)}
+        />
+      ) : null}
+
+      {videoViewer ? (
+        <VideoViewer
+          url={videoViewer.url}
+          filename={videoViewer.filename}
+          onClose={() => setVideoViewer(null)}
+        />
+      ) : null}
+
+      {fileViewer ? (
+        <FileViewer
+          filename={fileViewer.filename}
+          url={fileViewer.url}
+          sizeBytes={fileViewer.sizeBytes}
+          onClose={() => setFileViewer(null)}
         />
       ) : null}
 
