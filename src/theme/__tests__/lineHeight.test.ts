@@ -67,3 +67,16 @@ test('markdown drops the pin for a message carrying an emoji', () => {
   expect(emoji.text?.lineHeight).toBeUndefined();
   expect(emoji.li?.lineHeight).toBeUndefined();
 });
+
+test('bubble emphasis wears the palette ink, never the library default gray', () => {
+  for (const palette of [lightPalette, darkPalette]) {
+    const styles = markedStyles(palette) as unknown as Record<
+      string,
+      { color?: string; fontSize?: number } | undefined
+    >;
+    for (const key of ['strong', 'em', 'strikethrough', 'li'] as const) {
+      expect(styles[key]?.color).toBe(palette.text);
+      expect(styles[key]?.fontSize).toBe(14);
+    }
+  }
+});

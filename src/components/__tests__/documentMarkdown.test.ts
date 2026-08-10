@@ -53,6 +53,19 @@ describe('documentMarkdownStyles', () => {
     expect(styles.codespan?.fontWeight).toBe('400');
   });
 
+  test('emphasis wears the palette ink, never the library default gray', () => {
+    for (const palette of [lightPalette, darkPalette]) {
+      const styles = documentMarkdownStyles(palette);
+      for (const key of ['strong', 'em', 'strikethrough'] as const) {
+        expect(styles[key]?.color).toBe(palette.text);
+      }
+      expect(styles.link?.color).toBe(palette.accent);
+    }
+    const styles = documentMarkdownStyles(lightPalette);
+    expect(styles.strong?.fontSize).toBe(15);
+    expect(styles.strong?.lineHeight).toBe(23);
+  });
+
   test('the document body sits one step above the chat body', () => {
     const styles = documentMarkdownStyles(lightPalette);
     expect(styles.text?.fontSize).toBeGreaterThan(14);

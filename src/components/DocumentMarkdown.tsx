@@ -17,14 +17,17 @@ const DOC_LINE_HEIGHT = 23;
  * chat app as "moche".
  */
 export function documentMarkdownStyles(palette: Palette): MarkedStyles {
+  // The library flattens every style over its own regular base (16px, #333333); a span that
+  // only states its emphasis inherits that base and renders off-palette -- bold as dark gray
+  // in dark mode. Every inline style restates the body fully.
   const body = { fontSize: DOC_FONT_SIZE, color: palette.text, lineHeight: DOC_LINE_HEIGHT };
   return {
     text: body,
     paragraph: { paddingVertical: 6 },
-    strong: { fontWeight: '700' },
-    em: { fontStyle: 'italic' },
-    strikethrough: { textDecorationLine: 'line-through' },
-    link: { color: palette.accent, textDecorationLine: 'underline' },
+    strong: { ...body, fontWeight: '700' },
+    em: { ...body, fontStyle: 'italic' },
+    strikethrough: { ...body, textDecorationLine: 'line-through' },
+    link: { ...body, color: palette.accent, textDecorationLine: 'underline' },
     h1: {
       fontSize: 24,
       lineHeight: 30,

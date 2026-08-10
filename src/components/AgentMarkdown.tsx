@@ -10,19 +10,23 @@ import { font, lineBoxFor, lineHeightFor, space, useTheme, type Palette } from '
  */
 export function markedStyles(palette: Palette, prose = ''): MarkedStyles {
   const box = lineBoxFor(font.body, prose);
+  // The library flattens every style over its own regular base (16px, #333333); a span that
+  // only states its emphasis inherits that base. Restate the full body so bold and italic
+  // wear the bubble's ink and size, not the library's default gray.
+  const bodyStyle = { fontSize: font.body, color: palette.text, ...box };
   return {
     // Inline runs sit in the row that a list item builds (bullet, then content), so they must
     // yield width there or a long item would push its own line off the bubble.
     text: { fontSize: font.body, color: palette.text, ...box, flexShrink: 1 },
     paragraph: { marginVertical: 2, flexShrink: 0 },
-    strong: { fontWeight: '700', color: palette.text },
-    em: { fontStyle: 'italic' },
-    strikethrough: { textDecorationLine: 'line-through' },
+    strong: { ...bodyStyle, fontWeight: '700' },
+    em: { ...bodyStyle, fontStyle: 'italic' },
+    strikethrough: { ...bodyStyle, textDecorationLine: 'line-through' },
     h1: { fontSize: 18, fontWeight: '700', color: palette.text, marginTop: space.sm, marginBottom: space.xs },
     h2: { fontSize: 16, fontWeight: '700', color: palette.text, marginTop: space.sm, marginBottom: space.xs },
     h3: { fontSize: 15, fontWeight: '600', color: palette.text, marginTop: space.sm, marginBottom: 2 },
     h4: { fontSize: font.body, fontWeight: '600', color: palette.text, marginTop: space.xs, marginBottom: 2 },
-    link: { color: palette.accent, textDecorationLine: 'underline' },
+    link: { ...bodyStyle, color: palette.accent, textDecorationLine: 'underline' },
     codespan: {
       fontFamily: 'monospace',
       fontSize: font.meta,
