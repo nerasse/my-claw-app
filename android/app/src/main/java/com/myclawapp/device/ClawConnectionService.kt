@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.facebook.react.bridge.Arguments
 import com.myclawapp.MainActivity
@@ -46,7 +47,18 @@ class ClawConnectionService : Service() {
     const val ACTION_CONNECT = "com.myclawapp.device.CONNECT"
     const val ACTION_DISCONNECT = "com.myclawapp.device.DISCONNECT"
     const val EXTRA_URL = "url"
-    private const val CHANNEL_ID = "claw_connection"
+    /** One tag for the whole socket lifecycle: `adb logcat -s ClawConnection` and nothing else. */
+    private const val TAG = "ClawConnection"
+    /**
+     * A channel's settings are frozen at its first creation, and deleting one does not reset them:
+     * `createNotificationChannel` with a deleted id un-deletes it with the settings it had. So
+     * `setShowBadge(false)` could only ever reach an existing install under a new id. Named after
+     * what the channel is -- a connection status, not an event -- rather than a version number.
+     */
+    private const val CHANNEL_ID = "claw_connection_status"
+
+    /** The badge-carrying channel this replaces. Deleted once, never recreated under this id. */
+    private const val LEGACY_CHANNEL_ID = "claw_connection"
     private const val NOTIFICATION_ID = 1001
     private const val MAX_RECONNECT_DELAY_MS = 30_000L
     private const val OUTBOX_CAPACITY = 200
@@ -148,6 +160,7 @@ class ClawConnectionService : Service() {
     webSocket?.close(1000, "reconnecting")
     webSocket = null
     state = "connecting"
+    Log.i(TAG, "connecting to $url")
     emitState(null, 0)
     val deviceId = DeviceCredentials.deviceId(this)
     val token = DeviceCredentials.token(this)
@@ -160,6 +173,7 @@ class ClawConnectionService : Service() {
             ws.close(1000, "superseded")
             return
           }
+          Log.i(TAG, "open (gen=$gen, pending=${pendingCount()})")
           webSocket = ws
           reconnectAttempts = 0
           state = "connected"
@@ -180,11 +194,14 @@ class ClawConnectionService : Service() {
 
         override fun onClosed(ws: WebSocket, code: Int, reason: String) {
           if (gen != generation) return
+          // The close code is what distinguishes a server-side reap from a network drop.
+          Log.i(TAG, "closed by peer (code=$code, reason=$reason)")
           onDisconnected(reason)
         }
 
         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
           if (gen != generation) return
+          Log.w(TAG, "failure (http=${response?.code ?: 0})", t)
           onDisconnected(t.message ?: "failure")
         }
       },
@@ -202,6 +219,7 @@ class ClawConnectionService : Service() {
   private fun scheduleReconnect() {
     if (stopping) return
     val delay = minOf(MAX_RECONNECT_DELAY_MS, 1_000L shl minOf(reconnectAttempts, 5))
+    Log.i(TAG, "reconnect in ${delay}ms (attempt=${reconnectAttempts + 1})")
     reconnectAttempts += 1
     handler.postDelayed({ if (!stopping) connect() }, delay)
   }
@@ -240,8 +258,16 @@ class ClawConnectionService : Service() {
   }
 
   private fun createChannel() {
+    val manager = getSystemService(NotificationManager::class.java)
+    // Safe precisely because CHANNEL_ID moved: the un-delete trap only fires if the same id is
+    // recreated, and nothing creates the legacy one any more. Without this it lingers, empty,
+    // in the system settings.
+    manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
     val channel = NotificationChannel(CHANNEL_ID, getString(R.string.connection_channel_name), NotificationManager.IMPORTANCE_LOW)
-    getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    // A channel shows a launcher badge by default, so a permanent status notification put a
+    // permanent "1" on the app icon. This is a status, not an unread item: nothing to count.
+    channel.setShowBadge(false)
+    manager.createNotificationChannel(channel)
   }
 
   private fun buildNotification(): android.app.Notification {
@@ -257,6 +283,9 @@ class ClawConnectionService : Service() {
       // the system reclaiming the process) and each startForeground would otherwise re-alert.
       .setOnlyAlertOnce(true)
       .setSilent(true)
+      // Belt and braces with the channel: some launchers read the notification, not the channel.
+      .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
+      .setNumber(0)
       .build()
   }
 }

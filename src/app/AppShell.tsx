@@ -28,6 +28,7 @@ import {
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { commandStore, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
+import { acknowledgeDiagnostics, flushDiagnostics, loadDiagnostics } from '../core/diagnostics';
 import {
   encodeApprovalResponse,
   encodeAgentsConfigGet,
@@ -723,6 +724,9 @@ export function AppShell(): React.JSX.Element {
           setDiagSnapshot(frame.text);
           setDiagBusy(false);
           break;
+        case 'diag.report.result':
+          acknowledgeDiagnostics(frame.accepted);
+          break;
         case 'logs.tail.result':
           setDiagLogs(frame.lines > 0 ? frame.text : 'no matching lines');
           setDiagBusy(false);
@@ -946,6 +950,12 @@ export function AppShell(): React.JSX.Element {
         connection.send(encodeSessionList());
       });
     });
+
+    // Reports of what killed the previous process, read before the first frame goes out. They
+    // are queued natively if the socket is not up yet, so this does not need to wait for it.
+    loadDiagnostics()
+      .then(flushDiagnostics)
+      .catch(() => {});
 
     getDeviceInfo()
       .then(setDeviceInfo)

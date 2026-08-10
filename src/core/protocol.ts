@@ -171,6 +171,12 @@ export interface DiagSnapshotResultFrame {
   text: string;
 }
 
+/** Ack for a `diag.report`: only an acknowledged report is dropped from the device's store. */
+export interface DiagReportResultFrame {
+  type: 'diag.report.result';
+  accepted: number;
+}
+
 export interface LogsTailResultFrame {
   type: 'logs.tail.result';
   text: string;
@@ -467,6 +473,8 @@ export interface JobEntry {
     display: string;
   };
   enabled: boolean;
+  /** Suppresses this job's push notifications, successes and failures alike. */
+  silent: boolean;
   state: 'scheduled' | 'paused' | 'completed';
   pausedReason?: string;
   repeat: number | null;
@@ -771,6 +779,7 @@ export type ServerFrame =
   | CommandsListResultFrame
   | FilesListResultFrame
   | DiagSnapshotResultFrame
+  | DiagReportResultFrame
   | LogsTailResultFrame
   | VoiceModeResultFrame
   | ModelListResultFrame
@@ -814,6 +823,7 @@ const FRAME_TYPES = new Set([
   'commands.list.result',
   'files.list.result',
   'diag.snapshot.result',
+  'diag.report.result',
   'logs.tail.result',
   'voice.mode.result',
   'model.list.result',
@@ -896,6 +906,20 @@ export function encodeFileDelete(threadId: string, id: string): string {
 
 export function encodeDiagSnapshot(threadId: string): string {
   return JSON.stringify({ type: 'diag.snapshot', threadId });
+}
+
+export function encodeDiagReport(reports: DiagReport[]): string {
+  return JSON.stringify({ type: 'diag.report', reports });
+}
+
+/** One post-mortem. `exit` entries come from Android, the others from the JS side. */
+export interface DiagReport {
+  kind: 'js' | 'render' | 'exit';
+  at: number;
+  message: string;
+  stack?: string;
+  appVersion?: string;
+  reason?: string;
 }
 
 export interface LogsTailQuery {
@@ -1170,6 +1194,8 @@ export interface JobFieldsOut {
   prompt: string;
   schedule: string;
   enabled: boolean;
+  /** Suppresses this job's push notifications, successes and failures alike. */
+  silent: boolean;
   model?: string;
   /** The job's own effort pin; "" clears it so the cron agent's setting applies. */
   effort?: string;
@@ -1192,6 +1218,7 @@ export function encodeJobsSave(fields: JobFieldsOut): string {
   frame.prompt = fields.prompt;
   frame.schedule = fields.schedule;
   frame.enabled = fields.enabled;
+  frame.silent = fields.silent;
   if (fields.model) frame.model = fields.model;
   // An empty string is a deliberate clear on update, so it must reach the server.
   if (fields.effort !== undefined) frame.effort = fields.effort;

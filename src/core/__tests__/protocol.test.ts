@@ -110,6 +110,6 @@ describe('encoders', () => {
     expect(JSON.parse(encodeAgentsFallbackSet('opus'))).toEqual({ type: 'agents.fallback.set', model: 'opus' });
     expect(JSON.parse(encodeAgentsFallbackSet(''))).toEqual({ type: 'agents.fallback.set', model: '' });
     expect(JSON.parse(encodeModelEffortSet('t', ''))).toEqual({ type: 'model.effort.set', threadId: 't', level: '' });
-    expect(JSON.parse(encodeJobsSave({ name: 'j', prompt: 'p', schedule: 'every 1h', enabled: true, effort: '', skills: { mode: 'inherit' }, mcp: { mode: 'inherit' }, tools: { mode: 'inherit' } }))).toMatchObject({ type: 'jobs.save', effort: '' });
+    expect(JSON.parse(encodeJobsSave({ name: 'j', prompt: 'p', schedule: 'every 1h', enabled: true, silent: false, effort: '', skills: { mode: 'inherit' }, mcp: { mode: 'inherit' }, tools: { mode: 'inherit' } }))).toMatchObject({ type: 'jobs.save', effort: '' });
   });
 });

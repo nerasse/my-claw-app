@@ -708,6 +708,66 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     promise.resolve(null)
   }
 
+  /**
+   * Android's own record of why our previous processes died. It is the only source that can tell
+   * a crash from an ANR, an OOM kill, or the battery optimiser stopping the foreground service —
+   * four causes that produce the same visible symptom. It survives reboots, unlike logcat's ring
+   * buffer, and needs no adb, which is the point: the phone is not always on a network where adb
+   * can reach it. Empty below API 30, where the API does not exist.
+   */
+  @ReactMethod
+  fun getExitInfo(promise: Promise) {
+    val exits = Arguments.createArray()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      try {
+        val manager = reactContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        for (info in manager.getHistoricalProcessExitReasons(reactContext.packageName, 0, 10)) {
+          val map = Arguments.createMap()
+          map.putString("reason", exitReasonName(info.reason))
+          map.putDouble("at", info.timestamp.toDouble())
+          map.putInt("status", info.status)
+          map.putString("description", info.description ?: "")
+          exits.pushMap(map)
+        }
+      } catch (_: Exception) {
+        // A refused query must not keep the app from booting.
+      }
+    }
+    val result = Arguments.createMap()
+    result.putString("versionName", versionName())
+    result.putArray("exits", exits)
+    promise.resolve(result)
+  }
+
+  private fun versionName(): String {
+    return try {
+      reactContext.packageManager.getPackageInfo(reactContext.packageName, 0).versionName ?: ""
+    } catch (_: Exception) {
+      ""
+    }
+  }
+
+  /** The names, not the ints: a log line has to be readable a month later without a lookup table. */
+  private fun exitReasonName(reason: Int): String {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return "UNKNOWN"
+    return when (reason) {
+      android.app.ApplicationExitInfo.REASON_ANR -> "ANR"
+      android.app.ApplicationExitInfo.REASON_CRASH -> "CRASH"
+      android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
+      android.app.ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+      android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
+      android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+      android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INITIALIZATION_FAILURE"
+      android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+      android.app.ApplicationExitInfo.REASON_OTHER -> "OTHER"
+      android.app.ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "PERMISSION_CHANGE"
+      android.app.ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+      android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+      android.app.ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+      else -> "UNKNOWN"
+    }
+  }
+
   @ReactMethod
   fun getCapabilities(promise: Promise) {
     val caps = Arguments.createMap()

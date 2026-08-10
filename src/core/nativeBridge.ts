@@ -88,6 +88,11 @@ export interface DeviceBridgeNative {
   getCapabilities(): Promise<DeviceCapabilities>;
   prefsGetAll(): Promise<Record<string, string>>;
   prefsSet(key: string, value: string | null): Promise<void>;
+  /** Android's history of previous process deaths, plus the running build's version name. */
+  getExitInfo(): Promise<{
+    versionName: string;
+    exits: { reason: string; at: number; status: number; description: string }[];
+  }>;
   pickFile(): Promise<PickedFile[]>;
   /** Copies a content:// or file:// uri into the cache and returns a readable file:// uri. */
   prepareFile(
@@ -175,6 +180,8 @@ export const deviceBridge: DeviceBridgeNative = {
     }),
   prefsGetAll: () => native?.prefsGetAll() ?? Promise.resolve({}),
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
+  getExitInfo: () =>
+    native?.getExitInfo() ?? Promise.resolve({ versionName: '', exits: [] }),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   prepareFile: uri =>
     native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),

@@ -16,6 +16,7 @@ export interface JobDraft {
   prompt: string;
   schedule: string;
   enabled: boolean;
+  silent: boolean;
   model: string;
   effort: string;
   workspace: string;
@@ -31,6 +32,7 @@ function draftOf(job: JobEntry | null): JobDraft {
       prompt: '',
       schedule: 'every 24h',
       enabled: true,
+      silent: false,
       model: '',
       effort: '',
       workspace: '',
@@ -51,6 +53,7 @@ function draftOf(job: JobEntry | null): JobDraft {
     prompt: job.prompt,
     schedule,
     enabled: job.enabled,
+    silent: job.silent === true,
     model: job.model ?? '',
     effort: job.effort ?? '',
     workspace: job.workspace ?? '',
@@ -331,6 +334,25 @@ export function JobsEditorScreen({
               </Pressable>
             ))}
           </View>
+          {/* Notifications, not delivery: a silent job still runs and still writes its result. */}
+          <View style={styles.chips}>
+            {(
+              [
+                [false, 'Notify'],
+                [true, 'Silent'],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={label}
+                onPress={() => setDraft(current => ({ ...current, silent: value }))}
+                style={[styles.chip, draft.silent === value ? styles.chipActive : styles.chipIdle]}
+                accessibilityRole="button"
+                accessibilityLabel={`Job ${label}`}
+                accessibilityState={{ selected: draft.silent === value }}>
+                <Text style={draft.silent === value ? styles.chipTextActive : styles.chipTextIdle}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         <View style={styles.category}>
@@ -439,6 +461,7 @@ function toFields(job: JobEntry | null, draft: JobDraft): JobFieldsOut {
     prompt: draft.prompt,
     schedule: draft.schedule,
     enabled: draft.enabled,
+    silent: draft.silent,
     ...(draft.model.trim() ? { model: draft.model.trim() } : {}),
     // Always carried: "" reads as "no pin" on create and as a deliberate clear on update.
     effort: draft.effort,
