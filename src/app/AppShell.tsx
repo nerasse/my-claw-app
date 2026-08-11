@@ -461,6 +461,7 @@ export function AppShell(): React.JSX.Element {
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
   const [agentPicker, setAgentPicker] = useState<PickerState>(pickerStart);
+  const [providerQuery, setProviderQuery] = useState('');
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [tools, setTools] = useState<ToolEntry[]>([]);
   const [toolsError, setToolsError] = useState<string | null>(null);
@@ -1177,6 +1178,10 @@ export function AppShell(): React.JSX.Element {
           return true;
         }
         if (settingsPage === 'provider') {
+          if (providerQuery) {
+            setProviderQuery('');
+            return true;
+          }
           setSettingsPage('providers');
           return true;
         }
@@ -1305,6 +1310,7 @@ export function AppShell(): React.JSX.Element {
     modelPicker,
     newTagPrompt,
     providerEdit,
+    providerQuery,
     providerToDelete,
     scopeEditor,
     selectThread,
@@ -1985,6 +1991,7 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('tags');
           return;
         }
+        setProviderQuery('');
         setSelectedProvider(key);
         setSettingsPage('provider');
       }}
@@ -2395,6 +2402,8 @@ export function AppShell(): React.JSX.Element {
                   provider={selectedProviderInfo}
                   models={providerModels}
                   defaultModel={agentsConfig?.defaultModel ?? ''}
+                  query={providerQuery}
+                  onQueryChange={setProviderQuery}
                   error={agentsState.error}
                   onSetDefault={modelId => {
                     connection.send(encodeAgentsModelSet('global', modelId)).catch(() => {});

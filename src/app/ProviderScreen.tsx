@@ -1,7 +1,7 @@
-import React from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import type { ModelOption, ProviderInfo } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /** A component of its own, not a closure in render: FlatList keeps it across renders. */
@@ -9,6 +9,12 @@ function Separator(): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return <View style={styles.separator} />;
 }
+
+/**
+ * Below this the whole list fits on one screen: a search row would be one more thing to read
+ * before the handful of models under it. Same threshold as the model picker.
+ */
+const SEARCH_MIN_MODELS = 12;
 
 /**
  * The models one provider contributes, filtered from the shared catalog with the same rule the
@@ -19,6 +25,8 @@ export function ProviderScreen({
   provider,
   models,
   defaultModel,
+  query,
+  onQueryChange,
   error,
   onSetDefault,
   onEditProvider,
@@ -28,6 +36,9 @@ export function ProviderScreen({
   models: ModelOption[];
   /** The global default id, so the row in force is marked. */
   defaultModel: string;
+  /** Search text over the model list; the row clears it and the hardware back key does too. */
+  query: string;
+  onQueryChange: (value: string) => void;
   /** Server refused the last write: shown here, where the user asked for it. */
   error: string | null;
   onSetDefault: (modelId: string) => void;
@@ -35,7 +46,19 @@ export function ProviderScreen({
   onBack: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   useDismissKeyboard();
+
+  const needle = query.trim().toLowerCase();
+  const shown = useMemo(
+    () =>
+      needle
+        ? models.filter(
+            model => model.label.toLowerCase().includes(needle) || model.id.toLowerCase().includes(needle),
+          )
+        : models,
+    [models, needle],
+  );
 
   return (
     <View style={styles.screen}>
@@ -68,10 +91,24 @@ export function ProviderScreen({
         </Text>
       ) : null}
 
+      {models.length >= SEARCH_MIN_MODELS ? (
+        <TextInput
+          style={styles.search}
+          value={query}
+          onChangeText={onQueryChange}
+          placeholder="Search models"
+          placeholderTextColor={palette.textFaint}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+          accessibilityLabel="Search models"
+        />
+      ) : null}
+
       {/* A discovering provider floods its page with hundreds of models: the list virtualizes,
           the header, the error and the card look stay put above it. */}
       <FlatList
-        data={models}
+        data={shown}
         keyExtractor={model => model.id}
         renderItem={({ item: model }) => {
           const isDefault = model.id === defaultModel;
@@ -100,10 +137,12 @@ export function ProviderScreen({
         ItemSeparatorComponent={Separator}
         ListEmptyComponent={
           <View style={styles.emptyArea}>
-            <Text style={styles.empty}>no models known for this provider yet</Text>
+            <Text style={styles.empty}>
+              {needle ? 'no model matches the search' : 'no models known for this provider yet'}
+            </Text>
           </View>
         }
-        contentContainerStyle={models.length === 0 ? styles.body : [styles.body, styles.card]}
+        contentContainerStyle={shown.length === 0 ? styles.body : [styles.body, styles.card]}
         keyboardShouldPersistTaps="handled"
       />
     </View>
@@ -167,6 +206,19 @@ const createStyles = (palette: Palette) => ({
     letterSpacing: 0.3,
   },
   checkmark: { fontSize: font.body, color: palette.accent, fontWeight: '600' as const },
+  search: {
+    marginHorizontal: space.md,
+    marginTop: space.md,
+    marginBottom: 0,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceAlt,
+    color: palette.text,
+    fontSize: font.body,
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+  },
   emptyArea: { marginTop: space.lg, alignItems: 'center' as const },
   empty: { fontSize: font.meta, color: palette.textFaint },
   error: {

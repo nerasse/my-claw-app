@@ -337,6 +337,41 @@ test('the env page renames the variable and binds the provider onto another', as
   await settleAndUnmount(tree);
 });
 
+test('the provider model list searches, and back clears the search first', async () => {
+  const tree = await bootToProviders();
+  const config = providersConfig();
+  // Enough models to earn the search row (same threshold as the model picker).
+  const many = Array.from({ length: 14 }, (_, i) => ({
+    id: `provider-${i < 10 ? `0${i}` : i}`,
+    label: `Provider ${i < 10 ? `0${i}` : i}`,
+    provider: 'litellm',
+  }));
+  await emit({
+    type: 'model.list.result',
+    models: many,
+    defaultModel: (config.providers as Array<Record<string, unknown>>)[0].key,
+  });
+  await emit({ ...config, providers: [{ ...(config.providers as Array<Record<string, unknown>>)[0], models: 14 }] });
+  await pressLabel(tree, 'Open provider litellm');
+  await waitFor(() => labelsOf(tree).includes('Search models'));
+
+  // A short query narrows the list; the others are gone.
+  await typeInto(tree, 'Search models', 'provider 05');
+  await waitFor(() => labelsOf(tree).some(label => label.includes('Provider 05')));
+  expect(labelsOf(tree).some(label => label.includes('Provider 00'))).toBe(false);
+
+  // The hardware back key clears the search instead of leaving the page.
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).some(label => label.includes('Provider 00')));
+  expect(labelsOf(tree)).toContain('Edit provider');
+
+  // With no match, the empty state says so.
+  await typeInto(tree, 'Search models', 'nothing matches this');
+  await waitFor(() => textsOf(tree).some(text => text.includes('no model matches the search')));
+
+  await settleAndUnmount(tree);
+});
+
 test('back walks env, edit, models, list, index, chat', async () => {
   const tree = await bootToProviders();
   await emit(envResult());
