@@ -539,12 +539,15 @@ test('a notice is drawn apart from the agent replies it arrives between', async 
     .at(-1)!;
   // The bubble around it is outlined, which an agent bubble never is: that outline is the whole
   // "drawn apart". Climbing to it also proves the text is not inside an agent bubble.
-  const flatten = (style: unknown): Record<string, unknown> =>
-    Object.assign({}, ...[style].flat(Infinity).filter(Boolean)) as Record<string, unknown>;
+  const flatten = (style: unknown): { borderWidth?: number; fontFamily?: string } =>
+    Object.assign({}, ...[style].flat(Infinity).filter(Boolean)) as {
+      borderWidth?: number;
+      fontFamily?: string;
+    };
   let node: ReactTestRenderer.ReactTestInstance | null = notice;
   let outlined = false;
   while (node) {
-    if (flatten(node.props.style)['borderWidth'] === 1) {
+    if (flatten(node.props.style).borderWidth === 1) {
       outlined = true;
       break;
     }
@@ -552,6 +555,6 @@ test('a notice is drawn apart from the agent replies it arrives between', async 
   }
   expect(outlined).toBe(true);
   // Not the command style either: /status is a table and wears monospace, a notice is a sentence.
-  expect(flatten(notice.props.style)['fontFamily']).toBeUndefined();
+  expect(flatten(notice.props.style).fontFamily).toBeUndefined();
   await unmount(tree);
 });
