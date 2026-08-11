@@ -150,6 +150,37 @@ test('saving the scope editor sends agents.scope.set with the chosen mode', asyn
   await settleAndUnmount(tree);
 });
 
+test('the scope editor asks for both catalogs itself, instead of borrowing the agent page load', async () => {
+  const tree = await boot();
+  await pressLabel(tree, 'Open agent General sub-agent');
+  await waitFor(() => labelsOf(tree).includes('Edit skills scope'));
+  // From here on, only what the scope page asks for counts: it is the page that calls a name
+  // "no such skill installed", and it reads that verdict off a catalog it must hold itself.
+  bridge.sendMessage.mockClear();
+  await pressLabel(tree, 'Edit skills scope');
+  await waitFor(() => labelsOf(tree).includes('Scope mode Inherit'));
+
+  expect(sentFrames().map(frame => frame.type)).toEqual(
+    expect.arrayContaining(['skills.list', 'mcp.list']),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('the agent file page asks for the skills catalog it paints red, not just the MCP one', async () => {
+  const tree = await boot();
+  await pressLabel(tree, 'Open agent reviewer');
+  await waitFor(() => labelsOf(tree).includes('Edit agent file'));
+  bridge.sendMessage.mockClear();
+  await pressLabel(tree, 'Edit agent file');
+  await waitFor(() => sentFrames().some(frame => frame.type === 'agents.file.get'));
+
+  // Both, and for the same reason: the page flags unknown skills exactly like unknown servers.
+  expect(sentFrames().map(frame => frame.type)).toEqual(
+    expect.arrayContaining(['skills.list', 'mcp.list']),
+  );
+  await settleAndUnmount(tree);
+});
+
 test('a removed scope entry is flagged on the detail page', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Open agent General sub-agent');

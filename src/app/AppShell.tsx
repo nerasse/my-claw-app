@@ -189,6 +189,17 @@ function unknownOfList(names: string[], catalog: Array<{ name: string }>): strin
 }
 
 /**
+ * The pages that call a configured name "removed" when it is missing from the skills or MCP
+ * catalog. Naming them once is the point: an unfetched catalog is not evidence that a name is
+ * gone, so a page that paints that verdict red has to be a page that asks for the list.
+ */
+const CATALOG_JUDGING_PAGES: readonly string[] = ['agents', 'agent', 'file', 'scope'];
+
+function judgesCatalogNames(page: string): boolean {
+  return CATALOG_JUDGING_PAGES.includes(page);
+}
+
+/**
  * The model picker pointed at the server config instead of a session: "global" edits
  * llm.defaultModel, "fallback" edits llm.visionFallback, an agent key edits agents.<key>.llm.
  * The root option hands an agent back to its inheritance (clear), which is the "Use default"
@@ -1350,13 +1361,16 @@ export function AppShell(): React.JSX.Element {
   }, [settingsOpen, settingsPage]);
 
   // The jobs editor's pickers (model, workspace, skills, MCP, tools) are fed by the same live
-  // catalogs as the settings pages: ask for them when the jobs page opens too.
+  // catalogs as the settings pages: ask for them when the jobs page opens too. The model list is
+  // one of them: the editor calls a pinned model "no such model" on a catalog it does not have,
+  // and the only other fetch is the one at connect -- a lost frame there painted every job red.
   useEffect(() => {
     if (!jobsOpen) return;
     connection.send(encodeSkillsList()).catch(() => {});
     connection.send(encodeToolsList()).catch(() => {});
     connection.send(encodeMcpList()).catch(() => {});
     connection.send(encodeWorkspacesList()).catch(() => {});
+    connection.send(encodeModelList()).catch(() => {});
   }, [jobsOpen]);
 
   // The index shows the skills/tools counts on its rows: asking for the catalogs when it opens
@@ -1383,12 +1397,20 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeToolsList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
-  // The MCP list is the wire version of /mcp: asked for on the MCPs page and alongside the
-  // agent pages, where the scope editor and the file editor offer its names.
+  // The MCP list is the wire version of /mcp: asked for on the MCPs page, and on every page that
+  // judges names against it.
   useEffect(() => {
     if (!settingsOpen) return;
-    if (settingsPage !== 'mcps' && settingsPage !== 'agents' && settingsPage !== 'agent' && settingsPage !== 'file') return;
+    if (settingsPage !== 'mcps' && !judgesCatalogNames(settingsPage)) return;
     connection.send(encodeMcpList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
+  // Same catalog, same rule, for the skills: the pages that call a name "removed" need the list
+  // that decides it. The two used to be fetched by effects with different page sets, which is how
+  // the file editor ended up checking MCP names it had against skill names it did not.
+  useEffect(() => {
+    if (!settingsOpen || !judgesCatalogNames(settingsPage)) return;
+    connection.send(encodeSkillsList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   // The agent defaults are asked for when the Agents page opens. A server that predates the
@@ -1398,9 +1420,8 @@ export function AppShell(): React.JSX.Element {
     if (!settingsOpen || (settingsPage !== 'agents' && settingsPage !== 'agent')) return;
     agentsStore.request();
     connection.send(encodeAgentsConfigGet()).catch(() => {});
-    // The scope editor and the workspace picker need the dynamic lists too: they are the whole
-    // point of the page. The skills list doubles as the catalog those editors check names against.
-    connection.send(encodeSkillsList()).catch(() => {});
+    // The workspace picker needs its list here; the skills and MCP catalogs these pages judge
+    // names against are fetched by the catalog effects above, for every such page at once.
     connection.send(encodeWorkspacesList()).catch(() => {});
     const timer = setTimeout(() => agentsStore.markUnsupported(), 4000);
     return () => clearTimeout(timer);
@@ -1453,10 +1474,16 @@ export function AppShell(): React.JSX.Element {
   // and the page must say so rather than spin. The list is re-asked on every visit because the
   // agent edits AGENTS.md too, so a list from ten minutes ago can already be wrong -- and the
   // layer screen's ladder depends on that list directly.
+  //
+  // The workspace list is asked for here too, and it is not decoration: a source is called
+  // "broken" precisely when its workspace is missing from that list, so an empty one turns
+  // every `inherit: <workspace>` into a red "no longer exists" that is pure fiction. Reaching
+  // this page from the settings index -- which fetches no workspaces -- used to do exactly that.
   useEffect(() => {
     if (!settingsOpen || settingsPage !== 'instructions' && settingsPage !== 'instruction-layer') return;
     instructionsStore.request();
     connection.send(encodeInstructionsList()).catch(() => {});
+    connection.send(encodeWorkspacesList()).catch(() => {});
     const timer = setTimeout(() => instructionsStore.markUnsupported(), 4000);
     return () => clearTimeout(timer);
   }, [settingsOpen, settingsPage]);

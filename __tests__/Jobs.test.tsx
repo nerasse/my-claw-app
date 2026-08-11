@@ -134,6 +134,18 @@ test('the drawer opens the jobs page and asks for the listing', async () => {
   await unmount(tree);
 });
 
+test('the jobs page asks for the model catalog its editor judges pinned models against', async () => {
+  const tree = await renderApp();
+  // The connect fetch already sent one. Only the jobs page's own request counts here: it is the
+  // page that writes "no such model" next to a pinned model, and it used to trust a catalog that
+  // a single lost frame at connect leaves empty forever -- every pinned job red, wrongly.
+  bridge.sendMessage.mockClear();
+  await openJobs(tree);
+
+  expect(sentOfType('model.list').length).toBeGreaterThan(0);
+  await unmount(tree);
+});
+
 test('jobs render their schedule and state, and stale names are painted red', async () => {
   const tree = await renderApp();
   await openJobs(tree);
