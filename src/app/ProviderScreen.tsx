@@ -1,8 +1,14 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import type { ModelOption, ProviderInfo } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+
+/** A component of its own, not a closure in render: FlatList keeps it across renders. */
+function Separator(): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return <View style={styles.separator} />;
+}
 
 /**
  * The models one provider contributes, filtered from the shared catalog with the same rule the
@@ -53,42 +59,44 @@ export function ProviderScreen({
         </Text>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          {models.map((model, index) => {
-            const isDefault = model.id === defaultModel;
-            return (
-              <View key={model.id}>
-                {index > 0 ? <View style={styles.separator} /> : null}
-                <Pressable
-                  style={[styles.row, styles.link]}
-                  onPress={() => onSetDefault(model.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isDefault }}
-                  accessibilityLabel={isDefault ? `${model.label}, already the default` : `Set default ${model.label}`}>
-                  <View style={styles.linkMain}>
-                    <View style={styles.linkTitleLine}>
-                      <Text style={styles.linkTitle}>{model.label}</Text>
-                      {isDefault ? <Text style={styles.badge}>default</Text> : null}
-                    </View>
-                    {model.id !== model.label ? (
-                      <Text style={styles.hint} numberOfLines={1}>
-                        {model.id}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Text style={styles.checkmark}>{isDefault ? '✓' : ''}</Text>
-                </Pressable>
+      {/* A discovering provider floods its page with hundreds of models: the list virtualizes,
+          the header, the error and the card look stay put above it. */}
+      <FlatList
+        data={models}
+        keyExtractor={model => model.id}
+        renderItem={({ item: model }) => {
+          const isDefault = model.id === defaultModel;
+          return (
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={() => onSetDefault(model.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isDefault }}
+              accessibilityLabel={isDefault ? `${model.label}, already the default` : `Set default ${model.label}`}>
+              <View style={styles.linkMain}>
+                <View style={styles.linkTitleLine}>
+                  <Text style={styles.linkTitle}>{model.label}</Text>
+                  {isDefault ? <Text style={styles.badge}>default</Text> : null}
+                </View>
+                {model.id !== model.label ? (
+                  <Text style={styles.hint} numberOfLines={1}>
+                    {model.id}
+                  </Text>
+                ) : null}
               </View>
-            );
-          })}
-        </View>
-        {models.length === 0 ? (
+              <Text style={styles.checkmark}>{isDefault ? '✓' : ''}</Text>
+            </Pressable>
+          );
+        }}
+        ItemSeparatorComponent={Separator}
+        ListEmptyComponent={
           <View style={styles.emptyArea}>
             <Text style={styles.empty}>no models known for this provider yet</Text>
           </View>
-        ) : null}
-      </ScrollView>
+        }
+        contentContainerStyle={models.length === 0 ? styles.body : [styles.body, styles.card]}
+        keyboardShouldPersistTaps="handled"
+      />
     </View>
   );
 }
