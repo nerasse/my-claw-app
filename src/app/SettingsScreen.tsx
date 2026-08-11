@@ -7,7 +7,7 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'providers' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other';
+  key: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other';
 }> = [
   {
     title: 'General',
@@ -16,8 +16,11 @@ const CATEGORIES: Array<{
     key: 'general',
   },
   {
+    // The prompt files live here since they are per workspace: a workspace is the directory, its
+    // instructions and its nested AGENTS.md, and they were on two pages that never named each
+    // other.
     title: 'Workspaces',
-    hint: 'directories with their own prompts and skills',
+    hint: 'directories, their instructions and skills',
     accessibilityLabel: 'Open workspaces',
     key: 'workspaces',
   },
@@ -32,12 +35,6 @@ const CATEGORIES: Array<{
     hint: 'default model, effort, per-agent settings',
     accessibilityLabel: 'Open agents',
     key: 'agents',
-  },
-  {
-    title: 'Instructions',
-    hint: 'the markdown that builds the prompt',
-    accessibilityLabel: 'Open instructions',
-    key: 'instructions',
   },
   {
     title: 'Tools',
@@ -87,7 +84,7 @@ export function SettingsScreen({
   providersCount: number;
   onBack: () => void;
   onOpenCategory: (
-    category: 'general' | 'providers' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other',
+    category: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other',
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

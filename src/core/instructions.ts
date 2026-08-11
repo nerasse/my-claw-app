@@ -45,6 +45,10 @@ interface InstructionsState {
   status: InstructionsStatus;
   entries: InstructionEntry[];
   nested: NestedInstruction[];
+  /** Workspaces whose nested list the server cut at its cap. Empty on a server that predates
+   *  the field, which is indistinguishable from "nothing was cut" -- older servers capped the
+   *  whole scan and could not report it either. */
+  nestedTruncated: string[];
   files: string[];
   maxBytes: number;
   agentLayers: Array<{ agent: string; layers: string[] }>;
@@ -57,6 +61,7 @@ const EMPTY: InstructionsState = {
   status: 'unknown',
   entries: [],
   nested: [],
+  nestedTruncated: [],
   files: [],
   maxBytes: 0,
   agentLayers: [],
@@ -121,6 +126,7 @@ class InstructionsStoreImpl {
       status: 'ready',
       entries: frame.entries,
       nested: frame.nested,
+      nestedTruncated: frame.nestedTruncated ?? [],
       files: frame.files,
       maxBytes: frame.maxBytes,
       agentLayers: frame.agentLayers ?? this.state.agentLayers,

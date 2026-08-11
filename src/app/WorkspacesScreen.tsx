@@ -1,79 +1,88 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import type { WorkspaceEntry } from '../core/protocol';
+import type { InstructionEntry, NestedInstruction, WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /** The loader's workspace key rules, mirrored so the form refuses before the server does. */
 const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
 
-type Editor = { mode: 'add' } | { mode: 'edit'; key: string; path: string };
+/**
+ * What a row says about the prompt inside a workspace, so the list keeps the overview the old
+ * instructions page gave for free. Empty while the listing is still in flight: a row that
+ * claimed "4 inherited" before the answer landed would be wrong for a second.
+ */
+function promptSummary(
+  key: string,
+  entries: InstructionEntry[],
+  nested: NestedInstruction[],
+): string {
+  const files = entries.filter(entry => entry.workspace === key);
+  if (files.length === 0) return '';
+  const own = files.filter(entry => entry.origin === 'own').length;
+  const off = files.filter(entry => entry.origin === 'off' || entry.inherit === 'none').length;
+  const count = nested.filter(item => item.workspace === key).length;
+  const parts = [`${own}/${files.length} own`];
+  if (off > 0) parts.push(`${off} off`);
+  if (count > 0) parts.push(`${count} nested`);
+  return parts.join(' · ');
+}
 
 /**
- * The workspaces of the server, with full CRUD. The key is what agents and cron reference, the
- * path is the only thing the key stands for. One edit form handles both: renaming the key moves
- * the agent pins that used it (server-side), changing the path repoints the directory. Removing
- * drops the entry (agent pins pointing at it are flagged red elsewhere and resolve to the
- * default until fixed). Everything is written to config.workspaces, which is hot-reloaded in
- * place: the skills and agent tiers follow live.
+ * The workspaces of the server: this page adds and lists them, each row opening the workspace
+ * itself (its directory, its prompt files, its nested AGENTS.md). The key is what agents and cron
+ * reference, the path is the only thing the key stands for. Everything is written to
+ * config.workspaces, hot-reloaded in place: the skills and agent tiers follow live.
+ *
+ * Renaming, repointing and removing live on the workspace's own page, next to what they affect --
+ * not on this list, where a mis-tap on "remove" was one row away from the workspace above.
  */
 export function WorkspacesScreen({
   workspaces,
+  entries,
+  nested,
   error,
   busy,
   onBack,
   onAdd,
-  onRemove,
-  onRename,
-  onSetPath,
+  onOpen,
 }: {
   workspaces: WorkspaceEntry[];
+  /** The instruction listing, for the per-row summary only. Empty until it lands. */
+  entries: InstructionEntry[];
+  nested: NestedInstruction[];
   error: string | null;
   busy: boolean;
   onBack: () => void;
   onAdd: (key: string, path: string) => void;
-  onRemove: (key: string) => void;
-  onRename: (from: string, to: string) => void;
-  onSetPath: (key: string, path: string) => void;
+  onOpen: (key: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
-  const [editor, setEditor] = useState<Editor | null>(null);
+  const [adding, setAdding] = useState(false);
   const [keyDraft, setKeyDraft] = useState('');
   const [pathDraft, setPathDraft] = useState('');
-  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
-  const openEditor = (next: Editor): void => {
-    setEditor(next);
-    setKeyDraft(next.mode === 'edit' ? next.key : '');
-    setPathDraft(next.mode === 'edit' ? next.path : '');
-    setConfirmRemove(null);
+  const openEditor = (): void => {
+    setAdding(true);
+    setKeyDraft('');
+    setPathDraft('');
   };
-  const closeEditor = (): void => setEditor(null);
+  const closeEditor = (): void => setAdding(false);
 
   const keyValid = KEY_RE.test(keyDraft.trim()) && keyDraft.trim() !== 'default';
   const pathValid = pathDraft.trim().startsWith('/');
-  const editing = editor?.mode === 'edit';
-  const keyChanged = editing ? keyDraft.trim() !== editor.key : false;
-  const pathChanged = editing ? pathDraft.trim() !== editor.path : false;
-  const unchanged = editing && !keyChanged && !pathChanged;
-  const formValid = keyValid && pathValid && !busy && !unchanged;
-  const targetExists = workspaces.some(w => w.key === keyDraft.trim() && (!editing || keyDraft.trim() !== editor.key));
+  const formValid = keyValid && pathValid && !busy;
+  const targetExists = workspaces.some(w => w.key === keyDraft.trim());
 
   const submit = (): void => {
-    if (!editor || !formValid) return;
-    if (editor.mode === 'add') {
-      onAdd(keyDraft.trim(), pathDraft.trim());
-    } else {
-      // One save can move both: the key (renaming it, pins follow) and the path (repointing
-      // the directory). Each answer is a fresh listing, so the two frames settle in order.
-      if (keyChanged) onRename(editor.key, keyDraft.trim());
-      if (pathChanged) onSetPath(keyChanged ? keyDraft.trim() : editor.key, pathDraft.trim());
-    }
+    if (!adding || !formValid) return;
+    onAdd(keyDraft.trim(), pathDraft.trim());
     closeEditor();
   };
 
   const named = workspaces.filter(w => !w.default);
+  const defaultEntry = workspaces.find(w => w.default);
 
   return (
     <View style={styles.screen}>
@@ -92,13 +101,11 @@ export function WorkspacesScreen({
           </Text>
         </View>
         <Pressable
-          onPress={() => (editor?.mode === 'add' ? closeEditor() : openEditor({ mode: 'add' }))}
-          style={[styles.addButton, editor?.mode === 'add' ? styles.addActive : styles.addIdle]}
+          onPress={() => (adding ? closeEditor() : openEditor())}
+          style={[styles.addButton, adding ? styles.addActive : styles.addIdle]}
           accessibilityRole="button"
-          accessibilityLabel={editor?.mode === 'add' ? 'Cancel add workspace' : 'Add workspace'}>
-          <Text style={editor?.mode === 'add' ? styles.addTextActive : styles.addTextIdle}>
-            {editor?.mode === 'add' ? '✕' : '+'}
-          </Text>
+          accessibilityLabel={adding ? 'Cancel add workspace' : 'Add workspace'}>
+          <Text style={adding ? styles.addTextActive : styles.addTextIdle}>{adding ? '✕' : '+'}</Text>
         </Pressable>
       </View>
 
@@ -109,11 +116,9 @@ export function WorkspacesScreen({
       ) : null}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {editor ? (
+        {adding ? (
           <View style={styles.category}>
-            <Text style={styles.section}>
-              {editor.mode === 'add' ? 'new workspace' : 'edit workspace'}
-            </Text>
+            <Text style={styles.section}>new workspace</Text>
             <View style={styles.card}>
               <View style={styles.formRow}>
                 <Text style={styles.rowKey}>key (what agents reference)</Text>
@@ -146,12 +151,6 @@ export function WorkspacesScreen({
             {targetExists ? (
               <Text style={styles.noteRemoved}>a workspace with this key already exists</Text>
             ) : null}
-            {editing ? (
-              <Text style={styles.note}>
-                renaming moves the agent pins that used this key · changing the path repoints the
-                directory
-              </Text>
-            ) : null}
             <Pressable
               onPress={submit}
               disabled={!formValid}
@@ -160,7 +159,7 @@ export function WorkspacesScreen({
               accessibilityState={{ disabled: !formValid }}
               accessibilityLabel={busy ? 'Saving workspace' : 'Save workspace'}>
               <Text style={formValid ? styles.saveText : styles.saveTextOff}>
-                {busy ? '...' : editor.mode === 'add' ? 'Create' : 'Save'}
+                {busy ? '...' : 'Create'}
               </Text>
             </Pressable>
           </View>
@@ -168,14 +167,23 @@ export function WorkspacesScreen({
 
         <View style={styles.category}>
           <Text style={styles.section}>default</Text>
-          {/* The section header already names it: a row repeating "default" reads as a duplicate.
-              The path is the whole point of this row, so it wraps instead of being clipped. */}
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.path} selectable>
-                {workspaces.find(w => w.default)?.path ?? ''}
-              </Text>
-            </View>
+          <View style={[styles.card, styles.cardDefault]}>
+            <Pressable
+              style={styles.itemRow}
+              onPress={() => onOpen('default')}
+              accessibilityRole="button"
+              accessibilityLabel="Open workspace default">
+              <View style={styles.rowMain}>
+                <Text style={[styles.key, styles.keyDefault]}>default</Text>
+                <Text style={styles.path} selectable>
+                  {defaultEntry?.path ?? ''}
+                </Text>
+                <Text style={styles.itemHint}>
+                  {promptSummary('default', entries, nested) || 'your conversations and memory'}
+                </Text>
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -183,61 +191,38 @@ export function WorkspacesScreen({
           <Text style={styles.section}>named</Text>
           <View style={styles.card}>
             {named.length === 0 ? (
-              <View style={styles.row}>
+              <View style={styles.itemRow}>
                 <Text style={styles.itemHint}>no named workspaces yet</Text>
               </View>
             ) : (
               named.map((item, index) => (
                 <View key={item.key}>
                   {index > 0 ? <View style={styles.separator} /> : null}
-                  <View style={styles.serverRow}>
-                  <View style={styles.rowMain}>
-                    <View style={styles.rowTitleLine}>
+                  <Pressable
+                    style={styles.itemRow}
+                    onPress={() => onOpen(item.key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open workspace ${item.key}`}>
+                    <View style={styles.rowMain}>
                       <Text style={styles.key} numberOfLines={1}>
                         {item.key}
                       </Text>
+                      {/* No line cap: a path is a path, and a truncated one would point nowhere
+                          visible. It wraps instead. */}
+                      <Text style={styles.path} selectable>
+                        {item.path}
+                      </Text>
+                      <Text style={styles.itemHint}>{promptSummary(item.key, entries, nested)}</Text>
                     </View>
-                    {/* No line cap: a path is a path, and a truncated one would point nowhere
-                        visible. It wraps instead, pushing the actions to their own lines. */}
-                    <Text style={styles.path} selectable>
-                      {item.path}
-                    </Text>
-                  </View>
-                    {confirmRemove === item.key ? (
-                      <Pressable
-                        onPress={() => {
-                          onRemove(item.key);
-                          setConfirmRemove(null);
-                        }}
-                        style={styles.removeButton}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Confirm remove workspace ${item.key}`}>
-                        <Text style={styles.removeText}>remove</Text>
-                      </Pressable>
-                    ) : (
-                      <Pressable
-                        onPress={() => setConfirmRemove(item.key)}
-                        style={styles.actionButton}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove workspace ${item.key}`}>
-                        <Text style={styles.actionText}>remove</Text>
-                      </Pressable>
-                    )}
-                    <Pressable
-                      onPress={() => openEditor({ mode: 'edit', key: item.key, path: item.path })}
-                      style={styles.actionButton}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit workspace ${item.key}`}>
-                      <Text style={styles.actionText}>edit</Text>
-                    </Pressable>
-                  </View>
+                    <Text style={styles.linkGlyph}>›</Text>
+                  </Pressable>
                 </View>
               ))
             )}
           </View>
           <Text style={styles.note}>
-            agents pinned to a removed workspace are flagged red and resolve to the default until
-            you fix them · the skills and agent tiers under a path follow live
+            a workspace holds its own prompt files, skills and agents · open one to edit them,
+            rename it or repoint its directory
           </Text>
         </View>
       </ScrollView>
@@ -296,13 +281,15 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
   },
-  serverRow: {
+  itemRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.sm,
     paddingHorizontal: space.md,
     paddingVertical: space.md,
   },
+  cardDefault: { borderColor: palette.accent },
+  linkGlyph: { fontSize: 20, color: palette.textFaint },
   rowMain: { flex: 1, gap: 2 },
   rowTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
   key: {
@@ -311,6 +298,7 @@ const createStyles = (palette: Palette) => ({
     fontWeight: '600' as const,
     color: palette.text,
   },
+  keyDefault: { color: palette.accent },
   badge: {
     fontSize: font.micro,
     color: palette.textFaint,

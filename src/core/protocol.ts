@@ -709,6 +709,10 @@ export interface InstructionsListResultFrame {
   type: 'instructions.list.result';
   entries: InstructionEntry[];
   nested: NestedInstruction[];
+  /** Workspaces whose nested list the server had to cut at its cap: the page says the list is
+   *  incomplete instead of implying the workspace holds nothing more. Absent on older servers,
+   *  which capped the whole scan at once and could empty a workspace's list without saying so. */
+  nestedTruncated?: string[];
   /** The editable names, so the app never hardcodes the list the server enforces. */
   files: string[];
   maxBytes: number;

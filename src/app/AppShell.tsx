@@ -127,7 +127,7 @@ import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
 import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
-import { InstructionsScreen } from './InstructionsScreen';
+import { WorkspaceScreen } from './WorkspaceScreen';
 import { layerOfFile } from '../core/layers';
 import { InstructionLayerScreen } from './InstructionLayerScreen';
 import { InstructionEditorScreen } from './InstructionEditorScreen';
@@ -228,6 +228,14 @@ const AGENTS_CONFIG_PAGES: readonly string[] = [
 function readsAgentsConfig(page: string): boolean {
   return AGENTS_CONFIG_PAGES.includes(page);
 }
+
+/**
+ * The pages fed by `instructions.list.result`. The workspaces list needs it for the per-row
+ * prompt summary, the workspace page for its file rows, and the layer screen for the ladder it
+ * resolves against -- a page that shows the listing without asking for it shows an empty one,
+ * which is how Providers ended up reading "0 providers" when it was reached from the index.
+ */
+const READS_INSTRUCTIONS_PAGES: ReadonlySet<string> = new Set(['workspaces', 'workspace', 'instruction-layer']);
 
 /**
  * The model picker pointed at the server config instead of a session: "global" edits
@@ -417,7 +425,7 @@ export function AppShell(): React.JSX.Element {
     | 'tags'
     | 'skills'
     | 'workspaces'
-    | 'instructions'
+    | 'workspace'
     | 'instruction'
     | 'instruction-layer'
     | 'tools'
@@ -442,10 +450,13 @@ export function AppShell(): React.JSX.Element {
   const [providerBusy, setProviderBusy] = useState(false);
   /** The provider waiting for its delete confirmation, with the env key it may take with it. */
   const [providerToDelete, setProviderToDelete] = useState<{ key: string; keyEnv?: string } | null>(null);
-  /** Instructions is a top-level category, but the agent page links into it: back has to return
-   *  where the user came from rather than dropping them at the index. */
-  const [instructionsFrom, setInstructionsFrom] = useState<'index' | 'agent'>('index');
-  /** The layer screen is reached from the instructions list only; one entry path, one back. */
+  /** Which workspace the workspace page shows. The instruction editor and the layer screen hang
+   *  under it, so it outlives them: back walks down to this page, not to a list. */
+  const [selectedWorkspace, setSelectedWorkspace] = useState<string>('default');
+  /** The workspace page is a page of the workspaces list, but the agent page links straight into
+   *  the workspace it is pinned to: back has to return where the user came from. */
+  const [workspaceFrom, setWorkspaceFrom] = useState<'workspaces' | 'agent'>('workspaces');
+  /** The layer screen is reached from the workspace page only; one entry path, one back. */
   const [layerTarget, setLayerTarget] = useState<{ workspace: string; file: string } | null>(null);
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
@@ -1215,16 +1226,17 @@ export function AppShell(): React.JSX.Element {
         if (settingsPage === 'instruction-layer') {
           setLayerTarget(null);
           instructionsStore.closeLayer();
-          setSettingsPage('instructions');
+          setSettingsPage('workspace');
           return true;
         }
         if (settingsPage === 'instruction') {
           instructionsStore.closeEditor();
-          setSettingsPage('instructions');
+          setSettingsPage('workspace');
           return true;
         }
-        if (settingsPage === 'instructions') {
-          setSettingsPage(instructionsFrom === 'agent' ? 'agent' : 'index');
+        // The workspace page is reached from the list, or straight from an agent pinned to it.
+        if (settingsPage === 'workspace') {
+          setSettingsPage(workspaceFrom === 'agent' ? 'agent' : 'workspaces');
           return true;
         }
         // Workspaces is its own index entry; diagnostics lives under Other. Back lands where
@@ -1283,7 +1295,7 @@ export function AppShell(): React.JSX.Element {
     fileToDelete,
     filesOpen,
     imageViewer,
-    instructionsFrom,
+    workspaceFrom,
     layerTarget,
     jobSessions,
     jobsEditor,
@@ -1444,8 +1456,9 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeToolsList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
-  // The workspaces page owns the CRUD: asked for on every visit, like the other lists, because
-  // config.workspaces hot-reloads under it.
+  // The workspaces list owns the CRUD: asked for on every visit, like the other lists, because
+  // config.workspaces hot-reloads under it. The list also carries the per-row prompt summary,
+  // which is the instruction listing, so it asks for both -- see the instructions effect below.
   useEffect(() => {
     if (!settingsOpen || settingsPage !== 'workspaces') return;
     connection.send(encodeWorkspacesList()).catch(() => {});
@@ -1554,7 +1567,7 @@ export function AppShell(): React.JSX.Element {
   // every `inherit: <workspace>` into a red "no longer exists" that is pure fiction. Reaching
   // this page from the settings index -- which fetches no workspaces -- used to do exactly that.
   useEffect(() => {
-    if (!settingsOpen || settingsPage !== 'instructions' && settingsPage !== 'instruction-layer') return;
+    if (!settingsOpen || !READS_INSTRUCTIONS_PAGES.has(settingsPage)) return;
     instructionsStore.request();
     connection.send(encodeInstructionsList()).catch(() => {});
     connection.send(encodeWorkspacesList()).catch(() => {});
@@ -1811,15 +1824,27 @@ export function AppShell(): React.JSX.Element {
     setSettingsPage('instruction');
     connection.send(encodeInstructionsGet(workspace, file)).catch(() => {});
   };
-  const instructionsPage = (
-    <InstructionsScreen
+  // A workspace the list no longer carries (removed while its page was open, or renamed under it)
+  // still has a page: the key is what the instruction rows are addressed by, so a synthetic entry
+  // keeps the page honest instead of bouncing to the list.
+  const workspaceEntry: WorkspaceEntry = workspaces.find(w => w.key === selectedWorkspace) ?? {
+    key: selectedWorkspace,
+    path: '',
+    default: selectedWorkspace === 'default',
+  };
+  const workspacePage = (
+    <WorkspaceScreen
+      workspace={workspaceEntry}
       entries={instructions.entries}
       nested={instructions.nested}
+      nestedTruncated={instructions.nestedTruncated}
+      workspaceKeys={workspaces.map(w => w.key)}
       status={instructions.status}
       error={instructions.error}
-      workspaceKeys={workspaces.map(w => w.key)}
-      backLabel={instructionsFrom === 'agent' ? 'Back to agent' : 'Back to settings'}
-      onBack={() => setSettingsPage(instructionsFrom === 'agent' ? 'agent' : 'index')}
+      configError={workspacesError}
+      busy={workspacesBusy}
+      backLabel={workspaceFrom === 'agent' ? 'Back to agent' : 'Back to workspaces'}
+      onBack={() => setSettingsPage(workspaceFrom === 'agent' ? 'agent' : 'workspaces')}
       onOpen={entry => openInstruction(entry.workspace, entry.file)}
       onOpenLayer={entry => {
         setLayerTarget({ workspace: entry.workspace, file: entry.file });
@@ -1830,6 +1855,21 @@ export function AppShell(): React.JSX.Element {
         instructionsStore.openEditor(item.workspace, item.path);
         setSettingsPage('instruction');
         connection.send(encodeInstructionsGetNested(item.workspace, item.path)).catch(() => {});
+      }}
+      onRename={(from, to) => {
+        setWorkspacesBusy(true);
+        // The page follows the rename: its subject is the key, and the old one stops existing.
+        setSelectedWorkspace(to);
+        connection.send(encodeWorkspacesRename(from, to)).catch(() => {});
+      }}
+      onSetPath={(key, path) => {
+        setWorkspacesBusy(true);
+        connection.send(encodeWorkspacesSetPath(key, path)).catch(() => {});
+      }}
+      onRemove={key => {
+        setWorkspacesBusy(true);
+        setSettingsPage('workspaces');
+        connection.send(encodeWorkspacesRemove(key)).catch(() => {});
       }}
     />
   );
@@ -2205,12 +2245,7 @@ export function AppShell(): React.JSX.Element {
                 toolsCount={tools.length}
                 providersCount={agentsConfig?.providers.length ?? 0}
                 onBack={() => setSettingsOpen(false)}
-                onOpenCategory={category => {
-                  // Reaching a category from the index resets where its back button leads: a
-                  // previous visit from the agent page must not keep sending it there.
-                  if (category === 'instructions') setInstructionsFrom('index');
-                  setSettingsPage(category);
-                }}
+                onOpenCategory={category => setSettingsPage(category)}
               />
             ) : settingsPage === 'general' ? (
               <GeneralSettingsScreen
@@ -2283,11 +2318,11 @@ export function AppShell(): React.JSX.Element {
                   agentLayers={instructions.agentLayers}
                   saving={instructions.layer.saving > 0}
                   error={instructions.layer.error}
-                  backLabel="Back to instructions"
+                  backLabel="Back to the workspace"
                   onBack={() => {
                     setLayerTarget(null);
                     instructionsStore.closeLayer();
-                    setSettingsPage('instructions');
+                    setSettingsPage('workspace');
                   }}
                   onChange={patch => instructionsStore.editLayer(patch)}
                   onSave={applyToAll => {
@@ -2306,10 +2341,10 @@ export function AppShell(): React.JSX.Element {
                   }}
                 />
               ) : (
-                instructionsPage
+                workspacePage
               )
-            ) : settingsPage === 'instructions' ? (
-              instructionsPage
+            ) : settingsPage === 'workspace' ? (
+              workspacePage
             ) : settingsPage === 'instruction' ? (
               instructions.editor ? (
                 <InstructionEditorScreen
@@ -2317,7 +2352,7 @@ export function AppShell(): React.JSX.Element {
                   maxBytes={instructions.maxBytes}
                   onBack={() => {
                     instructionsStore.closeEditor();
-                    setSettingsPage('instructions');
+                    setSettingsPage('workspace');
                   }}
                   onChange={draft => instructionsStore.edit(draft)}
                   onSave={() => {
@@ -2336,7 +2371,7 @@ export function AppShell(): React.JSX.Element {
                   }}
                 />
               ) : (
-                instructionsPage
+                workspacePage
               )
             ) : settingsPage === 'providers' ? (
               providersPage
@@ -2422,8 +2457,12 @@ export function AppShell(): React.JSX.Element {
                     setSettingsPage('model-picker');
                   }}
                   onOpenInstructions={() => {
-                    setInstructionsFrom('agent');
-                    setSettingsPage('instructions');
+                    // The agent reads one workspace's prompt: the one it is pinned to, the
+                    // default when it is not. Landing on a list of every workspace would leave
+                    // the reader to work out which of them this agent actually reads.
+                    setSelectedWorkspace(selectedAgentInfo?.workspace ?? 'default');
+                    setWorkspaceFrom('agent');
+                    setSettingsPage('workspace');
                   }}
                   onOpenScope={kind => openScope(kind, 'config')}
                   onOpenWorkspace={openWorkspacePicker}
@@ -2583,6 +2622,8 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'workspaces' ? (
               <WorkspacesScreen
                 workspaces={workspaces}
+                entries={instructions.entries}
+                nested={instructions.nested}
                 error={workspacesError}
                 busy={workspacesBusy}
                 onBack={() => setSettingsPage('index')}
@@ -2590,17 +2631,10 @@ export function AppShell(): React.JSX.Element {
                   setWorkspacesBusy(true);
                   connection.send(encodeWorkspacesAdd(key, path)).catch(() => {});
                 }}
-                onRemove={key => {
-                  setWorkspacesBusy(true);
-                  connection.send(encodeWorkspacesRemove(key)).catch(() => {});
-                }}
-                onRename={(from, to) => {
-                  setWorkspacesBusy(true);
-                  connection.send(encodeWorkspacesRename(from, to)).catch(() => {});
-                }}
-                onSetPath={(key, path) => {
-                  setWorkspacesBusy(true);
-                  connection.send(encodeWorkspacesSetPath(key, path)).catch(() => {});
+                onOpen={key => {
+                  setSelectedWorkspace(key);
+                  setWorkspaceFrom('workspaces');
+                  setSettingsPage('workspace');
                 }}
               />
             ) : settingsPage === 'diagnostics' ? (

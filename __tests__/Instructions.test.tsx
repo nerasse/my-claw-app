@@ -97,14 +97,22 @@ function listFrame(over: Record<string, unknown> = {}): Record<string, unknown> 
   };
 }
 
-async function boot(): Promise<Tree> {
+/**
+ * The instruction files live on the workspace that owns them: settings -> Workspaces -> one
+ * workspace. Which one matters, so every test names it -- the rows of another workspace are on
+ * another page now.
+ */
+async function boot(workspace = 'default'): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
   await pressLabel(tree, 'Open settings');
-  await pressLabel(tree, 'Open instructions');
+  await pressLabel(tree, 'Open workspaces');
+  await answerWorkspacesIfAsked();
+  await waitFor(() => labelsOf(tree).includes(`Open workspace ${workspace}`));
+  await pressLabel(tree, `Open workspace ${workspace}`);
   await emit(listFrame());
-  await waitFor(() => labelsOf(tree).includes('Edit AGENTS.md of sofa'));
+  await waitFor(() => labelsOf(tree).includes(`Workspace ${workspace}`));
   return tree;
 }
 
@@ -118,19 +126,19 @@ beforeEach(() => {
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
 });
 
-test('the page groups the files by workspace and asks the server for them', async () => {
-  const tree = await boot();
+test('a workspace page carries its own files only, and asks the server for the listing', async () => {
+  const tree = await boot('sofa');
   expect(sentFrames()).toEqual(
     expect.arrayContaining([expect.objectContaining({ type: 'instructions.list' })]),
   );
-  expect(labelsOf(tree)).toEqual(
-    expect.arrayContaining(['Edit CORE.md of default', 'Edit AGENTS.md of sofa']),
-  );
+  expect(labelsOf(tree)).toContain('Edit AGENTS.md of sofa');
+  // The whole point of the move: one workspace at a time. The default's rows are on its own page.
+  expect(labelsOf(tree)).not.toContain('Edit CORE.md of default');
   await settleAndUnmount(tree);
 });
 
 test('the page asks for the workspace list too, or every named source reads as broken', async () => {
-  const tree = await boot();
+  const tree = await boot('sofa');
   // Reached from the settings index, which fetches no workspaces of its own. Without this frame
   // the list stays empty, and an empty list is what makes sourceStatusOf call a source removed:
   // every `inherit: <workspace>` would show a red "no longer exists" that is pure fiction.
@@ -157,7 +165,7 @@ test('the page asks for the workspace list too, or every named source reads as b
 });
 
 test('a fallback through a source without the file says the template won, not the source', async () => {
-  const tree = await boot();
+  const tree = await boot('sofa');
   await answerWorkspacesIfAsked();
   // sofa reads AGENTS.md from lab, and lab carries no AGENTS.md of its own: one hop, so the
   // ladder stops on the shipped template instead of following lab's own inheritance. The server
@@ -180,7 +188,7 @@ test('a fallback through a source without the file says the template won, not th
 });
 
 test('a cut source with nothing to pass on reads as no layer, never as the template', async () => {
-  const tree = await boot();
+  const tree = await boot('sofa');
   await answerWorkspacesIfAsked();
   // lab cut this layer and owns no AGENTS.md, so sofa reads nothing at all. Saying "lands on the
   // shipped template" here would name content the agent never sees; the server marks it `empty`
@@ -202,7 +210,7 @@ test('a cut source with nothing to pass on reads as no layer, never as the templ
 });
 
 test('a file a workspace does not carry reads as inherited, never as missing', async () => {
-  const tree = await boot();
+  const tree = await boot('sofa');
   // What the agent actually reads for sofa is the default workspace's copy.
   expect(textsOf(tree).some(text => text.includes('inherited from default'))).toBe(true);
   expect(textsOf(tree).some(text => text.includes('missing'))).toBe(false);
@@ -264,7 +272,7 @@ test('saving an edited file echoes the sha the editor loaded', async () => {
 });
 
 test('saving an inherited file sends no sha, so the server refuses an existing one', async () => {
-  const tree = await boot();
+  const tree = await boot('sofa');
   await pressLabel(tree, 'Edit AGENTS.md of sofa');
   await emit({
     type: 'instructions.file',
@@ -419,7 +427,50 @@ test('a nested AGENTS.md opens read-only, with no save button at all', async () 
   await settleAndUnmount(tree);
 });
 
-test('reached from an agent, back returns to that agent and not to the index', async () => {
+test('nested AGENTS.md sit under the workspace they belong to', async () => {
+  const tree = await boot('sofa');
+  // They used to be one flat list at the bottom of a page that stacked every workspace, with the
+  // owning key buried in the hint.
+  await emit(
+    listFrame({
+      nested: [
+        { workspace: 'default', path: 'svc/AGENTS.md', bytes: 400 },
+        { workspace: 'sofa', path: 'api/AGENTS.md', bytes: 200 },
+      ],
+    }),
+  );
+  await waitFor(() => labelsOf(tree).includes('Read api/AGENTS.md of sofa'));
+  expect(labelsOf(tree)).not.toContain('Read svc/AGENTS.md of default');
+  // Nothing was cut, so the page must not claim it was.
+  expect(labelsOf(tree)).not.toContain('Nested list truncated');
+  await settleAndUnmount(tree);
+});
+
+test('a nested scan the server had to cut says so, instead of implying there is no more', async () => {
+  const tree = await boot('sofa');
+  // The cap is per workspace and the server names the ones it cut. Silence here reads as "this
+  // is everything", which is how a crowded workspace hid files under the old shared budget.
+  await emit(
+    listFrame({
+      nested: [{ workspace: 'sofa', path: 'api/AGENTS.md', bytes: 200 }],
+      nestedTruncated: ['sofa'],
+    }),
+  );
+  await waitFor(() => labelsOf(tree).includes('Nested list truncated'));
+  await settleAndUnmount(tree);
+});
+
+test('the settings index has no Instructions row: the prompt files live under their workspace', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Open settings');
+  await waitFor(() => labelsOf(tree).includes('Open workspaces'));
+  expect(labelsOf(tree)).not.toContain('Open instructions');
+  await settleAndUnmount(tree);
+});
+
+test('reached from an agent, the page is the workspace that agent reads, back to that agent', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
@@ -451,7 +502,12 @@ test('reached from an agent, back returns to that agent and not to the index', a
 
   await pressLabel(tree, 'Open instructions');
   await emit(listFrame());
+  // No list of every workspace in between: the agent reads sofa, so sofa's page is what opens.
   await waitFor(() => labelsOf(tree).includes('Back to agent'));
+  expect(labelsOf(tree)).toEqual(
+    expect.arrayContaining(['Workspace sofa', 'Edit AGENTS.md of sofa']),
+  );
+  expect(labelsOf(tree)).not.toContain('Edit CORE.md of default');
   await pressLabel(tree, 'Back to agent');
   await waitFor(() => labelsOf(tree).includes('Open instructions'));
   await settleAndUnmount(tree);
@@ -462,13 +518,35 @@ test('a server too old to answer says so instead of spinning', async () => {
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
   await pressLabel(tree, 'Open settings');
-  await pressLabel(tree, 'Open instructions');
-  await waitFor(() => labelsOf(tree).includes('Back to settings'));
+  await pressLabel(tree, 'Open workspaces');
+  await answerWorkspacesIfAsked();
+  await waitFor(() => labelsOf(tree).includes('Open workspace default'));
+  await pressLabel(tree, 'Open workspace default');
+  await waitFor(() => labelsOf(tree).includes('Back to workspaces'));
 
   await ReactTestRenderer.act(async () => {
     instructionsStore.markUnsupported();
   });
   await waitFor(() => textsOf(tree).some(text => text.includes('0.1.169')));
+  await settleAndUnmount(tree);
+});
+
+test('a file row stacks its title over its hint, so the size cannot run over the ⋯ button', async () => {
+  const tree = await boot();
+  // The row is a flex box holding the pressable, the ⋯ button and the chevron side by side.
+  // The pressable itself must stack: laid out as a row, its hint (which carries the size) sits
+  // beside the title and overflows the box, printing over the button next to it.
+  const pressable = tree.root.find(
+    node =>
+      node.props.accessibilityLabel === 'Edit CORE.md of default' &&
+      typeof node.props.onPress === 'function',
+  );
+  const style = Object.assign({}, ...[pressable.props.style].flat(Infinity).filter(Boolean)) as {
+    flexDirection?: string;
+    flex?: number;
+  };
+  expect(style.flexDirection).toBeUndefined();
+  expect(style.flex).toBe(1);
   await settleAndUnmount(tree);
 });
 
@@ -497,7 +575,10 @@ async function bootPolicy(): Promise<Tree> {
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
   await pressLabel(tree, 'Open settings');
-  await pressLabel(tree, 'Open instructions');
+  await pressLabel(tree, 'Open workspaces');
+  await answerWorkspacesIfAsked();
+  await waitFor(() => labelsOf(tree).includes('Open workspace sofa'));
+  await pressLabel(tree, 'Open workspace sofa');
   await emit(policyListFrame());
   await waitFor(() => labelsOf(tree).includes('Layer settings for SOUL.md of sofa'));
   return tree;
@@ -586,11 +667,13 @@ test('the layer screen answers a skipped layer with the danger wording', async (
   await settleAndUnmount(tree);
 });
 
-test('back from the layer screen returns to the list, one level', async () => {
+test('back from the layer screen returns to the workspace, one level', async () => {
   const tree = await bootPolicy();
   await pressLabel(tree, 'Layer settings for SOUL.md of sofa');
   await waitFor(() => labelsOf(tree).includes('SOUL.md layer'));
-  await pressLabel(tree, 'Back to instructions');
+  await pressLabel(tree, 'Back to the workspace');
   await waitFor(() => labelsOf(tree).includes('Layer settings for SOUL.md of sofa'));
+  // One level: the workspace it came from, not the list of every workspace.
+  expect(labelsOf(tree)).toContain('Workspace sofa');
   await settleAndUnmount(tree);
 });

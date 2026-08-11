@@ -417,7 +417,8 @@ test('a refused agents write surfaces on the page that asked', async () => {
   await settleAndUnmount(tree);
 });
 
-test('the workspaces page adds, edits key and path, and removes workspaces', async () => {
+/** The workspaces list, then one workspace's own page: where the key, path and remove live now. */
+async function bootWorkspace(key: string): Promise<Tree> {
   const tree = await boot();
   await pressLabel(tree, 'Back to settings');
   await waitFor(() => labelsOf(tree).includes('Open workspaces'));
@@ -429,15 +430,17 @@ test('the workspaces page adds, edits key and path, and removes workspaces', asy
       { key: 'sofa', path: '/srv/sofa', default: false },
     ],
   });
-  await waitFor(() => labelsOf(tree).includes('Edit workspace sofa'));
+  await waitFor(() => labelsOf(tree).includes(`Open workspace ${key}`));
+  await pressLabel(tree, `Open workspace ${key}`);
+  await waitFor(() => labelsOf(tree).includes(`Workspace ${key}`));
+  return tree;
+}
 
-  await pressLabel(tree, 'Remove workspace sofa');
-  await waitFor(() => labelsOf(tree).includes('Confirm remove workspace sofa'));
-  await pressLabel(tree, 'Confirm remove workspace sofa');
-  expect(sentFrames()).toEqual(
-    expect.arrayContaining([expect.objectContaining({ type: 'workspaces.remove', key: 'sofa' })]),
-  );
-  // Every mutation answers with the fresh listing, which is also what clears the busy state.
+test('the list adds a workspace and opens each one, the CRUD living on its page', async () => {
+  const tree = await boot();
+  await pressLabel(tree, 'Back to settings');
+  await waitFor(() => labelsOf(tree).includes('Open workspaces'));
+  await pressLabel(tree, 'Open workspaces');
   await emit({
     type: 'workspaces.list.result',
     workspaces: [
@@ -445,18 +448,41 @@ test('the workspaces page adds, edits key and path, and removes workspaces', asy
       { key: 'sofa', path: '/srv/sofa', default: false },
     ],
   });
-  await waitFor(() => labelsOf(tree).includes('Edit workspace sofa'));
+  await waitFor(() => labelsOf(tree).includes('Open workspace sofa'));
 
-  // One edit form handles the key: changing it renames and moves the agent pins.
+  // The list no longer carries the destructive actions: remove and rename moved next to what
+  // they affect, one tap away from the row they belong to.
+  const listLabels = labelsOf(tree);
+  expect(listLabels).not.toContain('Remove workspace sofa');
+  expect(listLabels).not.toContain('Edit workspace sofa');
+  expect(listLabels).toEqual(expect.arrayContaining(['Open workspace default', 'Add workspace']));
+
+  await pressLabel(tree, 'Add workspace');
+  await waitFor(() => labelsOf(tree).includes('Workspace path'));
+  await typeInto(tree, 'Workspace key', 'desk');
+  await typeInto(tree, 'Workspace path', '/srv/desk');
+  await pressLabel(tree, 'Save workspace');
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'workspaces.add', key: 'desk', path: '/srv/desk' }),
+    ]),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('a workspace page renames the key, repoints the path and removes the workspace', async () => {
+  const tree = await bootWorkspace('sofa');
+
+  // One form handles both: changing the key renames and moves the agent pins.
   await pressLabel(tree, 'Edit workspace sofa');
   await waitFor(() => labelsOf(tree).includes('Workspace key'));
-  // The form is pre-filled with the current values.
   expect(textsOf(tree)).toEqual(expect.arrayContaining(['sofa', '/srv/sofa']));
   await typeInto(tree, 'Workspace key', 'couch');
   await pressLabel(tree, 'Save workspace');
   expect(sentFrames()).toEqual(
     expect.arrayContaining([expect.objectContaining({ type: 'workspaces.rename', from: 'sofa', to: 'couch' })]),
   );
+  // The page follows the rename: its subject is the key, and the old one no longer exists.
   await emit({
     type: 'workspaces.list.result',
     workspaces: [
@@ -464,9 +490,8 @@ test('the workspaces page adds, edits key and path, and removes workspaces', asy
       { key: 'couch', path: '/srv/sofa', default: false },
     ],
   });
-  await waitFor(() => labelsOf(tree).includes('Edit workspace couch'));
+  await waitFor(() => labelsOf(tree).includes('Workspace couch'));
 
-  // The same form handles the path: changing it repoints the key at a new directory.
   await pressLabel(tree, 'Edit workspace couch');
   await waitFor(() => labelsOf(tree).includes('Workspace path'));
   await typeInto(tree, 'Workspace path', '/srv/couch');
@@ -483,22 +508,32 @@ test('the workspaces page adds, edits key and path, and removes workspaces', asy
       { key: 'couch', path: '/srv/couch', default: false },
     ],
   });
-  await waitFor(() => labelsOf(tree).includes('Add workspace'));
 
-  await pressLabel(tree, 'Add workspace');
-  await waitFor(() => labelsOf(tree).includes('Workspace path'));
-  await typeInto(tree, 'Workspace key', 'desk');
-  await typeInto(tree, 'Workspace path', '/srv/desk');
-  await pressLabel(tree, 'Save workspace');
+  // Removing takes a confirmation and lands back on the list: the page's subject is gone.
+  await waitFor(() => labelsOf(tree).includes('Remove workspace couch'));
+  await pressLabel(tree, 'Remove workspace couch');
+  await waitFor(() => labelsOf(tree).includes('Confirm remove workspace couch'));
+  await pressLabel(tree, 'Confirm remove workspace couch');
   expect(sentFrames()).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ type: 'workspaces.add', key: 'desk', path: '/srv/desk' }),
-    ]),
+    expect.arrayContaining([expect.objectContaining({ type: 'workspaces.remove', key: 'couch' })]),
   );
+  await emit({ type: 'workspaces.list.result', workspaces: [{ key: 'default', path: '/w', default: true }] });
+  await waitFor(() => labelsOf(tree).includes('Add workspace'));
   await settleAndUnmount(tree);
 });
 
-test('WorkspacesScreen direct render shows the default and the named workspaces', async () => {
+test('the default workspace has no key form and cannot be removed', async () => {
+  const tree = await bootWorkspace('default');
+  // It is config.workspace, not an entry of config.workspaces: there is nothing to rename and
+  // everything else falls back to it.
+  const labels = labelsOf(tree);
+  expect(labels).not.toContain('Edit workspace default');
+  expect(labels).not.toContain('Remove workspace default');
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['/w']));
+  await settleAndUnmount(tree);
+});
+
+test('WorkspacesScreen direct render lists the default and the named workspaces', async () => {
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(
@@ -508,20 +543,34 @@ test('WorkspacesScreen direct render shows the default and the named workspaces'
             { key: 'default', path: '/w', default: true },
             { key: 'sofa', path: '/srv/sofa', default: false },
           ]}
+          entries={[
+            { workspace: 'sofa', file: 'CORE.md', origin: 'own', from: 'sofa', bytes: 10, sha: 'a' },
+            { workspace: 'sofa', file: 'SOUL.md', origin: 'inherited', from: 'default', bytes: 10, sha: 'b' },
+          ]}
+          nested={[{ workspace: 'sofa', path: 'svc/AGENTS.md', bytes: 10 }]}
           error={null}
           busy={false}
           onBack={() => {}}
           onAdd={() => {}}
-          onRemove={() => {}}
-          onRename={() => {}}
-          onSetPath={() => {}}
+          onOpen={() => {}}
         />
       </ThemeProvider>,
     );
   });
   const texts = textsOf(tree);
-  expect(texts).toEqual(expect.arrayContaining(['default', '/srv/sofa', '1 named · the default holds your conversations and memory']));
-  expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Add workspace', 'Edit workspace sofa', 'Remove workspace sofa']));
+  expect(texts).toEqual(
+    expect.arrayContaining([
+      'default',
+      '/srv/sofa',
+      '1 named · the default holds your conversations and memory',
+      // The summary is what the merge owes the reader: the old page showed every workspace's
+      // files at once, this one says what each holds without opening it.
+      '1/2 own · 1 nested',
+    ]),
+  );
+  expect(labelsOf(tree)).toEqual(
+    expect.arrayContaining(['Add workspace', 'Open workspace default', 'Open workspace sofa']),
+  );
   await unmount(tree);
 });
 
