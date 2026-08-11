@@ -98,7 +98,11 @@ export function InstructionLayerScreen({
       ? 'no step has content: this workspace gets no file at all'
       : 'the first step that has content wins';
 
-  const otherWorkspaces = workspaces.filter(w => w.key !== layer.workspace);
+  // The default has its own row at the top of the ladder, so it must not come back down the
+  // list: the listing carries it as a `default: true` entry and it showed up twice.
+  const otherWorkspaces = workspaces.filter(
+    w => w.key !== layer.workspace && !w.default && w.key !== 'default',
+  );
 
   return (
     <View style={styles.screen}>

@@ -8,6 +8,10 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
  * workspace, "default" removing the pin. A key the agent references but the list no longer
  * carries is pinned on top in red: the resolver throws on it at run time, so it has to stay
  * visible to be fixed. The server refuses unknown keys on save anyway.
+ *
+ * The default gets its own section at the top and never rows with the named ones: the listing
+ * carries it as a `default: true` entry, so mapping the whole list under the "no pin" row showed
+ * "default" twice. Its own section also keeps it first whatever order the server sends.
  */
 export function WorkspacePickerScreen({
   workspaces,
@@ -38,6 +42,8 @@ export function WorkspacePickerScreen({
 
   const pick = (key: string | null): void => onSave(key);
   const isCurrent = (key: string | null): boolean => (key ?? null) === (current ?? null);
+  const named = workspaces.filter(workspace => !workspace.default && workspace.key !== 'default');
+  const defaultPath = workspaces.find(workspace => workspace.default)?.path ?? '';
 
   return (
     <View style={styles.screen}>
@@ -82,8 +88,8 @@ export function WorkspacePickerScreen({
         ) : null}
 
         <View style={styles.category}>
-          <Text style={styles.section}>workspaces</Text>
-          <View style={styles.card}>
+          <Text style={styles.section}>default</Text>
+          <View style={[styles.card, styles.cardDefault]}>
             <Pressable
               style={[styles.row, styles.link]}
               onPress={() => pick(null)}
@@ -92,34 +98,44 @@ export function WorkspacePickerScreen({
               accessibilityLabel="Use the default workspace"
               accessibilityState={{ selected: isCurrent(null) }}>
               <View style={styles.itemMain}>
-                <Text style={styles.itemName}>default</Text>
+                <Text style={[styles.itemName, styles.itemNameDefault]}>default</Text>
                 <Text style={styles.itemHint} numberOfLines={1}>
-                  {workspaces.find(w => w.default)?.path ?? ''}
+                  {defaultPath}
                 </Text>
+                <Text style={styles.itemHint}>no pin · what every agent falls back to</Text>
               </View>
               <Text style={styles.glyph}>{isCurrent(null) ? '✓' : ''}</Text>
             </Pressable>
-            {workspaces.map(workspace => (
-              <View key={workspace.key}>
-                <View style={styles.separator} />                <Pressable
-                  style={[styles.row, styles.link]}
-                  onPress={() => pick(workspace.key)}
-                  disabled={saving}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use workspace ${workspace.key}`}
-                  accessibilityState={{ selected: isCurrent(workspace.key) }}>
-                  <View style={styles.itemMain}>
-                    <Text style={styles.itemName}>{workspace.key}</Text>
-                    <Text style={styles.itemHint} numberOfLines={1}>
-                      {workspace.path}
-                    </Text>
-                  </View>
-                  <Text style={styles.glyph}>{isCurrent(workspace.key) ? '✓' : ''}</Text>
-                </Pressable>
-              </View>
-            ))}
           </View>
         </View>
+
+        {named.length > 0 ? (
+          <View style={styles.category}>
+            <Text style={styles.section}>named</Text>
+            <View style={styles.card}>
+              {named.map((workspace, index) => (
+                <View key={workspace.key}>
+                  {index > 0 ? <View style={styles.separator} /> : null}
+                  <Pressable
+                    style={[styles.row, styles.link]}
+                    onPress={() => pick(workspace.key)}
+                    disabled={saving}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use workspace ${workspace.key}`}
+                    accessibilityState={{ selected: isCurrent(workspace.key) }}>
+                    <View style={styles.itemMain}>
+                      <Text style={styles.itemName}>{workspace.key}</Text>
+                      <Text style={styles.itemHint} numberOfLines={1}>
+                        {workspace.path}
+                      </Text>
+                    </View>
+                    <Text style={styles.glyph}>{isCurrent(workspace.key) ? '✓' : ''}</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -158,6 +174,7 @@ const createStyles = (palette: Palette) => ({
     overflow: 'hidden' as const,
   },
   cardRemoved: { borderColor: palette.danger },
+  cardDefault: { borderColor: palette.accent },
   row: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -168,6 +185,7 @@ const createStyles = (palette: Palette) => ({
   link: { flexDirection: 'row' as const, alignItems: 'center' as const },
   itemMain: { flex: 1, gap: 2 },
   itemName: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
+  itemNameDefault: { color: palette.accent },
   itemHint: { fontSize: font.small, color: palette.textMuted },
   removed: { color: palette.danger },
   glyph: { fontSize: 18, color: palette.accent, width: 22, textAlign: 'center' as const },

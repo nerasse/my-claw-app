@@ -536,6 +536,31 @@ test('the layer screen changes the source and saves it', async () => {
   await settleAndUnmount(tree);
 });
 
+test('the layer ladder offers the default workspace once, at the top of the steps', async () => {
+  const tree = await bootPolicy();
+  await pressLabel(tree, 'Layer settings for SOUL.md of sofa');
+  await waitFor(() => labelsOf(tree).includes('SOUL.md layer'));
+  // The listing is what carries the default entry, so the steps below only mean something once
+  // the page has it: default, sofa and lab.
+  await answerWorkspacesIfAsked();
+  await waitFor(() => labelsOf(tree).includes('Read from workspace lab instead'));
+
+  // "the default workspace" is its own step at the top; the workspace list that follows must
+  // exclude it, or the same fallback is offered twice under two different names.
+  // labelsOf reports one label per matching node, so dedupe, and keep only the step rows: the
+  // ladder summary mentions default/SOUL.md too without being an offered step.
+  const labels = labelsOf(tree);
+  const steps = [...new Set(labels)].filter(label => label.startsWith('Read from'));
+  expect(steps).not.toContain('Read from workspace default instead');
+  expect(steps.filter(label => label.includes('default'))).toEqual([
+    'Read from the default workspace instead',
+  ]);
+  expect(labels.indexOf('Read from the default workspace instead')).toBeLessThan(
+    labels.indexOf('Read from workspace lab instead'),
+  );
+  await settleAndUnmount(tree);
+});
+
 test('the layer screen answers a skipped layer with the danger wording', async () => {
   const tree = await bootPolicy();
   await pressLabel(tree, 'Layer settings for CORE.md of sofa');

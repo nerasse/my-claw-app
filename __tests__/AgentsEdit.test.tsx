@@ -204,6 +204,33 @@ test('the workspace picker sends agents.workspace.set with the picked key', asyn
   await settleAndUnmount(tree);
 });
 
+test('the picker lists the default once, first, and apart from the named workspaces', async () => {
+  const tree = await boot();
+  // The listing carries the default as a `default: true` entry, and the picker owns a "no pin"
+  // row for it: mapping the whole list under that row is how "default" showed up twice.
+  await emit({
+    type: 'workspaces.list.result',
+    workspaces: [
+      { key: 'sofa', path: '/s', default: false },
+      { key: 'default', path: '/w', default: true },
+    ],
+  });
+  await pressLabel(tree, 'Open agent General sub-agent');
+  await waitFor(() => labelsOf(tree).includes('Edit workspace'));
+  await pressLabel(tree, 'Edit workspace');
+  await waitFor(() => labelsOf(tree).includes('Use workspace sofa'));
+
+  // labelsOf reports one label per matching node, so dedupe before counting the rows.
+  const labels = labelsOf(tree);
+  const rows = [...new Set(labels)];
+  expect(rows).not.toContain('Use workspace default');
+  expect(rows.filter(label => label.includes('default'))).toEqual(['Use the default workspace']);
+  // First whatever order the server sent, and its own section says so.
+  expect(labels.indexOf('Use the default workspace')).toBeLessThan(labels.indexOf('Use workspace sofa'));
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['default', 'named', '/w', 'sofa']));
+  await settleAndUnmount(tree);
+});
+
 test('the file page loads the structured file and saves it back with the loaded sha', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Open agent reviewer');

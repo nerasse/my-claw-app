@@ -147,7 +147,11 @@ export function InstructionsScreen({
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
 
-  const workspaces = [...new Set(entries.map(e => e.workspace))];
+  // The default workspace heads the page whatever order the entries arrive in: it is the one
+  // every other workspace falls back to, so reading it first is what makes the rest legible.
+  const workspaces = [...new Set(entries.map(e => e.workspace))].sort(
+    (a, b) => Number(b === 'default') - Number(a === 'default'),
+  );
   // A server that predates the per-file sources sends no `inherit`: the page then shows no
   // controls at all instead of a dead button.
   const layersSupported = entries.some(entry => entry.inherit !== undefined);
