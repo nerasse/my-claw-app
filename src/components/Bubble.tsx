@@ -4,6 +4,7 @@ import type { TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
+import { ReasoningLine } from './ReasoningLine';
 import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
 function clock(ts: number): string {
@@ -34,6 +35,9 @@ export function Bubble({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const agent = item.role === 'agent';
+  // While the model is only thinking there is no text yet. The reasoning line already says so, so
+  // the bare caret would be a second, redundant "working" indicator in the same bubble.
+  const thinkingShown = Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
       <View
@@ -46,6 +50,11 @@ export function Bubble({
           // A notice is the system speaking: the agent did not write it either.
           item.notice && styles.bubbleNotice,
         ]}>
+        {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
+            produced, and during the thinking phase this line is the whole bubble. */}
+        {agent && !item.command && !item.notice ? (
+          <ReasoningLine reasoning={item.reasoning} tokens={item.reasoningTokens} streaming={item.streaming} />
+        ) : null}
         {item.attachments.map(att => (
           <AttachmentView
             key={att.id}
@@ -74,7 +83,7 @@ export function Bubble({
               {item.streaming ? '▍' : ''}
             </Text>
           )
-        ) : item.streaming ? (
+        ) : item.streaming && !thinkingShown ? (
           <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(font.body) }]}>▍</Text>
         ) : null}
 

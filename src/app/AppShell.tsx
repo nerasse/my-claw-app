@@ -756,6 +756,12 @@ export function AppShell(): React.JSX.Element {
         case 'chat.stream.delta':
           chatStore.appendDelta(frame.threadId, frame.id, frame.text);
           break;
+        case 'chat.reasoning.delta':
+          chatStore.appendReasoning(frame.threadId, frame.id, frame.text);
+          break;
+        case 'chat.reasoning.tokens':
+          chatStore.setReasoningTokens(frame.threadId, frame.id, frame.tokens);
+          break;
         case 'chat.stream.done':
           chatStore.endStream(frame.threadId, frame.id);
           break;

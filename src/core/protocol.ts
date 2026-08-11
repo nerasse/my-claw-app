@@ -75,6 +75,25 @@ export interface StreamDeltaFrame {
   text: string;
 }
 
+/** Incremental reasoning for the bubble `id`, from an engine that exposes the text. */
+export interface ReasoningDeltaFrame {
+  type: 'chat.reasoning.delta';
+  id: string;
+  threadId: string;
+  text: string;
+}
+
+/**
+ * Running token estimate while a redacted engine thinks (the Claude bridge never sends the text).
+ * No reasoning text will follow, so the bubble shows a count and opens nothing.
+ */
+export interface ReasoningTokensFrame {
+  type: 'chat.reasoning.tokens';
+  id: string;
+  threadId: string;
+  tokens: number;
+}
+
 export interface StreamDoneFrame {
   type: 'chat.stream.done';
   id: string;
@@ -114,6 +133,8 @@ export type HistoryEntry =
       attachments?: AttachmentMeta[];
       /** Words per recording id, so each replayed bubble matches the live one. */
       transcripts?: Record<string, string>;
+      /** What the model thought before this reply, replayed collapsed. */
+      reasoning?: string;
     }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 
@@ -832,6 +853,8 @@ export type ServerFrame =
   | RunEndFrame
   | StreamStartFrame
   | StreamDeltaFrame
+  | ReasoningDeltaFrame
+  | ReasoningTokensFrame
   | StreamDoneFrame
   | StreamAbortFrame
   | ToolCallFrame
@@ -875,6 +898,8 @@ const FRAME_TYPES = new Set([
   'chat.run.end',
   'chat.stream.start',
   'chat.stream.delta',
+  'chat.reasoning.delta',
+  'chat.reasoning.tokens',
   'chat.stream.done',
   'chat.stream.abort',
   'chat.tool',

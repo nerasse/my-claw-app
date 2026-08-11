@@ -11,6 +11,13 @@ export interface TextItem {
   error?: string;
   /** What the server heard, per recording id, rendered inside each recording's own bubble. */
   transcripts?: Record<string, string>;
+  /** What the model thought before answering, shown collapsed. */
+  reasoning?: string;
+  /**
+   * Token estimate from an engine that redacts its thinking (the Claude bridge): there is a count
+   * to show and nothing to expand.
+   */
+  reasoningTokens?: number;
   /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
   command?: boolean;
   /** A statement of the system (a model fallback), drawn apart for the same reason. */
@@ -40,6 +47,8 @@ function textOf(entry: HistoryEntry): string {
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
   private streams = new Map<string, string>();
+  /** Accumulated reasoning per open bubble, the counterpart of `streams` for the text. */
+  private reasoning = new Map<string, string>();
   /** The id of the bubble a thread's answer is streaming into; the media delivery that ends
    *  the answer lands on it instead of opening a second bubble. */
   private lastStream = new Map<string, string>();
@@ -143,6 +152,7 @@ class ChatStoreImpl {
         attachments: entry.attachments ?? [],
         streaming: false,
         ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
+        ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
         ts,
       };
     });
@@ -217,15 +227,42 @@ class ChatStoreImpl {
     this.patch(threadId, id, { text: current + text });
   }
 
+  /**
+   * Reasoning accumulates on the bubble it belongs to. Keyed off `streams` like the text is, so a
+   * frame arriving for a closed bubble is dropped instead of resurrecting it.
+   */
+  appendReasoning(threadId: string, id: string, text: string): void {
+    if (!this.streams.has(id)) return;
+    const current = this.reasoning.get(id) ?? '';
+    const next = current + text;
+    this.reasoning.set(id, next);
+    this.patch(threadId, id, { reasoning: next });
+  }
+
+  /** Latest estimate from a redacted engine; the server sends a running total, so it replaces. */
+  setReasoningTokens(threadId: string, id: string, tokens: number): void {
+    if (!this.streams.has(id)) return;
+    this.patch(threadId, id, { reasoningTokens: tokens });
+  }
+
   endStream(threadId: string, id: string): void {
     if (!this.streams.has(id)) return;
     const finalText = this.streams.get(id) ?? '';
+    const thought = this.reasoning.get(id) ?? '';
     this.streams.delete(id);
-    if (!finalText.trim()) {
+    this.reasoning.delete(id);
+    // A bubble carrying only reasoning is not empty: it explains a tool call that produced no
+    // prose, which is exactly what the owner asked to be able to read.
+    if (!finalText.trim() && !thought.trim() && !this.hasReasoningTokens(threadId, id)) {
       this.removeItem(threadId, id);
       return;
     }
     this.patch(threadId, id, { text: finalText, streaming: false });
+  }
+
+  private hasReasoningTokens(threadId: string, id: string): boolean {
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    return item?.kind === 'text' && (item.reasoningTokens ?? 0) > 0;
   }
 
   abortStream(threadId: string, id: string, error?: string): void {
@@ -243,6 +280,7 @@ class ChatStoreImpl {
       return;
     }
     this.streams.delete(id);
+    this.reasoning.delete(id);
     this.patch(threadId, id, { streaming: false, error });
   }
 
@@ -293,6 +331,7 @@ class ChatStoreImpl {
   clearAll(): void {
     this.threads.clear();
     this.streams.clear();
+    this.reasoning.clear();
     this.lastStream.clear();
     this.activeRuns.clear();
     this.unread.clear();
