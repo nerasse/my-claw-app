@@ -60,6 +60,15 @@ export function rowText(
   if (source.kind === 'none') {
     return { badge: { text: 'no layer', danger: false }, hint: 'nothing: this layer is left out of the prompt' };
   }
+  // A source that is cut and owns no file. Only the server can tell this apart from a source that
+  // is merely empty-handed, and the two end differently: nothing at all versus the template. The
+  // row has to say which, or it promises a template that is never read.
+  if (entry.empty === true && source.kind === 'workspace') {
+    return {
+      badge: { text: 'no layer', danger: false },
+      hint: `${source.key} has this layer off and no ${entry.file} to pass on · nothing is read`,
+    };
+  }
   if (source.kind === 'builtin') {
     return {
       badge: { text: 'built-in', danger: false },

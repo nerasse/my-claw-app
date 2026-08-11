@@ -656,6 +656,10 @@ export interface InstructionEntry {
    *  predates the layer controls, which the app then hides entirely. */
   inherit?: string;
   off?: boolean;
+  /** The layer resolves to nothing on purpose: `off`, `inherit: "none"`, or a source that is cut
+   *  and owns no file. The row cannot work the last case out on its own, and without it would
+   *  promise a shipped template that is never read. */
+  empty?: boolean;
 }
 
 /** A nested AGENTS.md found under a workspace. Read-only: it reaches tool results, not the prompt. */

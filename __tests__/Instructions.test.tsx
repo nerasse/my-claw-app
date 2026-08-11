@@ -179,6 +179,28 @@ test('a fallback through a source without the file says the template won, not th
   await settleAndUnmount(tree);
 });
 
+test('a cut source with nothing to pass on reads as no layer, never as the template', async () => {
+  const tree = await boot();
+  await answerWorkspacesIfAsked();
+  // lab cut this layer and owns no AGENTS.md, so sofa reads nothing at all. Saying "lands on the
+  // shipped template" here would name content the agent never sees; the server marks it `empty`
+  // because the row cannot tell this apart from an empty-handed source on its own.
+  await emit(
+    listFrame({
+      entries: [
+        { workspace: 'default', file: 'AGENTS.md', origin: 'own', from: 'default', bytes: 1024, sha: 'agents1111aa', inherit: 'default', off: false, empty: false },
+        { workspace: 'lab', file: 'AGENTS.md', origin: 'off', from: 'lab', bytes: 0, sha: '', inherit: 'default', off: true, empty: true },
+        { workspace: 'sofa', file: 'AGENTS.md', origin: 'fallback', from: '', bytes: 0, sha: '', inherit: 'lab', off: false, empty: true },
+      ],
+    }),
+  );
+
+  await waitFor(() => textsOf(tree).some(text => text.includes('nothing is read')));
+  expect(textsOf(tree).some(text => text.includes('lab has this layer off and no AGENTS.md to pass on'))).toBe(true);
+  expect(textsOf(tree).some(text => text.includes('shipped template'))).toBe(false);
+  await settleAndUnmount(tree);
+});
+
 test('a file a workspace does not carry reads as inherited, never as missing', async () => {
   const tree = await boot();
   // What the agent actually reads for sofa is the default workspace's copy.
