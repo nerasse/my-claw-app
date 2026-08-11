@@ -737,6 +737,7 @@ export function AppShell(): React.JSX.Element {
             frame.text,
             frame.attachments,
             frame.replyToId,
+            frame.notice,
           );
           noteActivity(frame.threadId, frame.text);
           break;

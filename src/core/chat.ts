@@ -13,6 +13,8 @@ export interface TextItem {
   transcripts?: Record<string, string>;
   /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
   command?: boolean;
+  /** A statement of the system (a model fallback), drawn apart for the same reason. */
+  notice?: boolean;
   ts: number;
 }
 
@@ -244,7 +246,14 @@ class ChatStoreImpl {
     this.patch(threadId, id, { streaming: false, error });
   }
 
-  addAgentMessage(threadId: string, id: string, text: string, attachments: AttachmentMeta[], replyToId?: string): void {
+  addAgentMessage(
+    threadId: string,
+    id: string,
+    text: string,
+    attachments: AttachmentMeta[],
+    replyToId?: string,
+    notice?: boolean,
+  ): void {
     // The server streams the answer, then delivers the media as a message of its own with no
     // text. As its own bubble, the image would sit apart from the words that go with it;
     // it belongs under the text that was just streamed.
@@ -263,6 +272,7 @@ class ChatStoreImpl {
       text,
       attachments,
       streaming: false,
+      ...(notice ? { notice: true } : {}),
       ts: parent ? parent.ts + 1 : Date.now(),
     });
   }

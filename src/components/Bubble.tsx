@@ -43,6 +43,8 @@ export function Bubble({
           // Command output is drawn apart: the agent did not write it, so it must not wear
           // the agent's clothes.
           item.command && styles.bubbleCommand,
+          // A notice is the system speaking: the agent did not write it either.
+          item.notice && styles.bubbleNotice,
         ]}>
         {item.attachments.map(att => (
           <AttachmentView
@@ -58,14 +60,14 @@ export function Bubble({
           />
         ))}
         {item.text ? (
-          agent && !item.command ? (
+          agent && !item.command && !item.notice ? (
             <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
           ) : (
             <Text
               selectable
               style={[
                 styles.text,
-                item.command ? styles.textCommand : styles.textUser,
+                item.command ? styles.textCommand : item.notice ? styles.textNotice : styles.textUser,
                 lineBoxFor(font.body, item.text),
               ]}>
               {item.text}
@@ -110,6 +112,12 @@ const createStyles = (palette: Palette) => ({
   },
   bubbleUser: { backgroundColor: palette.accent, borderBottomRightRadius: radius.sm },
   bubbleAgent: { backgroundColor: palette.surfaceAlt, borderBottomLeftRadius: radius.sm },
+  bubbleNotice: {
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.danger,
+    maxWidth: '95%' as const,
+  },
   bubbleCommand: {
     backgroundColor: palette.accentSoft,
     borderWidth: 1,
@@ -121,6 +129,7 @@ const createStyles = (palette: Palette) => ({
   textUser: { color: palette.accentText },
   // Command output keeps its line breaks: /status is a table, not prose.
   textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: font.small },
+  textNotice: { color: palette.text, fontSize: font.small },
   error: { fontSize: font.small, color: palette.danger, marginTop: 2 },
   time: { fontSize: font.micro, alignSelf: 'flex-end' as const, marginTop: 1 },
   timeAgent: { color: palette.textFaint },

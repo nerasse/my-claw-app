@@ -511,3 +511,47 @@ describe('keeping the same place when the keyboard opens', () => {
     await unmount(tree);
   });
 });
+
+test('a notice is drawn apart from the agent replies it arrives between', async () => {
+  const tree = await renderWithHistory();
+  // The server states a model fallback out of band: it is not an answer, and a bubble that looked
+  // like one would be read as the agent's own words.
+  await ReactTestRenderer.act(async () => {
+    chatStore.addAgentMessage(
+      THREAD,
+      'n1',
+      '`mimo-v2.5-pro` is not available (litellm no longer lists it) · running `claude-sonnet-5` instead',
+      [],
+      undefined,
+      true,
+    );
+  });
+  await waitFor(() => stringsOf(tree).some(t => t.includes('is not available')));
+
+  // Rendered as plain text, never through the markdown renderer the agent's answers use: the
+  // backticks are the server's wording, not a formatting instruction to obey.
+  const notice = tree.root
+    .findAll(node => {
+      const children = node.props.children;
+      const list = Array.isArray(children) ? children : [children];
+      return list.some(c => typeof c === 'string' && c.includes('is not available'));
+    })
+    .at(-1)!;
+  // The bubble around it is outlined, which an agent bubble never is: that outline is the whole
+  // "drawn apart". Climbing to it also proves the text is not inside an agent bubble.
+  const flatten = (style: unknown): Record<string, unknown> =>
+    Object.assign({}, ...[style].flat(Infinity).filter(Boolean)) as Record<string, unknown>;
+  let node: ReactTestRenderer.ReactTestInstance | null = notice;
+  let outlined = false;
+  while (node) {
+    if (flatten(node.props.style)['borderWidth'] === 1) {
+      outlined = true;
+      break;
+    }
+    node = node.parent;
+  }
+  expect(outlined).toBe(true);
+  // Not the command style either: /status is a table and wears monospace, a notice is a sentence.
+  expect(flatten(notice.props.style)['fontFamily']).toBeUndefined();
+  await unmount(tree);
+});

@@ -37,6 +37,11 @@ export interface ChatMessageFrame {
   ts?: string;
   /** Correlation id of the run that produced this reply: quote it to pull its logs. */
   run?: string;
+  /**
+   * A statement of the system, not a reply from the agent: a model fallback, a warning about a
+   * failed voice take. Drawn apart, because a warning wearing the agent's clothes reads as content.
+   */
+  notice?: boolean;
 }
 
 /** A run started answering on a thread: the Stop button stays until the matching end. */
