@@ -66,6 +66,22 @@ function sentFrames(): Array<Record<string, unknown>> {
   );
 }
 
+/**
+ * The workspace list, answered only if the page actually asked for it. A test that emits a result
+ * out of the blue proves nothing about the request that should have caused it.
+ */
+async function answerWorkspacesIfAsked(): Promise<void> {
+  if (!sentFrames().some(frame => frame.type === 'workspaces.list')) return;
+  await emit({
+    type: 'workspaces.list.result',
+    workspaces: [
+      { key: 'default', path: '/home/neras/.my-claw/workspace', default: true },
+      { key: 'sofa', path: '/home/neras/dev/SOFA', default: false },
+      { key: 'lab', path: '/home/neras/dev/lab', default: false },
+    ],
+  });
+}
+
 function listFrame(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     type: 'instructions.list.result',
@@ -110,6 +126,56 @@ test('the page groups the files by workspace and asks the server for them', asyn
   expect(labelsOf(tree)).toEqual(
     expect.arrayContaining(['Edit CORE.md of default', 'Edit AGENTS.md of sofa']),
   );
+  await settleAndUnmount(tree);
+});
+
+test('the page asks for the workspace list too, or every named source reads as broken', async () => {
+  const tree = await boot();
+  // Reached from the settings index, which fetches no workspaces of its own. Without this frame
+  // the list stays empty, and an empty list is what makes sourceStatusOf call a source removed:
+  // every `inherit: <workspace>` would show a red "no longer exists" that is pure fiction.
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'workspaces.list' })]),
+  );
+
+  // Answering a frame the app never sent is what makes a wiring test lie: the store would fill
+  // either way and the row would read fine with the request removed. Only answer what was asked.
+  await answerWorkspacesIfAsked();
+  await emit(
+    listFrame({
+      entries: [
+        { workspace: 'default', file: 'AGENTS.md', origin: 'own', from: 'default', bytes: 1024, sha: 'agents1111aa', inherit: 'default' },
+        { workspace: 'lab', file: 'AGENTS.md', origin: 'inherited', from: 'default', bytes: 1024, sha: 'agents1111aa', inherit: 'default' },
+        { workspace: 'sofa', file: 'AGENTS.md', origin: 'fallback', from: '', bytes: 800, sha: 'tpl111111aaa', inherit: 'lab' },
+      ],
+    }),
+  );
+
+  await waitFor(() => textsOf(tree).some(text => text.includes('lands on the shipped template')));
+  expect(textsOf(tree).some(text => text.includes('no longer exists'))).toBe(false);
+  await settleAndUnmount(tree);
+});
+
+test('a fallback through a source without the file says the template won, not the source', async () => {
+  const tree = await boot();
+  await answerWorkspacesIfAsked();
+  // sofa reads AGENTS.md from lab, and lab carries no AGENTS.md of its own: one hop, so the
+  // ladder stops on the shipped template instead of following lab's own inheritance. The server
+  // says as much by answering `fallback` -- claiming "read from lab" here would be a lie, and
+  // the byte count shown would be the template's.
+  await emit(
+    listFrame({
+      entries: [
+        { workspace: 'default', file: 'AGENTS.md', origin: 'own', from: 'default', bytes: 1024, sha: 'agents1111aa', inherit: 'default' },
+        { workspace: 'lab', file: 'AGENTS.md', origin: 'inherited', from: 'default', bytes: 1024, sha: 'agents1111aa', inherit: 'default' },
+        { workspace: 'sofa', file: 'AGENTS.md', origin: 'fallback', from: '', bytes: 800, sha: 'tpl111111aaa', inherit: 'lab' },
+      ],
+    }),
+  );
+
+  await waitFor(() => textsOf(tree).some(text => text.includes('lands on the shipped template')));
+  expect(textsOf(tree).some(text => text.includes('which has no AGENTS.md either'))).toBe(true);
+  expect(textsOf(tree).some(text => text.includes('read from lab · '))).toBe(false);
   await settleAndUnmount(tree);
 });
 

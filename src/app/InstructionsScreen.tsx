@@ -66,12 +66,19 @@ export function rowText(
       hint: 'always the shipped template, even if default has one',
     };
   }
-  if (source.kind === 'workspace' && !source.self && !source.removed && sourceOwnsFile(entry, entries)) {
+  // The one-hop rule, and the reason this branch is about the source *not* owning the file: the
+  // server only says "fallback" once the source failed to deliver, and a source that owns the
+  // file never fails. So the common shape here is a source without that file, which the ladder
+  // does not follow any further -- it stops on the shipped template.
+  if (source.kind === 'workspace' && !source.self && !source.removed && !sourceOwnsFile(entry, entries)) {
     return {
       badge: { text: 'built-in', danger: false },
       hint: `read from ${source.key}, which has no ${entry.file} either · lands on the shipped template`,
     };
   }
+  // Source owns the file, yet the server called it a fallback: the listing and the resolution
+  // disagree, which only happens on a snapshot taken across a write. Read it the optimistic way;
+  // the next list settles it.
   if (source.kind === 'workspace' && !source.self && !source.removed) {
     return {
       badge: { text: 'inherited', danger: false },
