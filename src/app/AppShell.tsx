@@ -210,6 +210,26 @@ function judgesCatalogNames(page: string): boolean {
 }
 
 /**
+ * The pages fed by `agents.config.result`: the agents stack, the provider stack, and the index,
+ * whose rows carry live counts from the same snapshot. Naming them once is the point -- the
+ * request used to live on the Agents page alone, so reaching Providers straight from the index
+ * (its own category since it left the Agents page) showed an empty list and a count of zero.
+ */
+const AGENTS_CONFIG_PAGES: readonly string[] = [
+  'index',
+  'agents',
+  'agent',
+  'providers',
+  'provider',
+  'provider-edit',
+  'provider-env',
+];
+
+function readsAgentsConfig(page: string): boolean {
+  return AGENTS_CONFIG_PAGES.includes(page);
+}
+
+/**
  * The model picker pointed at the server config instead of a session: "global" edits
  * llm.defaultModel, "fallback" edits llm.visionFallback, an agent key edits agents.<key>.llm.
  * The root option hands an agent back to its inheritance (clear), which is the "Use default"
@@ -1454,16 +1474,19 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeSkillsList()).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
-  // The agent defaults are asked for when the Agents page opens. A server that predates the
+  // The agent defaults are asked for by every page that renders them: the agents stack, the
+  // provider stack, and the index (its rows carry the counts). A server that predates the
   // frames answers nothing at all (unknown frames are dropped silently), so the store flips to
   // "unsupported" after a beat instead of spinning forever.
   useEffect(() => {
-    if (!settingsOpen || (settingsPage !== 'agents' && settingsPage !== 'agent')) return;
+    if (!settingsOpen || !readsAgentsConfig(settingsPage)) return;
     agentsStore.request();
     connection.send(encodeAgentsConfigGet()).catch(() => {});
-    // The workspace picker needs its list here; the skills and MCP catalogs these pages judge
-    // names against are fetched by the catalog effects above, for every such page at once.
-    connection.send(encodeWorkspacesList()).catch(() => {});
+    // The workspace picker needs its list here, and only the agent pages own one; the skills and
+    // MCP catalogs these pages judge names against are fetched by the catalog effects above.
+    if (settingsPage === 'agents' || settingsPage === 'agent') {
+      connection.send(encodeWorkspacesList()).catch(() => {});
+    }
     const timer = setTimeout(() => agentsStore.markUnsupported(), 4000);
     return () => clearTimeout(timer);
   }, [settingsOpen, settingsPage]);
