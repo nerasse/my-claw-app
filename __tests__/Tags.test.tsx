@@ -1,7 +1,7 @@
 /**
  * @format
  *
- * Tags (docs/tags.md on the server): the CRUD page under Settings > Agents, the model picker
+ * Tags (docs/tags.md on the server): the CRUD page under Settings > Providers, the model picker
  * it opens, the /tag command forms, and the wire frames behind it all.
  */
 
@@ -37,6 +37,15 @@ function pressLabel(tree: Tree, label: string): Promise<void> {
     const target = targets[0] ?? tree.root.find(node => node.props.accessibilityLabel === label);
     target.props.onPress();
   });
+}
+
+/** The Android layer calls the last registered handler and stops when it returns true. */
+function backHandler(): { __handlers: Array<() => boolean>; exitApp: jest.Mock } {
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+  };
+  return back.default;
 }
 
 function typeInto(tree: Tree, label: string, text: string): Promise<void> {
@@ -113,8 +122,10 @@ async function bootToTagsPage(): Promise<Tree> {
   });
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open agents');
-  await press(tree, 'Tags');
+  // Tags lives under Providers since it left the Agents page: the row is the synthetic
+  // "tags" provider, and reaching it from the providers list asks for the tags catalog.
+  await press(tree, 'Open providers');
+  await press(tree, 'Open provider tags');
   await waitFor(() =>
     sentFrames().some(frame => frame.type === 'tags.list'),
   );
@@ -188,6 +199,36 @@ test('the tag model picker offers no tag entries: a tag cannot pin a tag', async
   // pinning a tag reference is how cycles are born (the server refuses those writes).
   const labels = labelsOf(tree);
   expect(labels).not.toEqual(expect.arrayContaining(['Tags ›', 'Default', 'opus']));
+  await settleAndUnmount(tree);
+});
+
+test('back from the tags page returns to Providers, and the Agents page has no Tags row', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
+  await emit(agentsConfig());
+  await emit({ type: 'model.list.result', models: [{ id: 'fast-1', label: 'Fast' }], defaultModel: 'fast-1' });
+  await press(tree, 'Open conversations');
+  await press(tree, 'Open settings');
+  await press(tree, 'Open agents');
+  // The Agents page holds only the defaults and the agent rows since Tags left it.
+  expect(labelsOf(tree)).not.toContain('Tags');
+  await press(tree, 'Back to settings');
+  await press(tree, 'Open providers');
+  await press(tree, 'Open provider tags');
+  await waitFor(() => sentFrames().some(frame => frame.type === 'tags.list'));
+  await emit(tagsResult());
+  await waitFor(() => labelsOf(tree).includes('Open tag opus'));
+
+  // Hardware back: tags -> the providers list, not the agents page it used to live on.
+  const handlers = backHandler().__handlers;
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]!();
+  });
+  expect(handled).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('New provider'));
+  expect(labelsOf(tree)).not.toContain('Open tag opus');
+
   await settleAndUnmount(tree);
 });
 

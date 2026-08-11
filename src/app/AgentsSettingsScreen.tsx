@@ -41,7 +41,6 @@ export function AgentsSettingsScreen({
   onBack,
   onOpenDefaultModel,
   onOpenFallback,
-  onOpenTags,
   onOpenAgent,
   onNewAgent,
 }: {
@@ -51,7 +50,6 @@ export function AgentsSettingsScreen({
   onBack: () => void;
   onOpenDefaultModel: () => void;
   onOpenFallback: () => void;
-  onOpenTags: () => void;
   onOpenAgent: (key: string) => void;
   onNewAgent: () => void;
 }): React.JSX.Element {
@@ -126,20 +124,6 @@ export function AgentsSettingsScreen({
                     {config.fallback
                       ? `image runs switch to it when ${labelOf(config.defaultModel)} can't take images`
                       : 'what image runs switch to when the model cannot take images'}
-                  </Text>
-                </View>
-                <Text style={styles.linkGlyph}>›</Text>
-              </Pressable>
-              <View style={styles.separator} />
-              <Pressable
-                style={[styles.row, styles.link]}
-                onPress={onOpenTags}
-                accessibilityRole="button"
-                accessibilityLabel="Tags">
-                <View style={styles.linkMain}>
-                  <Text style={styles.linkTitle}>Tags</Text>
-                  <Text style={styles.hint}>
-                    aliases for a model combo · usable anywhere a model is expected
                   </Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>

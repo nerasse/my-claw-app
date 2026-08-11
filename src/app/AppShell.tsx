@@ -1183,7 +1183,7 @@ export function AppShell(): React.JSX.Element {
           return true;
         }
         if (settingsPage === 'tags') {
-          setSettingsPage('agents');
+          setSettingsPage('providers');
           return true;
         }
         if (settingsPage === 'agents') {
@@ -1912,7 +1912,6 @@ export function AppShell(): React.JSX.Element {
         setAgentModelFor('fallback');
         setSettingsPage('model-picker');
       }}
-      onOpenTags={() => setSettingsPage('tags')}
       onOpenAgent={key => {
         setSelectedAgent(key);
         setSettingsPage('agent');
@@ -1944,7 +1943,7 @@ export function AppShell(): React.JSX.Element {
       tags={tagsState.tags}
       status={tagsState.status}
       error={tagsState.error}
-      onBack={() => setSettingsPage('agents')}
+      onBack={() => setSettingsPage('providers')}
       onNewTag={() => setNewTagPrompt(true)}
       onEditTag={openTagEditor}
       onDeleteTag={setTagToDelete}

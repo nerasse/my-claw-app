@@ -44,7 +44,7 @@ export function TagsScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back to agents">
+          accessibilityLabel="Back to providers">
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
