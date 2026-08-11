@@ -23,13 +23,26 @@ kill). A report is dropped from the device only once acked (`diag.report.result`
 
 ## Symbolicating a release stack
 
-Hermes ships bytecode: without the source map of that **exact** build, a release stack is
-unreadable. It is emitted by `extraPackagerArgs` (`android/app/build.gradle`) and attached to the
-release by `scripts/release.sh` — `android/app/build/` dies at the next clean.
+Hermes ships bytecode: without the source map of that **exact** build, a release stack is a list
+of addresses. The map is not archived — the bundle is reproducible bit for bit, so it is
+regenerated from the tag, and the APK proves the result is right.
 
 ```sh
-npx react-native symbolicate crash.txt --sourcemap my-claw-app-<version>.bundle.map
+git checkout v<version> && npm ci
+cd android && ./gradlew :app:createBundleReleaseJsAndAssets
+
+# The proof, and it is not optional: a map that does not match the shipped bundle yields
+# plausible-looking line numbers pointing at the wrong code.
+unzip -p my-claw-app-v<version>.apk assets/index.android.bundle | sha256sum
+sha256sum app/build/generated/assets/react/release/index.android.bundle
+
+# identical -> symbolicate; different -> the toolchain drifted, do not trust the map
+npx react-native symbolicate crash.txt \
+  --sourcemap android/app/build/generated/sourcemaps/react/release/index.android.bundle.map
 ```
+
+`extraPackagerArgs` in `android/app/build.gradle` is what emits the map at all; keep it. Strings,
+not Files — a File breaks Gradle's configuration cache.
 
 ## Server logs
 
