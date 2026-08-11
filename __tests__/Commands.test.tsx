@@ -164,6 +164,114 @@ test('the chat picker walks model, effort and window, and applies the combo on c
   await settleAndUnmount(tree);
 });
 
+/**
+ * A catalog long enough to earn the search row: one provider group holds a dozen models, the
+ * way a discovering provider fills it (OpenRouter alone returns 400+).
+ */
+function bigCatalog(count = 12): Array<Record<string, unknown>> {
+  return [
+    { id: 'fast-1', label: 'Fast' },
+    { id: 'strong-2', label: 'Strong', group: 'Advanced' },
+    { id: 'nvidia/nemotron', label: 'nvidia/nemotron', group: 'openrouter' },
+    ...Array.from({ length: count }, (_, index) => ({
+      id: `vendor/model-${index}`,
+      label: `vendor/model-${index}`,
+      group: 'openrouter',
+    })),
+  ];
+}
+
+async function openChatPicker(
+  tree: Tree,
+  models: Array<Record<string, unknown>>,
+  messageId = 'u1',
+): Promise<void> {
+  // The store outlives an unmounted tree: a second picker in the same test needs its own id.
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, messageId, 'hello', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello'), 60);
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
+  await pressLabel(tree, 'Model…');
+  await emit({ type: 'model.list.result', models, defaultModel: 'fast-1' });
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'fast-1',
+    defaultModel: 'fast-1',
+    effort: { level: '', levels: [], supported: false },
+  });
+  await waitFor(() => labelsOf(tree).includes('Fast'), 60);
+}
+
+test('the search reaches a model inside a group without browsing to it, and stages it', async () => {
+  const tree = await renderApp();
+  await openChatPicker(tree, bigCatalog());
+
+  // The model is buried in its provider's group: the root shows the group, not the model.
+  expect(labelsOf(tree)).toContain('openrouter ›');
+  expect(labelsOf(tree)).not.toContain('nvidia/nemotron');
+
+  await typeInto(tree, 'Search models', 'nemo');
+  await waitFor(() => labelsOf(tree).includes('nvidia/nemotron'), 60);
+  // The search crosses every group, so the groups themselves stop being rows.
+  expect(labelsOf(tree)).not.toContain('openrouter ›');
+  expect(labelsOf(tree)).not.toContain('Fast');
+  expect(allTexts(tree)).toContain('1 match for "nemo"');
+
+  await pressLabel(tree, 'nvidia/nemotron');
+  await waitFor(() => labelsOf(tree).includes('Apply'), 60);
+  await pressLabel(tree, 'Apply');
+  await waitFor(
+    () => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'nvidia/nemotron' })),
+    60,
+  );
+
+  await settleAndUnmount(tree);
+});
+
+test('back clears the search before it closes the picker', async () => {
+  const tree = await renderApp();
+  await openChatPicker(tree, bigCatalog());
+  await typeInto(tree, 'Search models', 'nemo');
+  await waitFor(() => labelsOf(tree).includes('nvidia/nemotron'), 60);
+
+  // The keyboard is up over a filtered list: the step back the user means is the search, not
+  // the sheet. The list comes back whole, the picker stays open.
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('openrouter ›'), 60);
+  expect(labelsOf(tree)).toContain('Fast');
+  expect(labelsOf(tree)).not.toContain('nvidia/nemotron');
+
+  // Only the next press closes it.
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => !labelsOf(tree).includes('Fast'), 60);
+
+  await settleAndUnmount(tree);
+});
+
+test('a short catalog carries no search row, a flooded one cuts the list it shows', async () => {
+  const tree = await renderApp();
+  await openChatPicker(tree, [
+    { id: 'fast-1', label: 'Fast' },
+    { id: 'strong-2', label: 'Strong' },
+  ]);
+  // Two models are read, not searched.
+  expect(labelsOf(tree)).not.toContain('Search models');
+  await settleAndUnmount(tree);
+
+  const flooded = await renderApp();
+  await openChatPicker(flooded, bigCatalog(45), 'u2');
+  await typeInto(flooded, 'Search models', 'vendor/');
+  // 45 matches, 40 rendered: the sheet has no virtualization, so the rest is a count.
+  await waitFor(() => labelsOf(flooded).includes('5 more · narrow the search'), 60);
+  expect(labelsOf(flooded)).toContain('vendor/model-39');
+  expect(labelsOf(flooded)).not.toContain('vendor/model-40');
+
+  await settleAndUnmount(flooded);
+});
+
 test('a group whose models all live in sub-groups is still reachable', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
@@ -311,6 +419,29 @@ function pressLabel(tree: Tree, label: string): Promise<void> {
     const target = targets[0] ?? tree.root.find(node => node.props.accessibilityLabel === label);
     target.props.onPress();
   });
+}
+
+function typeInto(tree: Tree, label: string, text: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    const input = tree.root.find(
+      node => String(node.type) === 'TextInput' && node.props.accessibilityLabel === label,
+    );
+    input.props.onChangeText(text);
+  });
+}
+
+/** The Android layer calls the last registered handler and stops when it returns true. */
+async function hardwareBack(): Promise<boolean> {
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean> };
+  };
+  const handlers = back.default.__handlers;
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]!();
+  });
+  return handled;
 }
 
 

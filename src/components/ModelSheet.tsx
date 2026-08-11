@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ActionSheet, type SheetOption } from './ActionSheet';
 import { connection } from '../core/connection';
 import { useModelCatalog, useThreadModel } from '../core/model';
 import { contextSummary, contextTiers } from '../core/context';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import {
   encodeModelContextSet,
   encodeModelEffortSet,
@@ -14,6 +14,28 @@ import {
 
 function splitGroup(model: ModelOption): string[] {
   return (model.group ?? '').split('/').map(part => part.trim()).filter(Boolean);
+}
+
+/**
+ * Below this the whole list fits on one screen: a search row would be one more thing to read
+ * before the three models under it.
+ */
+const SEARCH_MIN_MODELS = 12;
+
+/**
+ * A one-letter query matches hundreds of models. The sheet renders every option it is given
+ * (no virtualization), so the list is cut and the count says what the cut hides.
+ */
+const SEARCH_MAX_RESULTS = 40;
+
+function normalize(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/** Where the model sits, so a hit found across groups still says which provider it came from. */
+function searchHint(model: ModelOption): string | undefined {
+  const parts = [model.group, model.id === model.label ? null : model.id].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
 /** Which screen of the flow is showing. The flow is always model -> [effort] -> [context] -> confirm. */
@@ -29,6 +51,9 @@ export interface PickerState {
   /** Group being browsed at the model stage. */
   path: string[];
   trail: PickerStage[];
+  /** Search text at the model stage. While it is set the list is flat and crosses every group:
+   *  a catalog of 400 models is not browsed, it is searched. */
+  query?: string;
   /** Staged choices: nothing is sent until the confirm step. */
   model?: string;
   /** The staged effort: a level, or null for a deliberate "back to default". Absent means the
@@ -39,8 +64,13 @@ export interface PickerState {
 
 export const pickerStart: PickerState = { stage: 'model', path: [], trail: [] };
 
-/** One step back: out of a group, then to the previous stage, then null meaning "close". */
+/** One step back: out of a search, then out of a group, then to the previous stage, then null
+ *  meaning "close". The search goes first because it is what covers the list the user was in:
+ *  clearing it is the step back they mean, and it is the one the keyboard is up for. */
 export function pickerBack(state: PickerState): PickerState | null {
+  if (state.stage === 'model' && state.query) {
+    return { ...state, query: '' };
+  }
   if (state.stage === 'model' && state.path.length > 0) {
     return { ...state, path: state.path.slice(0, -1) };
   }
@@ -54,6 +84,13 @@ export interface PickerRootOption {
   label: string;
   selected: boolean;
   onPress: () => void;
+}
+
+/** The search row of the model stage, or null when the catalog is short enough to just read. */
+export interface PickerSearch {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
 }
 
 /** The effort step: the pin the subject already holds, if any. */
@@ -112,7 +149,7 @@ export function useModelPickerFlow({
   skipEffortOnTag?: boolean;
   /** Full-page presentation: the page's own back entry replaces the in-flow "< Back" rows. */
   page?: boolean;
-}): { preview: string; options: SheetOption[]; back: () => void } {
+}): { preview: string; options: SheetOption[]; back: () => void; search: PickerSearch | null } {
   const { stage, path } = state;
   const activeLabel = models.find(model => model.id === activeId)?.label ?? activeId;
   const stagedModel = state.model ?? activeId;
@@ -125,6 +162,15 @@ export function useModelPickerFlow({
   const tiers = context
     ? contextTiers(stagedEntry?.context, context.cap, state.context ?? context.current)
     : [];
+
+  const query = state.query ?? '';
+  const needle = normalize(query);
+  // The search deliberately ignores `path`: the point is to reach a model without knowing which
+  // group holds it, and the groups are now one per provider.
+  const matches = useMemo(
+    () => (needle ? models.filter(model => normalize(model.label).includes(needle) || normalize(model.id).includes(needle)) : []),
+    [models, needle],
+  );
 
   const list = useMemo(() => {
     const prefix = path.join('/');
@@ -183,7 +229,29 @@ export function useModelPickerFlow({
   const options: SheetOption[] = [];
   let preview = '';
 
-  if (stage === 'model') {
+  if (stage === 'model' && needle) {
+    const shown = matches.slice(0, SEARCH_MAX_RESULTS);
+    preview = `${matches.length} match${matches.length === 1 ? '' : 'es'} for "${query.trim()}"`;
+    for (const model of shown) {
+      options.push({
+        key: model.id,
+        label: model.label,
+        hint: searchHint(model),
+        selected: model.id === activeId,
+        onPress: () => advance('model', { model: model.id }),
+      });
+    }
+    if (matches.length === 0) {
+      options.push({ key: 'empty', label: 'no model matches', onPress: () => {} });
+    } else if (matches.length > shown.length) {
+      options.push({
+        key: 'more',
+        label: `${matches.length - shown.length} more · narrow the search`,
+        onPress: () => {},
+      });
+    }
+    options.push(...backRow);
+  } else if (stage === 'model') {
     preview =
       path.length > 0
         ? `${path[path.length - 1]} · current: ${activeLabel}`
@@ -199,6 +267,7 @@ export function useModelPickerFlow({
     }
     for (const model of list.visible) {
       options.push({
+        key: model.id,
         label: model.label,
         hint: model.id === model.label ? undefined : model.id,
         selected: model.id === activeId,
@@ -272,13 +341,33 @@ export function useModelPickerFlow({
     options.push(...backRow);
   }
 
-  return { preview, options, back };
+  // Only the model stage: effort and window are four rows each, and the field would carry a
+  // query that no longer filters anything.
+  const search: PickerSearch | null =
+    stage === 'model' && models.length >= SEARCH_MIN_MODELS
+      ? {
+          value: query,
+          onChange: value => onStateChange({ ...state, query: value }),
+          // Fixed text: it doubles as the accessibility label, which a model count would make
+          // change under the user (and under the tests) on every discovery refresh.
+          placeholder: 'Search models',
+        }
+      : null;
+
+  return { preview, options, back, search };
 }
 
 /** The bottom-sheet presentation of the flow: chat, and the jobs editor. */
 export function ModelPickerSheet(props: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'>): React.JSX.Element {
   const flow = useModelPickerFlow(props);
-  return <ActionSheet preview={flow.preview} options={flow.options} onClose={props.onClose} />;
+  return (
+    <ActionSheet
+      preview={flow.preview}
+      options={flow.options}
+      search={flow.search}
+      onClose={props.onClose}
+    />
+  );
 }
 
 /**
@@ -293,6 +382,7 @@ export function ModelPickerPage({
 }: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'> & { backLabel: string }): React.JSX.Element {
   const flow = useModelPickerFlow({ ...flowProps, page: true });
   const styles = useThemedStyles(createPageStyles);
+  const { palette } = useTheme();
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -310,10 +400,23 @@ export function ModelPickerPage({
           </Text>
         </View>
       </View>
+      {flow.search ? (
+        <TextInput
+          style={styles.search}
+          value={flow.search.value}
+          onChangeText={flow.search.onChange}
+          placeholder={flow.search.placeholder}
+          placeholderTextColor={palette.textFaint}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+          accessibilityLabel={flow.search.placeholder}
+        />
+      ) : null}
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {flow.options.map(option => (
           <Pressable
-            key={option.label}
+            key={option.key ?? option.label}
             style={styles.option}
             onPress={option.onPress}
             accessibilityRole="button"
@@ -357,6 +460,19 @@ const createPageStyles = (palette: Palette) => ({
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
+  search: {
+    minHeight: 40,
+    marginHorizontal: space.lg,
+    marginTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    fontSize: font.meta,
+    color: palette.text,
+    backgroundColor: palette.surfaceAlt,
+  },
   body: { paddingHorizontal: space.lg, paddingBottom: space.xl },
   option: {
     flexDirection: 'row' as const,
