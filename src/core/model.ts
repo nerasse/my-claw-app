@@ -9,9 +9,11 @@ Object.freeze(EMPTY);
 const NO_EFFORT: EffortState = { level: '', levels: [], supported: false };
 
 interface ThreadModel {
-  /** What runs on the thread now: the override, or the configured default. */
+  /** What runs on the thread now: this chat's pick, an agent pin, or the configured default. */
   model: string;
   defaultModel: string;
+  /** Which of the three, when the server says. */
+  source?: 'session' | 'agent' | 'agent-file' | 'global';
   effort: EffortState;
   /** Absent on a server that predates the context step: the picker then skips it. */
   context?: ContextState;
@@ -62,6 +64,7 @@ class ModelStoreImpl {
     this.perThread.set(frame.threadId, {
       model: frame.model,
       defaultModel: frame.defaultModel,
+      ...(frame.source === undefined ? {} : { source: frame.source }),
       effort: frame.effort ?? NO_EFFORT,
       ...(frame.context === undefined ? {} : { context: frame.context }),
     });

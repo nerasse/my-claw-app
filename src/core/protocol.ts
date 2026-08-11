@@ -334,9 +334,15 @@ export interface WorkspacesListResultFrame {
 export interface ModelResultFrame {
   type: 'model.result';
   threadId: string;
-  /** The model that will run on this thread: override or the configured default. */
+  /** The model that will run on this thread: this chat's pick, an agent pin, or the default. */
   model: string;
   defaultModel: string;
+  /**
+   * Which of the three it is. "agent" means this chat inherits a pin from the server config: the
+   * row says so, because a model shown without its source cannot explain why picking the global
+   * default changes nothing. Absent on a server that predates the field.
+   */
+  source?: 'session' | 'agent' | 'agent-file' | 'global';
   effort: EffortState;
   /** Absent on a server that predates the context step: the picker then skips it. */
   context?: ContextState;

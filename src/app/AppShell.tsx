@@ -1750,11 +1750,22 @@ export function AppShell(): React.JSX.Element {
   const currentModelLabel = threadModel
     ? catalog.models.find(model => model.id === threadModel.model)?.label ?? threadModel.model
     : null;
+  // A model this chat did not pick is inherited, and from where decides what to go and edit. A
+  // row that only named the model could not explain why picking the global default changed
+  // nothing: the agent's own pin was answering all along.
+  const currentModelOrigin =
+    threadModel?.source === 'agent' || threadModel?.source === 'agent-file'
+      ? 'from the agent config'
+      : threadModel?.source === 'global'
+        ? 'global default'
+        : null;
 
   const commandMenuOptions: SheetOption[] = [
     {
       label: 'Model…',
-      hint: currentModelLabel ? `current: ${currentModelLabel}` : undefined,
+      hint: currentModelLabel
+        ? `current: ${currentModelLabel}${currentModelOrigin ? ` · ${currentModelOrigin}` : ''}`
+        : undefined,
       onPress: () => {
         setCommandMenuOpen(false);
         openModel();

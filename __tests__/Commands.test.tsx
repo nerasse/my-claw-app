@@ -445,3 +445,34 @@ async function hardwareBack(): Promise<boolean> {
 }
 
 
+
+test('the model row says when the chat only inherits the model, and from where', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello'), 60);
+  // The server resolved this chat's model to an agent pin: the chat picked nothing, so the row
+  // must not read as a choice the user made. Without the origin, picking the global default looks
+  // like a no-op with no explanation -- which is how the incident hid for two days.
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast' },
+      { id: 'strong-2', label: 'Strong' },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'strong-2',
+    defaultModel: 'fast-1',
+    source: 'agent',
+    effort: { level: '', levels: [], supported: false },
+  });
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => textsOf(tree).some(t => t.includes('current: Strong')), 60);
+  expect(textsOf(tree).some(t => t.includes('from the agent config'))).toBe(true);
+  await settleAndUnmount(tree);
+});
