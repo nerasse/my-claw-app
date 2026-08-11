@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, View, type ViewStyle } from 'react-native';
+import { FlatList, Pressable, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
@@ -110,6 +110,11 @@ export function ChatScreen({
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
   const listRef = useRef<FlatList<ChatItem>>(null);
+  // What the list is doing right now, tracked from its own events: the keyboard resizes the
+  // viewport without scrolling, so keeping the visible content anchored needs the before/after.
+  const viewportRef = useRef(0);
+  const offsetRef = useRef(0);
+  const contentRef = useRef(0);
   const [draft, setDraft] = useState('');
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
@@ -270,13 +275,33 @@ export function ChatScreen({
 
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    offsetRef.current = contentOffset.y;
+    contentRef.current = contentSize.height;
     const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
     if (nearBottom !== atBottom) setAtBottom(nearBottom);
   }, [atBottom]);
-  const handleContentSize = useCallback(() => {
+  const handleContentSize = useCallback((_width: number, height: number) => {
+    contentRef.current = height;
     if (atBottom) listRef.current?.scrollToEnd({ animated: false });
   }, [atBottom]);
-  const { scrollProps, indicator } = useScrollIndicator(handleScroll, handleContentSize);
+  const handleListLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    const previous = viewportRef.current;
+    viewportRef.current = height;
+    // A shrink (the keyboard opening, the composer growing) cuts the bottom of the viewport off
+    // the content without moving the offset. Scroll down by exactly what was cut, clamped to the
+    // new maximum: the message that was just above the keyboard stays where it was, and a list
+    // read from the bottom stays at the bottom. A grow needs nothing: the content keeps its spot.
+    if (previous <= 0 || height >= previous) return;
+    const shrink = previous - height;
+    const max = Math.max(contentRef.current - height, 0);
+    const target = Math.min(offsetRef.current + shrink, max);
+    if (target === offsetRef.current) return;
+    listRef.current?.scrollToOffset({ offset: target, animated: false });
+    offsetRef.current = target;
+    if (target + height >= contentRef.current - 120) setAtBottom(true);
+  }, []);
+  const { scrollProps, indicator } = useScrollIndicator(handleScroll, handleContentSize, handleListLayout);
 
   return (
     <View style={styles.screen}>

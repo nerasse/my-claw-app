@@ -15,7 +15,8 @@ import { useTheme } from '../theme';
  *
  * Spread `scrollProps` on the scrollable, render `indicator` as a sibling inside the
  * (relatively positioned) container that bounds it, and hand the screen's own onScroll to the
- * hook: the two run in the same handler.
+ * hook: the two run in the same handler. `onLayout` is forwarded the same way, so a screen can
+ * react to its own viewport resizing (the keyboard opening, for instance).
  */
 const THUMB_MIN = 24;
 const HIDE_DELAY_MS = 1000;
@@ -23,6 +24,7 @@ const HIDE_DELAY_MS = 1000;
 export function useScrollIndicator(
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void,
   onContentSizeChange?: (width: number, height: number) => void,
+  onLayout?: (event: LayoutChangeEvent) => void,
 ): {
   scrollProps: {
     showsVerticalScrollIndicator: boolean;
@@ -88,7 +90,10 @@ export function useScrollIndicator(
       showsVerticalScrollIndicator: false,
       scrollEventThrottle: 16,
       onScroll: onScrollEvent,
-      onLayout: (event: LayoutChangeEvent) => setViewport(event.nativeEvent.layout.height),
+      onLayout: (event: LayoutChangeEvent) => {
+        setViewport(event.nativeEvent.layout.height);
+        onLayout?.(event);
+      },
       onContentSizeChange: (width: number, height: number) => {
         setContent(height);
         onContentSizeChange?.(width, height);

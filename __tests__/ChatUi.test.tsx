@@ -3,7 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter, FlatList } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
@@ -420,6 +420,94 @@ describe('attachments in a replayed turn', () => {
     );
     expect(openable).toHaveLength(0);
 
+    await unmount(tree);
+  });
+});
+
+describe('keeping the same place when the keyboard opens', () => {
+  /** The message list of the chat screen, identified by the seeded history it renders. */
+  function chatList(tree: Tree): ReactTestRenderer.ReactTestInstance {
+    return tree.root.find(
+      node =>
+        node.props.data &&
+        Array.isArray(node.props.data) &&
+        node.props.data.some((item: { id: string }) => item.id === 'h-0'),
+    );
+  }
+
+  function scrollEvent(y: number, height: number) {
+    return {
+      nativeEvent: {
+        contentOffset: { y },
+        contentSize: { height: 2000 },
+        layoutMeasurement: { height },
+      },
+    };
+  }
+
+  test('the list scrolls down by exactly what the keyboard cut off', async () => {
+    const tree = await renderWithHistory();
+    const spy = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
+    const list = chatList(tree);
+    ReactTestRenderer.act(() => {
+      list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
+      list.props.onContentSizeChange(100, 2000);
+      // Reading a message halfway down the conversation.
+      list.props.onScroll(scrollEvent(600, 700));
+    });
+    spy.mockClear();
+
+    ReactTestRenderer.act(() => {
+      // The keyboard opens: the viewport is cut down to 500.
+      list.props.onLayout({ nativeEvent: { layout: { height: 500 } } });
+    });
+
+    // 600 + 200 cut off: the message that was just above the keyboard is still there.
+    expect(spy).toHaveBeenCalledWith({ offset: 800, animated: false });
+    spy.mockRestore();
+    await unmount(tree);
+  });
+
+  test('the bottom stays the bottom when the keyboard opens', async () => {
+    const tree = await renderWithHistory();
+    const spy = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
+    const list = chatList(tree);
+    ReactTestRenderer.act(() => {
+      list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
+      list.props.onContentSizeChange(100, 2000);
+      // At the very bottom of a 700-high viewport: offset 1300.
+      list.props.onScroll(scrollEvent(1300, 700));
+    });
+    spy.mockClear();
+
+    ReactTestRenderer.act(() => {
+      list.props.onLayout({ nativeEvent: { layout: { height: 500 } } });
+    });
+
+    // 1300 + 200 = 1500, which is the new maximum (2000 - 500): still at the bottom.
+    expect(spy).toHaveBeenCalledWith({ offset: 1500, animated: false });
+    spy.mockRestore();
+    await unmount(tree);
+  });
+
+  test('closing the keyboard leaves the offset alone', async () => {
+    const tree = await renderWithHistory();
+    const spy = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
+    const list = chatList(tree);
+    ReactTestRenderer.act(() => {
+      list.props.onLayout({ nativeEvent: { layout: { height: 500 } } });
+      list.props.onContentSizeChange(100, 2000);
+      list.props.onScroll(scrollEvent(800, 500));
+    });
+    spy.mockClear();
+
+    ReactTestRenderer.act(() => {
+      list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
+    });
+
+    // The viewport grows: nothing needs to move to keep the same place.
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
     await unmount(tree);
   });
 });
