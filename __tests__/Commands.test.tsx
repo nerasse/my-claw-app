@@ -164,6 +164,54 @@ test('the chat picker walks model, effort and window, and applies the combo on c
   await settleAndUnmount(tree);
 });
 
+test('the level that turns reasoning off is not read as the row that inherits it', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
+  });
+  await waitFor(() => allTexts(tree).includes('hello'), 60);
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
+  await pressLabel(tree, 'Model…');
+
+  // A ladder published by the model itself, bottom rung included (server-side docs/model-metadata.md).
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast' },
+      { id: 'flash-4', label: 'DeepSeek V4 Flash', effortLevels: ['none', 'high', 'max'] },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'fast-1',
+    defaultModel: 'fast-1',
+    effort: { level: '', levels: ['none', 'high', 'max'], supported: true },
+  });
+
+  await waitFor(() => labelsOf(tree).includes('DeepSeek V4 Flash'), 60);
+  await pressLabel(tree, 'DeepSeek V4 Flash');
+
+  // Both rows exist and neither can be mistaken for the other: one pins "do not reason", the
+  // other hands the choice back to the defaults.
+  await waitFor(() => labelsOf(tree).includes('none (no reasoning)'), 60);
+  expect(labelsOf(tree)).toContain('default (inherit)');
+  expect(labelsOf(tree)).not.toContain('none');
+
+  // And it is still the level `none` that goes on the wire, not the label.
+  await pressLabel(tree, 'none (no reasoning)');
+  await waitFor(() => labelsOf(tree).includes('Apply'), 60);
+  await pressLabel(tree, 'Apply');
+  await waitFor(
+    () => sentFrames().includes(JSON.stringify({ type: 'model.effort.set', threadId: THREAD, level: 'none' })),
+    60,
+  );
+
+  await settleAndUnmount(tree);
+});
+
 /**
  * A catalog long enough to earn the search row: one provider group holds a dozen models, the
  * way a discovering provider fills it (OpenRouter alone returns 400+).

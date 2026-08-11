@@ -32,6 +32,15 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
+/**
+ * A level named `none` lands one row above `default (inherit)`, and the two read alike while
+ * meaning opposites: `none` pins "do not reason", the other hands the choice back to the defaults.
+ * Only the level is spelled out; the inherit row is left as it was.
+ */
+function effortLabel(level: string): string {
+  return level === 'none' ? 'none (no reasoning)' : level;
+}
+
 /** Where the model sits, so a hit found across groups still says which provider it came from. */
 function searchHint(model: ModelOption): string | undefined {
   const parts = [model.group, model.id === model.label ? null : model.id].filter(Boolean);
@@ -276,10 +285,10 @@ export function useModelPickerFlow({
     }
     if (path.length > 0) options.push(...backRow);
   } else if (stage === 'effort') {
-    preview = `Effort for ${stagedLabel} · current: ${effortCurrent || 'default'}`;
+    preview = `Effort for ${stagedLabel} · current: ${effortCurrent ? effortLabel(effortCurrent) : 'default'}`;
     for (const level of effortLevels) {
       options.push({
-        label: level,
+        label: effortLabel(level),
         selected: (state.effort ?? effortCurrent) === level,
         onPress: () => advance('effort', { effort: level }),
       });
@@ -291,7 +300,7 @@ export function useModelPickerFlow({
     });
     if (effortLevels.length > 0) {
       options.push({
-        label: `Keep current: ${effortCurrent || 'default'}`,
+        label: `Keep current: ${effortCurrent ? effortLabel(effortCurrent) : 'default'}`,
         onPress: () => advance('effort', { effort: undefined }),
       });
     }
@@ -315,9 +324,9 @@ export function useModelPickerFlow({
       state.effort === null
         ? 'effort: default'
         : state.effort !== undefined
-          ? `effort: ${state.effort}`
+          ? `effort: ${effortLabel(state.effort)}`
           : skipEffortOnTag && stagedIsTag && stagedEntry?.effort
-            ? `effort: ${stagedEntry.effort} (tag pin)`
+            ? `effort: ${effortLabel(stagedEntry.effort)} (tag pin)`
             : null;
     const parts = [
       `model: ${stagedLabel}`,
