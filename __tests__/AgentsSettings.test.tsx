@@ -181,6 +181,48 @@ test('picking a model for an agent sends agents.model.set and the page follows',
   await settleAndUnmount(tree);
 });
 
+test('staging a tag for an agent asks for neither effort nor window, and writes no cap', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'Open agents');
+  await emit(agentsConfig());
+  // The tag carries its own pins and the window of the model behind it, exactly as the server
+  // now reports them. Both are the tag's business: the agent has nothing left to decide.
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'], context: 1_000_000 },
+      { id: 'tag:Cheap', label: 'Cheap', group: 'Tags', effort: 'max', context: 1_000_000 },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await waitFor(() => labelsOf(tree).includes('Open agent Scheduled tasks'));
+  await pressLabel(tree, 'Open agent Scheduled tasks');
+  await waitFor(() => labelsOf(tree).includes('Change model'));
+  await pressLabel(tree, 'Change model');
+  await waitFor(() => labelsOf(tree).includes('Tags ›'));
+  await pressLabel(tree, 'Tags ›');
+  await waitFor(() => labelsOf(tree).includes('Cheap'));
+  await pressLabel(tree, 'Cheap');
+
+  // Straight to the confirmation: no effort screen, and above all no window screen offering a
+  // ceiling that the tag's own cap would outrank anyway.
+  await waitFor(() => labelsOf(tree).includes('Apply'));
+  const labels = labelsOf(tree);
+  expect(labels).not.toEqual(expect.arrayContaining(['max']));
+  expect(labels).not.toEqual(expect.arrayContaining(['Full: 1.0M', '512k', '256k', '128k', '64k']));
+  await pressLabel(tree, 'Apply');
+
+  const frames = sentFrames();
+  expect(frames).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set', agent: 'cron', model: 'tag:Cheap' })]),
+  );
+  expect(frames.some(frame => frame.type === 'agents.contextcap.set')).toBe(false);
+  await settleAndUnmount(tree);
+});
+
 test('the root option sends agents.model.clear so the agent inherits again', async () => {
   const tree = await boot();
   await emit(

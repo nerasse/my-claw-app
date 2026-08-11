@@ -136,7 +136,7 @@ export function useModelPickerFlow({
   rootOption,
   effort,
   context,
-  skipEffortOnTag = false,
+  skipPinsOnTag = false,
   page = false,
 }: {
   /** Label used in the sheet preview when the user is not inside a group. */
@@ -152,10 +152,10 @@ export function useModelPickerFlow({
   rootOption?: PickerRootOption | null;
   effort?: PickerEffort | null;
   context?: PickerContext | null;
-  /** Config flows (agent, global, job) skip the effort step when the staged model is a tag: the
-   *  tag's own pin always wins, so a scope-level pin would be dead config. The chat keeps the
-   *  step because the session's /effort still sits above the tag. */
-  skipEffortOnTag?: boolean;
+  /** Config flows (agent, global, job) skip the effort and window steps when the staged model is
+   *  a tag: the tag pins both, and its pins outrank a scope's, so anything set here would be dead
+   *  config. The chat keeps both steps because a session's own choice still sits above the tag. */
+  skipPinsOnTag?: boolean;
   /** Full-page presentation: the page's own back entry replaces the in-flow "< Back" rows. */
   page?: boolean;
 }): { preview: string; options: SheetOption[]; back: () => void; search: PickerSearch | null } {
@@ -168,9 +168,10 @@ export function useModelPickerFlow({
   const effortCurrent = effort?.current ?? '';
 
   const effortLevels = effort ? stagedEntry?.effortLevels ?? [] : [];
-  const tiers = context
-    ? contextTiers(stagedEntry?.context, context.cap, state.context ?? context.current)
-    : [];
+  const tiers =
+    context && !(skipPinsOnTag && stagedIsTag)
+      ? contextTiers(stagedEntry?.context, context.cap, state.context ?? context.current)
+      : [];
 
   const query = state.query ?? '';
   const needle = normalize(query);
@@ -213,8 +214,10 @@ export function useModelPickerFlow({
     // A subject that already pins an effort keeps the step even on a model with no levels: the
     // pin is dead weight there and must stay removable. Only the "default" row is shown then.
     const effortStep = effort && (levels.length > 0 || effortCurrent !== '');
-    const showEffort = Boolean(effortStep) && !(skipEffortOnTag && model.startsWith('tag:'));
-    const ceilings = context ? contextTiers(entry?.context, context.cap, next.context ?? context.current) : [];
+    // Both pins belong to the tag, so neither step is offered on top of one.
+    const tagPins = skipPinsOnTag && model.startsWith('tag:');
+    const showEffort = Boolean(effortStep) && !tagPins;
+    const ceilings = context && !tagPins ? contextTiers(entry?.context, context.cap, next.context ?? context.current) : [];
     if (from === 'model' && showEffort) {
       onStateChange({ ...next, stage: 'effort' });
       return;
@@ -325,7 +328,7 @@ export function useModelPickerFlow({
         ? 'effort: default'
         : state.effort !== undefined
           ? `effort: ${effortLabel(state.effort)}`
-          : skipEffortOnTag && stagedIsTag && stagedEntry?.effort
+          : skipPinsOnTag && stagedIsTag && stagedEntry?.effort
             ? `effort: ${effortLabel(stagedEntry.effort)} (tag pin)`
             : null;
     const parts = [

@@ -244,9 +244,10 @@ const READS_INSTRUCTIONS_PAGES: ReadonlySet<string> = new Set(['workspaces', 'wo
  * of the chat picker in reverse.
  *
  * An agent pins its effort next to its model, and a window too, so the flow is model then
- * effort then window then confirm. The effort step is skipped when the staged model is a tag:
- * the tag's own pin always wins, and the confirmation names it instead. Picking the full
- * window removes the agent's own cap, which is how it returns to the standing policy.
+ * effort then window then confirm. Both steps are skipped when the staged model is a tag: the
+ * tag pins the effort and the ceiling itself, so either one set here would be dead config, and
+ * the confirmation names the tag's pin instead. Picking the full window removes the agent's own
+ * cap, which is how it returns to the standing policy.
  *
  * The fallback target is the reverse of the default: it exists so image runs have somewhere
  * to go when the resolved model cannot take images, so only vision-capable models are on
@@ -304,7 +305,7 @@ function AgentModelPickerPage({
             .catch(() => {});
         }
       }}
-      skipEffortOnTag
+      skipPinsOnTag
       rootOption={
         agent
           ? {
@@ -392,7 +393,7 @@ function TagEditorPage({
         connection.send(encodeModelList()).catch(() => {});
         connection.send(encodeAgentsConfigGet()).catch(() => {});
       }}
-      skipEffortOnTag
+      skipPinsOnTag
       effort={{ current: tag?.effort ?? '' }}
       context={{ ...(tag?.contextCap === undefined ? {} : { current: tag.contextCap }) }}
     />
