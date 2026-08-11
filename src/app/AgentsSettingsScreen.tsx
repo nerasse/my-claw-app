@@ -41,7 +41,6 @@ export function AgentsSettingsScreen({
   onBack,
   onOpenDefaultModel,
   onOpenFallback,
-  onOpenProviders,
   onOpenTags,
   onOpenAgent,
   onNewAgent,
@@ -52,7 +51,6 @@ export function AgentsSettingsScreen({
   onBack: () => void;
   onOpenDefaultModel: () => void;
   onOpenFallback: () => void;
-  onOpenProviders: () => void;
   onOpenTags: () => void;
   onOpenAgent: (key: string) => void;
   onNewAgent: () => void;
@@ -128,22 +126,6 @@ export function AgentsSettingsScreen({
                     {config.fallback
                       ? `image runs switch to it when ${labelOf(config.defaultModel)} can't take images`
                       : 'what image runs switch to when the model cannot take images'}
-                  </Text>
-                </View>
-                <Text style={styles.linkGlyph}>›</Text>
-              </Pressable>
-              <View style={styles.separator} />
-              <Pressable
-                style={[styles.row, styles.link]}
-                onPress={onOpenProviders}
-                accessibilityRole="button"
-                accessibilityLabel="Providers">
-                <View style={styles.linkMain}>
-                  <Text style={styles.linkTitle}>Providers</Text>
-                  <Text style={styles.hint}>
-                    {`${config.providers.length} configured · ${
-                      config.providers.filter(provider => provider.keyPresent).length
-                    } with a key set`}
                   </Text>
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>

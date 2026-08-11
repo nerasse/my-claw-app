@@ -27,7 +27,7 @@ export function ProvidersScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back to agents">
+          accessibilityLabel="Back to settings">
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>

@@ -1120,7 +1120,7 @@ export function AppShell(): React.JSX.Element {
           return true;
         }
         if (settingsPage === 'providers') {
-          setSettingsPage('agents');
+          setSettingsPage('index');
           return true;
         }
         if (settingsPage === 'tags') {
@@ -1838,7 +1838,6 @@ export function AppShell(): React.JSX.Element {
         setAgentModelFor('fallback');
         setSettingsPage('model-picker');
       }}
-      onOpenProviders={() => setSettingsPage('providers')}
       onOpenTags={() => setSettingsPage('tags')}
       onOpenAgent={key => {
         setSelectedAgent(key);
@@ -1850,7 +1849,7 @@ export function AppShell(): React.JSX.Element {
   const providersPage = (
     <ProvidersScreen
       providers={agentsConfig?.providers ?? []}
-      onBack={() => setSettingsPage('agents')}
+      onBack={() => setSettingsPage('index')}
       onOpenProvider={key => {
         if (key === 'tags') {
           setSettingsPage('tags');
@@ -2046,6 +2045,7 @@ export function AppShell(): React.JSX.Element {
               <SettingsScreen
                 skillsCount={skills.length}
                 toolsCount={tools.length}
+                providersCount={agentsConfig?.providers.length ?? 0}
                 onBack={() => setSettingsOpen(false)}
                 onOpenCategory={category => {
                   // Reaching a category from the index resets where its back button leads: a

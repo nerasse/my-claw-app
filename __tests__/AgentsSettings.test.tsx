@@ -334,11 +334,30 @@ describe('providers', () => {
     };
   }
 
+  /** Providers is its own index row: from the agents page, back out to the index first. */
+  async function openProviders(tree: Tree): Promise<void> {
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('Open providers'));
+    await pressLabel(tree, 'Open providers');
+    await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+  }
+
+  test('Providers is its own index row, not a row of the agents page', async () => {
+    const tree = await boot();
+    await emit(providersConfig());
+    // The agents page keeps only the defaults and the tags: no Providers row left behind.
+    expect(labelsOf(tree)).not.toContain('Providers');
+    // The index rows the category with its own badge and a live count.
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('Open providers'));
+    expect(textsOf(tree)).toEqual(expect.arrayContaining(['2 providers · model providers, API keys, models']));
+    await settleAndUnmount(tree);
+  });
+
   test('the Providers row opens the list the server sent', async () => {
     const tree = await boot();
     await emit(providersConfig());
-    await pressLabel(tree, 'Providers');
-    await waitFor(() => labelsOf(tree).includes('Open provider anthropic'));
+    await openProviders(tree);
     expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Open provider litellm', 'Open provider anthropic']));
     expect(textsOf(tree)).toEqual(expect.arrayContaining(['2 models · key set (LITELLM_API_KEY)']));
     await settleAndUnmount(tree);
@@ -356,8 +375,7 @@ describe('providers', () => {
       ],
       defaultModel: 'mimo',
     });
-    await pressLabel(tree, 'Providers');
-    await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+    await openProviders(tree);
     await pressLabel(tree, 'Open provider litellm');
     await waitFor(() => labelsOf(tree).includes('Set default Naked'));
     expect(labelsOf(tree)).not.toContain('Set default Opus');
@@ -378,8 +396,7 @@ describe('providers', () => {
       ],
       defaultModel: 'mimo',
     });
-    await pressLabel(tree, 'Providers');
-    await waitFor(() => labelsOf(tree).includes('Open provider anthropic'));
+    await openProviders(tree);
     await pressLabel(tree, 'Open provider anthropic');
     await waitFor(() => labelsOf(tree).includes('Set default Opus'));
     await pressLabel(tree, 'Set default Opus');
@@ -390,19 +407,15 @@ describe('providers', () => {
     await settleAndUnmount(tree);
   });
 
-  test('back walks provider, providers, agents, index', async () => {
+  test('back walks provider, providers, index, chat', async () => {
     const tree = await boot();
     await emit(providersConfig());
-    await pressLabel(tree, 'Providers');
-    await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+    await openProviders(tree);
     await pressLabel(tree, 'Open provider litellm');
     await waitFor(() => labelsOf(tree).includes('Back to providers'));
 
     expect(await hardwareBack()).toBe(true);
     await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
-
-    expect(await hardwareBack()).toBe(true);
-    await waitFor(() => labelsOf(tree).includes('Default model'));
 
     expect(await hardwareBack()).toBe(true);
     await waitFor(() => labelsOf(tree).includes('Open general'));

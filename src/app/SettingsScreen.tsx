@@ -7,7 +7,7 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other';
+  key: 'general' | 'providers' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other';
 }> = [
   {
     title: 'General',
@@ -20,6 +20,12 @@ const CATEGORIES: Array<{
     hint: 'directories with their own prompts and skills',
     accessibilityLabel: 'Open workspaces',
     key: 'workspaces',
+  },
+  {
+    title: 'Providers',
+    hint: 'model providers, API keys, models',
+    accessibilityLabel: 'Open providers',
+    key: 'providers',
   },
   {
     title: 'Agents',
@@ -72,14 +78,16 @@ const CATEGORIES: Array<{
 export function SettingsScreen({
   skillsCount,
   toolsCount,
+  providersCount,
   onBack,
   onOpenCategory,
 }: {
   skillsCount: number;
   toolsCount: number;
+  providersCount: number;
   onBack: () => void;
   onOpenCategory: (
-    category: 'general' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other',
+    category: 'general' | 'providers' | 'agents' | 'instructions' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other',
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -113,13 +121,18 @@ export function SettingsScreen({
                   {category.key === 'tools' && toolsCount > 0 ? (
                     <Text style={styles.badge}>{toolsCount}</Text>
                   ) : null}
+                  {category.key === 'providers' && providersCount > 0 ? (
+                    <Text style={styles.badge}>{providersCount}</Text>
+                  ) : null}
                 </View>
                 <Text style={styles.rowHint} numberOfLines={1}>
                   {category.key === 'skills' && skillsCount > 0
                     ? `${skillsCount} skill${skillsCount === 1 ? '' : 's'} · ${category.hint}`
                     : category.key === 'tools' && toolsCount > 0
                       ? `${toolsCount} tool${toolsCount === 1 ? '' : 's'} · ${category.hint}`
-                      : category.hint}
+                      : category.key === 'providers' && providersCount > 0
+                        ? `${providersCount} provider${providersCount === 1 ? '' : 's'} · ${category.hint}`
+                        : category.hint}
                 </Text>
               </View>
               <Text style={styles.linkGlyph}>›</Text>
