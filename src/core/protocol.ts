@@ -539,7 +539,8 @@ export type ErrorScope =
   | 'workspaces'
   | 'status'
   | 'jobs'
-  | 'tags';
+  | 'tags'
+  | 'providers';
 
 export interface ErrorFrame {
   type: 'error';
@@ -591,11 +592,16 @@ export interface AgentInfo {
   layer?: string;
 }
 
-/** A configured provider, for display only: never a secret, only whether its env key is set. */
+/** A configured provider, for display only: never a secret, only whether its env key is set.
+ *  The editable fields ride along so the edit page can seed its form from the snapshot. */
 export interface ProviderInfo {
   key: string;
   type: string;
   group?: string;
+  baseUrl?: string;
+  promptCache?: boolean;
+  pricingProvider?: string;
+  fallbackModel?: string;
   discover: boolean;
   /** Models currently known to belong to this provider. */
   models: number;
@@ -634,6 +640,36 @@ export interface TagInfo {
 export interface TagsResultFrame {
   type: 'tags.result';
   tags: TagInfo[];
+}
+
+/**
+ * The environment variable names the server knows, and which provider reads each. Names only:
+ * the values live in .env on the server and never cross the wire. The creation form reads it to
+ * propose a free name, or to reuse one that is already set.
+ */
+export interface ProvidersEnvResultFrame {
+  type: 'providers.env.result';
+  names: string[];
+  /** Names present in the process env: the .env ones plus the shell/systemd ones. */
+  present: string[];
+  /** provider key -> the env name it reads. */
+  usedBy: Record<string, string>;
+}
+
+/** The one editable provider shape: everything `providers.upsert` accepts. Empty strings on an
+ *  edit clear the field; `providerType` is the engine, renamed so it cannot collide with the
+ *  frame's own `type`. */
+export interface ProviderPatch {
+  type: 'providers.upsert';
+  key: string;
+  providerType?: 'openai' | 'claude-sdk' | 'codex';
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  group?: string;
+  discover?: boolean;
+  promptCache?: boolean;
+  pricingProvider?: string;
+  fallbackModel?: string;
 }
 
 /** Where the content of a prompt file comes from. See docs/instructions-page.md on the server. */
@@ -814,6 +850,7 @@ export type ServerFrame =
   | JobsListResultFrame
   | JobsRunsResultFrame
   | TagsResultFrame
+  | ProvidersEnvResultFrame
   | NotificationsInfoFrame
   | ErrorFrame;
 
@@ -855,6 +892,7 @@ const FRAME_TYPES = new Set([
   'jobs.runs.result',
   'notifications.info',
   'tags.result',
+  'providers.env.result',
   'chat.transcript',
   'approval.request',
   'error',
@@ -1043,6 +1081,38 @@ export function encodeTagsUpsert(
 
 export function encodeTagsDelete(name: string): string {
   return JSON.stringify({ type: 'tags.delete', name });
+}
+
+export function encodeProvidersUpsert(
+  key: string,
+  patch: Omit<ProviderPatch, 'type' | 'key'>,
+): string {
+  return JSON.stringify({ type: 'providers.upsert', key, ...patch });
+}
+
+export function encodeProvidersRemove(key: string): string {
+  return JSON.stringify({ type: 'providers.remove', key });
+}
+
+export function encodeProvidersRename(from: string, to: string): string {
+  return JSON.stringify({ type: 'providers.rename', from, to });
+}
+
+/** The one frame that carries a secret value; it is never logged or echoed anywhere. */
+export function encodeProvidersEnvSet(name: string, value: string): string {
+  return JSON.stringify({ type: 'providers.env.set', name, value });
+}
+
+export function encodeProvidersEnvRename(from: string, to: string): string {
+  return JSON.stringify({ type: 'providers.env.rename', from, to });
+}
+
+export function encodeProvidersEnvRemove(name: string): string {
+  return JSON.stringify({ type: 'providers.env.remove', name });
+}
+
+export function encodeProvidersEnvList(): string {
+  return JSON.stringify({ type: 'providers.env.list' });
 }
 
 export function encodeInstructionsList(): string {

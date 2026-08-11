@@ -21,6 +21,7 @@ export function ProviderScreen({
   defaultModel,
   error,
   onSetDefault,
+  onEditProvider,
   onBack,
 }: {
   provider: ProviderInfo;
@@ -30,6 +31,7 @@ export function ProviderScreen({
   /** Server refused the last write: shown here, where the user asked for it. */
   error: string | null;
   onSetDefault: (modelId: string) => void;
+  onEditProvider: () => void;
   onBack: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -51,6 +53,13 @@ export function ProviderScreen({
             {`${models.length} model${models.length === 1 ? '' : 's'} · tap one to make it the default`}
           </Text>
         </View>
+        <Pressable
+          onPress={onEditProvider}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Edit provider">
+          <Text style={styles.editGlyph}>⚙</Text>
+        </Pressable>
       </View>
 
       {error ? (
@@ -120,6 +129,7 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  editGlyph: { fontSize: 18, lineHeight: 20, color: palette.text },
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },

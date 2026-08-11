@@ -5,16 +5,19 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /**
- * The configured providers, read-only. Each row names the config key, the backend type, the
- * model count and whether the key is actually set on the server -- never the key itself.
+ * The configured providers. Each row names the config key, the backend type, the model count
+ * and whether the key is actually set on the server -- never the key itself. The + opens the
+ * create form; a row opens the provider's models, which carry their own edit entry.
  */
 export function ProvidersScreen({
   providers,
   onBack,
+  onNewProvider,
   onOpenProvider,
 }: {
   providers: ProviderInfo[];
   onBack: () => void;
+  onNewProvider: () => void;
   onOpenProvider: (key: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -36,6 +39,13 @@ export function ProvidersScreen({
             {providers.length} configured · models come from the server catalog
           </Text>
         </View>
+        <Pressable
+          onPress={onNewProvider}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="New provider">
+          <Text style={styles.addGlyph}>+</Text>
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -93,6 +103,7 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  addGlyph: { fontSize: 22, lineHeight: 24, color: palette.text },
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },

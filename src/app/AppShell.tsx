@@ -106,6 +106,13 @@ import {
   encodeTagsDelete,
   encodeTagsList,
   encodeTagsUpsert,
+  encodeProvidersEnvList,
+  encodeProvidersEnvRemove,
+  encodeProvidersEnvRename,
+  encodeProvidersEnvSet,
+  encodeProvidersRemove,
+  encodeProvidersRename,
+  encodeProvidersUpsert,
 } from '../core/protocol';
 import {
   parseNotificationLink,
@@ -145,6 +152,9 @@ import { McpsScreen } from './McpsScreen';
 import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
 import { ProvidersScreen } from './ProvidersScreen';
 import { ProviderScreen } from './ProviderScreen';
+import { ProviderEditScreen } from './ProviderEditScreen';
+import { ProviderEnvScreen } from './ProviderEnvScreen';
+import { providersEnvStore, useProvidersEnv } from '../core/providers';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { ToolsScreen } from './ToolsScreen';
@@ -382,6 +392,8 @@ export function AppShell(): React.JSX.Element {
     | 'agent'
     | 'providers'
     | 'provider'
+    | 'provider-edit'
+    | 'provider-env'
     | 'tags'
     | 'skills'
     | 'workspaces'
@@ -405,6 +417,11 @@ export function AppShell(): React.JSX.Element {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   /** The provider page shows this key's models, filtered from the shared catalog. */
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  /** The provider form: create (no key yet) or edit (the key being renamed). */
+  const [providerEdit, setProviderEdit] = useState<{ mode: 'create' | 'edit'; key: string | null } | null>(null);
+  const [providerBusy, setProviderBusy] = useState(false);
+  /** The provider waiting for its delete confirmation, with the env key it may take with it. */
+  const [providerToDelete, setProviderToDelete] = useState<{ key: string; keyEnv?: string } | null>(null);
   /** Instructions is a top-level category, but the agent page links into it: back has to return
    *  where the user came from rather than dropping them at the index. */
   const [instructionsFrom, setInstructionsFrom] = useState<'index' | 'agent'>('index');
@@ -518,6 +535,7 @@ export function AppShell(): React.JSX.Element {
   const threadModel = useThreadModel(activeThread);
   const agentsState = useAgentsConfig();
   const tagsState = useTags();
+  const providersEnvState = useProvidersEnv();
   const agentsFile = useAgentsFile();
   const instructions = useInstructions();
   const agentsConfig = agentsState.config;
@@ -792,6 +810,10 @@ export function AppShell(): React.JSX.Element {
         case 'tags.result':
           tagsStore.receive(frame.tags);
           break;
+        case 'providers.env.result':
+          providersEnvStore.receive(frame);
+          setProviderBusy(false);
+          break;
         case 'agents.file.result':
           agentsFileStore.receive(frame);
           break;
@@ -943,6 +965,9 @@ export function AppShell(): React.JSX.Element {
               instructionsStore.fail(frame.message);
             } else if (frame.scope === 'tags') {
               tagsStore.fail(frame.message);
+            } else if (frame.scope === 'providers') {
+              providersEnvStore.fail(frame.message);
+              setProviderBusy(false);
             } else if (activeThreadRef.current) {
               chatStore.addAgentMessage(
                 activeThreadRef.current,
@@ -1062,6 +1087,10 @@ export function AppShell(): React.JSX.Element {
         setTagToDelete(null);
         return true;
       }
+      if (providerToDelete) {
+        setProviderToDelete(null);
+        return true;
+      }
       if (commandMenuOpen) {
         setCommandMenuOpen(false);
         return true;
@@ -1117,6 +1146,16 @@ export function AppShell(): React.JSX.Element {
         }
         if (settingsPage === 'provider') {
           setSettingsPage('providers');
+          return true;
+        }
+        if (settingsPage === 'provider-env') {
+          setSettingsPage('provider-edit');
+          return true;
+        }
+        if (settingsPage === 'provider-edit') {
+          if (providerEdit?.mode === 'create') setSettingsPage('providers');
+          else setSettingsPage('provider');
+          setProviderEdit(null);
           return true;
         }
         if (settingsPage === 'providers') {
@@ -1232,6 +1271,8 @@ export function AppShell(): React.JSX.Element {
     modelOpen,
     modelPicker,
     newTagPrompt,
+    providerEdit,
+    providerToDelete,
     scopeEditor,
     selectThread,
     settingsOpen,
@@ -1455,9 +1496,19 @@ export function AppShell(): React.JSX.Element {
 
   // The catalog is fetched at connect, but the provider pages group it by provider and the
   // grouping follows config hot-reloads: ask again when they open, like the skills page does.
+  // The env pages pull the variable names too: the form's "reuse or ask for a value" decision
+  // depends on it, and a server that predates the frames flips to unsupported after a beat.
   useEffect(() => {
     if (!settingsOpen || (settingsPage !== 'providers' && settingsPage !== 'provider')) return;
     connection.send(encodeModelList()).catch(() => {});
+  }, [settingsOpen, settingsPage]);
+
+  useEffect(() => {
+    if (!settingsOpen || (settingsPage !== 'provider-edit' && settingsPage !== 'provider-env')) return;
+    providersEnvStore.request();
+    connection.send(encodeProvidersEnvList()).catch(() => {});
+    const timer = setTimeout(() => providersEnvStore.markUnsupported(), 4000);
+    return () => clearTimeout(timer);
   }, [settingsOpen, settingsPage]);
 
   // The tag catalog, same pull pattern as the agents page: asked for when the page opens, and
@@ -1850,6 +1901,11 @@ export function AppShell(): React.JSX.Element {
     <ProvidersScreen
       providers={agentsConfig?.providers ?? []}
       onBack={() => setSettingsPage('index')}
+      onNewProvider={() => {
+        setProviderBusy(false);
+        setProviderEdit({ mode: 'create', key: null });
+        setSettingsPage('provider-edit');
+      }}
       onOpenProvider={key => {
         if (key === 'tags') {
           setSettingsPage('tags');
@@ -1927,6 +1983,86 @@ export function AppShell(): React.JSX.Element {
       .catch(() => {});
     setSettingsPage('agent');
     setNumberEditor(null);
+  };
+  const saveProviderEdit = (patch: {
+    key: string;
+    providerType: 'openai' | 'claude-sdk' | 'codex';
+    baseUrl: string;
+    group: string;
+    discover: boolean;
+    promptCache: boolean;
+    pricingProvider: string;
+    fallbackModel: string;
+    apiKeyEnv: string;
+    envValue: string;
+  }): void => {
+    if (!providerEdit || providerBusy) return;
+    const from = providerEdit.key;
+    setProviderBusy(true);
+    if (from !== null && from !== patch.key) {
+      connection.send(encodeProvidersRename(from, patch.key)).catch(() => {});
+    }
+    connection
+      .send(
+        encodeProvidersUpsert(patch.key, {
+          providerType: patch.providerType,
+          baseUrl: patch.baseUrl,
+          group: patch.group,
+          discover: patch.discover,
+          promptCache: patch.promptCache,
+          pricingProvider: patch.pricingProvider,
+          fallbackModel: patch.fallbackModel,
+          apiKeyEnv: patch.apiKeyEnv,
+        }),
+      )
+      .catch(() => {});
+    // The one field that rides on a create: a fresh name gets its value in the same Save.
+    if (patch.apiKeyEnv && patch.envValue) {
+      connection.send(encodeProvidersEnvSet(patch.apiKeyEnv, patch.envValue)).catch(() => {});
+    }
+    setProviderEdit(null);
+    if (providerEdit.mode === 'create') {
+      setSettingsPage('providers');
+    } else {
+      setSelectedProvider(patch.key);
+      setSettingsPage('provider');
+    }
+  };
+  const deleteProviderConfirmed = (removeKeyToo: boolean): void => {
+    if (!providerToDelete) return;
+    const { key, keyEnv } = providerToDelete;
+    connection.send(encodeProvidersRemove(key)).catch(() => {});
+    if (removeKeyToo && keyEnv) {
+      connection.send(encodeProvidersEnvRemove(keyEnv)).catch(() => {});
+    }
+    setProviderToDelete(null);
+    setSelectedProvider(null);
+    setProviderEdit(null);
+    setSettingsPage('providers');
+  };
+  const saveEnvValue = (name: string, value: string): void => {
+    if (providerBusy) return;
+    setProviderBusy(true);
+    connection.send(encodeProvidersEnvSet(name, value)).catch(() => {});
+  };
+  const renameEnvVariable = (from: string, to: string): void => {
+    if (providerBusy) return;
+    setProviderBusy(true);
+    connection.send(encodeProvidersEnvRename(from, to)).catch(() => {});
+  };
+  const bindProviderEnv = (name: string): void => {
+    const key = providerEdit?.key;
+    if (!key || providerBusy) return;
+    setProviderBusy(true);
+    connection
+      .send(encodeProvidersUpsert(key, { apiKeyEnv: name }))
+      .catch(() => {});
+  };
+  const unbindProviderEnv = (): void => {
+    const key = providerEdit?.key;
+    if (!key || providerBusy) return;
+    setProviderBusy(true);
+    connection.send(encodeProvidersUpsert(key, { apiKeyEnv: '' })).catch(() => {});
   };
   const saveAgentFile = (): void => {
     const editor = agentsFile.editor;
@@ -2194,7 +2330,59 @@ export function AppShell(): React.JSX.Element {
                   onSetDefault={modelId => {
                     connection.send(encodeAgentsModelSet('global', modelId)).catch(() => {});
                   }}
+                  onEditProvider={() => {
+                    setProviderBusy(false);
+                    setProviderEdit({ mode: 'edit', key: selectedProviderInfo.key });
+                    setSettingsPage('provider-edit');
+                  }}
                   onBack={() => setSettingsPage('providers')}
+                />
+              ) : (
+                providersPage
+              )
+            ) : settingsPage === 'provider-edit' ? (
+              providerEdit ? (
+                <ProviderEditScreen
+                  mode={providerEdit.mode}
+                  provider={
+                    providerEdit.mode === 'edit' && providerEdit.key
+                      ? (agentsConfig?.providers.find(p => p.key === providerEdit.key) ?? null)
+                      : null
+                  }
+                  env={providersEnvState.env}
+                  error={providersEnvState.error}
+                  busy={providerBusy}
+                  onSave={saveProviderEdit}
+                  onDelete={() =>
+                    setProviderToDelete({
+                      key: providerEdit.key ?? '',
+                      ...(providerEdit.key
+                        ? { keyEnv: agentsConfig?.providers.find(p => p.key === providerEdit.key)?.keyEnv }
+                        : {}),
+                    })
+                  }
+                  onOpenEnv={() => setSettingsPage('provider-env')}
+                  onBack={() => {
+                    if (providerEdit.mode === 'create') setSettingsPage('providers');
+                    else setSettingsPage('provider');
+                    setProviderEdit(null);
+                  }}
+                />
+              ) : (
+                providersPage
+              )
+            ) : settingsPage === 'provider-env' ? (
+              providerEdit?.key &&
+              agentsConfig?.providers.find(p => p.key === providerEdit.key) ? (
+                <ProviderEnvScreen
+                  provider={agentsConfig.providers.find(p => p.key === providerEdit.key)!}
+                  env={providersEnvState.env}
+                  error={providersEnvState.error}
+                  onBack={() => setSettingsPage('provider-edit')}
+                  onSaveValue={saveEnvValue}
+                  onRename={renameEnvVariable}
+                  onBind={bindProviderEnv}
+                  onUnbind={unbindProviderEnv}
                 />
               ) : (
                 providersPage
@@ -2614,6 +2802,29 @@ export function AppShell(): React.JSX.Element {
             },
           ]}
           onClose={() => setTagToDelete(null)}
+        />
+      ) : null}
+
+      {providerToDelete ? (
+        <ActionSheet
+          preview={`Delete the provider "${providerToDelete.key}"? Its discovered models leave with the catalog refresh, and a re-auth recreates the SDK providers.`}
+          options={[
+            {
+              label: 'Delete',
+              danger: true,
+              onPress: () => deleteProviderConfirmed(false),
+            },
+            ...(providerToDelete.keyEnv
+              ? [
+                  {
+                    label: 'Delete and remove its key from .env',
+                    danger: true,
+                    onPress: () => deleteProviderConfirmed(true),
+                  },
+                ]
+              : []),
+          ]}
+          onClose={() => setProviderToDelete(null)}
         />
       ) : null}
 
