@@ -637,7 +637,7 @@ export interface TagsResultFrame {
 }
 
 /** Where the content of a prompt file comes from. See docs/instructions-page.md on the server. */
-export type InstructionOrigin = 'own' | 'inherited' | 'fallback';
+export type InstructionOrigin = 'own' | 'inherited' | 'fallback' | 'off';
 
 /**
  * One prompt file in one workspace. There is never a "missing" entry: a workspace without the
@@ -652,6 +652,10 @@ export interface InstructionEntry {
   bytes: number;
   /** sha of the content that applies; a save echoes it back to prove it is not stale. */
   sha: string;
+  /** The workspace's effective policy, always present on a current server. Absent: the server
+   *  predates the layer controls, which the app then hides entirely. */
+  inherit?: string;
+  off?: boolean;
 }
 
 /** A nested AGENTS.md found under a workspace. Read-only: it reaches tool results, not the prompt. */
@@ -668,6 +672,8 @@ export interface InstructionsListResultFrame {
   /** The editable names, so the app never hardcodes the list the server enforces. */
   files: string[];
   maxBytes: number;
+  /** File-defined agents and the prompt layers each declares. Absent: the section is skipped. */
+  agentLayers?: Array<{ agent: string; layers: string[] }>;
 }
 
 export interface InstructionsFileFrame {
@@ -1062,6 +1068,19 @@ export function encodeInstructionsSet(
       ? { type: 'instructions.set', workspace, file, content }
       : { type: 'instructions.set', workspace, file, content, sha },
   );
+}
+
+/**
+ * The layer screen always sends explicit values: "default" and false are the no-op resets, and
+ * the server answers with a fresh listing rather than an echo.
+ */
+export function encodeInstructionsLayerSet(
+  workspace: string,
+  file: string,
+  inherit: string,
+  off: boolean,
+): string {
+  return JSON.stringify({ type: 'instructions.layer.set', workspace, file, inherit, off });
 }
 
 /**

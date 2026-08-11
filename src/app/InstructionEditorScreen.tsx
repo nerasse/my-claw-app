@@ -7,6 +7,9 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 /** The one-line explanation of what saving will do, which differs per origin. */
 export function saveHint(editor: EditorState): string {
   if (editor.origin === 'own') return `saving edits ${editor.workspace}/${editor.file}`;
+  if (editor.origin === 'off') {
+    return `this layer is off · saving edits ${editor.workspace}/${editor.file} for when you turn it back on`;
+  }
   if (editor.origin === 'inherited') {
     return `saving creates ${editor.workspace}/${editor.file}, today read from ${editor.from || 'default'}`;
   }

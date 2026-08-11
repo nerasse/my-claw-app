@@ -392,3 +392,92 @@ test('a refused request surfaces on the page instead of vanishing', async () => 
   await waitFor(() => labelsOf(tree).includes('Instructions error instructions unavailable'));
   await settleAndUnmount(tree);
 });
+
+function policyListFrame(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return listFrame({
+    entries: [
+      { workspace: 'default', file: 'CORE.md', origin: 'own', from: 'default', bytes: 2048, sha: 'core111111aa', inherit: 'default', off: false },
+      { workspace: 'sofa', file: 'SOUL.md', origin: 'fallback', from: '', bytes: 0, sha: 'soulsha11111', inherit: 'default', off: false },
+      { workspace: 'sofa', file: 'CORE.md', origin: 'off', from: 'sofa', bytes: 100, sha: 'coreoff11111', inherit: 'default', off: true },
+    ],
+    ...over,
+  });
+}
+
+async function bootPolicy(): Promise<Tree> {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'Open instructions');
+  await emit(policyListFrame());
+  await waitFor(() => labelsOf(tree).includes('Layer settings for SOUL.md of sofa'));
+  return tree;
+}
+
+test('a current server shows the layer controls and an off badge on the row', async () => {
+  const tree = await bootPolicy();
+  expect(labelsOf(tree)).toEqual(
+    expect.arrayContaining(['Layer settings for SOUL.md of sofa', 'CORE.md of sofa off']),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('the layer screen changes the source and saves it', async () => {
+  const tree = await bootPolicy();
+  await pressLabel(tree, 'Layer settings for SOUL.md of sofa');
+  await waitFor(() => labelsOf(tree).includes('SOUL.md layer'));
+
+  // The ladder shows the shipped template winning: nothing any workspace owns, source default.
+  expect(textsOf(tree).some(text => text.includes('the first step that has content wins'))).toBe(true);
+
+  await pressLabel(tree, 'Read the shipped template instead');
+  await pressLabel(tree, 'Save layer');
+
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'instructions.layer.set',
+        workspace: 'sofa',
+        file: 'SOUL.md',
+        inherit: 'builtin',
+        off: false,
+      }),
+    ]),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('the layer screen answers a skipped layer with the danger wording', async () => {
+  const tree = await bootPolicy();
+  await pressLabel(tree, 'Layer settings for CORE.md of sofa');
+  await waitFor(() => labelsOf(tree).includes('CORE.md layer'));
+
+  // CORE.md is already off in this workspace: the red warning names the safety directives.
+  expect(labelsOf(tree)).toContain('Warning CORE.md carries the safety directives');
+
+  await pressLabel(tree, 'Read this layer');
+  await pressLabel(tree, 'Save layer');
+
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'instructions.layer.set',
+        workspace: 'sofa',
+        file: 'CORE.md',
+        inherit: 'default',
+        off: false,
+      }),
+    ]),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('back from the layer screen returns to the list, one level', async () => {
+  const tree = await bootPolicy();
+  await pressLabel(tree, 'Layer settings for SOUL.md of sofa');
+  await waitFor(() => labelsOf(tree).includes('SOUL.md layer'));
+  await pressLabel(tree, 'Back to instructions');
+  await waitFor(() => labelsOf(tree).includes('Layer settings for SOUL.md of sofa'));
+  await settleAndUnmount(tree);
+});

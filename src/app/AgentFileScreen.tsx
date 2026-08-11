@@ -23,6 +23,7 @@ export function AgentFileScreen({
   skills,
   mcpServers,
   error,
+  layerOff,
   onBack,
   onChange,
   onSave,
@@ -33,6 +34,8 @@ export function AgentFileScreen({
   skills: ScopeOption[];
   mcpServers: ScopeOption[];
   error: string | null;
+  /** Workspace-level off state per layer, for the agent's own workspace. Absent: unknown. */
+  layerOff?: Record<string, boolean>;
   onBack: () => void;
   /** Every field change lands in the store; the whole frame goes on save. */
   onChange: (patch: Partial<AgentFileResultFrame>) => void;
@@ -328,6 +331,16 @@ export function AgentFileScreen({
               );
             })}
           </View>
+          {(() => {
+            const offChecked = (frame.instructions ?? []).filter(layer => layerOff?.[layer]);
+            if (offChecked.length === 0) return null;
+            const workspace = frame.workspace ?? 'default';
+            return (
+              <Text style={styles.layerOffNote} accessibilityLabel="Warning a layer is off at the workspace level">
+                {`${offChecked.join(', ')} ${offChecked.length === 1 ? 'is' : 'are'} off for the ${workspace} workspace · this agent will not get ${offChecked.length === 1 ? 'it' : 'them'}, even checked here`}
+              </Text>
+            );
+          })()}
         </View>
 
         <View style={styles.category}>
@@ -647,6 +660,7 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
   },
   forkText: { fontSize: font.body, fontWeight: '600' as const, color: palette.accent },
+  layerOffNote: { fontSize: font.micro, color: palette.danger, paddingHorizontal: space.xs },
   emptyArea: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: space.lg },
   empty: { fontSize: font.meta, color: palette.textFaint, textAlign: 'center' as const },
   error: {

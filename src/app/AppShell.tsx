@@ -34,6 +34,7 @@ import {
   encodeAgentsConfigGet,
   encodeInstructionsGet,
   encodeInstructionsGetNested,
+  encodeInstructionsLayerSet,
   encodeInstructionsList,
   encodeInstructionsSet,
   encodeAgentsModelClear,
@@ -120,6 +121,8 @@ import { tagsStore, useTags } from '../core/tags';
 import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
 import { InstructionsScreen } from './InstructionsScreen';
+import { layerOfFile } from '../core/layers';
+import { InstructionLayerScreen } from './InstructionLayerScreen';
 import { InstructionEditorScreen } from './InstructionEditorScreen';
 import { skillUrl } from '../core/skills';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
@@ -373,6 +376,7 @@ export function AppShell(): React.JSX.Element {
     | 'workspaces'
     | 'instructions'
     | 'instruction'
+    | 'instruction-layer'
     | 'tools'
     | 'mcps'
     | 'other'
@@ -393,6 +397,8 @@ export function AppShell(): React.JSX.Element {
   /** Instructions is a top-level category, but the agent page links into it: back has to return
    *  where the user came from rather than dropping them at the index. */
   const [instructionsFrom, setInstructionsFrom] = useState<'index' | 'agent'>('index');
+  /** The layer screen is reached from the instructions list only; one entry path, one back. */
+  const [layerTarget, setLayerTarget] = useState<{ workspace: string; file: string } | null>(null);
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
   const [agentPicker, setAgentPicker] = useState<PickerState>(pickerStart);
@@ -1136,6 +1142,12 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('index');
           return true;
         }
+        if (settingsPage === 'instruction-layer') {
+          setLayerTarget(null);
+          instructionsStore.closeLayer();
+          setSettingsPage('instructions');
+          return true;
+        }
         if (settingsPage === 'instruction') {
           instructionsStore.closeEditor();
           setSettingsPage('instructions');
@@ -1202,6 +1214,7 @@ export function AppShell(): React.JSX.Element {
     filesOpen,
     imageViewer,
     instructionsFrom,
+    layerTarget,
     jobSessions,
     jobsEditor,
     jobsOpen,
@@ -1394,10 +1407,13 @@ export function AppShell(): React.JSX.Element {
   }, [settingsOpen, settingsPage]);
 
   // The agent file editor asks for its file when the page opens; a stale sha answers a conflict.
+  // The instructions list is asked too, so the layer chips can say which checked layers are off
+  // at the workspace level -- the one fact the frontmatter alone cannot show.
   useEffect(() => {
     if (!settingsOpen || settingsPage !== 'file' || !selectedAgent) return;
     agentsFileStore.open(selectedAgent);
     connection.send(encodeAgentFileGet(selectedAgent)).catch(() => {});
+    connection.send(encodeInstructionsList()).catch(() => {});
   }, [settingsOpen, settingsPage, selectedAgent]);
 
   // The raw config editor: asked for when its page opens, and the sha round-trip guards saves.
@@ -1435,9 +1451,10 @@ export function AppShell(): React.JSX.Element {
 
   // Same guard as the agents page: a server without the instructions frames answers nothing,
   // and the page must say so rather than spin. The list is re-asked on every visit because the
-  // agent edits AGENTS.md too, so a list from ten minutes ago can already be wrong.
+  // agent edits AGENTS.md too, so a list from ten minutes ago can already be wrong -- and the
+  // layer screen's ladder depends on that list directly.
   useEffect(() => {
-    if (!settingsOpen || settingsPage !== 'instructions') return;
+    if (!settingsOpen || settingsPage !== 'instructions' && settingsPage !== 'instruction-layer') return;
     instructionsStore.request();
     connection.send(encodeInstructionsList()).catch(() => {});
     const timer = setTimeout(() => instructionsStore.markUnsupported(), 4000);
@@ -1699,9 +1716,15 @@ export function AppShell(): React.JSX.Element {
       nested={instructions.nested}
       status={instructions.status}
       error={instructions.error}
+      workspaceKeys={workspaces.map(w => w.key)}
       backLabel={instructionsFrom === 'agent' ? 'Back to agent' : 'Back to settings'}
       onBack={() => setSettingsPage(instructionsFrom === 'agent' ? 'agent' : 'index')}
       onOpen={entry => openInstruction(entry.workspace, entry.file)}
+      onOpenLayer={entry => {
+        setLayerTarget({ workspace: entry.workspace, file: entry.file });
+        instructionsStore.openLayer(entry.workspace, entry.file);
+        setSettingsPage('instruction-layer');
+      }}
       onOpenNested={item => {
         instructionsStore.openEditor(item.workspace, item.path);
         setSettingsPage('instruction');
@@ -2062,6 +2085,44 @@ export function AppShell(): React.JSX.Element {
               ) : (
                 tagsPage
               )
+            ) : settingsPage === 'instruction-layer' ? (
+              layerTarget && instructions.layer ? (
+                <InstructionLayerScreen
+                  layer={instructions.layer}
+                  entry={instructions.entries.find(
+                    e => e.workspace === layerTarget.workspace && e.file === layerTarget.file,
+                  ) ?? instructions.entries[0]!}
+                  entries={instructions.entries}
+                  workspaces={workspaces}
+                  files={instructions.files}
+                  agentLayers={instructions.agentLayers}
+                  saving={instructions.layer.saving > 0}
+                  error={instructions.layer.error}
+                  backLabel="Back to instructions"
+                  onBack={() => {
+                    setLayerTarget(null);
+                    instructionsStore.closeLayer();
+                    setSettingsPage('instructions');
+                  }}
+                  onChange={patch => instructionsStore.editLayer(patch)}
+                  onSave={applyToAll => {
+                    const layer = instructions.layer;
+                    if (!layer) return;
+                    const files = applyToAll ? instructions.files : [layer.file];
+                    instructionsStore.markLayerSaving(files.length);
+                    for (const file of files) {
+                      connection
+                        .send(encodeInstructionsLayerSet(layer.workspace, file, layer.inherit, layer.off))
+                        .catch(() => {});
+                    }
+                    // A send() that resolves does not mean the server answered: the outbox is in
+                    // memory and dies with the process. A silent save must come back, not spin.
+                    setTimeout(() => instructionsStore.failLayer('no answer from the server · try again'), 4000);
+                  }}
+                />
+              ) : (
+                instructionsPage
+              )
             ) : settingsPage === 'instructions' ? (
               instructionsPage
             ) : settingsPage === 'instruction' ? (
@@ -2229,6 +2290,14 @@ export function AppShell(): React.JSX.Element {
                   skills={skills.map(s => ({ name: s.name, description: s.description }))}
                   mcpServers={mcpServers.map(s => ({ name: s.name, description: `${s.transport} · ${s.state}` }))}
                   error={agentsFile.error}
+                  layerOff={(() => {
+                    const ws = agentsFile.editor?.frame?.workspace ?? 'default';
+                    const off: Record<string, boolean> = {};
+                    for (const entry of instructions.entries) {
+                      if (entry.workspace === ws && entry.off) off[layerOfFile(entry.file)] = true;
+                    }
+                    return off;
+                  })()}
                   onBack={closeAgentFile}
                   onChange={patch => {
                     const editor = agentsFile.editor;

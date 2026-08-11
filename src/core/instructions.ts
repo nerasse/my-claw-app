@@ -30,14 +30,27 @@ export interface EditorState {
   error: string | null;
 }
 
+/** The layer screen's working copy of one file's policy, seeded from the server's entry. */
+export interface LayerState {
+  workspace: string;
+  file: string;
+  inherit: string;
+  off: boolean;
+  /** In-flight instructions.layer.set frames; the header shows "..." while above zero. */
+  saving: number;
+  error: string | null;
+}
+
 interface InstructionsState {
   status: InstructionsStatus;
   entries: InstructionEntry[];
   nested: NestedInstruction[];
   files: string[];
   maxBytes: number;
+  agentLayers: Array<{ agent: string; layers: string[] }>;
   error: string | null;
   editor: EditorState | null;
+  layer: LayerState | null;
 }
 
 const EMPTY: InstructionsState = {
@@ -46,8 +59,10 @@ const EMPTY: InstructionsState = {
   nested: [],
   files: [],
   maxBytes: 0,
+  agentLayers: [],
   error: null,
   editor: null,
+  layer: null,
 };
 
 /**
@@ -83,6 +98,24 @@ class InstructionsStoreImpl {
   }
 
   receive(frame: InstructionsListResultFrame): void {
+    const open = this.state.layer;
+    // A list.result while a policy save is in flight IS the save's answer: re-seed the draft
+    // from what the server stored and burn one in-flight slot. Any other list (a refresh, or
+    // another device's edit) must not clobber a draft the user is typing.
+    const layer =
+      open && open.saving > 0
+        ? (() => {
+            const fresh = frame.entries.find(e => e.workspace === open.workspace && e.file === open.file);
+            const saving = open.saving - 1;
+            return {
+              ...open,
+              inherit: fresh?.inherit ?? open.inherit,
+              off: fresh?.off ?? open.off,
+              saving,
+              error: saving === 0 ? null : open.error,
+            };
+          })()
+        : open;
     this.state = {
       ...this.state,
       status: 'ready',
@@ -90,7 +123,9 @@ class InstructionsStoreImpl {
       nested: frame.nested,
       files: frame.files,
       maxBytes: frame.maxBytes,
+      agentLayers: frame.agentLayers ?? this.state.agentLayers,
       error: null,
+      layer,
     };
     this.emit();
   }
@@ -108,7 +143,17 @@ class InstructionsStoreImpl {
     const editor: EditorState | null = open
       ? { ...open, status: open.status === 'conflict' ? 'conflict' : 'ready', error: message }
       : null;
-    this.state = { ...this.state, error: message, editor };
+    const layer = this.state.layer ? { ...this.state.layer, saving: 0, error: message } : null;
+    this.state = { ...this.state, error: message, editor, layer };
+    this.emit();
+  }
+
+  /** The layer screen's own failure channel, for a save the server never answered. No-op once
+   *  the save already landed: the stale timer must not paint an error on a done save. */
+  failLayer(message: string): void {
+    const layer = this.state.layer;
+    if (!layer || layer.saving === 0) return;
+    this.state = { ...this.state, layer: { ...layer, saving: 0, error: message } };
     this.emit();
   }
 
@@ -149,8 +194,9 @@ class InstructionsStoreImpl {
         draft: frame.content,
         loaded: frame.content,
         // An inherited or fallback copy has no file to overwrite: saving it creates the override,
-        // which is why the sha is dropped rather than echoed back.
-        sha: frame.origin === 'own' ? frame.sha : undefined,
+        // which is why the sha is dropped rather than echoed back. An off file with an own copy
+        // keeps the sha: the user is editing the file itself, not creating an override.
+        sha: frame.origin === 'own' || frame.origin === 'off' ? frame.sha : undefined,
         origin: frame.origin,
         from: frame.from,
         editable: frame.editable,
@@ -198,6 +244,42 @@ class InstructionsStoreImpl {
       listener();
     }
   }
+
+  /** Opens the layer screen, seeded from the entry the list already holds. */
+  openLayer(workspace: string, file: string): void {
+    const entry = this.state.entries.find(e => e.workspace === workspace && e.file === file);
+    this.state = {
+      ...this.state,
+      layer: {
+        workspace,
+        file,
+        inherit: entry?.inherit ?? 'default',
+        off: entry?.off ?? false,
+        saving: 0,
+        error: null,
+      },
+    };
+    this.emit();
+  }
+
+  closeLayer(): void {
+    this.state = { ...this.state, layer: null };
+    this.emit();
+  }
+
+  editLayer(patch: { inherit?: string; off?: boolean }): void {
+    const layer = this.state.layer;
+    if (!layer || layer.saving > 0) return;
+    this.state = { ...this.state, layer: { ...layer, ...patch, error: null } };
+    this.emit();
+  }
+
+  markLayerSaving(count: number): void {
+    const layer = this.state.layer;
+    if (!layer) return;
+    this.state = { ...this.state, layer: { ...layer, saving: count, error: null } };
+    this.emit();
+  }
 }
 
 export const instructionsStore = new InstructionsStoreImpl();
@@ -214,4 +296,9 @@ export function useInstructions(): InstructionsState {
  */
 export function isDirty(editor: EditorState): boolean {
   return editor.draft !== editor.loaded || editor.origin !== 'own';
+}
+
+/** True when the layer screen's save would change what the server holds. */
+export function layerIsDirty(layer: LayerState, entry: InstructionEntry | undefined): boolean {
+  return layer.inherit !== (entry?.inherit ?? 'default') || layer.off !== (entry?.off ?? false);
 }
