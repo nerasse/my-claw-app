@@ -25,6 +25,7 @@ import {
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
+import { subAgentStore, groupRoster, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { commandStore, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
@@ -90,6 +91,7 @@ import {
   type AgentsConfigResultFrame,
   type FileScopeMode,
   type JobEntry,
+  type SubAgentEntry,
   type JobRunEntry,
   type JobFieldsOut,
   type LogsTailQuery,
@@ -105,6 +107,9 @@ import {
   encodeNotificationsState,
   encodeTagsDelete,
   encodeTagsList,
+  encodeSubAgentsList,
+  encodeSubAgentKill,
+  encodeSubAgentReset,
   encodeTagsUpsert,
   encodeProvidersEnvList,
   encodeProvidersEnvRemove,
@@ -167,6 +172,7 @@ import { VideoViewer } from './VideoViewer';
 import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
+import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
@@ -546,6 +552,21 @@ export function AppShell(): React.JSX.Element {
   const [jobToDelete, setJobToDelete] = useState<JobEntry | null>(null);
   /** The runs page of one job, stacked over the jobs list; a run opens as a chat over it. */
   const [jobSessions, setJobSessions] = useState<{ jobId: string; jobName: string } | null>(null);
+  const [agentsOpen, setAgentsOpen] = useState(false);
+  /**
+   * Set while the chat on screen is a sub-agent rather than a conversation. It carries the parent
+   * so the header can name it and so a send can declare which conversation it is driving from.
+   */
+  const [subagentView, setSubagentView] = useState<{
+    threadId: string;
+    id: string;
+    type: string;
+    status: 'idle' | 'running';
+    messageCount: number;
+    parentThreadId: string;
+  } | null>(null);
+  const [subagentAction, setSubagentAction] = useState<'reset' | 'kill' | null>(null);
+  const [subagentMenuOpen, setSubagentMenuOpen] = useState(false);
   const [jobRuns, setJobRuns] = useState<JobRunEntry[] | null>(null);
   const [runsError, setRunsError] = useState<string | null>(null);
   /** The frame handler runs outside React: it checks the runs page by ref. */
@@ -582,6 +603,9 @@ export function AppShell(): React.JSX.Element {
   // The server's push key, kept for a re-registration after the distributor rotates the
   // endpoint (the "registered" event can fire long after the frame that triggered it).
   const vapidRef = useRef<string | null>(null);
+  // A sub-agent chat always goes back to its parent conversation, never to the roster: the roster
+  // is a chooser that closes when a row is picked, which is what keeps the header's promise true.
+  const subagentRef = useRef<typeof subagentView>(null);
   // A run opened from the job's runs page goes back there, like the archives flow.
   const fromJobSessionsRef = useRef(false);
   // Where the thread on screen came from: the hardware back press sends a conversation
@@ -601,6 +625,10 @@ export function AppShell(): React.JSX.Element {
       setDrawerOpen(false);
       setSettingsOpen(false);
       setArchivesOpen(false);
+      setAgentsOpen(false);
+      subagentRef.current = null;
+      setSubagentView(null);
+      connection.send(encodeSubAgentsList(threadId)).catch(() => {});
       connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
       // The model of a conversation is per session: refresh it when the thread changes, so
       // the picker never shows the previous conversation's choice.
@@ -667,6 +695,42 @@ export function AppShell(): React.JSX.Element {
     },
     [openThread],
   );
+
+  /**
+   * Opens a sub-agent as a real chat. Its handle is a thread id like any other, so history,
+   * streaming, tool cards and reasoning all work; what differs is the header and that a send
+   * declares the conversation it is driven from.
+   */
+  const openSubAgent = useCallback(
+    (entry: SubAgentEntry, parentThreadId: string) => {
+      const view = {
+        threadId: entry.threadId,
+        id: entry.id,
+        type: entry.type,
+        status: entry.status,
+        messageCount: entry.messageCount,
+        parentThreadId,
+      };
+      subagentRef.current = view;
+      setSubagentView(view);
+      setAgentsOpen(false);
+      setAutoFocusHero(false);
+      setDrawerOpen(false);
+      selectThread(entry.threadId);
+      chatStore.markRead(entry.threadId);
+      connection.send(encodeSessionHistory(entry.threadId, HISTORY_LIMIT));
+    },
+    [selectThread],
+  );
+
+  /** Back out of a sub-agent to the conversation that reached it. */
+  const leaveSubAgent = useCallback(() => {
+    const view = subagentRef.current;
+    subagentRef.current = null;
+    setSubagentView(null);
+    if (!view) return;
+    openThread(view.parentThreadId);
+  }, [openThread]);
 
   const saveJob = useCallback(
     (fields: JobFieldsOut) => {
@@ -746,8 +810,16 @@ export function AppShell(): React.JSX.Element {
         case 'chat.run.start':
           chatStore.startRun(frame.threadId);
           break;
-        case 'chat.run.end':
+        case 'chat.run.end': {
           chatStore.endRun(frame.threadId);
+          // A run may have spawned sub-agents; the roster is refetched at its end rather than
+          // pushed, which keeps the counter honest without a live push path.
+          const parent = subagentRef.current?.parentThreadId ?? activeThreadRef.current;
+          if (parent) connection.send(encodeSubAgentsList(parent)).catch(() => {});
+          break;
+        }
+        case 'subagents.list.result':
+          subAgentStore.receive(frame);
           break;
         case 'chat.stream.start':
           chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
@@ -1056,6 +1128,20 @@ export function AppShell(): React.JSX.Element {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // A confirmation is the topmost thing on screen when it is up.
+      if (subagentAction) {
+        setSubagentAction(null);
+        return true;
+      }
+      if (subagentMenuOpen) {
+        setSubagentMenuOpen(false);
+        return true;
+      }
+      // The roster is an absolute layer like the status page, so it closes before anything under it.
+      if (agentsOpen) {
+        setAgentsOpen(false);
+        return true;
+      }
       // Topmost layer first: the image covers everything else.
       if (statusOpen) {
         // The status page is an absolute layer over the whole shell, so the back key must
@@ -1275,6 +1361,12 @@ export function AppShell(): React.JSX.Element {
       }
       // A conversation opened from the archived list goes back there: backing out of it
       // would otherwise fall through and close the app.
+      // A sub-agent chat backs out to the conversation that reached it, which is exactly what its
+      // header says it will do.
+      if (subagentRef.current) {
+        leaveSubAgent();
+        return true;
+      }
       if (fromArchivesRef.current) {
         fromArchivesRef.current = false;
         selectThread(null);
@@ -1301,6 +1393,7 @@ export function AppShell(): React.JSX.Element {
     approvals.length,
     agentModelFor,
     agentPicker,
+    agentsOpen,
     archivesOpen,
     bubbleMenu,
     commandMenuOpen,
@@ -1325,6 +1418,9 @@ export function AppShell(): React.JSX.Element {
     settingsPage,
     skillViewer,
     statusOpen,
+    subagentAction,
+    subagentMenuOpen,
+    leaveSubAgent,
     tagContextEditor,
     tagEditor,
     tagToDelete,
@@ -1335,10 +1431,63 @@ export function AppShell(): React.JSX.Element {
     fileViewer,
   ]);
 
-  const sendChat = useCallback(
-    async (text: string, attachments?: OutgoingAttachment[]) => {
-      const threadId = activeThreadRef.current ?? uuid();
-      if (!activeThreadRef.current) selectThread(threadId);
+  // The roster of the conversation in play: while inside a sub-agent that is still the parent's,
+  // because that is the scope the server answered for.
+  const rosterThread = subagentView?.parentThreadId ?? activeThread;
+  const roster = useSubAgents(rosterThread);
+  const spawnCards = useMemo(
+    () =>
+      items.flatMap(item =>
+        item.kind === 'tool' && item.name === 'spawn'
+          ? [{ id: item.id, name: item.name, args: item.args, ok: item.ok, durationMs: item.durationMs }]
+          : [],
+      ),
+    [items],
+  );
+  const rosterGroups = useMemo(() => groupRoster(roster.agents, spawnCards), [roster.agents, spawnCards]);
+  const subagentCount = useMemo(
+    () => ({
+      total: rosterGroups.reduce((sum, group) => sum + group.rows.length, 0),
+      running: roster.agents.filter(agent => agent.status === 'running').length,
+    }),
+    [rosterGroups, roster.agents],
+  );
+
+  /**
+   * Which `spawn` cards still lead somewhere. A card outlives the sub-agent it made, so the door is
+   * offered only while the roster still lists it: a killed one stops offering rather than opening a
+   * dead thread.
+   */
+  const subagentDoors = useMemo(() => {
+    const byName = new Map(roster.agents.map(agent => [agent.displayName, agent]));
+    const doors = new Map<string, { label: string; status: 'idle' | 'running' }>();
+    for (const card of spawnCards) {
+      if (!card.ok || card.args.mode !== 'session') continue;
+      const claimed = typeof card.args.name === 'string' ? card.args.name : '';
+      const agent = byName.get(claimed);
+      if (!agent) continue;
+      doors.set(card.id, { label: agent.id.replace(/^subagent\//, ''), status: agent.status });
+    }
+    return doors;
+  }, [roster.agents, spawnCards]);
+
+  const openSubAgentFromCard = useCallback(
+    (toolItemId: string) => {
+      const card = spawnCards.find(entry => entry.id === toolItemId);
+      const claimed = card && typeof card.args.name === 'string' ? card.args.name : '';
+      const agent = roster.agents.find(entry => entry.displayName === claimed);
+      if (!agent || !activeThread) return;
+      openSubAgent(agent, activeThread);
+    },
+    [spawnCards, roster.agents, activeThread, openSubAgent],
+  );
+
+  /**
+   * Sends into a named conversation. Explicit rather than always the active one, because handing a
+   * sub-agent's answer to its parent posts into the parent while the sub-agent is still on screen.
+   */
+  const sendChatTo = useCallback(
+    async (threadId: string, text: string, attachments?: OutgoingAttachment[]) => {
       const id = uuid();
       chatStore.addUserMessage(
         threadId,
@@ -1367,11 +1516,23 @@ export function AppShell(): React.JSX.Element {
             ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
             ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
           })),
+          // Only when driving a sub-agent: it names the conversation this is driven from, which
+          // the server matches against the sub-agent's recorded parent.
+          subagentRef.current?.threadId === threadId ? subagentRef.current.parentThreadId : undefined,
         ),
       );
       if (!delivered) chatStore.markSendFailed(threadId, id);
     },
-    [selectThread],
+    [],
+  );
+
+  const sendChat = useCallback(
+    async (text: string, attachments?: OutgoingAttachment[]) => {
+      const threadId = activeThreadRef.current ?? uuid();
+      if (!activeThreadRef.current) selectThread(threadId);
+      return sendChatTo(threadId, text, attachments);
+    },
+    [selectThread, sendChatTo],
   );
 
   // Push notifications (docs/notifications.md). The distributor answers registrations on its
@@ -1819,6 +1980,9 @@ export function AppShell(): React.JSX.Element {
   const title =
     (activeThread ? runTitlesRef.current[activeThread] ?? sessionStore.titleOf(activeThread) : null) ??
     'new conversation';
+  // Looked up rather than stored on the sub-agent view: a conversation renamed while a sub-agent is
+  // open must not leave a stale name on the way back.
+  const parentTitleOf = (threadId: string): string => sessionStore.titleOf(threadId) ?? 'conversation';
   const offline = status.state !== 'connected';
   const subtitle = [
     offline ? status.state : 'connected',
@@ -2732,10 +2896,26 @@ export function AppShell(): React.JSX.Element {
               deviceInfo={deviceInfo}
               hint={hint}
               autoFocusHero={autoFocusHero}
-              onOpenDrawer={() => setDrawerOpen(true)}
+              onOpenDrawer={subagentView ? leaveSubAgent : () => setDrawerOpen(true)}
               onStatusPress={openSettings}
               onFilesPress={openFiles}
               onSend={sendChat}
+              subagentCount={subagentCount}
+              onAgentsPress={() => setAgentsOpen(true)}
+              subagentDoors={subagentDoors}
+              onOpenSubAgent={openSubAgentFromCard}
+              {...(subagentView
+                ? {
+                    subagent: {
+                      id: subagentView.id,
+                      type: subagentView.type,
+                      status: streaming ? ('running' as const) : subagentView.status,
+                      messageCount: subagentView.messageCount,
+                      parentTitle: parentTitleOf(subagentView.parentThreadId),
+                    },
+                    onSubAgentMenu: () => setSubagentMenuOpen(true),
+                  }
+                : {})}
               onBubbleMenu={setBubbleMenu}
               onOpenImage={setImageViewer}
               onOpenText={setTextViewer}
@@ -2826,6 +3006,24 @@ export function AppShell(): React.JSX.Element {
         <ActionSheet
           preview={bubbleMenu.text}
           options={[
+            // Handing an answer to the parent is a message in the parent conversation, so it is a
+            // plain send there: the server injects it into a running parent or starts a fresh run,
+            // exactly as it would for anything typed by hand.
+            ...(subagentView && bubbleMenu.role === 'agent' && bubbleMenu.text.trim()
+              ? [
+                  {
+                    label: `Hand to ${parentTitleOf(subagentView.parentThreadId)}`,
+                    hint: 'sends it to the parent conversation, quoted',
+                    onPress: () => {
+                      const quote = `[${subagentView.id.replace(/^subagent\//, '')}] ${bubbleMenu.text}`;
+                      const parentThreadId = subagentView.parentThreadId;
+                      setBubbleMenu(null);
+                      leaveSubAgent();
+                      sendChatTo(parentThreadId, quote).catch(() => {});
+                    },
+                  },
+                ]
+              : []),
             {
               label: 'Copy text',
               onPress: () => {
@@ -2835,6 +3033,39 @@ export function AppShell(): React.JSX.Element {
             },
           ]}
           onClose={() => setBubbleMenu(null)}
+        />
+      ) : null}
+
+      {subagentMenuOpen && subagentView ? (
+        <ActionSheet
+          preview={subagentView.id.replace(/^subagent\//, '')}
+          options={[
+            {
+              label: 'Copy id',
+              onPress: () => {
+                Clipboard.setString(subagentView.id);
+                setSubagentMenuOpen(false);
+              },
+            },
+            {
+              label: 'Clear memory',
+              hint: 'archives the transcript, keeps the agent and its workspace',
+              onPress: () => {
+                setSubagentMenuOpen(false);
+                setSubagentAction('reset');
+              },
+            },
+            {
+              label: 'Delete',
+              hint: 'removes the agent and its transcript for good',
+              danger: true,
+              onPress: () => {
+                setSubagentMenuOpen(false);
+                setSubagentAction('kill');
+              },
+            },
+          ]}
+          onClose={() => setSubagentMenuOpen(false)}
         />
       ) : null}
 
@@ -2992,6 +3223,49 @@ export function AppShell(): React.JSX.Element {
             { label: 'Cancel', onPress: () => setFileToDelete(null) },
           ]}
           onClose={() => setFileToDelete(null)}
+        />
+      ) : null}
+
+      {agentsOpen && rosterThread ? (
+        <AgentsScreen
+          parentTitle={parentTitleOf(rosterThread)}
+          groups={rosterGroups}
+          status={roster.status}
+          onClose={() => setAgentsOpen(false)}
+          onOpenAgent={entry => openSubAgent(entry, rosterThread)}
+          onShowSpawnCard={() => {
+            // The card is already in the transcript under this list: closing lands on it.
+            setAgentsOpen(false);
+          }}
+        />
+      ) : null}
+
+      {subagentAction && subagentView ? (
+        <ActionSheet
+          preview={
+            subagentAction === 'kill'
+              ? `Delete ${subagentView.id.replace(/^subagent\//, '')}? Its transcript is gone for good.`
+              : `Clear this agent's memory? Its transcript is archived, its workspace and identity are kept.`
+          }
+          options={[
+            {
+              label: subagentAction === 'kill' ? 'Delete' : 'Clear memory',
+              danger: subagentAction === 'kill',
+              onPress: () => {
+                const view = subagentView;
+                const frame =
+                  subagentAction === 'kill'
+                    ? encodeSubAgentKill(view.threadId, view.parentThreadId)
+                    : encodeSubAgentReset(view.threadId, view.parentThreadId);
+                connection.send(frame).catch(() => {});
+                setSubagentAction(null);
+                // A deleted sub-agent has no thread left to stand on; a cleared one stays open.
+                if (view.threadId && subagentAction === 'kill') leaveSubAgent();
+                else connection.send(encodeSessionHistory(view.threadId, HISTORY_LIMIT)).catch(() => {});
+              },
+            },
+          ]}
+          onClose={() => setSubagentAction(null)}
         />
       ) : null}
 

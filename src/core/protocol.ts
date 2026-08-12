@@ -553,6 +553,30 @@ export interface JobsRunsResultFrame {
   runs: JobRunEntry[];
 }
 
+/**
+ * One live sub-agent of a conversation. `threadId` is an opaque handle the server issues, and the
+ * only way to address it: the app never builds one. `id` is what the roster shows, because
+ * `displayName` is picked by the model and two agents can share it.
+ */
+export interface SubAgentEntry {
+  threadId: string;
+  id: string;
+  displayName: string;
+  type: string;
+  messageCount: number;
+  status: 'idle' | 'running';
+  visibility: 'global' | 'private';
+  model?: string;
+  createdAt: string;
+}
+
+export interface SubAgentsListResultFrame {
+  type: 'subagents.list.result';
+  /** The parent conversation the roster belongs to. */
+  threadId: string;
+  agents: SubAgentEntry[];
+}
+
 /** Which request was refused. The screen that asked is the one that shows it. */
 export type ErrorScope =
   | 'chat'
@@ -887,6 +911,7 @@ export type ServerFrame =
   | StatusResultFrame
   | JobsListResultFrame
   | JobsRunsResultFrame
+  | SubAgentsListResultFrame
   | TagsResultFrame
   | ProvidersEnvResultFrame
   | NotificationsInfoFrame
@@ -930,6 +955,7 @@ const FRAME_TYPES = new Set([
   'status.result',
   'jobs.list.result',
   'jobs.runs.result',
+  'subagents.list.result',
   'notifications.info',
   'tags.result',
   'providers.env.result',
@@ -953,10 +979,38 @@ export function parseServerFrame(raw: string): ServerFrame | null {
   }
 }
 
-export function encodeChatSend(id: string, text: string, threadId: string, attachments?: AttachmentRef[]): string {
-  return JSON.stringify(attachments?.length
-    ? { type: 'chat.send', id, text, threadId, attachments }
-    : { type: 'chat.send', id, text, threadId });
+/**
+ * `parentThreadId` is only for a send addressed to a sub-agent handle: it names the conversation
+ * the roster was read from, which the server matches against the sub-agent's recorded parent to
+ * decide reachability. Omitted everywhere else.
+ */
+export function encodeChatSend(
+  id: string,
+  text: string,
+  threadId: string,
+  attachments?: AttachmentRef[],
+  parentThreadId?: string,
+): string {
+  return JSON.stringify({
+    type: 'chat.send',
+    id,
+    text,
+    threadId,
+    ...(attachments?.length ? { attachments } : {}),
+    ...(parentThreadId ? { parentThreadId } : {}),
+  });
+}
+
+export function encodeSubAgentsList(threadId: string): string {
+  return JSON.stringify({ type: 'subagents.list', threadId });
+}
+
+export function encodeSubAgentKill(threadId: string, parentThreadId: string): string {
+  return JSON.stringify({ type: 'subagents.kill', threadId, parentThreadId });
+}
+
+export function encodeSubAgentReset(threadId: string, parentThreadId: string): string {
+  return JSON.stringify({ type: 'subagents.reset', threadId, parentThreadId });
 }
 
 export type VoiceMode = 'cloud' | 'local' | 'auto';

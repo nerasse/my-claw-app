@@ -76,6 +76,12 @@ export function ChatScreen({
   streaming,
   onStop,
   onNewThread,
+  subagentCount,
+  onAgentsPress,
+  subagent,
+  subagentDoors,
+  onOpenSubAgent,
+  onSubAgentMenu,
 }: {
   threadId: string;
   title: string;
@@ -106,6 +112,22 @@ export function ChatScreen({
   onStop: () => void;
   /** Wire /new: starts a fresh conversation, like the + button. */
   onNewThread: () => void;
+  /** Sub-agents this conversation reaches. 0 hides the counter entirely. */
+  subagentCount?: { total: number; running: number };
+  onAgentsPress?: () => void;
+  /**
+   * Set while this screen shows a sub-agent rather than a conversation. The header then names the
+   * parent, because a chat that looks like every other chat must say what it is before the user
+   * types into it.
+   */
+  subagent?: { id: string; type: string; status: 'idle' | 'running'; messageCount: number; parentTitle: string };
+  /**
+   * Which `spawn` cards lead to a sub-agent that still exists, keyed by chat item id. Built from
+   * the roster, so a killed sub-agent stops offering a door instead of opening a dead thread.
+   */
+  subagentDoors: Map<string, { label: string; status: 'idle' | 'running' }>;
+  onOpenSubAgent?: (toolItemId: string) => void;
+  onSubAgentMenu?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -305,6 +327,44 @@ export function ChatScreen({
 
   return (
     <View style={styles.screen}>
+      {subagent ? (
+        <View style={styles.subHeader}>
+          {/* Names the parent rather than saying "back": the way out must be legible without
+              remembering how you got in. */}
+          <Pressable
+            onPress={onOpenDrawer}
+            style={styles.backRow}
+            accessibilityRole="button"
+            accessibilityLabel={`Back to ${subagent.parentTitle}`}>
+            <Text style={styles.backGlyph}>‹</Text>
+            <Text style={styles.backLabel} numberOfLines={1}>
+              {subagent.parentTitle}
+            </Text>
+          </Pressable>
+          <View style={styles.subIdentity}>
+            <Text style={styles.subGlyph}>◈</Text>
+            <View style={styles.headerText}>
+              <Text style={styles.title} numberOfLines={1}>
+                {`${subagent.id.replace(/^subagent\//, '')} · ${subagent.type}`}
+              </Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {`${subagent.status === 'running' ? 'running' : 'idle'} · ${subagent.messageCount} msg${subagent.messageCount === 1 ? '' : 's'}`}
+              </Text>
+            </View>
+            <Pressable
+              onPress={onSubAgentMenu}
+              hitSlop={8}
+              style={styles.menuButton}
+              accessibilityRole="button"
+              accessibilityLabel="Sub-agent actions">
+              <Text style={styles.menuGlyph}>⋮</Text>
+            </Pressable>
+          </View>
+          {/* Standing marker: every chat screen here looks alike, and without it a message meant
+              for the main agent lands in the sub-agent. */}
+          <View style={styles.subRule} />
+        </View>
+      ) : (
       <View style={styles.header}>
         <Pressable
           onPress={onOpenDrawer}
@@ -321,6 +381,18 @@ export function ChatScreen({
             {subtitle}
           </Text>
         </View>
+        {subagentCount && subagentCount.total > 0 && onAgentsPress ? (
+          <Pressable
+            onPress={onAgentsPress}
+            hitSlop={10}
+            style={styles.agentsButton}
+            accessibilityRole="button"
+            accessibilityLabel={`${subagentCount.total} sub-agent${subagentCount.total === 1 ? '' : 's'}${subagentCount.running > 0 ? `, ${subagentCount.running} running` : ''}`}>
+            <Text style={styles.agentsGlyph}>◈</Text>
+            <Text style={styles.agentsCount}>{subagentCount.total}</Text>
+            {subagentCount.running > 0 ? <Text style={styles.agentsRunning}>●</Text> : null}
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={onStatusPress}
           hitSlop={10}
@@ -344,6 +416,7 @@ export function ChatScreen({
           <Text style={styles.menuGlyph}>⋮</Text>
         </Pressable>
       </View>
+      )}
 
       {empty ? (
         // New conversation: the composer itself is the screen. Keyed by thread so switching
@@ -383,7 +456,12 @@ export function ChatScreen({
               keyboardShouldPersistTaps="handled"
               renderItem={({ item, index }) =>
                 item.kind === 'tool' ? (
-                  <ToolCard item={item} />
+                  <ToolCard
+                    item={item}
+                    {...(subagentDoors.get(item.id)
+                      ? { subagent: subagentDoors.get(item.id)!, onOpenSubAgent: () => onOpenSubAgent?.(item.id) }
+                      : {})}
+                  />
                 ) : (
                   <Bubble
                     item={item}
@@ -466,6 +544,59 @@ const createStyles = (palette: Palette) => ({
     paddingBottom: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
+  },
+  subHeader: {
+    paddingBottom: space.sm,
+  },
+  backRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.xs,
+    paddingVertical: 2,
+  },
+  backGlyph: {
+    color: palette.accent,
+    fontSize: 20,
+    lineHeight: 22,
+    marginTop: -2,
+  },
+  backLabel: {
+    flex: 1,
+    color: palette.accent,
+    fontSize: font.small,
+  },
+  subIdentity: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+  },
+  subGlyph: {
+    color: palette.accent,
+    fontSize: font.meta,
+  },
+  subRule: {
+    height: 1,
+    backgroundColor: palette.accent,
+    marginTop: space.sm,
+  },
+  agentsButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 3,
+    paddingHorizontal: space.xs,
+  },
+  agentsGlyph: {
+    color: palette.accent,
+    fontSize: font.meta,
+  },
+  agentsCount: {
+    color: palette.text,
+    fontSize: font.small,
+    fontVariant: ['tabular-nums' as const],
+  },
+  agentsRunning: {
+    color: palette.accent,
+    fontSize: font.micro,
   },
   menuButton: {
     width: 40,
