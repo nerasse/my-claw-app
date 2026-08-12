@@ -23,10 +23,18 @@ function announce(state: string, url: string): Promise<void> {
 }
 
 async function openSettings(tree: Tree): Promise<void> {
-  const statusLabel = labelsOf(tree).find(l => l.startsWith('Connection status'))!;
-  await press(tree, statusLabel);
+  // Settings are reached from the drawer: connected shows no status control in the header.
+  await press(tree, 'Open conversations');
+  await press(tree, 'Open settings');
   await press(tree, 'Open general');
   await waitFor(() => labelsOf(tree).includes('Server address'));
+}
+
+async function settleAndUnmount(tree: Tree): Promise<void> {
+  await ReactTestRenderer.act(async () => {
+    await new Promise<void>(resolve => setTimeout(resolve, 60));
+  });
+  await unmount(tree);
 }
 
 function typeUrl(tree: Tree, next: string): Promise<void> {
@@ -76,4 +84,27 @@ test('a disconnected app never claims to be talking to another server', async ()
 
   expect(labelsOf(tree)).not.toContain('Live server differs');
   await unmount(tree);
+});
+
+
+describe('the connection indicator in the header', () => {
+  it('is absent while connected, and a dropped connection shows an offline badge in its place', async () => {
+    const tree = await renderApp();
+    // Connected is the normal case: nothing to show, and the label is not there to press.
+    expect(labelsOf(tree).filter(label => label.startsWith('Connection status'))).toEqual([]);
+    expect(textsOf(tree)).not.toContain('offline');
+
+    await announce('disconnected', OLD_URL);
+    await waitFor(() => labelsOf(tree).includes('Connection status: disconnected'));
+    expect(textsOf(tree)).toContain('offline');
+
+    // A degraded state is a badge, not a dot: it reads.
+    await announce('connecting', OLD_URL);
+    await waitFor(() => labelsOf(tree).includes('Connection status: connecting'));
+    expect(textsOf(tree)).toContain('connecting');
+
+    await announce('connected', OLD_URL);
+    await waitFor(() => labelsOf(tree).filter(label => label.startsWith('Connection status')).length === 0);
+    await settleAndUnmount(tree);
+  });
 });

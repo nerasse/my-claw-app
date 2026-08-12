@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import { FlatList, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
@@ -28,19 +28,6 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   const mimeType = asset.type ?? 'application/octet-stream';
   const type: AttachmentMeta['type'] = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'file';
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
-}
-
-function statusColor(state: WsState, styles: ReturnType<typeof createStyles>): ViewStyle | null {
-  switch (state) {
-    case 'connected':
-      return styles.statusOk;
-    case 'disconnected':
-      return styles.statusBad;
-    case 'connecting':
-      return styles.statusWarn;
-    default:
-      return styles.statusOff;
-  }
 }
 
 /** Same author, close in time and not split by a tool card: render as one visual block. */
@@ -393,14 +380,23 @@ export function ChatScreen({
             {subagentCount.running > 0 ? <Text style={styles.agentsRunning}>●</Text> : null}
           </Pressable>
         ) : null}
-        <Pressable
-          onPress={onStatusPress}
-          hitSlop={10}
-          style={styles.statusButton}
-          accessibilityRole="button"
-          accessibilityLabel={`Connection status: ${connectionState}`}>
-          <View style={[styles.statusDot, statusColor(connectionState, styles)]} />
-        </Pressable>
+        {connectionState !== 'connected' ? (
+          <Pressable
+            onPress={onStatusPress}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={`Connection status: ${connectionState}`}>
+            {/* Connected is the normal case and shows nothing; a degraded state gets the space it
+                deserves instead of a 9px dot nobody reads. */}
+            <Text
+              style={[
+                styles.connBadge,
+                connectionState === 'connecting' ? styles.connWarn : styles.connBad,
+              ]}>
+              {connectionState === 'connecting' ? 'connecting' : 'offline'}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={onFilesPress}
           style={styles.filesButton}
@@ -619,11 +615,16 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  statusDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1, borderColor: palette.surface },
-  statusOk: { backgroundColor: palette.ok },
-  statusOff: { backgroundColor: palette.textFaint },
-  statusWarn: { backgroundColor: palette.warn },
-  statusBad: { backgroundColor: palette.danger },
+  connBadge: {
+    fontSize: font.meta,
+    fontWeight: '600' as const,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    overflow: 'hidden' as const,
+  },
+  connWarn: { color: palette.warn, backgroundColor: palette.surfaceAlt },
+  connBad: { color: palette.danger, backgroundColor: palette.surfaceAlt },
   listWrap: { flex: 1 },
   listContent: { paddingTop: space.md, paddingBottom: space.sm },
   hero: {
