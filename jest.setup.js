@@ -161,6 +161,14 @@ jest.mock('./src/core/nativeBridge', () => ({
         wssConnection: true,
       }),
     ),
+    getCurrentLocation: jest.fn(() =>
+      Promise.resolve({
+        latitude: 48.8566,
+        longitude: 2.3522,
+        accuracyMeters: 24,
+        capturedAt: '2026-01-01T10:00:00.000Z',
+      }),
+    ),
     prefsGetAll: jest.fn(() => Promise.resolve({})),
     getExitInfo: jest.fn(() => Promise.resolve({ versionName: '0.0.1-test', exits: [] })),
     prefsSet: jest.fn(() => Promise.resolve()),

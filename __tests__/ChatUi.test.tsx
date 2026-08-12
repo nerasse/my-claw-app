@@ -3,7 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter, FlatList } from 'react-native';
+import { DeviceEventEmitter, FlatList, PermissionsAndroid } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
@@ -204,6 +204,48 @@ test('the attach button opens the picker sheet and the sheet closes on cancel', 
 
   await pressLabel(tree, 'Close menu');
   expect(textsOf(tree)).not.toContain('Photo from gallery');
+  await unmount(tree);
+});
+
+test('the location action is hidden until the server enables it and sends a structured fix', async () => {
+  const tree = await renderWithHistory();
+  expect(textsOf(tree)).not.toContain('Share current location');
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'location.capabilities', enabled: true, address: true, provider: 'geoapify' }),
+    });
+  });
+  await pressLabel(tree, 'Add attachment');
+  expect(textsOf(tree)).toContain('Share current location');
+  jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
+  await pressText(tree, 'Share current location');
+  await waitFor(() => textsOf(tree).includes('Current location'));
+  expect(bridge.getCurrentLocation).toHaveBeenCalled();
+
+  await pressLabel(tree, 'Send message');
+  await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('"location"')));
+  const sent = JSON.parse(String(bridge.sendMessage.mock.calls.at(-1)?.[0])) as { id?: string; location?: { latitude?: number; address?: unknown } };
+  expect(sent.location?.latitude).toBe(48.8566);
+  expect(sent.location?.address).toBeUndefined();
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'chat.location',
+        threadId: THREAD,
+        replyToId: sent.id ?? '',
+        location: {
+          latitude: 48.8566,
+          longitude: 2.3522,
+          accuracyMeters: 24,
+          capturedAt: '2026-01-01T10:00:00.000Z',
+          address: { formatted: 'Rue de Rivoli, Paris', level: 'street', provider: 'geoapify' },
+        },
+      }),
+    });
+  });
+  await waitFor(() => textsOf(tree).includes('Rue de Rivoli, Paris'));
   await unmount(tree);
 });
 

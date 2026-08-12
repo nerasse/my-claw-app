@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import type { AttachmentMeta, HistoryEntry, ToolCallPayload } from './protocol';
+import type { AttachmentMeta, HistoryEntry, LocationData, ToolCallPayload } from './protocol';
 
 export interface TextItem {
   kind: 'text';
@@ -7,6 +7,7 @@ export interface TextItem {
   role: 'user' | 'agent';
   text: string;
   attachments: AttachmentMeta[];
+  location?: LocationData;
   streaming: boolean;
   error?: string;
   /** What the server heard, per recording id, rendered inside each recording's own bubble. */
@@ -151,6 +152,7 @@ class ChatStoreImpl {
         text: textOf(entry),
         attachments: entry.attachments ?? [],
         streaming: false,
+        ...(entry.location ? { location: entry.location } : {}),
         ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
         ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
         ts,
@@ -160,8 +162,27 @@ class ChatStoreImpl {
     this.emit();
   }
 
-  addUserMessage(threadId: string, id: string, text: string, attachments: AttachmentMeta[] = []): void {
-    this.append(threadId, { kind: 'text', id, role: 'user', text, attachments, streaming: false, ts: Date.now() });
+  addUserMessage(
+    threadId: string,
+    id: string,
+    text: string,
+    attachments: AttachmentMeta[] = [],
+    location?: LocationData,
+  ): void {
+    this.append(threadId, {
+      kind: 'text',
+      id,
+      role: 'user',
+      text,
+      attachments,
+      streaming: false,
+      ...(location ? { location } : {}),
+      ts: Date.now(),
+    });
+  }
+
+  setLocation(threadId: string, id: string, location: LocationData): void {
+    this.patch(threadId, id, { location });
   }
 
   /**

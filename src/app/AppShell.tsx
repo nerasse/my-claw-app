@@ -103,6 +103,7 @@ import {
   type ToolEntry,
   type VoiceMode,
   type VoiceModeResultFrame,
+  type LocationInput,
   type WorkspaceEntry,
   encodeNotificationsRegister,
   encodeNotificationsState,
@@ -518,6 +519,7 @@ export function AppShell(): React.JSX.Element {
     skill: SkillEntry;
   } | null>(null);
   const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
+  const [locationEnabled, setLocationEnabled] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<SessionFileMeta | null>(null);
@@ -827,6 +829,7 @@ export function AppShell(): React.JSX.Element {
 
     const offState = connection.onState(next => {
       setStatus(next);
+      if (next.state !== 'connected') setLocationEnabled(false);
       if (next.state === 'connected') {
         connection.send(encodeSessionList());
         connection.send(encodeCommandsList());
@@ -846,6 +849,12 @@ export function AppShell(): React.JSX.Element {
         setLastRun(frame.run);
       }
       switch (frame.type) {
+        case 'location.capabilities':
+          setLocationEnabled(frame.enabled === true);
+          break;
+        case 'chat.location':
+          chatStore.setLocation(frame.threadId, frame.replyToId, frame.location);
+          break;
         case 'chat.message':
           chatStore.addAgentMessage(
             frame.threadId,
@@ -1577,7 +1586,7 @@ export function AppShell(): React.JSX.Element {
    * sub-agent's answer to its parent posts into the parent while the sub-agent is still on screen.
    */
   const sendChatTo = useCallback(
-    async (threadId: string, text: string, attachments?: OutgoingAttachment[]) => {
+    async (threadId: string, text: string, attachments?: OutgoingAttachment[], location?: LocationInput) => {
       const id = uuid();
       chatStore.addUserMessage(
         threadId,
@@ -1591,9 +1600,10 @@ export function AppShell(): React.JSX.Element {
           ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
           ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
         })) ?? [],
+        location,
       );
       const isVoiceNote = attachments?.some(attachment => attachment.audioAsVoice) ?? false;
-      if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : '(attachment)'));
+      if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : location ? '(location)' : '(attachment)'));
       // The wire only carries the reference; uri and filename are local bubble concerns.
       const delivered = await connection.send(
         encodeChatSend(
@@ -1609,6 +1619,7 @@ export function AppShell(): React.JSX.Element {
           // Only when driving a sub-agent: it names the conversation this is driven from, which
           // the server matches against the sub-agent's recorded parent.
           subagentRef.current?.threadId === threadId ? subagentRef.current.parentThreadId : undefined,
+          location,
         ),
       );
       if (!delivered) chatStore.markSendFailed(threadId, id);
@@ -1617,10 +1628,10 @@ export function AppShell(): React.JSX.Element {
   );
 
   const sendChat = useCallback(
-    async (text: string, attachments?: OutgoingAttachment[]) => {
+    async (text: string, attachments?: OutgoingAttachment[], location?: LocationInput) => {
       const threadId = activeThreadRef.current ?? uuid();
       if (!activeThreadRef.current) selectThread(threadId);
-      return sendChatTo(threadId, text, attachments);
+      return sendChatTo(threadId, text, attachments, location);
     },
     [selectThread, sendChatTo],
   );
@@ -3033,6 +3044,7 @@ export function AppShell(): React.JSX.Element {
               title={title}
               subtitle={subtitle}
               connectionState={status.state}
+              locationEnabled={locationEnabled}
               items={items}
               mediaBase={mediaBase}
               deviceInfo={deviceInfo}

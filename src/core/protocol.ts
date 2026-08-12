@@ -1,3 +1,30 @@
+export type LocationAddressLevel = 'building' | 'street' | 'locality' | 'city' | 'country';
+
+export interface LocationAddress {
+  formatted: string;
+  level: LocationAddressLevel;
+  provider: 'geoapify';
+  street?: string;
+  houseNumber?: string;
+  city?: string;
+  postcode?: string;
+  country?: string;
+  confidence?: number;
+}
+
+export interface LocationData {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  capturedAt: string;
+  altitudeMeters?: number;
+  headingDegrees?: number;
+  speedMetersPerSecond?: number;
+  address?: LocationAddress;
+}
+
+export type LocationInput = Omit<LocationData, 'address'>;
+
 export interface AttachmentMeta {
   id: string;
   type: 'image' | 'audio' | 'video' | 'file';
@@ -25,6 +52,7 @@ export interface ChatSendPayload {
   text: string;
   threadId: string;
   attachments?: AttachmentRef[];
+  location?: LocationInput;
 }
 
 export interface ChatMessageFrame {
@@ -42,6 +70,21 @@ export interface ChatMessageFrame {
    * failed voice take. Drawn apart, because a warning wearing the agent's clothes reads as content.
    */
   notice?: boolean;
+}
+
+export interface LocationCapabilitiesFrame {
+  type: 'location.capabilities';
+  enabled: boolean;
+  address: boolean;
+  provider: 'geoapify';
+}
+
+/** Server-confirmed location for the optimistic user bubble identified by `replyToId`. */
+export interface ChatLocationFrame {
+  type: 'chat.location';
+  threadId: string;
+  replyToId: string;
+  location: LocationData;
 }
 
 /** A run started answering on a thread: the Stop button stays until the matching end. */
@@ -131,6 +174,7 @@ export type HistoryEntry =
       text: string;
       ts: string;
       attachments?: AttachmentMeta[];
+      location?: LocationData;
       /** Words per recording id, so each replayed bubble matches the live one. */
       transcripts?: Record<string, string>;
       /** What the model thought before this reply, replayed collapsed. */
@@ -882,6 +926,8 @@ export interface NotificationsInfoFrame {
 
 export type ServerFrame =
   | ChatMessageFrame
+  | LocationCapabilitiesFrame
+  | ChatLocationFrame
   | RunStartFrame
   | RunEndFrame
   | StreamStartFrame
@@ -929,6 +975,8 @@ export type ServerFrame =
 
 const FRAME_TYPES = new Set([
   'chat.message',
+  'location.capabilities',
+  'chat.location',
   'chat.run.start',
   'chat.run.end',
   'chat.stream.start',
@@ -1001,6 +1049,7 @@ export function encodeChatSend(
   threadId: string,
   attachments?: AttachmentRef[],
   parentThreadId?: string,
+  location?: LocationInput,
 ): string {
   return JSON.stringify({
     type: 'chat.send',
@@ -1009,6 +1058,7 @@ export function encodeChatSend(
     threadId,
     ...(attachments?.length ? { attachments } : {}),
     ...(parentThreadId ? { parentThreadId } : {}),
+    ...(location ? { location } : {}),
   });
 }
 
@@ -1468,4 +1518,3 @@ export function encodeNotificationsState(state: { foreground: boolean; threadId?
     ...(state.threadId ? { threadId: state.threadId } : {}),
   });
 }
-

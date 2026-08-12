@@ -11,6 +11,7 @@ import {
 import { PlusIcon, SendIcon } from './icons';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
 import type { VoiceRecording } from '../core/nativeBridge';
+import type { LocationData } from '../core/protocol';
 import { StagedVoiceList } from './StagedVoiceList';
 import { VoiceRecorder } from './VoiceRecorder';
 import type { PendingAttachment } from '../core/upload';
@@ -27,8 +28,11 @@ export function Composer({
   commands,
   onCommandEntered,
   attachments,
+  location,
   onPickAttachment,
   onRemoveAttachment,
+  onRemoveLocation,
+  locationBusy,
   uploading,
   uploadError,
   uploadProgress,
@@ -56,9 +60,13 @@ export function Composer({
   onCommandEntered?: (command: string) => boolean;
   /** Files staged for the next message. */
   attachments?: PendingAttachment[];
+  /** One-shot location staged for the next message. */
+  location?: LocationData;
   /** Opens the attachment picker sheet. */
   onPickAttachment?: () => void;
   onRemoveAttachment?: (id: string) => void;
+  onRemoveLocation?: () => void;
+  locationBusy?: boolean;
   uploading?: boolean;
   uploadError?: string | null;
   /** Percent of each staged file already on the server, keyed by attachment id. */
@@ -73,7 +81,7 @@ export function Composer({
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
   const empty = value.trim().length === 0;
-  const staged = attachments?.length ?? 0;
+  const staged = (attachments?.length ?? 0) + (location ? 1 : 0);
   // An attachment on its own is a message. Gating on text alone made the button dead for a
   // photo sent without a caption, even though the send path already accepted it.
   const nothingToSend = empty && staged === 0;
@@ -153,6 +161,25 @@ export function Composer({
 
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       {uploadError ? <Text style={styles.uploadError}>{uploadError}</Text> : null}
+      {location ? (
+        <View style={styles.locationChip}>
+          <View style={styles.locationText}>
+            <Text style={styles.locationTitle}>Current location</Text>
+            <Text style={styles.locationMeta}>
+              Approximate · GPS accuracy +/- {Math.round(location.accuracyMeters)} m
+            </Text>
+          </View>
+          {onRemoveLocation ? (
+            <Pressable
+              onPress={onRemoveLocation}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Remove current location">
+              <Text style={styles.chipRemove}>✕</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {/* Recordings get a full row each; anything else stays a chip, since a file name is all
           there is to show about it. */}
       {recordings.length > 0 ? (
@@ -193,9 +220,10 @@ export function Composer({
           <Pressable
             style={[styles.attach, hero && styles.sendHero]}
             onPress={onPickAttachment}
+            disabled={uploading || locationBusy}
             accessibilityRole="button"
             accessibilityLabel="Add attachment">
-            {uploading ? (
+            {uploading || locationBusy ? (
               <ActivityIndicator size="small" color={palette.textFaint} />
             ) : (
               <PlusIcon size={20} color={palette.accent} />
@@ -314,6 +342,19 @@ const createStyles = (palette: Palette) => ({
   },
   chipFill: { height: 2, backgroundColor: palette.accent },
   uploadError: { fontSize: font.small, color: palette.danger, paddingHorizontal: space.xs },
+  locationChip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: space.md,
+    backgroundColor: palette.accentSoft,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  locationText: { flex: 1, gap: 2 },
+  locationTitle: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text },
+  locationMeta: { fontSize: font.small, color: palette.textMuted },
   input: {
     flex: 1,
     maxHeight: 112,

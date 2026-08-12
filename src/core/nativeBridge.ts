@@ -25,6 +25,16 @@ export interface VoiceRecording {
   sizeBytes: number;
 }
 
+export interface CurrentLocationNative {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  capturedAt: string;
+  altitudeMeters?: number;
+  headingDegrees?: number;
+  speedMetersPerSecond?: number;
+}
+
 /** Pushed while recording, ~16 times a second: `level` is already normalised to 0..1. */
 export interface VoiceLevelEvent {
   level: number;
@@ -86,6 +96,8 @@ export interface DeviceBridgeNative {
   getConnectionState(): Promise<string>;
   getDeviceInfo(): Promise<DeviceInfoNative>;
   getCapabilities(): Promise<DeviceCapabilities>;
+  /** Captures one foreground location, waiting briefly for the best available fix. */
+  getCurrentLocation(): Promise<CurrentLocationNative>;
   prefsGetAll(): Promise<Record<string, string>>;
   prefsSet(key: string, value: string | null): Promise<void>;
   /** Android's history of previous process deaths, plus the running build's version name. */
@@ -177,7 +189,9 @@ export const deviceBridge: DeviceBridgeNative = {
       accessibility: false,
       notificationListener: false,
       wssConnection: false,
-    }),
+      }),
+  getCurrentLocation: () =>
+    native?.getCurrentLocation() ?? Promise.reject(new Error('Location unavailable')),
   prefsGetAll: () => native?.prefsGetAll() ?? Promise.resolve({}),
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
   getExitInfo: () =>

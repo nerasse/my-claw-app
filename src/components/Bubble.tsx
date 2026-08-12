@@ -5,6 +5,7 @@ import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
 import { ReasoningLine } from './ReasoningLine';
+import { LocationView } from './LocationView';
 import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
 function clock(ts: number): string {
@@ -55,6 +56,7 @@ export function Bubble({
         {agent && !item.command && !item.notice ? (
           <ReasoningLine reasoning={item.reasoning} tokens={item.reasoningTokens} streaming={item.streaming} />
         ) : null}
+        {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
         {item.attachments.map(att => (
           <AttachmentView
             key={att.id}

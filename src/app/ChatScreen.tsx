@@ -10,11 +10,12 @@ import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
-import { encodeCommandsList, type AttachmentMeta } from '../core/protocol';
+import { encodeCommandsList, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
+import { getCurrentLocation } from '../core/location';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -50,6 +51,7 @@ export function ChatScreen({
   onOpenDrawer,
   onStatusPress,
   onSend,
+  locationEnabled,
   onBubbleMenu,
   onOpenImage,
   onOpenText,
@@ -79,7 +81,9 @@ export function ChatScreen({
   autoFocusHero: boolean;
   onOpenDrawer: () => void;
   onStatusPress: () => void;
-  onSend: (text: string, attachments?: OutgoingAttachment[]) => void;
+  onSend: (text: string, attachments?: OutgoingAttachment[], location?: LocationInput) => void;
+  /** Server capability; false until the post-connect capability frame says otherwise. */
+  locationEnabled: boolean;
   onBubbleMenu: (item: TextItem) => void;
   onOpenImage: (target: { url: string; filename: string; sizeBytes?: number }) => void;
   onOpenText: (target: { url: string; filename: string }) => void;
@@ -130,6 +134,13 @@ export function ChatScreen({
   const [uploadError, setUploadError] = useState<string | null>(null);
   /** Percent of each staged file that has reached the server, keyed by attachment id. */
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [location, setLocation] = useState<LocationData | undefined>();
+  const [locationBusy, setLocationBusy] = useState(false);
+
+  useEffect(() => {
+    setLocation(undefined);
+    setLocationBusy(false);
+  }, [threadId]);
 
   useEffect(() => {
     if (!atBottom) return;
@@ -182,6 +193,19 @@ export function ChatScreen({
     });
   }, [addAssets]);
 
+  const shareLocation = useCallback(async () => {
+    setAttachOpen(false);
+    setLocationBusy(true);
+    setUploadError(null);
+    try {
+      setLocation(await getCurrentLocation());
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'location unavailable');
+    } finally {
+      setLocationBusy(false);
+    }
+  }, []);
+
   const pickFiles = useCallback(() => {
     setAttachOpen(false);
     deviceBridge
@@ -224,17 +248,18 @@ export function ChatScreen({
 
   const submit = useCallback(() => {
     const text = draft.trim();
-    if (!text && attachments.length === 0) return;
+    if (!text && attachments.length === 0 && !location) return;
+    const stagedLocation = location;
     // /tag is app-owned: it opens the tags page or the tag editor, never a message to the
     // model. Intercepted here so it works even when the slash-menu is closed.
-    if (onTagCommand?.(text) === true) {
+    if (!stagedLocation && attachments.length === 0 && onTagCommand?.(text) === true) {
       setDraft('');
       return;
     }
     // /new is the wire form of the + button: a fresh conversation, not a reset of this one.
     // Intercepted here so it works even when the slash-menu is closed, and never reaches the
     // server as a command about a conversation the user is leaving.
-    if (text.toLowerCase() === '/new') {
+    if (!stagedLocation && attachments.length === 0 && text.toLowerCase() === '/new') {
       onNewThread();
       setDraft('');
       return;
@@ -263,7 +288,8 @@ export function ChatScreen({
             });
           }
           setAttachments([]);
-          onSend(text, refs);
+          setLocation(undefined);
+          onSend(text, refs, stagedLocation);
         } catch (err) {
           setUploadError(err instanceof Error ? err.message : 'upload failed');
         } finally {
@@ -271,10 +297,11 @@ export function ChatScreen({
         }
       })();
     } else {
-      onSend(text);
+      setLocation(undefined);
+      onSend(text, undefined, stagedLocation);
     }
     setDraft('');
-  }, [attachments, deviceInfo, draft, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
+  }, [attachments, deviceInfo, draft, location, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 
   const empty = items.length === 0;
 
@@ -419,8 +446,11 @@ export function ChatScreen({
             hint={hint}
             commands={commands}
             attachments={attachments}
+            location={location}
             onPickAttachment={() => setAttachOpen(true)}
             onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+            onRemoveLocation={() => setLocation(undefined)}
+            locationBusy={locationBusy}
             onCommandEntered={onCommandEntered}
             uploading={uploading}
             uploadError={uploadError}
@@ -494,8 +524,11 @@ export function ChatScreen({
           hint={hint}
           commands={commands}
           attachments={attachments}
+          location={location}
           onPickAttachment={() => setAttachOpen(true)}
           onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+          onRemoveLocation={() => setLocation(undefined)}
+          locationBusy={locationBusy}
           onCommandEntered={onCommandEntered}
           uploading={uploading}
           uploadError={uploadError}
@@ -512,6 +545,9 @@ export function ChatScreen({
             { label: 'Photo from gallery', onPress: pickPhotos },
             { label: 'Take a photo', onPress: takePhoto },
             { label: 'File', onPress: pickFiles },
+            ...(locationEnabled
+              ? [{ label: 'Share current location', hint: 'One-shot GPS position with approximate address', onPress: shareLocation }]
+              : []),
           ]}
           onClose={() => setAttachOpen(false)}
         />

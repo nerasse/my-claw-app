@@ -5,9 +5,14 @@ import android.app.DownloadManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
@@ -21,6 +26,9 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 import okhttp3.Call
@@ -49,6 +57,11 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   private var pendingSaveUrl: String? = null
   private var pendingSaveName: String? = null
   private var pendingSaveTransferId: String? = null
+  private var pendingLocationPromise: Promise? = null
+  private var locationListener: LocationListener? = null
+  private var bestLocation: Location? = null
+  private val locationHandler = Handler(Looper.getMainLooper())
+  private val locationTimeout = Runnable { finishLocation() }
 
   // Uploads can be slow on mobile data; only the connect timeout stays short.
   private val uploadClient: OkHttpClient by lazy {
@@ -111,12 +124,108 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
 
   override fun invalidate() {
     reactContext.removeActivityEventListener(filePickListener)
+    cancelLocation("BRIDGE_INVALIDATED", "location bridge stopped")
     voiceAudio.teardown()
     DeviceBus.detach()
     super.invalidate()
   }
 
   private val voiceAudio by lazy { VoiceAudio(reactContext) }
+
+  @ReactMethod
+  fun getCurrentLocation(promise: Promise) {
+    if (pendingLocationPromise != null) {
+      promise.reject("LOCATION_IN_PROGRESS", "a location request is already in progress")
+      return
+    }
+    val coarse = ContextCompat.checkSelfPermission(
+      reactContext,
+      android.Manifest.permission.ACCESS_COARSE_LOCATION,
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val fine = ContextCompat.checkSelfPermission(
+      reactContext,
+      android.Manifest.permission.ACCESS_FINE_LOCATION,
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    if (!coarse && !fine) {
+      promise.reject("NO_LOCATION_PERMISSION", "location permission not granted")
+      return
+    }
+
+    val manager = reactContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val providers = buildList {
+      if (fine && manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) add(LocationManager.GPS_PROVIDER)
+      if (manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) add(LocationManager.NETWORK_PROVIDER)
+    }
+    if (providers.isEmpty()) {
+      promise.reject("LOCATION_DISABLED", "no location provider is enabled")
+      return
+    }
+
+    val listener = object : LocationListener {
+      override fun onLocationChanged(location: Location) {
+        val current = bestLocation
+        if (current == null || location.accuracy < current.accuracy) bestLocation = location
+        if (location.accuracy <= 25f) finishLocation()
+      }
+    }
+    pendingLocationPromise = promise
+    locationListener = listener
+    bestLocation = null
+    try {
+      for (provider in providers) {
+        manager.requestLocationUpdates(provider, 1_000L, 0f, listener, Looper.getMainLooper())
+      }
+      locationHandler.postDelayed(locationTimeout, 12_000L)
+    } catch (err: SecurityException) {
+      cancelLocation("NO_LOCATION_PERMISSION", "location permission not granted", err)
+    } catch (err: Exception) {
+      cancelLocation("LOCATION_FAILED", err.message ?: "could not read location", err)
+    }
+  }
+
+  private fun finishLocation() {
+    val promise = pendingLocationPromise ?: return
+    val location = bestLocation
+    cleanupLocation()
+    if (location == null) {
+      promise.reject("LOCATION_UNAVAILABLE", "no location fix received")
+      return
+    }
+    val map = Arguments.createMap()
+    map.putDouble("latitude", location.latitude)
+    map.putDouble("longitude", location.longitude)
+    map.putDouble("accuracyMeters", location.accuracy.toDouble())
+    map.putString("capturedAt", isoTime(location.time.takeIf { it > 0 } ?: System.currentTimeMillis()))
+    if (Build.VERSION.SDK_INT >= 26 && location.hasAltitude()) map.putDouble("altitudeMeters", location.altitude)
+    if (location.hasBearing()) map.putDouble("headingDegrees", location.bearing.toDouble())
+    if (location.hasSpeed()) map.putDouble("speedMetersPerSecond", location.speed.toDouble())
+    promise.resolve(map)
+  }
+
+  private fun cancelLocation(code: String, message: String, cause: Throwable? = null) {
+    val promise = pendingLocationPromise ?: return
+    cleanupLocation()
+    promise.reject(code, message, cause)
+  }
+
+  private fun cleanupLocation() {
+    val listener = locationListener
+    if (listener != null) {
+      val manager = reactContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+      try {
+        manager.removeUpdates(listener)
+      } catch (_: SecurityException) {
+        // Permission can be revoked while the request is being cleaned up.
+      }
+    }
+    locationHandler.removeCallbacks(locationTimeout)
+    locationListener = null
+    bestLocation = null
+    pendingLocationPromise = null
+  }
+
+  private fun isoTime(timeMs: Long): String =
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(Date(timeMs))
 
   /**
    * Starts capture and returns the destination immediately. The caller needs the uri before the
