@@ -2,7 +2,7 @@ import { groupRoster, subAgentStore } from '../subagents';
 import type { SubAgentEntry } from '../protocol';
 
 const entry = (over: Partial<SubAgentEntry> & { id: string }): SubAgentEntry => ({
-  threadId: `sub-${over.id}`,
+  threadId: `sub-${over.id.replace(/\W/g, '')}`,
   displayName: over.id.replace(/^subagent\//, '').replace(/-[0-9a-f]{4}$/, ''),
   type: 'research',
   messageCount: 3,
@@ -12,22 +12,19 @@ const entry = (over: Partial<SubAgentEntry> & { id: string }): SubAgentEntry => 
   ...over,
 });
 
-const spawn = (over: { id: string; mode?: string; type?: string; name?: string; ok?: boolean; durationMs?: number }) => ({
-  id: over.id,
-  name: 'spawn',
-  args: { mode: over.mode ?? 'run', type: over.type ?? 'research', name: over.name ?? 'digger' },
-  ok: over.ok ?? true,
-  ...(over.durationMs === undefined ? {} : { durationMs: over.durationMs }),
-});
+const oneShot = (over: Partial<SubAgentEntry> = {}): SubAgentEntry =>
+  entry({ id: `subagent/run-${Math.random().toString(16).slice(2, 10)}`, visibility: 'private', ...over });
 
 beforeEach(() => subAgentStore.reset());
 
 describe('groupRoster', () => {
   it('puts named before temporary and groups each by agent type', () => {
-    const groups = groupRoster(
-      [entry({ id: 'subagent/w-0001', type: 'writer' }), entry({ id: 'subagent/r-0002', type: 'research' })],
-      [spawn({ id: 't1', type: 'writer' }), spawn({ id: 't2', type: 'research' })],
-    );
+    const groups = groupRoster([
+      entry({ id: 'subagent/w-0001', type: 'writer' }),
+      entry({ id: 'subagent/r-0002', type: 'research' }),
+      oneShot({ type: 'writer' }),
+      oneShot({ type: 'research' }),
+    ]);
     expect(groups.map(g => `${g.major}/${g.type}`)).toEqual([
       'named/research',
       'named/writer',
@@ -36,27 +33,22 @@ describe('groupRoster', () => {
     ]);
   });
 
-  it('floats the type holding a running agent to the top of the named groups', () => {
-    const groups = groupRoster(
-      [
-        entry({ id: 'subagent/a-0001', type: 'aaa' }),
-        entry({ id: 'subagent/z-0002', type: 'zzz', status: 'running' }),
-      ],
-      [],
-    );
+  it('floats the type holding a running agent to the top of each category', () => {
+    const groups = groupRoster([
+      entry({ id: 'subagent/a-0001', type: 'aaa' }),
+      entry({ id: 'subagent/z-0002', type: 'zzz', status: 'running' }),
+      oneShot({ type: 'aaa', status: 'running' }),
+    ]);
     // Alphabetical would have put aaa first: what is working now wins over the sort.
-    expect(groups.map(g => g.type)).toEqual(['zzz', 'aaa']);
+    expect(groups.map(g => `${g.major}/${g.type}`)).toEqual(['named/zzz', 'named/aaa', 'temporary/aaa']);
   });
 
   it('within a type, running leads and then the most recent', () => {
-    const groups = groupRoster(
-      [
-        entry({ id: 'subagent/old-0001', createdAt: '2026-01-01T00:00:00.000Z' }),
-        entry({ id: 'subagent/new-0002', createdAt: '2026-03-01T00:00:00.000Z' }),
-        entry({ id: 'subagent/busy-0003', createdAt: '2025-01-01T00:00:00.000Z', status: 'running' }),
-      ],
-      [],
-    );
+    const groups = groupRoster([
+      entry({ id: 'subagent/old-0001', createdAt: '2026-01-01T00:00:00.000Z' }),
+      entry({ id: 'subagent/new-0002', createdAt: '2026-03-01T00:00:00.000Z' }),
+      entry({ id: 'subagent/busy-0003', createdAt: '2025-01-01T00:00:00.000Z', status: 'running' }),
+    ]);
     expect(groups[0]!.rows.map(r => r.key)).toEqual([
       'subagent/busy-0003',
       'subagent/new-0002',
@@ -66,37 +58,25 @@ describe('groupRoster', () => {
 
   it('breaks a tie on id so the order never wobbles between renders', () => {
     const same = '2026-01-01T00:00:00.000Z';
-    const rows = groupRoster(
-      [entry({ id: 'subagent/b-0002', createdAt: same }), entry({ id: 'subagent/a-0001', createdAt: same })],
-      [],
-    )[0]!.rows;
+    const rows = groupRoster([
+      entry({ id: 'subagent/b-0002', createdAt: same }),
+      entry({ id: 'subagent/a-0001', createdAt: same }),
+    ])[0]!.rows;
     expect(rows.map(r => r.key)).toEqual(['subagent/a-0001', 'subagent/b-0002']);
   });
 
-  it('only one-shot spawn cards become temporary rows', () => {
-    const groups = groupRoster([], [
-      spawn({ id: 'kept', mode: 'run' }),
-      // A session-mode spawn is a named agent: it comes from the server roster, not the transcript,
-      // or it would be listed twice.
-      spawn({ id: 'skipped', mode: 'session' }),
+  it('classes a kept one-shot as temporary, and it carries its entry to open the chat', () => {
+    const kept = oneShot({ displayName: 'researcher' });
+    const groups = groupRoster([kept, entry({ id: 'subagent/digger-a1b2' })]);
+    const temporary = groups.find(g => g.major === 'temporary')!;
+    expect(temporary.rows).toEqual([
+      { kind: 'temporary', key: kept.id, entry: kept },
     ]);
-    expect(groups).toHaveLength(1);
-    expect(groups[0]!.rows.map(r => r.key)).toEqual(['kept']);
-  });
-
-  it('keeps a failed one-shot, with its outcome and duration', () => {
-    const rows = groupRoster([], [spawn({ id: 'boom', ok: false, durationMs: 8100 })])[0]!.rows;
-    expect(rows[0]).toMatchObject({ kind: 'temporary', toolItemId: 'boom', ok: false, durationMs: 8100 });
-  });
-
-  it('lists one-shots newest first', () => {
-    const rows = groupRoster([], [spawn({ id: 'first' }), spawn({ id: 'second' })])[0]!.rows;
-    expect(rows.map(r => r.key)).toEqual(['second', 'first']);
+    expect(groups.find(g => g.major === 'named')!.rows[0]).toMatchObject({ kind: 'named' });
   });
 
   it('is empty when there is nothing, rather than showing empty groups', () => {
-    expect(groupRoster([], [])).toEqual([]);
-    expect(groupRoster([], [{ id: 'x', name: 'read', args: {}, ok: true }])).toEqual([]);
+    expect(groupRoster([])).toEqual([]);
   });
 });
 

@@ -117,8 +117,8 @@ describe('the header counter', () => {
     await settleAndUnmount(tree);
   });
 
-  it('counts one-shots from the transcript too, since the server no longer has them', async () => {
-    const tree = await seed([], [spawnCard({ id: 'tc-run', args: { mode: 'run', type: 'research', name: 'peek' } })]);
+  it('counts one-shots kept by the server, since they are listed like any other sub-agent', async () => {
+    const tree = await seed([agent({ id: 'subagent/run-7d21a04c', visibility: 'private' })]);
     await waitFor(() => labelsOf(tree).some(label => label.startsWith('1 sub-agent')));
     expect(labelsOf(tree)).toContain('1 sub-agent');
     await settleAndUnmount(tree);
@@ -127,11 +127,12 @@ describe('the header counter', () => {
 
 describe('the roster', () => {
   it('opens from the counter, groups by category and type, and names the way back', async () => {
-    const tree = await seed(
-      [agent({ id: 'subagent/digger-a1b2' }), agent({ id: 'subagent/scribe-c3d4', type: 'writer' })],
-      [spawnCard({ id: 'tc-run', args: { mode: 'run', type: 'research', name: 'peek' }, ok: false })],
-    );
-    // Two named plus the one-shot from the transcript.
+    const tree = await seed([
+      agent({ id: 'subagent/digger-a1b2' }),
+      agent({ id: 'subagent/scribe-c3d4', type: 'writer' }),
+      agent({ id: 'subagent/run-7d21a04c', visibility: 'private' }),
+    ]);
+    // Two named plus the kept one-shot.
     await pressLabel(tree, '3 sub-agents');
 
     const texts = textsOf(tree);
@@ -140,10 +141,18 @@ describe('the roster', () => {
     expect(texts).toContain('research');
     expect(texts).toContain('writer');
     expect(texts).toContain('digger-a1b2');
-    // A one-shot is listed read-only with its outcome, never as something to open.
-    expect(texts).toContain('read-only');
-    expect(labelsOf(tree)).toContain('Show the spawn card of peek, failed');
+    // The one-shot is openable, exactly like a named one.
+    expect(labelsOf(tree)).toContain('Open sub-agent subagent/run-7d21a04c, idle');
     expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent'))).toBe(true);
+    await settleAndUnmount(tree);
+  });
+
+  it('opens a kept one-shot as a chat, naming the parent on the way back', async () => {
+    const tree = await seed([agent({ id: 'subagent/run-7d21a04c', visibility: 'private' })]);
+    await pressLabel(tree, '1 sub-agent');
+    await pressLabel(tree, 'Open sub-agent subagent/run-7d21a04c, idle');
+    expect(textsOf(tree)).toContain('run-7d21a04c · research');
+    expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
     await settleAndUnmount(tree);
   });
 

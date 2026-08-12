@@ -1454,7 +1454,7 @@ export function AppShell(): React.JSX.Element {
       ),
     [items],
   );
-  const rosterGroups = useMemo(() => groupRoster(roster.agents, spawnCards), [roster.agents, spawnCards]);
+  const rosterGroups = useMemo(() => groupRoster(roster.agents), [roster.agents]);
   const subagentCount = useMemo(
     () => ({
       total: rosterGroups.reduce((sum, group) => sum + group.rows.length, 0),
@@ -3243,10 +3243,6 @@ export function AppShell(): React.JSX.Element {
           status={roster.status}
           onClose={() => setAgentsOpen(false)}
           onOpenAgent={entry => openSubAgent(entry, rosterThread)}
-          onShowSpawnCard={() => {
-            // The card is already in the transcript under this list: closing lands on it.
-            setAgentsOpen(false);
-          }}
         />
       ) : null}
 

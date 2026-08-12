@@ -4,15 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import { formatDuration } from '../core/utils';
 import type { RosterGroup, SubAgentsStatus } from '../core/subagents';
 import type { SubAgentEntry } from '../core/protocol';
 
 /**
  * The sub-agents of one conversation, grouped named-then-temporary and by agent type inside each.
- * The split is not cosmetic: a named sub-agent lives on disk and opens as a real chat, while a
- * one-shot was deleted when its run ended, so its row can only point back at the `spawn` card that
- * recorded it. See docs/subagent-navigation.md in the server repo.
+ * The split is not cosmetic: a named sub-agent lives until killed, while a one-shot (a kept
+ * `run-` session) dies with its parent conversation. Both open as a real chat, though.
  *
  * Picking a row closes this screen. It is a chooser, not a level to come back to, which is what
  * lets the sub-agent's own header name the parent conversation instead of naming this list.
@@ -23,14 +21,12 @@ export function AgentsScreen({
   status,
   onClose,
   onOpenAgent,
-  onShowSpawnCard,
 }: {
   parentTitle: string;
   groups: RosterGroup[];
   status: SubAgentsStatus;
   onClose: () => void;
   onOpenAgent: (entry: SubAgentEntry) => void;
-  onShowSpawnCard: (toolItemId: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
@@ -81,52 +77,34 @@ export function AgentsScreen({
               <Text style={styles.minor} numberOfLines={1}>
                 {group.type}
               </Text>
-              {group.rows.map(row =>
-                row.kind === 'named' ? (
-                  <Pressable
-                    key={row.key}
-                    style={styles.card}
-                    onPress={() => onOpenAgent(row.entry)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open sub-agent ${row.entry.id}, ${row.entry.status}`}>
-                    <View style={styles.cardHead}>
-                      <Text style={styles.glyph}>◈</Text>
-                      {/* The id, not the display name: the model picks names and repeats them. */}
-                      <Text style={styles.cardTitle} numberOfLines={1}>
-                        {row.entry.id.replace(/^subagent\//, '')}
-                      </Text>
-                      {row.entry.status === 'running' ? (
-                        <Text style={styles.running}>● running</Text>
-                      ) : (
-                        <Text style={styles.state}>idle</Text>
-                      )}
-                    </View>
-                    <Text style={styles.cardMeta} numberOfLines={1}>
-                      {`${row.entry.messageCount} msg${row.entry.messageCount === 1 ? '' : 's'} · ${row.entry.visibility}`}
-                      {row.entry.model ? ` · ${row.entry.model}` : ''}
+              {group.rows.map(row => (
+                <Pressable
+                  key={row.key}
+                  style={styles.card}
+                  onPress={() => onOpenAgent(row.entry)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open sub-agent ${row.entry.id}, ${row.entry.status}`}>
+                  <View style={styles.cardHead}>
+                    <Text style={row.kind === 'temporary' ? styles.glyphFaint : styles.glyph}>
+                      {row.kind === 'temporary' ? '◇' : '◈'}
                     </Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    key={row.key}
-                    style={styles.card}
-                    onPress={() => onShowSpawnCard(row.toolItemId)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Show the spawn card of ${row.name}, ${row.ok ? 'done' : 'failed'}`}>
-                    <View style={styles.cardHead}>
-                      <Text style={styles.glyphFaint}>◇</Text>
-                      <Text style={styles.cardTitle} numberOfLines={1}>
-                        {row.name}
-                      </Text>
-                      {row.ok ? <Text style={styles.state}>✓</Text> : <Text style={styles.failed}>failed</Text>}
-                    </View>
-                    <Text style={styles.cardMeta} numberOfLines={1}>
-                      {formatDuration(row.durationMs) || 'one-shot'}
-                      {' · tap to show it in the conversation'}
+                    {/* The id, not the display name: the model picks names and repeats them. */}
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {row.entry.id.replace(/^subagent\//, '')}
                     </Text>
-                  </Pressable>
-                ),
-              )}
+                    {row.entry.status === 'running' ? (
+                      <Text style={styles.running}>● running</Text>
+                    ) : (
+                      <Text style={styles.state}>idle</Text>
+                    )}
+                  </View>
+                  <Text style={styles.cardMeta} numberOfLines={1}>
+                    {`${row.entry.messageCount} msg${row.entry.messageCount === 1 ? '' : 's'} · ${row.entry.visibility}`}
+                    {row.kind === 'temporary' ? ' · one-shot' : ''}
+                    {row.entry.model ? ` · ${row.entry.model}` : ''}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
           ))}
         </ScrollView>
@@ -251,11 +229,6 @@ function createStyles(palette: Palette) {
     state: {
       color: palette.textFaint,
       fontSize: font.micro,
-    },
-    failed: {
-      color: palette.danger,
-      fontSize: font.micro,
-      fontWeight: '600',
     },
     cardMeta: {
       color: palette.textMuted,

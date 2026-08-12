@@ -73,7 +73,8 @@ class SubAgentsStoreImpl {
 
 export const subAgentStore = new SubAgentsStoreImpl();
 
-/** A named sub-agent: it lives on disk, so it can be opened, talked to, reset and deleted. */
+/** A named sub-agent: created as a `session`, lives on disk until killed or until its parent
+ *  conversation is deleted (when private). */
 export interface NamedRow {
   kind: 'named';
   key: string;
@@ -81,17 +82,14 @@ export interface NamedRow {
 }
 
 /**
- * A one-shot the model ran. The server deleted its session when the run ended, so there is nothing
- * to open: the row points back at the `spawn` card in the transcript, which holds the whole record.
+ * A one-shot the model ran (`subagent/run-<uuid>`). The server keeps it after the run now, so it
+ * is a row like the others — opened as a chat, driven again — only its lifecycle differs: it is
+ * always private and dies with its parent conversation.
  */
 export interface TemporaryRow {
   kind: 'temporary';
   key: string;
-  /** Chat item id of the `spawn` card, to scroll to. */
-  toolItemId: string;
-  name: string;
-  ok: boolean;
-  durationMs?: number;
+  entry: SubAgentEntry;
 }
 
 export type RosterRow = NamedRow | TemporaryRow;
@@ -103,77 +101,47 @@ export interface RosterGroup {
   rows: RosterRow[];
 }
 
-interface SpawnCard {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-  ok: boolean;
-  durationMs?: number;
-}
-
-function str(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
 /**
  * Groups the roster the way it is read: named before temporary, then by agent type. Within a
  * category a type holding a running agent comes first, then alphabetically; within a type the
  * running ones lead, then the most recently created.
  *
- * Temporary rows come from the transcript rather than the server, because a one-shot's session is
- * already deleted while its `spawn` card still carries its type, outcome and duration.
+ * The two categories are distinguished by id: `subagent/run-` is a kept one-shot, anything else
+ * is a named session. Both come from the server's roster, which is already scoped to the asking
+ * conversation.
  */
-export function groupRoster(agents: SubAgentEntry[], spawnCards: SpawnCard[]): RosterGroup[] {
-  const named = new Map<string, NamedRow[]>();
+export function groupRoster(agents: SubAgentEntry[]): RosterGroup[] {
+  const buckets = new Map<'named' | 'temporary', Map<string, RosterRow[]>>([
+    ['named', new Map()],
+    ['temporary', new Map()],
+  ]);
   for (const entry of agents) {
-    const rows = named.get(entry.type) ?? [];
-    rows.push({ kind: 'named', key: entry.id, entry });
-    named.set(entry.type, rows);
+    const kind: 'named' | 'temporary' = entry.id.startsWith('subagent/run-') ? 'temporary' : 'named';
+    const byType = buckets.get(kind)!;
+    const rows = byType.get(entry.type) ?? [];
+    rows.push({ kind, key: entry.id, entry });
+    byType.set(entry.type, rows);
   }
-  for (const rows of named.values()) {
-    rows.sort((a, b) => {
-      const running = Number(b.entry.status === 'running') - Number(a.entry.status === 'running');
-      if (running !== 0) return running;
-      const created = b.entry.createdAt.localeCompare(a.entry.createdAt);
-      return created !== 0 ? created : a.entry.id.localeCompare(b.entry.id);
-    });
-  }
-
-  const temporary = new Map<string, TemporaryRow[]>();
-  // Newest first: the transcript is chronological and the interesting one-shot is the last.
-  for (const card of [...spawnCards].reverse()) {
-    if (card.name !== 'spawn' || str(card.args.mode) !== 'run') continue;
-    const type = str(card.args.type) || 'unknown';
-    const rows = temporary.get(type) ?? [];
-    rows.push({
-      kind: 'temporary',
-      key: card.id,
-      toolItemId: card.id,
-      name: str(card.args.name) || '(unnamed)',
-      ok: card.ok,
-      ...(card.durationMs === undefined ? {} : { durationMs: card.durationMs }),
-    });
-    temporary.set(type, rows);
+  for (const byType of buckets.values()) {
+    for (const rows of byType.values()) {
+      rows.sort((a, b) => {
+        const running = Number(b.entry.status === 'running') - Number(a.entry.status === 'running');
+        if (running !== 0) return running;
+        const created = b.entry.createdAt.localeCompare(a.entry.createdAt);
+        return created !== 0 ? created : a.entry.id.localeCompare(b.entry.id);
+      });
+    }
   }
 
-  const groupsOf = (
-    source: Map<string, RosterRow[]>,
-    major: 'named' | 'temporary',
-    leads: (rows: RosterRow[]) => boolean,
-  ): RosterGroup[] =>
+  const groupsOf = (source: Map<string, RosterRow[]>, major: 'named' | 'temporary'): RosterGroup[] =>
     [...source.entries()]
       .sort(([aType, aRows], [bType, bRows]) => {
-        const lead = Number(leads(bRows)) - Number(leads(aRows));
+        const lead = Number(bRows.some(r => r.entry.status === 'running')) - Number(aRows.some(r => r.entry.status === 'running'));
         return lead !== 0 ? lead : aType.localeCompare(bType);
       })
       .map(([type, rows]) => ({ major, type, rows }));
 
-  return [
-    ...groupsOf(named as Map<string, RosterRow[]>, 'named', rows =>
-      rows.some(r => r.kind === 'named' && r.entry.status === 'running'),
-    ),
-    ...groupsOf(temporary as Map<string, RosterRow[]>, 'temporary', () => false),
-  ];
+  return [...groupsOf(buckets.get('named')!, 'named'), ...groupsOf(buckets.get('temporary')!, 'temporary')];
 }
 
 export function useSubAgents(threadId: string | null): ThreadRoster {
