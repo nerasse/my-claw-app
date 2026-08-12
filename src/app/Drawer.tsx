@@ -181,19 +181,6 @@ export function Drawer({
         </View>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
-          <Pressable
-            style={[styles.footerRow, styles.archivedRow]}
-            onPress={onOpenSubAgents}
-            accessibilityRole="button"
-            accessibilityLabel={`Open sub-agents${subagentCount > 0 ? `, ${subagentCount}` : ''}`}>
-            <View style={styles.footerMain}>
-              <Text style={styles.footerTitle}>Sub-Agents</Text>
-              <Text style={styles.footerMeta}>shared workers</Text>
-            </View>
-            {subagentCount > 0 ? <Text style={styles.footerCount}>{subagentCount}</Text> : null}
-            <Text style={styles.footerGlyph}>›</Text>
-          </Pressable>
-
           {/* Always shown: an entry that appears only once it has content is an entry nobody
               finds, and the screen says plainly when there is nothing in it. */}
           <Pressable
@@ -205,6 +192,19 @@ export function Drawer({
               <Text style={styles.footerTitle}>Archived</Text>
             </View>
             {archivedCount > 0 ? <Text style={styles.footerCount}>{archivedCount}</Text> : null}
+            <Text style={styles.footerGlyph}>›</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.footerRow, styles.archivedRow]}
+            onPress={onOpenSubAgents}
+            accessibilityRole="button"
+            accessibilityLabel={`Open agents${subagentCount > 0 ? `, ${subagentCount}` : ''}`}>
+            <View style={styles.footerMain}>
+              <Text style={styles.footerTitle}>Agents</Text>
+              <Text style={styles.footerMeta}>shared workers</Text>
+            </View>
+            {subagentCount > 0 ? <Text style={styles.footerCount}>{subagentCount}</Text> : null}
             <Text style={styles.footerGlyph}>›</Text>
           </Pressable>
 

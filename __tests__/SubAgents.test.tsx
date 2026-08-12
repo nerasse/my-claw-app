@@ -240,9 +240,9 @@ describe('the drawer Sub-Agents entry', () => {
     await pressLabel(tree, 'Open conversations');
 
     const texts = textsOf(tree);
-    expect(texts).toContain('Sub-Agents');
+    expect(texts).toContain('Agents');
     expect(texts).toContain('shared workers');
-    expect(labelsOf(tree)).toContain('Open sub-agents, 2');
+    expect(labelsOf(tree)).toContain('Open agents, 2');
     // The list lives on a page, not inside the panel.
     expect(texts).not.toContain('digger-a1b2');
     expect(texts).not.toContain('secret-e5f6');
@@ -255,7 +255,7 @@ describe('the drawer Sub-Agents entry', () => {
       agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
     ]);
     await pressLabel(tree, 'Open conversations');
-    await pressLabel(tree, 'Open sub-agents, 1');
+    await pressLabel(tree, 'Open agents, 1');
 
     // The page: globals listed, a conversation's private one absent.
     expect(textsOf(tree)).toContain('shared across conversations');
@@ -272,9 +272,9 @@ describe('the drawer Sub-Agents entry', () => {
   it('closes on the way back, and is not a level between a sub-agent and its parent', async () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
     await pressLabel(tree, 'Open conversations');
-    await pressLabel(tree, 'Open sub-agents, 1');
+    await pressLabel(tree, 'Open agents, 1');
     await pressLabel(tree, 'Back to conversations');
-    await waitFor(() => labelsOf(tree).includes('Open sub-agents, 1'));
+    await waitFor(() => labelsOf(tree).includes('Open agents, 1'));
     expect(textsOf(tree)).not.toContain('shared across conversations');
     await settleAndUnmount(tree);
   });
