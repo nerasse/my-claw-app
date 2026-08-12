@@ -228,6 +228,39 @@ describe('handing an answer to the parent', () => {
   });
 });
 
+describe('the drawer lists the shared agents', () => {
+  it('shows globals only, above the footer, and opens one as a chat', async () => {
+    const tree = await seed([
+      agent({ id: 'subagent/digger-a1b2' }),
+      agent({ id: 'subagent/secret-c3d4', visibility: 'private' }),
+      agent({ id: 'subagent/run-7d21a04c', visibility: 'private' }),
+    ]);
+    await pressLabel(tree, 'Open conversations');
+
+    const texts = textsOf(tree);
+    expect(texts).toContain('agents · 1');
+    expect(texts).toContain('digger-a1b2');
+    // A conversation's private agents are not shared: they stay in its roster.
+    expect(texts).not.toContain('secret-c3d4');
+    expect(texts).not.toContain('run-7d21a04c');
+    // The section sits above Archived in the same panel.
+    expect(labelsOf(tree)).toContain('Open shared sub-agent subagent/digger-a1b2, idle');
+
+    await pressLabel(tree, 'Open shared sub-agent subagent/digger-a1b2, idle');
+    expect(textsOf(tree)).toContain('digger-a1b2 · research');
+    expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
+    await settleAndUnmount(tree);
+  });
+
+  it('shows no section when there is no shared agent', async () => {
+    const tree = await seed([agent({ id: 'subagent/secret-c3d4', visibility: 'private' })]);
+    await pressLabel(tree, 'Open conversations');
+    expect(textsOf(tree).filter(text => text.startsWith('agents ·'))).toEqual([]);
+    expect(textsOf(tree)).not.toContain('secret-c3d4');
+    await settleAndUnmount(tree);
+  });
+});
+
 describe('a sub-agent is not a conversation', () => {
   it('writing in one does not list it in the drawer, and does not become the thread reopened at boot', async () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);

@@ -871,7 +871,13 @@ export function AppShell(): React.JSX.Element {
           if (!activeThreadRef.current) {
             const first = frame.sessions.find(summary => !summary.archived);
             if (first) openThread(first.threadId);
-            else selectThread(uuid());
+            else {
+              const threadId = uuid();
+              selectThread(threadId);
+              // The drawer's agents section reads this roster: an app that boots with no
+              // conversation at all must still list the shared agents.
+              connection.send(encodeSubAgentsList(threadId)).catch(() => {});
+            }
           }
           break;
         case 'commands.list.result':
@@ -1455,6 +1461,18 @@ export function AppShell(): React.JSX.Element {
     [items],
   );
   const rosterGroups = useMemo(() => groupRoster(roster.agents), [roster.agents]);
+  const globalAgents = useMemo(
+    () =>
+      roster.agents
+        .filter(agent => agent.visibility === 'global')
+        .sort((a, b) => {
+          const running = Number(b.status === 'running') - Number(a.status === 'running');
+          if (running !== 0) return running;
+          const created = b.createdAt.localeCompare(a.createdAt);
+          return created !== 0 ? created : a.id.localeCompare(b.id);
+        }),
+    [roster.agents],
+  );
   const subagentCount = useMemo(
     () => ({
       total: rosterGroups.reduce((sum, group) => sum + group.rows.length, 0),
@@ -2955,6 +2973,15 @@ export function AppShell(): React.JSX.Element {
         onOpenThread={threadId => {
           fromArchivesRef.current = false;
           openThread(threadId);
+        }}
+        agents={globalAgents}
+        onOpenAgent={entry => {
+          // A shared agent opened from the drawer answers to the conversation on screen: that is
+          // what the back row names, and what authorizes the send (a global accepts any caller).
+          const parent = activeThreadRef.current;
+          if (!parent) return;
+          setDrawerOpen(false);
+          openSubAgent(entry, parent);
         }}
         onNewThread={newThread}
         onThreadMenu={setThreadMenu}
