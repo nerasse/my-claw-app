@@ -90,13 +90,24 @@ test('the model picker drops the keyboard instead of hiding behind it', async ()
 
 test.each([
   ['Open conversations', 'Search conversations'],
-  ['Session files', 'Back to chat'],
 ])('%s drops the keyboard', async (open, landmark) => {
   const tree = await boot();
   dismiss.mockClear();
   await pressLabel(tree, open);
 
   await waitFor(() => labelsOf(tree).includes(landmark));
+  expect(dismiss).toHaveBeenCalled();
+
+  await settleAndUnmount(tree);
+});
+
+test('Session files, now reached through the Commands menu, still drops the keyboard', async () => {
+  const tree = await boot();
+  dismiss.mockClear();
+  await pressLabel(tree, 'Commands');
+  await pressLabel(tree, 'Session files');
+
+  await waitFor(() => labelsOf(tree).includes('Back to chat'));
   expect(dismiss).toHaveBeenCalled();
 
   await settleAndUnmount(tree);

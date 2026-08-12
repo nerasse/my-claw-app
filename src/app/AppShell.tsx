@@ -179,7 +179,7 @@ import { JobsEditorScreen } from './JobsEditorScreen';
 import { JobSessionsScreen } from './JobSessionsScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
-import { ActionSheet, type SheetOption } from '../components/ActionSheet';
+import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ModelPickerPage, ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
@@ -1811,12 +1811,19 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeLogsTail(query));
   }, []);
 
-  const openFiles = useCallback(() => {
-    const threadId = activeThreadRef.current;
-    if (!threadId) return;
-    setFilesOpen(true);
-    connection.send(encodeFilesList(threadId));
-  }, []);
+  /**
+   * Opens the files of a named conversation, switching to it first when the entry came from the
+   * drawer: the files screen sits over the chat, so landing on the right conversation makes the
+   * way back land where the files belong.
+   */
+  const openFilesFor = useCallback(
+    (threadId: string) => {
+      if (activeThreadRef.current !== threadId) openThread(threadId);
+      setFilesOpen(true);
+      connection.send(encodeFilesList(threadId));
+    },
+    [openThread],
+  );
 
   const changeUrl = useCallback((next: string) => {
     setUrl(next);
@@ -1858,7 +1865,17 @@ export function AppShell(): React.JSX.Element {
    * header confirmed. The subject is a conversation in both places, so no label says so.
    */
   const conversationActions = useCallback(
-    (target: SessionSummary, close: () => void): SheetOption[] => [
+    (target: SessionSummary, close: () => void): SheetEntry[] => [
+      // First and standing alone: it is the one action both menus share for any conversation,
+      // and it used to cost a whole header button.
+      {
+        label: 'Session files',
+        onPress: () => {
+          close();
+          openFilesFor(target.threadId);
+        },
+      },
+      { type: 'separator' },
       {
         label: 'Rename…',
         onPress: () => {
@@ -1903,10 +1920,10 @@ export function AppShell(): React.JSX.Element {
         },
       },
     ],
-    [openStatus, setThreadArchived],
+    [openStatus, setThreadArchived, openFilesFor],
   );
 
-  const threadActions: SheetOption[] = threadMenu
+  const threadActions: SheetEntry[] = threadMenu
     ? conversationActions(threadMenu, () => setThreadMenu(null))
     : [];
 
@@ -1969,7 +1986,7 @@ export function AppShell(): React.JSX.Element {
         ? 'global default'
         : null;
 
-  const commandMenuOptions: SheetOption[] = [
+  const commandMenuOptions: SheetEntry[] = [
     {
       label: 'Model…',
       hint: currentModelLabel
@@ -1989,7 +2006,7 @@ export function AppShell(): React.JSX.Element {
               if (threadId) connection.send(encodeChatStop(threadId));
               setCommandMenuOpen(false);
             },
-          } satisfies SheetOption,
+          } satisfies SheetEntry,
         ]
       : []),
     // Model and Stop lead because only the conversation on screen can answer for them: the app
@@ -2008,8 +2025,8 @@ export function AppShell(): React.JSX.Element {
           () => setCommandMenuOpen(false),
         )
       : []),
-    // New conversations live on the + in the drawer (and the /new command); Files has its
-    // own header button. This menu stays for what acts on the conversation in front of you.
+    // New conversations live on the + in the drawer (and the /new command). Session files sit in
+    // this menu too, so the header keeps only the counter and the menu.
   ];
 
   const title =
@@ -2933,7 +2950,6 @@ export function AppShell(): React.JSX.Element {
               autoFocusHero={autoFocusHero}
               onOpenDrawer={subagentView ? leaveSubAgent : () => setDrawerOpen(true)}
               onStatusPress={openSettings}
-              onFilesPress={openFiles}
               onSend={sendChat}
               subagentCount={subagentCount}
               onAgentsPress={() => setAgentsOpen(true)}

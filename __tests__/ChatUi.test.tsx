@@ -7,6 +7,7 @@ import { DeviceEventEmitter, FlatList } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
+import { sessionStore } from '../src/core/sessions';
 import { darkPalette, lightPalette } from '../src/theme/palettes';
 import type { HistoryEntry } from '../src/core/protocol';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
@@ -209,8 +210,9 @@ test('the attach button opens the picker sheet and the sheet closes on cancel', 
 test('the session file explorer lists files with sizes and deletes them', async () => {
   const tree = await renderWithHistory();
 
+  await pressLabel(tree, 'Commands');
   await pressLabel(tree, 'Session files');
-  await waitFor(() => textsOf(tree).includes('Session files'));
+  await waitFor(() => labelsOf(tree).includes('Back to chat'));
 
   // The server answers with the file list.
   await ReactTestRenderer.act(async () => {
@@ -556,5 +558,43 @@ test('a notice is drawn apart from the agent replies it arrives between', async 
   expect(outlined).toBe(true);
   // Not the command style either: /status is a table and wears monospace, a notice is a sentence.
   expect(flatten(notice.props.style).fontFamily).toBeUndefined();
+  await unmount(tree);
+});
+
+
+test('the Commands menu leads with Session files, and it is the only row before the separator', async () => {
+  const tree = await renderWithHistory();
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Session files'));
+
+  // First in the menu, and its position is marked: the separator follows it and is not a row.
+  const commands = tree.root.findAll(node => node.props.accessibilityLabel === 'Commands' && typeof node.props.onPress === 'function', { deep: true });
+  expect(commands.length).toBeGreaterThan(0);
+
+  await pressLabel(tree, 'Session files');
+  await waitFor(() => labelsOf(tree).includes('Back to chat'));
+  await unmount(tree);
+});
+
+test('Session files from a drawer conversation opens that conversation and its files', async () => {
+  const tree = await renderWithHistory();
+  await ReactTestRenderer.act(async () => {
+    sessionStore.replace([
+      { threadId: THREAD, title: 'the active one', messageCount: 4, createdAt: '2026-01-01T00:00:00.000Z', lastActiveAt: '2026-01-01T10:00:00.000Z' },
+      { threadId: 'other-thread', title: 'the other one', messageCount: 1, createdAt: '2026-01-02T00:00:00.000Z', lastActiveAt: '2026-01-02T10:00:00.000Z' },
+    ]);
+  });
+  bridge.sendMessage.mockClear();
+
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Actions for conversation the other one');
+  await pressLabel(tree, 'Session files');
+
+  await waitFor(() => labelsOf(tree).includes('Back to chat'));
+  // The files screen opened over the conversation it belongs to: history and files were asked
+  // for the drawer's thread, not for the one that happened to be on screen.
+  const sent = bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
+  expect(sent).toContain(JSON.stringify({ type: 'session.history', threadId: 'other-thread', limit: 50 }));
+  expect(sent).toContain(JSON.stringify({ type: 'files.list', threadId: 'other-thread' }));
   await unmount(tree);
 });

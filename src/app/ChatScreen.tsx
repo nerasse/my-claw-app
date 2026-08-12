@@ -16,9 +16,8 @@ import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
 import type { WsState } from '../core/types';
-import { FolderIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 const GROUP_WINDOW_MS = 120_000;
 
@@ -50,7 +49,6 @@ export function ChatScreen({
   autoFocusHero,
   onOpenDrawer,
   onStatusPress,
-  onFilesPress,
   onSend,
   onBubbleMenu,
   onOpenImage,
@@ -81,7 +79,6 @@ export function ChatScreen({
   autoFocusHero: boolean;
   onOpenDrawer: () => void;
   onStatusPress: () => void;
-  onFilesPress: () => void;
   onSend: (text: string, attachments?: OutgoingAttachment[]) => void;
   onBubbleMenu: (item: TextItem) => void;
   onOpenImage: (target: { url: string; filename: string; sizeBytes?: number }) => void;
@@ -117,7 +114,6 @@ export function ChatScreen({
   onSubAgentMenu?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
   const listRef = useRef<FlatList<ChatItem>>(null);
   // What the list is doing right now, tracked from its own events: the keyboard resizes the
   // viewport without scrolling, so keeping the visible content anchored needs the before/after.
@@ -398,15 +394,8 @@ export function ChatScreen({
           </Pressable>
         ) : null}
         <Pressable
-          onPress={onFilesPress}
-          style={styles.filesButton}
-          accessibilityRole="button"
-          accessibilityLabel="Session files">
-          <FolderIcon size={19} color={palette.text} />
-        </Pressable>
-        <Pressable
           onPress={onOpenMenu}
-          style={styles.filesButton}
+          style={styles.menuButton}
           accessibilityRole="button"
           accessibilityLabel="Commands">
           <Text style={styles.menuGlyph}>⋮</Text>
@@ -607,14 +596,6 @@ const createStyles = (palette: Palette) => ({
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
   statusButton: { padding: 2 },
-  filesButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: palette.surfaceAlt,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
   connBadge: {
     fontSize: font.meta,
     fontWeight: '600' as const,

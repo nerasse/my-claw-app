@@ -16,6 +16,14 @@ export interface SheetOption {
   onPress: () => void;
 }
 
+/** A divider between options, when a menu needs its first row to stand alone. */
+export interface SheetSeparator {
+  type: 'separator';
+  key?: string;
+}
+
+export type SheetEntry = (SheetOption & { type?: undefined }) | SheetSeparator;
+
 /**
  * The one bottom sheet of the app: message actions, conversation actions, confirmations,
  * checklists. Every menu shares it, so a new command costs one option instead of a new
@@ -29,7 +37,7 @@ export function ActionSheet({
   onClose,
 }: {
   preview?: string;
-  options?: SheetOption[];
+  options?: SheetEntry[];
   /** Filter row above the list, for a menu too long to read (the model catalog). */
   search?: {
     value: string;
@@ -89,27 +97,31 @@ export function ActionSheet({
               style={styles.scroll}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled>
-              {options.map(option => (
-                <Pressable
-                  key={option.key ?? option.label}
-                  style={styles.option}
-                  onPress={option.onPress}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: option.selected ?? false }}
-                  accessibilityLabel={option.label}>
-                  <View style={styles.optionMain}>
-                    <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>
-                      {option.label}
-                    </Text>
-                    {option.hint ? (
-                      <Text style={styles.optionHint} numberOfLines={2}>
-                        {option.hint}
+              {options.map(option =>
+                option.type === 'separator' ? (
+                  <View key={option.key ?? 'separator'} style={styles.optionSeparator} />
+                ) : (
+                  <Pressable
+                    key={option.key ?? option.label}
+                    style={styles.option}
+                    onPress={option.onPress}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: option.selected ?? false }}
+                    accessibilityLabel={option.label}>
+                    <View style={styles.optionMain}>
+                      <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>
+                        {option.label}
                       </Text>
-                    ) : null}
-                  </View>
-                  {option.selected ? <Text style={styles.check}>✓</Text> : null}
-                </Pressable>
-              ))}
+                      {option.hint ? (
+                        <Text style={styles.optionHint} numberOfLines={2}>
+                          {option.hint}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {option.selected ? <Text style={styles.check}>✓</Text> : null}
+                  </Pressable>
+                ),
+              )}
             </ScrollView>
             {indicator}
           </View>
@@ -152,6 +164,7 @@ const createStyles = (palette: Palette) => ({
     color: palette.text,
     backgroundColor: palette.surfaceAlt,
   },
+  optionSeparator: { height: 1, backgroundColor: palette.border, marginVertical: space.xs },
   grabber: {
     alignSelf: 'center' as const,
     width: 34,

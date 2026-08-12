@@ -41,6 +41,8 @@ function listFiles(files: SessionFileMeta[]): Promise<void> {
 
 async function openFiles(tree: Tree, files: SessionFileMeta[]): Promise<void> {
   await listFiles(files);
+  // Session files moved from its own header button into the Commands menu, first row.
+  await press(tree, 'Commands');
   await press(tree, 'Session files');
   await waitFor(() =>
     labelsOf(tree).includes(`Open file ${files[0].filename}`),
