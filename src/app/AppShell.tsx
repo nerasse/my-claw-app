@@ -70,6 +70,7 @@ import {
   encodeSessionHistory,
   encodeSessionList,
   encodeSessionRename,
+  encodeSessionWorkspaceSet,
   encodeSessionUnarchive,
   encodeSkillsList,
   encodeToolsList,
@@ -507,6 +508,10 @@ export function AppShell(): React.JSX.Element {
   const [workspaces, setWorkspaces] = useState<WorkspaceEntry[]>([]);
   const [workspacesError, setWorkspacesError] = useState<string | null>(null);
   const [workspacesBusy, setWorkspacesBusy] = useState(false);
+  /** The workspace picker, for the + of the drawer (/new) and the menus' Change workspace. */
+  const [workspacePicker, setWorkspacePicker] = useState<{ threadId: string | null } | null>(null);
+  /** Workspace a brand-new thread picked before the server knew the conversation existed. */
+  const pendingWorkspaceRef = useRef(new Map<string, string>());
   const [skillsError, setSkillsError] = useState<string | null>(null);
   const [skillViewer, setSkillViewer] = useState<{
     url: string;
@@ -649,15 +654,48 @@ export function AppShell(): React.JSX.Element {
     [selectThread],
   );
 
+  /**
+   * The + and /new propose a workspace before the conversation exists: default preselected,
+   * every named workspace available. The pick itself creates the thread and tells the server
+   * right away, so the choice is stored before the first message.
+   */
   const newThread = useCallback(() => {
-    fromArchivesRef.current = false;
-    selectThread(uuid());
-    // The composer is the whole screen on a fresh thread: focus it, but only from the + tap,
-    // never when the app boots into an empty list.
-    setAutoFocusHero(true);
-    setDrawerOpen(false);
-    setSettingsOpen(false);
-  }, [selectThread]);
+    setWorkspacePicker({ threadId: null });
+    connection.send(encodeWorkspacesList()).catch(() => {});
+  }, []);
+
+  /** The workspace a conversation runs in, optimistic pending value included. */
+  const workspaceOf = useCallback(
+    (threadId: string) =>
+      sessionStore.workspaceOf(threadId) ?? pendingWorkspaceRef.current.get(threadId) ?? 'default',
+    [],
+  );
+
+  const pickWorkspace = useCallback(
+    (key: string) => {
+      if (!workspacePicker) return;
+      const target = workspacePicker.threadId;
+      if (target) {
+        // Switching an existing conversation: optimistic local echo, the server confirms
+        // through session.workspace.set.result (and the next listing).
+        sessionStore.setWorkspace(target, key);
+        connection.send(encodeSessionWorkspaceSet(target, key)).catch(() => {});
+      } else {
+        const threadId = uuid();
+        pendingWorkspaceRef.current.set(threadId, key);
+        fromArchivesRef.current = false;
+        selectThread(threadId);
+        // The composer is the whole screen on a fresh thread: focus it, but only from the +
+        // tap, never when the app boots into an empty list.
+        setAutoFocusHero(true);
+        setDrawerOpen(false);
+        setSettingsOpen(false);
+        connection.send(encodeSessionWorkspaceSet(threadId, key)).catch(() => {});
+      }
+      setWorkspacePicker(null);
+    },
+    [workspacePicker, selectThread],
+  );
 
   /** Settings always open on the category index, never inside yesterday's page. */
   const openSettings = useCallback(() => {
@@ -865,6 +903,11 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'session.list.result':
           sessionStore.replace(frame.sessions);
+          // The server now owns these conversations: their optimistic workspace values are
+          // superseded by the listing's own (authoritative) field.
+          for (const threadId of pendingWorkspaceRef.current.keys()) {
+            if (sessionStore.has(threadId)) pendingWorkspaceRef.current.delete(threadId);
+          }
           // The server's run view survives a reconnect mid-run: flags it missed (or lost)
           // come back through the list, so the Stop button reappears without a new token.
           chatStore.seedRuns(frame.sessions.filter(session => session.activeRun).map(session => session.threadId));
@@ -880,6 +923,18 @@ export function AppShell(): React.JSX.Element {
               // conversation at all must still list the shared agents.
               connection.send(encodeSubAgentsList(threadId)).catch(() => {});
             }
+          }
+          break;
+        case 'session.workspace.set.result':
+          if (sessionStore.has(frame.threadId)) {
+            // The server stored the key and the conversation is listed: the stored value
+            // supersedes the optimistic one.
+            pendingWorkspaceRef.current.delete(frame.threadId);
+            sessionStore.setWorkspace(frame.threadId, frame.workspace);
+          } else {
+            // A fresh conversation the listing has not carried yet: keep the pending value
+            // until the next session.list.result brings the stored one.
+            pendingWorkspaceRef.current.set(frame.threadId, frame.workspace);
           }
           break;
         case 'commands.list.result':
@@ -1875,6 +1930,15 @@ export function AppShell(): React.JSX.Element {
           openFilesFor(target.threadId);
         },
       },
+      {
+        label: 'Change workspace',
+        hint: `current: ${workspaceOf(target.threadId)}`,
+        onPress: () => {
+          setWorkspacePicker({ threadId: target.threadId });
+          connection.send(encodeWorkspacesList()).catch(() => {});
+          close();
+        },
+      },
       { type: 'separator' },
       {
         label: 'Rename…',
@@ -1920,11 +1984,37 @@ export function AppShell(): React.JSX.Element {
         },
       },
     ],
-    [openStatus, setThreadArchived, openFilesFor],
+    [openStatus, setThreadArchived, openFilesFor, workspaceOf],
   );
 
   const threadActions: SheetEntry[] = threadMenu
     ? conversationActions(threadMenu, () => setThreadMenu(null))
+    : [];
+
+  /**
+   * One sheet for both flows: a new conversation (default preselected) and a switch of an
+   * existing one (its current workspace preselected). The same words as the menus: the
+   * workspace is a property of the conversation, so the picker names nothing else.
+   */
+  const workspacePickerOptions: SheetEntry[] = workspacePicker
+    ? [
+        ...workspaces.map(entry => ({
+          key: entry.key,
+          label: entry.key === 'default' ? 'Default workspace' : entry.key,
+          hint: entry.path,
+          selected: entry.key === (workspacePicker.threadId ? workspaceOf(workspacePicker.threadId) : 'default'),
+          onPress: () => pickWorkspace(entry.key),
+        })),
+        { type: 'separator' as const },
+        {
+          label: 'Manage workspaces…',
+          onPress: () => {
+            setWorkspacePicker(null);
+            openSettings();
+            setSettingsPage('workspaces');
+          },
+        },
+      ]
     : [];
 
   /**
@@ -3138,6 +3228,14 @@ export function AppShell(): React.JSX.Element {
           preview={activeThread ? title : undefined}
           options={commandMenuOptions}
           onClose={() => setCommandMenuOpen(false)}
+        />
+      ) : null}
+
+      {workspacePicker ? (
+        <ActionSheet
+          preview={workspacePicker.threadId ? 'Change workspace' : 'New conversation'}
+          options={workspacePickerOptions}
+          onClose={() => setWorkspacePicker(null)}
         />
       ) : null}
 

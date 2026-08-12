@@ -38,6 +38,9 @@ export const ThreadRow = React.memo(function ThreadRowRow({
           <Text style={styles.date}>{formatDate(item.lastActiveAt)}</Text>
         </View>
         {item.messageCount > 0 ? <Text style={styles.meta}>{item.messageCount} messages</Text> : null}
+        {item.workspace && item.workspace !== 'default' ? (
+          <Text style={styles.workspace}>{item.workspace}</Text>
+        ) : null}
       </Pressable>
       <Pressable
         hitSlop={6}
@@ -61,6 +64,18 @@ const createStyles = (palette: Palette) => ({
   titleUnread: { fontWeight: '700' as const },
   date: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   meta: { fontSize: font.small, color: palette.textFaint },
+  /** The named workspace a conversation runs in; the default one stays unlabelled. */
+  workspace: {
+    alignSelf: 'flex-start' as const,
+    fontSize: font.micro,
+    color: palette.textFaint,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginTop: 2,
+  },
   menu: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center' as const, justifyContent: 'center' as const },
   menuGlyph: { fontSize: 17, lineHeight: 20, color: palette.textFaint },
 });

@@ -154,6 +154,8 @@ export interface SessionSummary {
   archived?: boolean;
   /** A run is answering on this thread right now: the app keeps the Stop button visible. */
   activeRun?: boolean;
+  /** Workspace key the conversation runs in: 'default' or a config.workspaces key. */
+  workspace?: string;
 }
 
 export interface CommandsListResultFrame {
@@ -180,6 +182,13 @@ export interface FilesListResultFrame {
 export interface SessionListResultFrame {
   type: 'session.list.result';
   sessions: SessionSummary[];
+}
+
+/** Answer to session.workspace.set: the key the server stored, not the one the app hoped for. */
+export interface SessionWorkspaceSetResultFrame {
+  type: 'session.workspace.set.result';
+  threadId: string;
+  workspace: string;
 }
 
 export interface ApprovalRequestFrame {
@@ -884,6 +893,7 @@ export type ServerFrame =
   | ToolCallFrame
   | ChatHistoryFrame
   | SessionListResultFrame
+  | SessionWorkspaceSetResultFrame
   | CommandsListResultFrame
   | FilesListResultFrame
   | DiagSnapshotResultFrame
@@ -932,6 +942,7 @@ const FRAME_TYPES = new Set([
   'chat.command.result',
   'chat.cleared',
   'session.list.result',
+  'session.workspace.set.result',
   'commands.list.result',
   'files.list.result',
   'diag.snapshot.result',
@@ -1020,6 +1031,10 @@ export const MAX_TITLE_LENGTH = 60;
 
 export function encodeSessionRename(threadId: string, title: string): string {
   return JSON.stringify({ type: 'session.rename', threadId, title });
+}
+
+export function encodeSessionWorkspaceSet(threadId: string, workspace: string): string {
+  return JSON.stringify({ type: 'session.workspace.set', threadId, workspace });
 }
 
 export function encodeVoiceModeGet(): string {

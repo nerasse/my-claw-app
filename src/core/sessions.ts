@@ -44,6 +44,10 @@ class SessionStoreImpl {
     return this.list.find(summary => summary.threadId === threadId)?.title;
   }
 
+  has(threadId: string): boolean {
+    return this.list.some(summary => summary.threadId === threadId);
+  }
+
   replace(sessions: SessionSummary[]): void {
     this.list = sessions.length === 0 ? EMPTY : sessions;
     this.emit();
@@ -64,6 +68,20 @@ class SessionStoreImpl {
     const next = this.list.filter(summary => summary.threadId !== threadId);
     if (next.length === this.list.length) return;
     this.list = next.length === 0 ? EMPTY : next;
+    this.emit();
+  }
+
+  workspaceOf(threadId: string): string | undefined {
+    return this.list.find(summary => summary.threadId === threadId)?.workspace;
+  }
+
+  /** Local echo of session.workspace.set until the server's result lands and refreshes. */
+  setWorkspace(threadId: string, workspace: string): void {
+    const existing = this.list.find(summary => summary.threadId === threadId);
+    if (!existing || existing.workspace === workspace) return;
+    this.list = this.list.map(summary =>
+      summary.threadId === threadId ? { ...summary, workspace } : summary,
+    );
     this.emit();
   }
 
