@@ -199,7 +199,7 @@ export function Drawer({
             style={[styles.footerRow, styles.archivedRow]}
             onPress={onOpenSubAgents}
             accessibilityRole="button"
-            accessibilityLabel={`Open agents${subagentCount > 0 ? `, ${subagentCount}` : ''}`}>
+            accessibilityLabel={`Open shared agents${subagentCount > 0 ? `, ${subagentCount}` : ''}`}>
             <View style={styles.footerMain}>
               <Text style={styles.footerTitle}>Agents</Text>
               <Text style={styles.footerMeta}>shared workers</Text>
