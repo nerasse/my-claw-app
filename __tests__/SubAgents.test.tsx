@@ -5,6 +5,7 @@
 import ReactTestRenderer from 'react-test-renderer';
 import { chatStore } from '../src/core/chat';
 import { subAgentStore } from '../src/core/subagents';
+import { sessionStore } from '../src/core/sessions';
 import { deviceBridge } from '../src/core/nativeBridge';
 import type { SubAgentEntry, ToolCallPayload } from '../src/core/protocol';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
@@ -12,8 +13,17 @@ import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../te
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-subagents';
 
+/** The server issues `sub-` + 16 hex; a fixture that is not shaped like one proves nothing. */
+function handleFor(id: string): string {
+  let hex = '';
+  for (const char of id) {
+    hex += char.charCodeAt(0).toString(16);
+  }
+  return `sub-${hex.slice(0, 16).padEnd(16, '0')}`;
+}
+
 const agent = (over: Partial<SubAgentEntry> & { id: string }): SubAgentEntry => ({
-  threadId: `sub-${over.id.replace(/\W/g, '')}`,
+  threadId: handleFor(over.id),
   displayName: over.id.replace(/^subagent\//, '').replace(/-[0-9a-f]{4}$/, ''),
   type: 'research',
   messageCount: 4,
@@ -36,6 +46,10 @@ const spawnCard = (over: Partial<ToolCallPayload> & { id: string }): ToolCallPay
 beforeEach(() => {
   chatStore.clearAll();
   subAgentStore.reset();
+  // The bridge mock outlives a test: without this, a frame sent by an earlier one is still in
+  // the log and the next assertion reads it instead of its own.
+  bridge.sendMessage.mockClear();
+  bridge.prefsSet.mockClear();
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
 });
 
@@ -181,7 +195,7 @@ describe('handing an answer to the parent', () => {
     await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
 
     await ReactTestRenderer.act(async () => {
-      chatStore.seedHistory('sub-subagentdiggera1b2', [
+      chatStore.seedHistory(handleFor('subagent/digger-a1b2'), [
         { id: 'h-a', role: 'assistant', text: 'the cause is the token cache', ts: '2026-01-01T10:00:02.000Z' },
       ]);
     });
@@ -201,6 +215,34 @@ describe('handing an answer to the parent', () => {
     const parsed = JSON.parse(quoted!) as { type: string; threadId: string };
     expect(parsed.type).toBe('chat.send');
     expect(parsed.threadId).toBe(THREAD);
+    await settleAndUnmount(tree);
+  });
+});
+
+describe('a sub-agent is not a conversation', () => {
+  it('writing in one does not list it in the drawer, and does not become the thread reopened at boot', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await pressLabel(tree, '1 sub-agent');
+    await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
+
+    const composer = tree.root.findAll(
+      node => node.props.accessibilityLabel === 'Message to send' && typeof node.props.onChangeText === 'function',
+      { deep: true },
+    )[0]!;
+    await ReactTestRenderer.act(async () => composer.props.onChangeText('how far are you?'));
+    await pressLabel(tree, 'Send message');
+
+    // Reached from the drawer it would open as a plain chat: no parent to return to, and a send
+    // with no parentThreadId, which a private sub-agent refuses.
+    expect(sessionStore.getActiveSnapshot().map(entry => entry.threadId)).not.toContain(handleFor('subagent/digger-a1b2'));
+    // And the app must not reopen inside it.
+    const stored = bridge.prefsSet.mock.calls.filter(([key]) => key === 'lastThreadId').map(([, value]) => value);
+    expect(stored).not.toContain(handleFor('subagent/digger-a1b2'));
+
+    // The message itself did go out, with the parent declared.
+    const sent = bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
+    const chat = sent.map(f => JSON.parse(f) as { type: string }).find(f => f.type === 'chat.send');
+    expect(chat).toMatchObject({ threadId: handleFor('subagent/digger-a1b2'), parentThreadId: THREAD });
     await settleAndUnmount(tree);
   });
 });

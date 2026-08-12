@@ -406,6 +406,15 @@ function TagEditorPage({
   );
 }
 
+/**
+ * A sub-agent handle is a thread id, but it is not a conversation: it must never be listed in the
+ * drawer nor restored at boot, because reached that way it would open as a plain chat -- no parent
+ * to go back to, and a send with no `parentThreadId`, which a private sub-agent refuses outright.
+ */
+function isSubAgentThread(threadId: string): boolean {
+  return /^sub-[0-9a-f]{16}$/.test(threadId);
+}
+
 export function AppShell(): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette, dark } = useTheme();
@@ -614,7 +623,8 @@ export function AppShell(): React.JSX.Element {
   const selectThread = useCallback((threadId: string | null) => {
     activeThreadRef.current = threadId;
     setActiveThread(threadId);
-    prefs.set('lastThreadId', threadId);
+    // Keep the last conversation: reopening the app must land on it, not inside a sub-agent.
+    if (threadId === null || !isSubAgentThread(threadId)) prefs.set('lastThreadId', threadId);
   }, []);
 
   const openThread = useCallback(
@@ -772,7 +782,7 @@ export function AppShell(): React.JSX.Element {
     const noteActivity = (threadId: string, text: string): void => {
       if (threadId === activeThreadRef.current) return;
       chatStore.markUnread(threadId);
-      sessionStore.ensure(threadId, text);
+      if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text);
     };
 
     const offState = connection.onState(next => {
@@ -1503,7 +1513,7 @@ export function AppShell(): React.JSX.Element {
         })) ?? [],
       );
       const isVoiceNote = attachments?.some(attachment => attachment.audioAsVoice) ?? false;
-      sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : '(attachment)'));
+      if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : '(attachment)'));
       // The wire only carries the reference; uri and filename are local bubble concerns.
       const delivered = await connection.send(
         encodeChatSend(
