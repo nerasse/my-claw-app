@@ -580,22 +580,53 @@ async function bootPolicy(): Promise<Tree> {
   await waitFor(() => labelsOf(tree).includes('Open workspace sofa'));
   await pressLabel(tree, 'Open workspace sofa');
   await emit(policyListFrame());
-  await waitFor(() => labelsOf(tree).includes('Layer settings for SOUL.md of sofa'));
+  await waitFor(() => labelsOf(tree).includes('Actions for SOUL.md of sofa'));
   return tree;
 }
+
+async function openLayerFromMenu(tree: Tree, file: string, workspace = 'sofa'): Promise<void> {
+  await pressLabel(tree, `Actions for ${file} of ${workspace}`);
+  await pressLabel(tree, 'Layer settings');
+  await waitFor(() => labelsOf(tree).includes(`${file} layer`));
+}
+
+test('an inherited file exposes Create from template in its row menu', async () => {
+  const tree = await boot('sofa');
+  await pressLabel(tree, 'Actions for AGENTS.md of sofa');
+  await waitFor(() => labelsOf(tree).includes('Create from template'));
+
+  await pressLabel(tree, 'Create from template');
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'instructions.get', workspace: 'sofa', file: 'AGENTS.md' }),
+    ]),
+  );
+  await emit({
+    type: 'instructions.file',
+    workspace: 'sofa',
+    file: 'AGENTS.md',
+    content: '# inherited body',
+    origin: 'inherited',
+    from: 'default',
+    sha: 'agents1111aa',
+    editable: true,
+  });
+  await waitFor(() => labelsOf(tree).includes('AGENTS.md content'));
+  expect(textsOf(tree).some(text => text.includes('saving creates sofa/AGENTS.md, today read from default'))).toBe(true);
+  await settleAndUnmount(tree);
+});
 
 test('a current server shows the layer controls and an off badge on the row', async () => {
   const tree = await bootPolicy();
   expect(labelsOf(tree)).toEqual(
-    expect.arrayContaining(['Layer settings for SOUL.md of sofa', 'CORE.md of sofa off']),
+    expect.arrayContaining(['Actions for SOUL.md of sofa', 'CORE.md of sofa off']),
   );
   await settleAndUnmount(tree);
 });
 
 test('the layer screen changes the source and saves it', async () => {
   const tree = await bootPolicy();
-  await pressLabel(tree, 'Layer settings for SOUL.md of sofa');
-  await waitFor(() => labelsOf(tree).includes('SOUL.md layer'));
+  await openLayerFromMenu(tree, 'SOUL.md');
 
   // The ladder shows the shipped template winning: nothing any workspace owns, source default.
   expect(textsOf(tree).some(text => text.includes('the first step that has content wins'))).toBe(true);
@@ -619,8 +650,7 @@ test('the layer screen changes the source and saves it', async () => {
 
 test('the layer ladder offers the default workspace once, at the top of the steps', async () => {
   const tree = await bootPolicy();
-  await pressLabel(tree, 'Layer settings for SOUL.md of sofa');
-  await waitFor(() => labelsOf(tree).includes('SOUL.md layer'));
+  await openLayerFromMenu(tree, 'SOUL.md');
   // The listing is what carries the default entry, so the steps below only mean something once
   // the page has it: default, sofa and lab.
   await answerWorkspacesIfAsked();
@@ -644,8 +674,7 @@ test('the layer ladder offers the default workspace once, at the top of the step
 
 test('the layer screen answers a skipped layer with the danger wording', async () => {
   const tree = await bootPolicy();
-  await pressLabel(tree, 'Layer settings for CORE.md of sofa');
-  await waitFor(() => labelsOf(tree).includes('CORE.md layer'));
+  await openLayerFromMenu(tree, 'CORE.md');
 
   // CORE.md is already off in this workspace: the red warning names the safety directives.
   expect(labelsOf(tree)).toContain('Warning CORE.md carries the safety directives');
@@ -669,10 +698,9 @@ test('the layer screen answers a skipped layer with the danger wording', async (
 
 test('back from the layer screen returns to the workspace, one level', async () => {
   const tree = await bootPolicy();
-  await pressLabel(tree, 'Layer settings for SOUL.md of sofa');
-  await waitFor(() => labelsOf(tree).includes('SOUL.md layer'));
+  await openLayerFromMenu(tree, 'SOUL.md');
   await pressLabel(tree, 'Back to the workspace');
-  await waitFor(() => labelsOf(tree).includes('Layer settings for SOUL.md of sofa'));
+  await waitFor(() => labelsOf(tree).includes('Actions for SOUL.md of sofa'));
   // One level: the workspace it came from, not the list of every workspace.
   expect(labelsOf(tree)).toContain('Workspace sofa');
   await settleAndUnmount(tree);

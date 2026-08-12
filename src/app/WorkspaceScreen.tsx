@@ -5,6 +5,7 @@ import type { InstructionsStatus } from '../core/instructions';
 import { sourceStatusOf, sourceOwnsFile } from '../core/layers';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 
 /** The loader's workspace key rules, mirrored so the form refuses before the server does. */
 const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
@@ -176,6 +177,7 @@ export function WorkspaceScreen({
   const [keyDraft, setKeyDraft] = useState(workspace.key);
   const [pathDraft, setPathDraft] = useState(workspace.path);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [menuEntry, setMenuEntry] = useState<InstructionEntry | null>(null);
 
   const openEditor = (): void => {
     setKeyDraft(workspace.key);
@@ -204,6 +206,31 @@ export function WorkspaceScreen({
   const ownNested = nested.filter(item => item.workspace === workspace.key);
   const cut = files.filter(entry => entry.origin === 'off' || entry.inherit === 'none').length;
   const layersSupported = entries.some(entry => entry.inherit !== undefined);
+  const fileMenuOptions: SheetEntry[] = [];
+  if (menuEntry && menuEntry.origin !== 'own' && menuEntry.origin !== 'off') {
+    fileMenuOptions.push({
+      label: menuEntry.bytes > 0 ? 'Create from template' : 'Create file',
+      hint:
+        menuEntry.bytes > 0
+          ? `save a copy of the content this workspace reads${menuEntry.from ? ` from ${menuEntry.from}` : ''}`
+          : 'open a blank file and save it in this workspace',
+      onPress: () => {
+        const entry = menuEntry;
+        setMenuEntry(null);
+        onOpen(entry);
+      },
+    });
+  }
+  if (menuEntry?.inherit !== undefined) {
+    fileMenuOptions.push({
+      label: 'Layer settings',
+      onPress: () => {
+        const entry = menuEntry;
+        setMenuEntry(null);
+        onOpenLayer(entry);
+      },
+    });
+  }
 
   return (
     <View style={styles.screen}>
@@ -346,12 +373,12 @@ export function WorkspaceScreen({
                           {row.hint}
                         </Text>
                       </Pressable>
-                      {entry.inherit !== undefined ? (
+                      {entry.origin !== 'own' || entry.inherit !== undefined ? (
                         <Pressable
                           style={styles.layerButton}
-                          onPress={() => onOpenLayer(entry)}
+                          onPress={() => setMenuEntry(entry)}
                           accessibilityRole="button"
-                          accessibilityLabel={`Layer settings for ${entry.file} of ${workspace.key}`}>
+                          accessibilityLabel={`Actions for ${entry.file} of ${workspace.key}`}>
                           <Text style={styles.layerGlyph}>⋯</Text>
                         </Pressable>
                       ) : null}
@@ -453,6 +480,13 @@ export function WorkspaceScreen({
           </View>
         )}
       </ScrollView>
+      {menuEntry ? (
+        <ActionSheet
+          preview={`${menuEntry.file} · ${workspace.key}`}
+          options={fileMenuOptions}
+          onClose={() => setMenuEntry(null)}
+        />
+      ) : null}
     </View>
   );
 }
