@@ -17,12 +17,16 @@ import type { SubAgentEntry } from '../core/protocol';
  */
 export function AgentsScreen({
   parentTitle,
+  subtitle,
   groups,
   status,
   onClose,
   onOpenAgent,
 }: {
+  /** What the back row returns to. */
   parentTitle: string;
+  /** What this list is a list of; defaults to the parent, which is not always what it means. */
+  subtitle?: string;
   groups: RosterGroup[];
   status: SubAgentsStatus;
   onClose: () => void;
@@ -51,7 +55,7 @@ export function AgentsScreen({
             Agents
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>
-            {parentTitle}
+            {subtitle ?? parentTitle}
           </Text>
         </View>
       </View>

@@ -562,6 +562,8 @@ export function AppShell(): React.JSX.Element {
   /** The runs page of one job, stacked over the jobs list; a run opens as a chat over it. */
   const [jobSessions, setJobSessions] = useState<{ jobId: string; jobName: string } | null>(null);
   const [agentsOpen, setAgentsOpen] = useState(false);
+  /** The drawer's Sub-Agents page: shared agents from every conversation, not one roster. */
+  const [agentsGlobalOpen, setAgentsGlobalOpen] = useState(false);
   /**
    * Set while the chat on screen is a sub-agent rather than a conversation. It carries the parent
    * so the header can name it and so a send can declare which conversation it is driving from.
@@ -1158,6 +1160,10 @@ export function AppShell(): React.JSX.Element {
         setAgentsOpen(false);
         return true;
       }
+      if (agentsGlobalOpen) {
+        setAgentsGlobalOpen(false);
+        return true;
+      }
       // Topmost layer first: the image covers everything else.
       if (statusOpen) {
         // The status page is an absolute layer over the whole shell, so the back key must
@@ -1409,6 +1415,7 @@ export function AppShell(): React.JSX.Element {
     approvals.length,
     agentModelFor,
     agentPicker,
+    agentsGlobalOpen,
     agentsOpen,
     archivesOpen,
     bubbleMenu,
@@ -2974,14 +2981,10 @@ export function AppShell(): React.JSX.Element {
           fromArchivesRef.current = false;
           openThread(threadId);
         }}
-        agents={globalAgents}
-        onOpenAgent={entry => {
-          // A shared agent opened from the drawer answers to the conversation on screen: that is
-          // what the back row names, and what authorizes the send (a global accepts any caller).
-          const parent = activeThreadRef.current;
-          if (!parent) return;
+        subagentCount={globalAgents.length}
+        onOpenSubAgents={() => {
           setDrawerOpen(false);
-          openSubAgent(entry, parent);
+          setAgentsGlobalOpen(true);
         }}
         onNewThread={newThread}
         onThreadMenu={setThreadMenu}
@@ -3270,6 +3273,24 @@ export function AppShell(): React.JSX.Element {
           status={roster.status}
           onClose={() => setAgentsOpen(false)}
           onOpenAgent={entry => openSubAgent(entry, rosterThread)}
+        />
+      ) : null}
+
+      {agentsGlobalOpen ? (
+        <AgentsScreen
+          parentTitle="conversations"
+          subtitle="shared across conversations"
+          groups={groupRoster(globalAgents)}
+          status={roster.status}
+          onClose={() => setAgentsGlobalOpen(false)}
+          onOpenAgent={entry => {
+            // A shared agent answers to the conversation on screen: that is what the back row
+            // names, and what authorizes the send (a global accepts any caller).
+            const parent = activeThreadRef.current;
+            if (!parent) return;
+            setAgentsGlobalOpen(false);
+            openSubAgent(entry, parent);
+          }}
         />
       ) : null}
 

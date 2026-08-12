@@ -103,7 +103,9 @@ async function pressLabel(tree: Tree, label: string): Promise<void> {
 describe('the header counter', () => {
   it('is absent when the conversation has no sub-agent', async () => {
     const tree = await seed([]);
-    expect(labelsOf(tree).filter(label => label.includes('sub-agent'))).toEqual([]);
+    // The drawer's pinned Sub-Agents button is not a roster: only the header counter matches
+    // the N sub-agents shape, and it must be absent.
+    expect(labelsOf(tree).filter(label => /^\d+ sub-agent/.test(label))).toEqual([]);
     await settleAndUnmount(tree);
   });
 
@@ -228,35 +230,52 @@ describe('handing an answer to the parent', () => {
   });
 });
 
-describe('the drawer lists the shared agents', () => {
-  it('shows globals only, above the footer, and opens one as a chat', async () => {
+describe('the drawer Sub-Agents entry', () => {
+  it('is one pinned button with the count, not an inline list', async () => {
     const tree = await seed([
       agent({ id: 'subagent/digger-a1b2' }),
-      agent({ id: 'subagent/secret-c3d4', visibility: 'private' }),
-      agent({ id: 'subagent/run-7d21a04c', visibility: 'private' }),
+      agent({ id: 'subagent/scribe-c3d4', type: 'writer' }),
+      agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
     ]);
     await pressLabel(tree, 'Open conversations');
 
     const texts = textsOf(tree);
-    expect(texts).toContain('agents · 1');
-    expect(texts).toContain('digger-a1b2');
-    // A conversation's private agents are not shared: they stay in its roster.
-    expect(texts).not.toContain('secret-c3d4');
-    expect(texts).not.toContain('run-7d21a04c');
-    // The section sits above Archived in the same panel.
-    expect(labelsOf(tree)).toContain('Open shared sub-agent subagent/digger-a1b2, idle');
+    expect(texts).toContain('Sub-Agents');
+    expect(texts).toContain('shared workers');
+    expect(labelsOf(tree)).toContain('Open sub-agents, 2');
+    // The list lives on a page, not inside the panel.
+    expect(texts).not.toContain('digger-a1b2');
+    expect(texts).not.toContain('secret-e5f6');
+    await settleAndUnmount(tree);
+  });
 
-    await pressLabel(tree, 'Open shared sub-agent subagent/digger-a1b2, idle');
+  it('opens a page listing the shared agents only, and a tap opens the chat', async () => {
+    const tree = await seed([
+      agent({ id: 'subagent/digger-a1b2' }),
+      agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
+    ]);
+    await pressLabel(tree, 'Open conversations');
+    await pressLabel(tree, 'Open sub-agents, 1');
+
+    // The page: globals listed, a conversation's private one absent.
+    expect(textsOf(tree)).toContain('shared across conversations');
+    expect(textsOf(tree)).toContain('digger-a1b2');
+    expect(textsOf(tree)).not.toContain('secret-e5f6');
+    expect(labelsOf(tree)).toContain('Open sub-agent subagent/digger-a1b2, idle');
+
+    await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
     expect(textsOf(tree)).toContain('digger-a1b2 · research');
     expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
     await settleAndUnmount(tree);
   });
 
-  it('shows no section when there is no shared agent', async () => {
-    const tree = await seed([agent({ id: 'subagent/secret-c3d4', visibility: 'private' })]);
+  it('closes on the way back, and is not a level between a sub-agent and its parent', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
     await pressLabel(tree, 'Open conversations');
-    expect(textsOf(tree).filter(text => text.startsWith('agents ·'))).toEqual([]);
-    expect(textsOf(tree)).not.toContain('secret-c3d4');
+    await pressLabel(tree, 'Open sub-agents, 1');
+    await pressLabel(tree, 'Back to conversations');
+    await waitFor(() => labelsOf(tree).includes('Open sub-agents, 1'));
+    expect(textsOf(tree)).not.toContain('shared across conversations');
     await settleAndUnmount(tree);
   });
 });
@@ -311,8 +330,11 @@ describe('the door on a spawn card', () => {
       for (const card of cards) card.props.onPress();
     });
 
-    // Exactly one door: not one per spawn card, and not one for the agent that is gone.
-    expect(controlsLabelled(tree, 'Open sub-agent')).toEqual(['Open sub-agent digger-a1b2, idle']);
+    // Exactly one door: not one per spawn card, and not one for the agent that is gone. The
+    // id-carrying shape excludes the drawer's pinned Sub-Agents button.
+    // The trailing space is the discriminator: the drawer's "Open sub-agents" has an s, the
+    // door carries the id right after "sub-agent".
+    expect(controlsLabelled(tree, 'Open sub-agent ')).toEqual(['Open sub-agent digger-a1b2, idle']);
     expect(labelsOf(tree).some(label => label.includes('ghost'))).toBe(false);
     expect(labelsOf(tree).some(label => label.includes('peek'))).toBe(false);
     await settleAndUnmount(tree);

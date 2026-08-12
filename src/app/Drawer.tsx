@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { SessionSummary, SubAgentEntry } from '../core/protocol';
+import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
 import { PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
@@ -22,51 +22,8 @@ function Separator(): React.JSX.Element {
 }
 
 /**
- * The shared sub-agents, pinned above the footer. They are global workers, so the drawer -- the
- * app's global panel -- is where they live; a conversation's own private ones stay in its roster.
- * Bounded so a long row of agents never squeezes the conversation list out of the panel, and
- * hidden while a search is active: a needle is about conversations.
- */
-function AgentsSection({
-  agents,
-  onOpenAgent,
-}: {
-  agents: SubAgentEntry[];
-  onOpenAgent: (entry: SubAgentEntry) => void;
-}): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
-  if (agents.length === 0) return <></>;
-  return (
-    <View style={styles.agentsSection}>
-      <Text style={styles.sectionLabel}>{`agents · ${agents.length}`}</Text>
-      <ScrollView style={styles.agentsScroll} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-        {agents.map((agent, index) => (
-          <View key={agent.id}>
-            {index > 0 ? <Separator /> : null}
-            <Pressable
-              style={styles.agentRow}
-              onPress={() => onOpenAgent(agent)}
-              accessibilityRole="button"
-              accessibilityLabel={`Open shared sub-agent ${agent.id}, ${agent.status}`}>
-              <Text style={styles.agentGlyph}>◈</Text>
-              {/* The id, not the display name: the model picks names and repeats them. */}
-              <Text style={styles.agentTitle} numberOfLines={1}>
-                {agent.id.replace(/^subagent\//, '')}
-              </Text>
-              {agent.status === 'running' ? <Text style={styles.agentRunning}>●</Text> : null}
-              <Text style={styles.agentMeta}>{`${agent.messageCount} msg${agent.messageCount === 1 ? '' : 's'}`}</Text>
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-/**
- * Left slide-over: conversations first, shared sub-agents pinned above the footer, settings pinned
- * at the bottom. Stays mounted so the panel animates both ways and swallows no touches while
- * closed.
+ * Left slide-over: conversations first, pinned entries (Sub-Agents, Archived, Jobs, Settings) at
+ * the bottom. Stays mounted so the panel animates both ways and swallows no touches while closed.
  */
 export function Drawer({
   open,
@@ -75,8 +32,8 @@ export function Drawer({
   activeThread,
   connectionState,
   pending,
-  agents,
-  onOpenAgent,
+  subagentCount,
+  onOpenSubAgents,
   onClose,
   onOpenThread,
   onNewThread,
@@ -92,9 +49,9 @@ export function Drawer({
   activeThread: string | null;
   connectionState: WsState;
   pending: number;
-  /** Shared sub-agents (visibility global), from the active conversation's roster. */
-  agents: SubAgentEntry[];
-  onOpenAgent: (entry: SubAgentEntry) => void;
+  /** Shared sub-agents (visibility global). The button stays, the count comes and goes. */
+  subagentCount: number;
+  onOpenSubAgents: () => void;
   onClose: () => void;
   onOpenThread: (threadId: string) => void;
   onNewThread: () => void;
@@ -223,9 +180,20 @@ export function Drawer({
           {indicator}
         </View>
 
-        {query.trim() ? null : <AgentsSection agents={agents} onOpenAgent={onOpenAgent} />}
-
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
+          <Pressable
+            style={[styles.footerRow, styles.archivedRow]}
+            onPress={onOpenSubAgents}
+            accessibilityRole="button"
+            accessibilityLabel={`Open sub-agents${subagentCount > 0 ? `, ${subagentCount}` : ''}`}>
+            <View style={styles.footerMain}>
+              <Text style={styles.footerTitle}>Sub-Agents</Text>
+              <Text style={styles.footerMeta}>shared workers</Text>
+            </View>
+            {subagentCount > 0 ? <Text style={styles.footerCount}>{subagentCount}</Text> : null}
+            <Text style={styles.footerGlyph}>›</Text>
+          </Pressable>
+
           {/* Always shown: an entry that appears only once it has content is an entry nobody
               finds, and the screen says plainly when there is nothing in it. */}
           <Pressable
@@ -326,27 +294,6 @@ const createStyles = (palette: Palette) => ({
   },
   separator: { height: 1, backgroundColor: palette.border, marginHorizontal: space.sm },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
-  agentsSection: {
-    paddingHorizontal: space.sm,
-    paddingBottom: space.sm,
-    maxHeight: '42%' as const,
-    flexShrink: 0,
-  },
-  agentsScroll: {
-    flexGrow: 0,
-  },
-  agentRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.sm,
-    borderRadius: radius.sm,
-  },
-  agentGlyph: { fontSize: font.meta, color: palette.accent },
-  agentTitle: { flex: 1, fontSize: font.meta, fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
-  agentRunning: { fontSize: font.micro, color: palette.accent },
-  agentMeta: { fontSize: font.small, color: palette.textFaint },
   footer: {
     borderTopWidth: 1,
     borderTopColor: palette.border,
