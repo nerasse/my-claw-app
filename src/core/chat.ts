@@ -45,6 +45,51 @@ function textOf(entry: HistoryEntry): string {
   return entry.role === 'tool' ? '' : entry.text;
 }
 
+/**
+ * How far back a thread has been read. `loading` is held here rather than in the screen so a
+ * remount mid-request cannot fire a second one for the same page.
+ */
+export interface HistoryPage {
+  nextBefore: number;
+  hasMore: boolean;
+  loading: boolean;
+}
+
+const NO_PAGE: HistoryPage = { nextBefore: 0, hasMore: false, loading: false };
+Object.freeze(NO_PAGE);
+
+/** Replayed server entries as bubbles. Shared by the newest page and by every older one. */
+function itemsOf(entries: HistoryEntry[]): ChatItem[] {
+  return entries.map((entry, index) => {
+    const ts = new Date(entry.ts).getTime() || Date.now() + index;
+    if (entry.role === 'tool') {
+      return {
+        kind: 'tool',
+        id: entry.id,
+        name: entry.name,
+        args: entry.args,
+        durationMs: entry.durationMs,
+        ok: entry.ok,
+        output: entry.output,
+        truncated: entry.truncated,
+        ts,
+      };
+    }
+    return {
+      kind: 'text',
+      id: entry.id,
+      role: entry.role === 'user' ? 'user' : 'agent',
+      text: textOf(entry),
+      attachments: entry.attachments ?? [],
+      streaming: false,
+      ...(entry.location ? { location: entry.location } : {}),
+      ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
+      ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
+      ts,
+    };
+  });
+}
+
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
   private streams = new Map<string, string>();
@@ -57,6 +102,8 @@ class ChatStoreImpl {
   private activeRuns = new Set<string>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
+  /** Where the next older page starts, per thread, and whether there is one at all. */
+  private pages = new Map<string, HistoryPage>();
   private listeners = new Set<Listener>();
 
   subscribe(listener: Listener): () => void {
@@ -72,6 +119,24 @@ class ChatStoreImpl {
 
   getUnreadThreads(): string[] {
     return this.unreadSnapshot;
+  }
+
+  getPage(threadId: string): HistoryPage {
+    return this.pages.get(threadId) ?? NO_PAGE;
+  }
+
+  /** Records where the newest page left off, so scrolling up knows what to ask for. */
+  setPage(threadId: string, page: { nextBefore: number; hasMore: boolean }): void {
+    this.pages.set(threadId, { ...page, loading: false });
+    this.emit();
+  }
+
+  /** Latched before the request leaves, cleared when its page lands or the send fails. */
+  setPageLoading(threadId: string, loading: boolean): void {
+    const current = this.pages.get(threadId) ?? NO_PAGE;
+    if (current.loading === loading) return;
+    this.pages.set(threadId, { ...current, loading });
+    this.emit();
   }
 
   hasThread(threadId: string): boolean {
@@ -130,35 +195,22 @@ class ChatStoreImpl {
     if (existing.some(item => item.kind === 'text' && item.streaming)) return;
     if (entries.length === 0) return;
 
-    const items: ChatItem[] = entries.map((entry, index) => {
-      const ts = new Date(entry.ts).getTime() || Date.now() + index;
-      if (entry.role === 'tool') {
-        return {
-          kind: 'tool',
-          id: entry.id,
-          name: entry.name,
-          args: entry.args,
-          durationMs: entry.durationMs,
-          ok: entry.ok,
-          output: entry.output,
-          truncated: entry.truncated,
-          ts,
-        };
-      }
-      return {
-        kind: 'text',
-        id: entry.id,
-        role: entry.role === 'user' ? 'user' : 'agent',
-        text: textOf(entry),
-        attachments: entry.attachments ?? [],
-        streaming: false,
-        ...(entry.location ? { location: entry.location } : {}),
-        ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
-        ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
-        ts,
-      };
-    });
-    this.threads.set(threadId, items);
+    this.threads.set(threadId, itemsOf(entries));
+    this.emit();
+  }
+
+  /**
+   * An older page, put in front of what is already there. Ids are checked because a page can
+   * overlap the one before it: the newest page is taken from the tail of a session that keeps
+   * growing, so a turn that arrived between two requests would otherwise be replayed twice.
+   */
+  prependHistory(threadId: string, entries: HistoryEntry[]): void {
+    if (entries.length === 0) return;
+    const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    const known = new Set(existing.map(item => item.id));
+    const older = itemsOf(entries).filter(item => !known.has(item.id));
+    if (older.length === 0) return;
+    this.threads.set(threadId, [...older, ...existing]);
     this.emit();
   }
 
@@ -404,6 +456,11 @@ const subscribeToChat = (listener: Listener): (() => void) => chatStore.subscrib
 
 export function useChatItems(threadId: string | null): ChatItem[] {
   const snapshot = useCallback(() => (threadId ? chatStore.getItems(threadId) : EMPTY_ITEMS), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+export function useHistoryPage(threadId: string | null): HistoryPage {
+  const snapshot = useCallback(() => (threadId ? chatStore.getPage(threadId) : NO_PAGE), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 

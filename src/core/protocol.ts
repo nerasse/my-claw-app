@@ -202,6 +202,12 @@ export interface ChatHistoryFrame {
   type: 'chat.history';
   threadId: string;
   messages: HistoryEntry[];
+  /** Echo of the request cursor: absent means the newest page, which replaces the thread. */
+  before?: number;
+  /** Whether anything remains before this page, so the list stops asking at the top. */
+  hasMore?: boolean;
+  /** What to send as `before` to reach the page just older than this one. */
+  nextBefore?: number;
 }
 
 export interface SessionSummary {
@@ -1177,8 +1183,9 @@ export function encodeLogsTail(query: LogsTailQuery = {}): string {
   return JSON.stringify({ type: 'logs.tail', ...query });
 }
 
-export function encodeSessionHistory(threadId: string, limit = 50): string {
-  return JSON.stringify({ type: 'session.history', threadId, limit });
+/** `before` is the server's cursor, counted back from the newest message; 0 is the newest page. */
+export function encodeSessionHistory(threadId: string, limit = 50, before = 0): string {
+  return JSON.stringify({ type: 'session.history', threadId, limit, ...(before ? { before } : {}) });
 }
 
 export function encodeSessionArchive(threadId: string): string {

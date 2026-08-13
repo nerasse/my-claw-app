@@ -527,31 +527,7 @@ describe('attachments in a replayed turn', () => {
   });
 });
 
-describe('landing at the bottom of a conversation', () => {
-  test('opening jumps to the latest, what arrives afterwards glides', async () => {
-    const spy = jest.spyOn(FlatList.prototype, 'scrollToEnd').mockImplementation(() => {});
-    const tree = await renderWithHistory();
-
-    // The history arrives in one frame. Animating through it would scroll past every message the
-    // user did not ask to re-read, and on a long thread that animation is the jank people report.
-    // The autoscroll is debounced by 40ms, which is more than the default drain affords.
-    await waitFor(() => spy.mock.calls.length > 0, 200);
-    expect(spy.mock.calls.map(([options]) => options?.animated)).not.toContain(true);
-    spy.mockClear();
-
-    await ReactTestRenderer.act(async () => {
-      chatStore.addAgentMessage(THREAD, 'h-3', 'and one more thing', []);
-    });
-
-    // Once the thread is settled, following the answer as it grows is a scroll, not a jump.
-    await waitFor(() => spy.mock.calls.length > 0, 200);
-    expect(spy).toHaveBeenCalledWith({ animated: true });
-    spy.mockRestore();
-    await unmount(tree);
-  });
-});
-
-describe('keeping the same place when the keyboard opens', () => {
+describe('reading a conversation from its newest message', () => {
   /** The message list of the chat screen, identified by the seeded history it renders. */
   function chatList(tree: Tree): ReactTestRenderer.ReactTestInstance {
     return tree.root.find(
@@ -562,25 +538,33 @@ describe('keeping the same place when the keyboard opens', () => {
     );
   }
 
-  function scrollEvent(y: number, height: number) {
-    return {
-      nativeEvent: {
-        contentOffset: { y },
-        contentSize: { height: 2000 },
-        layoutMeasurement: { height },
-      },
-    };
-  }
+  test('the newest message is the first row, so opening lands on it without scrolling', async () => {
+    const toEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd').mockImplementation(() => {});
+    const toOffset = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
+    const tree = await renderWithHistory();
 
-  test('the list scrolls down by exactly what the keyboard cut off', async () => {
+    const list = chatList(tree);
+    // Inverted: row 0 is the newest and sits at offset 0. scrollToEnd on rows of unknown height
+    // aims at an estimated content height and stops short of the last message, so the fix is to
+    // not need it at all rather than to time it better.
+    expect(list.props.inverted).toBe(true);
+    expect(list.props.data.map((item: { id: string }) => item.id)).toEqual(['h-2', 'h-1', 'h-0']);
+    expect(toEnd).not.toHaveBeenCalled();
+    expect(toOffset).not.toHaveBeenCalled();
+
+    toEnd.mockRestore();
+    toOffset.mockRestore();
+    await unmount(tree);
+  });
+
+  test('the keyboard opening moves nothing: the content is anchored to the bottom edge', async () => {
     const tree = await renderWithHistory();
     const spy = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
     const list = chatList(tree);
     ReactTestRenderer.act(() => {
       list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
-      list.props.onContentSizeChange(100, 2000);
-      // Reading a message halfway down the conversation.
-      list.props.onScroll(scrollEvent(600, 700));
+      // Reading somewhere above the newest message.
+      list.props.onScroll({ nativeEvent: { contentOffset: { y: 600 } } });
     });
     spy.mockClear();
 
@@ -589,52 +573,97 @@ describe('keeping the same place when the keyboard opens', () => {
       list.props.onLayout({ nativeEvent: { layout: { height: 500 } } });
     });
 
-    // 600 + 200 cut off: the message that was just above the keyboard is still there.
-    expect(spy).toHaveBeenCalledWith({ offset: 800, animated: false });
-    spy.mockRestore();
-    await unmount(tree);
-  });
-
-  test('the bottom stays the bottom when the keyboard opens', async () => {
-    const tree = await renderWithHistory();
-    const spy = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
-    const list = chatList(tree);
-    ReactTestRenderer.act(() => {
-      list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
-      list.props.onContentSizeChange(100, 2000);
-      // At the very bottom of a 700-high viewport: offset 1300.
-      list.props.onScroll(scrollEvent(1300, 700));
-    });
-    spy.mockClear();
-
-    ReactTestRenderer.act(() => {
-      list.props.onLayout({ nativeEvent: { layout: { height: 500 } } });
-    });
-
-    // 1300 + 200 = 1500, which is the new maximum (2000 - 500): still at the bottom.
-    expect(spy).toHaveBeenCalledWith({ offset: 1500, animated: false });
-    spy.mockRestore();
-    await unmount(tree);
-  });
-
-  test('closing the keyboard leaves the offset alone', async () => {
-    const tree = await renderWithHistory();
-    const spy = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
-    const list = chatList(tree);
-    ReactTestRenderer.act(() => {
-      list.props.onLayout({ nativeEvent: { layout: { height: 500 } } });
-      list.props.onContentSizeChange(100, 2000);
-      list.props.onScroll(scrollEvent(800, 500));
-    });
-    spy.mockClear();
-
-    ReactTestRenderer.act(() => {
-      list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
-    });
-
-    // The viewport grows: nothing needs to move to keep the same place.
+    // An inverted list measures from the bottom, so the message above the keyboard stays put on
+    // its own. The compensation pass this replaces had to compute the cut and scroll by it.
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+    await unmount(tree);
+  });
+});
+
+describe('paging back through a long conversation', () => {
+  function chatList(tree: Tree): ReactTestRenderer.ReactTestInstance {
+    return tree.root.find(
+      node =>
+        node.props.data &&
+        Array.isArray(node.props.data) &&
+        node.props.data.some((item: { id: string }) => item.id === 'h-0'),
+    );
+  }
+
+  function sentHistoryRequests(): Array<{ before?: number; limit?: number }> {
+    return bridge.sendMessage.mock.calls
+      .map(([raw]) => JSON.parse(raw as string))
+      .filter((frame: { type: string }) => frame.type === 'session.history');
+  }
+
+  test('reaching the far end asks for the page before it, once, and prepends it', async () => {
+    const tree = await renderWithHistory();
+    await ReactTestRenderer.act(async () => {
+      DeviceEventEmitter.emit('claw:ws:message', {
+        text: JSON.stringify({ type: 'chat.history', threadId: THREAD, messages: history, hasMore: true, nextBefore: 3 }),
+      });
+    });
+    bridge.sendMessage.mockClear();
+
+    const list = chatList(tree);
+    // The list fires this repeatedly while a request is still out; only one may leave.
+    await ReactTestRenderer.act(async () => {
+      list.props.onEndReached({ distanceFromEnd: 0 });
+      list.props.onEndReached({ distanceFromEnd: 0 });
+    });
+    expect(sentHistoryRequests()).toEqual([{ type: 'session.history', threadId: THREAD, limit: 50, before: 3 }]);
+
+    await ReactTestRenderer.act(async () => {
+      DeviceEventEmitter.emit('claw:ws:message', {
+        text: JSON.stringify({
+          type: 'chat.history',
+          threadId: THREAD,
+          before: 3,
+          hasMore: false,
+          nextBefore: 4,
+          messages: [{ id: 'older-1', role: 'user', text: 'la toute premiere question', ts: '2025-12-31T23:00:00.000Z' }],
+        }),
+      });
+    });
+
+    // Older messages go in front, and the inverted list therefore appends them at its own end:
+    // nothing the reader was looking at moves.
+    await waitFor(() =>
+      chatList(tree).props.data.some((item: { id: string }) => item.id === 'older-1'),
+    );
+    expect(chatList(tree).props.data.map((item: { id: string }) => item.id)).toEqual([
+      'h-2',
+      'h-1',
+      'h-0',
+      'older-1',
+    ]);
+
+    // hasMore is now false: the end of the list must stop asking.
+    bridge.sendMessage.mockClear();
+    await ReactTestRenderer.act(async () => {
+      chatList(tree).props.onEndReached({ distanceFromEnd: 0 });
+    });
+    expect(sentHistoryRequests()).toEqual([]);
+
+    await unmount(tree);
+  });
+
+  test('a server that reports no cursor is never asked for an older page', async () => {
+    const tree = await renderWithHistory();
+    await ReactTestRenderer.act(async () => {
+      // An older build answers session.history without hasMore or nextBefore.
+      DeviceEventEmitter.emit('claw:ws:message', {
+        text: JSON.stringify({ type: 'chat.history', threadId: THREAD, messages: history }),
+      });
+    });
+    bridge.sendMessage.mockClear();
+
+    await ReactTestRenderer.act(async () => {
+      chatList(tree).props.onEndReached({ distanceFromEnd: 0 });
+    });
+    expect(sentHistoryRequests()).toEqual([]);
+
     await unmount(tree);
   });
 });

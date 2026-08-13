@@ -22,6 +22,7 @@ import {
   chatStore,
   useChatItems,
   useActiveRun,
+  useHistoryPage,
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
@@ -619,6 +620,7 @@ export function AppShell(): React.JSX.Element {
   const [approvals, setApprovals] = useState<ApprovalRequestFrame[]>([]);
 
   const items = useChatItems(activeThread);
+  const historyPage = useHistoryPage(activeThread);
   const sessions = useSessions();
   const archivedSessions = useArchivedSessions();
   const pinnedOrder = usePinnedOrder();
@@ -761,6 +763,22 @@ export function AppShell(): React.JSX.Element {
     setDrawerOpen(false);
     setAutoFocusHero(false);
     connection.send(encodeJobsList()).catch(() => {});
+  }, []);
+
+  /**
+   * Asks for the page just older than what is on screen. The guard is the store's, not a ref
+   * here: the list fires this from a scroll handler, so it arrives repeatedly while one request
+   * is still out.
+   */
+  const loadOlderHistory = useCallback(() => {
+    const threadId = activeThreadRef.current;
+    if (!threadId) return;
+    const page = chatStore.getPage(threadId);
+    if (!page.hasMore || page.loading) return;
+    chatStore.setPageLoading(threadId, true);
+    connection
+      .send(encodeSessionHistory(threadId, HISTORY_LIMIT, page.nextBefore))
+      .catch(() => chatStore.setPageLoading(threadId, false));
   }, []);
 
   const setGlobalDefaultModel = useCallback((modelId: string) => {
@@ -1036,8 +1054,17 @@ export function AppShell(): React.JSX.Element {
           setFilesError(null);
           break;
         case 'chat.history':
-          chatStore.seedHistory(frame.threadId, frame.messages);
-          chatStore.markRead(frame.threadId);
+          // The same frame carries both the newest page, which replaces the thread, and an
+          // older one, which goes in front of it. `before` is what tells them apart.
+          if (frame.before) chatStore.prependHistory(frame.threadId, frame.messages);
+          else chatStore.seedHistory(frame.threadId, frame.messages);
+          chatStore.setPage(frame.threadId, {
+            // An old server answers neither field: no cursor means no older page to ask for,
+            // which is exactly the behaviour before this existed.
+            nextBefore: frame.nextBefore ?? 0,
+            hasMore: frame.hasMore === true && frame.nextBefore !== undefined,
+          });
+          if (!frame.before) chatStore.markRead(frame.threadId);
           break;
         case 'voice.mode.result':
           setVoice(frame);
@@ -3205,6 +3232,8 @@ export function AppShell(): React.JSX.Element {
                 if (activeThread) connection.send(encodeChatStop(activeThread));
               }}
               onNewThread={newThread}
+              onLoadOlder={loadOlderHistory}
+              loadingOlder={historyPage.loading}
             />
           )}
         </View>

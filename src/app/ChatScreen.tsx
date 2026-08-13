@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Linking, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, FlatList, Linking, Pressable, Text, View } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
@@ -21,7 +21,7 @@ import { LocationEditor } from '../components/LocationEditor';
 import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 const GROUP_WINDOW_MS = 120_000;
 
@@ -74,6 +74,8 @@ export function ChatScreen({
   subagentDoors,
   onOpenSubAgent,
   onSubAgentMenu,
+  onLoadOlder,
+  loadingOlder,
 }: {
   threadId: string;
   title: string;
@@ -121,16 +123,18 @@ export function ChatScreen({
   subagentDoors: Map<string, { label: string; status: 'idle' | 'running' }>;
   onOpenSubAgent?: (toolItemId: string) => void;
   onSubAgentMenu?: () => void;
+  /** Asks for the page of history just older than what is on screen. */
+  onLoadOlder: () => void;
+  /** A page is in flight: the spinner sits at the far end, which is the top of the reading order. */
+  loadingOlder: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   const listRef = useRef<FlatList<ChatItem>>(null);
-  // What the list is doing right now, tracked from its own events: the keyboard resizes the
-  // viewport without scrolling, so keeping the visible content anchored needs the before/after.
-  const viewportRef = useRef(0);
+  // How far the list is from the newest message. The keyboard used to need a compensation pass
+  // here — it shrinks the viewport without scrolling — but an inverted list anchors its content
+  // to the bottom edge, so the message above the keyboard stays put on its own.
   const offsetRef = useRef(0);
-  const contentRef = useRef(0);
-  /** False until this thread has been placed at its bottom once; gates the scroll animation. */
-  const settledRef = useRef(false);
   const [draft, setDraft] = useState('');
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
@@ -154,21 +158,7 @@ export function ChatScreen({
     setAddressOverride(null);
     setLocationSheet(false);
     setLocationDraft('');
-    settledRef.current = false;
   }, [threadId]);
-
-  // Follow the bottom as the answer grows. The first landing of a thread is a jump, not a scroll:
-  // history arrives in one frame, and gliding through it would animate past every message the
-  // user did not ask to re-read. Only what happens after that first paint is worth animating.
-  useEffect(() => {
-    if (!atBottom) return;
-    const animated = settledRef.current;
-    const timer = setTimeout(() => {
-      listRef.current?.scrollToEnd({ animated });
-      settledRef.current = true;
-    }, 40);
-    return () => clearTimeout(timer);
-  }, [items, atBottom]);
 
   // Re-fetch the catalog every time the user starts a command: a command added on the server
   // is visible on the next "/" without an app release.
@@ -398,22 +388,30 @@ export function ChatScreen({
     [onOpenImage, onOpenText, onOpenVideo, onOpenFile],
   );
 
+  // Newest first, because the list is inverted. Reversing the data rather than the reading of it
+  // keeps every index the list hands back pointing at the right bubble.
+  const reversed = useMemo(() => [...items].reverse(), [items]);
+
   const renderItem = useCallback(
-    ({ item, index }: { item: ChatItem; index: number }) =>
-      item.kind === 'tool' ? (
+    ({ item, index }: { item: ChatItem; index: number }) => {
+      // Grouping is a property of reading order, so it is still computed oldest-first and the
+      // row index is mapped back into it.
+      const chronological = reversed.length - 1 - index;
+      return item.kind === 'tool' ? (
         <ToolCard item={item} subagent={subagentDoors.get(item.id)} onOpenSubAgent={onOpenSubAgent} />
       ) : (
         <Bubble
           item={item}
           mediaBase={mediaBase}
           deviceInfo={deviceInfo}
-          grouped={grouped[index] ?? false}
-          showTime={!(grouped[index + 1] ?? false)}
+          grouped={grouped[chronological] ?? false}
+          showTime={!(grouped[chronological + 1] ?? false)}
           onMenu={onBubbleMenu}
           onOpenAttachment={openAttachment}
         />
-      ),
-    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, subagentDoors],
+      );
+    },
+    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors],
   );
 
   const locationLabel = location
@@ -422,35 +420,16 @@ export function ChatScreen({
       : location.address?.formatted ?? 'Resolving address…'
     : undefined;
 
-  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    offsetRef.current = contentOffset.y;
-    contentRef.current = contentSize.height;
-    const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
+  // Offset 0 is the newest message: the list is inverted, so the bottom is the start of the
+  // scroll range. That is the whole point of inverting it — no scrollToEnd on open, no content
+  // height to estimate, and the keyboard shrinking the viewport leaves offset 0 where it was.
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    const offset = event.nativeEvent.contentOffset.y;
+    offsetRef.current = offset;
+    const nearBottom = offset <= 120;
     if (nearBottom !== atBottom) setAtBottom(nearBottom);
   }, [atBottom]);
-  const handleContentSize = useCallback((_width: number, height: number) => {
-    contentRef.current = height;
-    if (atBottom) listRef.current?.scrollToEnd({ animated: false });
-  }, [atBottom]);
-  const handleListLayout = useCallback((event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
-    const previous = viewportRef.current;
-    viewportRef.current = height;
-    // A shrink (the keyboard opening, the composer growing) cuts the bottom of the viewport off
-    // the content without moving the offset. Scroll down by exactly what was cut, clamped to the
-    // new maximum: the message that was just above the keyboard stays where it was, and a list
-    // read from the bottom stays at the bottom. A grow needs nothing: the content keeps its spot.
-    if (previous <= 0 || height >= previous) return;
-    const shrink = previous - height;
-    const max = Math.max(contentRef.current - height, 0);
-    const target = Math.min(offsetRef.current + shrink, max);
-    if (target === offsetRef.current) return;
-    listRef.current?.scrollToOffset({ offset: target, animated: false });
-    offsetRef.current = target;
-    if (target + height >= contentRef.current - 120) setAtBottom(true);
-  }, []);
-  const { scrollProps, indicator } = useScrollIndicator(handleScroll, handleContentSize, handleListLayout);
+  const { scrollProps, indicator } = useScrollIndicator(handleScroll);
 
   return (
     <View style={styles.screen}>
@@ -581,14 +560,30 @@ export function ChatScreen({
       ) : (
         <>
           <View style={styles.listWrap}>
+            {/* Inverted: the newest message is index 0 and sits at offset 0, so opening a
+                conversation lands on it with no scrolling at all. scrollToEnd on a list of
+                unmeasured rows aims at an estimated content height and stops short of the last
+                message, which is exactly the bug this replaces. Scrolling up towards older
+                messages is then the list's own end, so paging back is onEndReached and the
+                arriving page is appended — no scroll position to preserve, on either platform. */}
             <FlatList
               ref={listRef}
               {...scrollProps}
-              data={items}
+              inverted
+              data={reversed}
               keyExtractor={keyOfItem}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               renderItem={renderItem}
+              onEndReached={onLoadOlder}
+              onEndReachedThreshold={0.4}
+              ListFooterComponent={
+                loadingOlder ? (
+                  <View style={styles.olderSpinner}>
+                    <ActivityIndicator size="small" color={palette.textFaint} />
+                  </View>
+                ) : null
+              }
               // Bubbles have no knowable height (markdown, images, tool output), so getItemLayout
               // is out and these numbers are the only handle on how much is mounted at once.
               initialNumToRender={12}
@@ -606,7 +601,7 @@ export function ChatScreen({
             style={styles.jump}
             onPress={() => {
               setAtBottom(true);
-              listRef.current?.scrollToEnd({ animated: true });
+              listRef.current?.scrollToOffset({ offset: 0, animated: true });
             }}
             accessibilityRole="button"
             accessibilityLabel="Jump to latest message">
@@ -761,7 +756,10 @@ const createStyles = (palette: Palette) => ({
   connWarn: { color: palette.warn, backgroundColor: palette.surfaceAlt },
   connBad: { color: palette.danger, backgroundColor: palette.surfaceAlt },
   listWrap: { flex: 1 },
-  listContent: { paddingTop: space.md, paddingBottom: space.sm },
+  // The list is inverted, so its content box is upside down too: what is written as the top
+  // padding is drawn under the newest message.
+  listContent: { paddingTop: space.sm, paddingBottom: space.md },
+  olderSpinner: { paddingVertical: space.md, alignItems: 'center' as const },
   hero: {
     flex: 1,
     justifyContent: 'center' as const,
