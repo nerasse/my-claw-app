@@ -7,7 +7,9 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * Memoized: with hundreds of sessions, a scroll or an unread change must not re-render every
- * row. The handlers take the threadId instead of a per-row closure so their identity is stable.
+ * row. The handlers take what they need from the row rather than a per-row closure, so their
+ * identity is stable — `onMenu` gets the whole session, which spares its owner a lookup table
+ * whose identity would have moved with the list.
  * When `draggable`, the actions button doubles as the drag handle: a hold becomes a drag, a
  * quick tap still opens the menu.
  */
@@ -25,14 +27,14 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   /** The actions button is the drag handle; only pinned rows are draggable. */
   draggable: boolean;
   onOpen: (threadId: string) => void;
-  onMenu: (threadId: string) => void;
+  onMenu: (thread: SessionSummary) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const menuButton = (
     <Pressable
       hitSlop={6}
       style={styles.menu}
-      onPress={() => onMenu(item.threadId)}
+      onPress={() => onMenu(item)}
       accessibilityRole="button"
       accessibilityLabel={`Actions for conversation ${item.title}${draggable ? ', hold to reorder' : ''}`}>
       <Text style={styles.menuGlyph}>⋯</Text>

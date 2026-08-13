@@ -1,10 +1,12 @@
-import React from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import React, { useCallback } from 'react';
+import { FlatList, Platform, Pressable, Text, View } from 'react-native';
 import { ThreadRow } from '../components/ThreadRow';
 import type { SessionSummary } from '../core/protocol';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+
+const keyOfThread = (item: SessionSummary): string => item.threadId;
 
 /**
  * The conversations the owner filed away. They are whole sessions, not snapshots: opening one
@@ -26,12 +28,20 @@ export function ArchivesScreen({
   useDismissKeyboard();
   const { scrollProps, indicator } = useScrollIndicator();
 
-  const handleMenu = React.useCallback(
-    (threadId: string) => {
-      const thread = sessions.find(summary => summary.threadId === threadId);
-      if (thread) onThreadMenu(thread);
-    },
-    [onThreadMenu, sessions],
+  // The row hands back the whole session, so this needs neither a lookup over the archive nor a
+  // dependency on it — the identity holds, and the memoized rows hold with it.
+  const renderThread = useCallback(
+    ({ item }: { item: SessionSummary }) => (
+      <ThreadRow
+        item={item}
+        active={false}
+        unread={false}
+        draggable={false}
+        onOpen={onOpenThread}
+        onMenu={onThreadMenu}
+      />
+    ),
+    [onOpenThread, onThreadMenu],
   );
 
   return (
@@ -57,19 +67,17 @@ export function ArchivesScreen({
           {...scrollProps}
           style={styles.list}
           data={sessions}
-          keyExtractor={item => item.threadId}
+          keyExtractor={keyOfThread}
           contentContainerStyle={sessions.length === 0 ? styles.emptyContent : styles.listContent}
           ListEmptyComponent={<Text style={styles.empty}>no archived conversations</Text>}
-          renderItem={({ item }) => (
-            <ThreadRow
-              item={item}
-              active={false}
-              unread={false}
-              draggable={false}
-              onOpen={onOpenThread}
-              onMenu={handleMenu}
-            />
-          )}
+          renderItem={renderThread}
+          keyboardShouldPersistTaps="handled"
+          // The archive is kept indefinitely, so this is the thread list that grows without end.
+          initialNumToRender={14}
+          maxToRenderPerBatch={14}
+          updateCellsBatchingPeriod={50}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === 'android'}
         />
         {indicator}
       </View>

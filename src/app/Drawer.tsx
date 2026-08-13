@@ -23,6 +23,8 @@ function Separator(): React.JSX.Element {
   return <View style={styles.separator} />;
 }
 
+const keyOfThread = (item: SessionSummary): string => item.threadId;
+
 /**
  * Left slide-over: conversations first, pinned entries (Sub-Agents, Archived, Jobs, Settings) at
  * the bottom. Stays mounted so the panel animates both ways and swallows no touches while closed.
@@ -73,16 +75,10 @@ export function Drawer({
   // never focused on the way in: whatever keyboard is up belongs to the composer behind it.
   useDismissKeyboard(open);
 
-  // Stable identities so React.memo on the rows keeps working while the list is long.
   const threadsById = useMemo(() => new Map(sessions.map(session => [session.threadId, session])), [sessions]);
-  const handleOpen = useCallback((threadId: string) => onOpenThread(threadId), [onOpenThread]);
-  const handleMenu = useCallback(
-    (threadId: string) => {
-      const thread = threadsById.get(threadId);
-      if (thread) onThreadMenu(thread);
-    },
-    [onThreadMenu, threadsById],
-  );
+  // Membership as a Set, not `unread.includes` per row: that scan ran once per visible row on
+  // every render of a panel that never unmounts, i.e. on every streaming token.
+  const unreadIds = useMemo(() => new Set(unread), [unread]);
 
   // The pinned set is a per-device preference, the sessions come from the server: the merge
   // happens here. Pinned rows follow the user's order, the rest keeps the server's.
@@ -109,9 +105,8 @@ export function Drawer({
   // has spoken, and never before: the list starts empty on boot and would wipe the pins.
   useEffect(() => {
     if (sessions.length === 0) return;
-    const stale = pinnedOrder.filter(threadId => !threadsById.has(threadId));
-    if (stale.length > 0)
-      pinnedStore.setOrder(pinnedOrder.filter(threadId => !stale.includes(threadId)));
+    const kept = pinnedOrder.filter(threadId => threadsById.has(threadId));
+    if (kept.length !== pinnedOrder.length) pinnedStore.setOrder(kept);
   }, [sessions, pinnedOrder, threadsById]);
 
   const handleDragEnd = useCallback(
@@ -125,6 +120,20 @@ export function Drawer({
 
   const sectionCount = (count: number, total: number): string =>
     query.trim() ? `${count} / ${total}` : String(total);
+
+  const renderThread = useCallback(
+    ({ item }: { item: SessionSummary }) => (
+      <ThreadRow
+        item={item}
+        active={item.threadId === activeThread}
+        unread={unreadIds.has(item.threadId)}
+        draggable={false}
+        onOpen={onOpenThread}
+        onMenu={onThreadMenu}
+      />
+    ),
+    [activeThread, onOpenThread, onThreadMenu, unreadIds],
+  );
 
   useEffect(() => {
     Animated.timing(progress, { toValue: open ? 1 : 0, duration: 200, useNativeDriver: true }).start();
@@ -189,7 +198,7 @@ export function Drawer({
             {...scrollProps}
             style={styles.list}
             data={restRows}
-            keyExtractor={item => item.threadId}
+            keyExtractor={keyOfThread}
             ItemSeparatorComponent={Separator}
             keyboardShouldPersistTaps="handled"
             // Virtualized by default; tuned so a long list scrolls without re-rendering
@@ -216,10 +225,10 @@ export function Drawer({
                         key={session.threadId}
                         item={session}
                         active={session.threadId === activeThread}
-                        unread={unread.includes(session.threadId)}
+                        unread={unreadIds.has(session.threadId)}
                         draggable
-                        onOpen={handleOpen}
-                        onMenu={handleMenu}
+                        onOpen={onOpenThread}
+                        onMenu={onThreadMenu}
                       />
                     ))}
                   </Sortable.Flex>
@@ -236,16 +245,8 @@ export function Drawer({
                     : 'no conversations'}
               </Text>
             }
-            renderItem={({ item }) => (
-              <ThreadRow
-                item={item}
-                active={item.threadId === activeThread}
-                unread={unread.includes(item.threadId)}
-                draggable={false}
-                onOpen={handleOpen}
-                onMenu={handleMenu}
-              />
-            )}
+            renderItem={renderThread}
+            updateCellsBatchingPeriod={50}
           />
           {indicator}
         </View>
