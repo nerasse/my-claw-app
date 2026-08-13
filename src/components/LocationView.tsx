@@ -3,7 +3,7 @@ import { Linking, Pressable, Text, View } from 'react-native';
 import type { LocationData } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
-function mapUrl(location: LocationData): string {
+export function locationMapUrl(location: LocationData): string {
   const zoom = location.accuracyMeters <= 25 ? 18 : location.accuracyMeters <= 100 ? 16 : 13;
   return `https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=${zoom}/${location.latitude}/${location.longitude}`;
 }
@@ -26,7 +26,7 @@ export function LocationView({ location, onAccent }: { location: LocationData; o
       </Text>
       <Pressable
         style={[styles.button, onAccent && styles.buttonOnAccent]}
-        onPress={() => Linking.openURL(mapUrl(location)).catch(() => {})}
+        onPress={() => Linking.openURL(locationMapUrl(location)).catch(() => {})}
         accessibilityRole="button"
         accessibilityLabel="Open shared location on OpenStreetMap">
         <Text style={[styles.buttonText, onAccent && styles.buttonTextOnAccent]}>Open in OpenStreetMap</Text>

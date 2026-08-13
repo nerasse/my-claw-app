@@ -10,6 +10,8 @@ export interface LocationAddress {
   postcode?: string;
   country?: string;
   confidence?: number;
+  /** Rewritten by the owner before sending: display text, never a provider claim. */
+  edited?: boolean;
 }
 
 export interface LocationData {
@@ -23,7 +25,14 @@ export interface LocationData {
   address?: LocationAddress;
 }
 
-export type LocationInput = Omit<LocationData, 'address'>;
+export type LocationInput = Omit<LocationData, 'address'> & {
+  /**
+   * Owner decision about the display address, sent with chat.send: an empty string means
+   * "coordinates only", a non-empty string is shown as-is and flagged edited. Absent means the
+   * server derives the address from the provider.
+   */
+  addressOverride?: { formatted: string };
+};
 
 export interface AttachmentMeta {
   id: string;
@@ -84,6 +93,13 @@ export interface ChatLocationFrame {
   type: 'chat.location';
   threadId: string;
   replyToId: string;
+  location: LocationData;
+}
+
+/** Geocoded preview for a staged location: nothing is persisted. */
+export interface LocationPreviewResultFrame {
+  type: 'location.preview.result';
+  id: string;
   location: LocationData;
 }
 
@@ -928,6 +944,7 @@ export type ServerFrame =
   | ChatMessageFrame
   | LocationCapabilitiesFrame
   | ChatLocationFrame
+  | LocationPreviewResultFrame
   | RunStartFrame
   | RunEndFrame
   | StreamStartFrame
@@ -977,6 +994,7 @@ const FRAME_TYPES = new Set([
   'chat.message',
   'location.capabilities',
   'chat.location',
+  'location.preview.result',
   'chat.run.start',
   'chat.run.end',
   'chat.stream.start',
@@ -1062,10 +1080,14 @@ export function encodeChatSend(
   });
 }
 
+/** Asks the server to geocode a staged location for the composer preview; nothing is persisted. */
+export function encodeLocationPreview(id: string, location: LocationInput): string {
+  return JSON.stringify({ type: 'location.preview', id, location });
+}
+
 export function encodeSubAgentsList(threadId: string): string {
   return JSON.stringify({ type: 'subagents.list', threadId });
 }
-
 export function encodeSubAgentKill(threadId: string, parentThreadId: string): string {
   return JSON.stringify({ type: 'subagents.kill', threadId, parentThreadId });
 }

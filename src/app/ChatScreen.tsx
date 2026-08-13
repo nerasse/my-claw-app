@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { FlatList, Linking, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
@@ -16,6 +16,9 @@ import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
 import { getCurrentLocation } from '../core/location';
+import { locationPreview } from '../core/locationPreview';
+import { LocationEditor } from '../components/LocationEditor';
+import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -136,10 +139,17 @@ export function ChatScreen({
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [location, setLocation] = useState<LocationData | undefined>();
   const [locationBusy, setLocationBusy] = useState(false);
+  /** Owner decision on the display address: null = provider value, '' = coordinates only. */
+  const [addressOverride, setAddressOverride] = useState<string | null>(null);
+  const [locationSheet, setLocationSheet] = useState(false);
+  const [locationDraft, setLocationDraft] = useState('');
 
   useEffect(() => {
     setLocation(undefined);
     setLocationBusy(false);
+    setAddressOverride(null);
+    setLocationSheet(false);
+    setLocationDraft('');
   }, [threadId]);
 
   useEffect(() => {
@@ -198,12 +208,50 @@ export function ChatScreen({
     setLocationBusy(true);
     setUploadError(null);
     try {
-      setLocation(await getCurrentLocation());
+      const input = await getCurrentLocation();
+      setLocation(input);
+      setAddressOverride(null);
+      // The preview is best-effort: a late or missing answer leaves the chip with accuracy
+      // only, and the send still carries the exact coordinates.
+      locationPreview
+        .request(input)
+        .then(enriched => {
+          setLocation(current =>
+            current &&
+            current.capturedAt === input.capturedAt &&
+            current.latitude === input.latitude &&
+            current.longitude === input.longitude
+              ? enriched
+              : current,
+          );
+        })
+        .catch(() => {});
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'location unavailable');
     } finally {
       setLocationBusy(false);
     }
+  }, []);
+
+  const openLocationSheet = useCallback(() => {
+    if (!location) return;
+    setLocationDraft(addressOverride ?? location.address?.formatted ?? '');
+    setLocationSheet(true);
+  }, [location, addressOverride]);
+
+  const closeLocationSheet = useCallback(() => {
+    const edited = locationDraft.trim();
+    if (location) {
+      const providerText = location.address?.formatted ?? '';
+      setAddressOverride(edited === providerText ? null : edited);
+    }
+    setLocationSheet(false);
+  }, [location, locationDraft]);
+
+  const removeLocation = useCallback(() => {
+    setLocation(undefined);
+    setAddressOverride(null);
+    setLocationSheet(false);
   }, []);
 
   const pickFiles = useCallback(() => {
@@ -250,6 +298,19 @@ export function ChatScreen({
     const text = draft.trim();
     if (!text && attachments.length === 0 && !location) return;
     const stagedLocation = location;
+    // The wire carries coordinates and the owner's address decision, never the provider text.
+    const locationToSend: LocationInput | undefined = stagedLocation
+      ? {
+          latitude: stagedLocation.latitude,
+          longitude: stagedLocation.longitude,
+          accuracyMeters: stagedLocation.accuracyMeters,
+          capturedAt: stagedLocation.capturedAt,
+          ...(stagedLocation.altitudeMeters === undefined ? {} : { altitudeMeters: stagedLocation.altitudeMeters }),
+          ...(stagedLocation.headingDegrees === undefined ? {} : { headingDegrees: stagedLocation.headingDegrees }),
+          ...(stagedLocation.speedMetersPerSecond === undefined ? {} : { speedMetersPerSecond: stagedLocation.speedMetersPerSecond }),
+          ...(addressOverride !== null ? { addressOverride: { formatted: addressOverride } } : {}),
+        }
+      : undefined;
     // /tag is app-owned: it opens the tags page or the tag editor, never a message to the
     // model. Intercepted here so it works even when the slash-menu is closed.
     if (!stagedLocation && attachments.length === 0 && onTagCommand?.(text) === true) {
@@ -289,7 +350,8 @@ export function ChatScreen({
           }
           setAttachments([]);
           setLocation(undefined);
-          onSend(text, refs, stagedLocation);
+          setAddressOverride(null);
+          onSend(text, refs, locationToSend);
         } catch (err) {
           setUploadError(err instanceof Error ? err.message : 'upload failed');
         } finally {
@@ -298,12 +360,19 @@ export function ChatScreen({
       })();
     } else {
       setLocation(undefined);
-      onSend(text, undefined, stagedLocation);
+      setAddressOverride(null);
+      onSend(text, undefined, locationToSend);
     }
     setDraft('');
-  }, [attachments, deviceInfo, draft, location, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
+  }, [attachments, deviceInfo, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 
   const empty = items.length === 0;
+
+  const locationLabel = location
+    ? addressOverride !== null
+      ? addressOverride.trim() || 'Coordinates only'
+      : location.address?.formatted ?? 'Resolving address…'
+    : undefined;
 
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -447,9 +516,11 @@ export function ChatScreen({
             commands={commands}
             attachments={attachments}
             location={location}
+            locationLabel={locationLabel}
             onPickAttachment={() => setAttachOpen(true)}
             onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
-            onRemoveLocation={() => setLocation(undefined)}
+            onRemoveLocation={removeLocation}
+            onPressLocation={openLocationSheet}
             locationBusy={locationBusy}
             onCommandEntered={onCommandEntered}
             uploading={uploading}
@@ -525,9 +596,11 @@ export function ChatScreen({
           commands={commands}
           attachments={attachments}
           location={location}
+          locationLabel={locationLabel}
           onPickAttachment={() => setAttachOpen(true)}
           onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
-          onRemoveLocation={() => setLocation(undefined)}
+          onRemoveLocation={removeLocation}
+          onPressLocation={openLocationSheet}
           locationBusy={locationBusy}
           onCommandEntered={onCommandEntered}
           uploading={uploading}
@@ -551,6 +624,22 @@ export function ChatScreen({
           ]}
           onClose={() => setAttachOpen(false)}
         />
+      ) : null}
+
+      {locationSheet && location ? (
+        <ActionSheet
+          preview="Current location"
+          onClose={closeLocationSheet}
+          options={[
+            { label: 'Open in OpenStreetMap', onPress: () => Linking.openURL(locationMapUrl(location)).catch(() => {}) },
+            { label: 'Remove location', danger: true, onPress: removeLocation },
+          ]}>
+          <LocationEditor
+            value={locationDraft}
+            onChange={setLocationDraft}
+            meta={`Approximate · GPS accuracy +/- ${Math.round(location.accuracyMeters)} m · captured ${new Date(location.capturedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+          />
+        </ActionSheet>
       ) : null}
     </View>
   );

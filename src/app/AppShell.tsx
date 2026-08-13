@@ -162,6 +162,7 @@ import { ProviderScreen } from './ProviderScreen';
 import { ProviderEditScreen } from './ProviderEditScreen';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
+import { locationPreview } from '../core/locationPreview';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { ToolsScreen } from './ToolsScreen';
@@ -854,6 +855,9 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'chat.location':
           chatStore.setLocation(frame.threadId, frame.replyToId, frame.location);
+          break;
+        case 'location.preview.result':
+          locationPreview.receive(frame.id, frame.location);
           break;
         case 'chat.message':
           chatStore.addAgentMessage(

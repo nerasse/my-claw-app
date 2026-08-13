@@ -249,6 +249,65 @@ test('the location action is hidden until the server enables it and sends a stru
   await unmount(tree);
 });
 
+test('the staged location shows the preview address and sends the owner edit', async () => {
+  const tree = await renderWithHistory();
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'location.capabilities', enabled: true, address: true, provider: 'geoapify' }),
+    });
+  });
+  bridge.sendMessage.mockClear();
+  await pressLabel(tree, 'Add attachment');
+  jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
+  await pressText(tree, 'Share current location');
+  await waitFor(() => textsOf(tree).includes('Current location'));
+  expect(textsOf(tree)).toContain('Resolving address…');
+
+  // The server answers the preview request with the geocoded value.
+  const previewRequest = bridge.sendMessage.mock.calls
+    .map(([frame]) => JSON.parse(String(frame)) as { type?: string; id?: string })
+    .find(frame => frame.type === 'location.preview');
+  expect(previewRequest?.id).toBeTruthy();
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'location.preview.result',
+        id: previewRequest?.id,
+        location: {
+          latitude: 48.8566,
+          longitude: 2.3522,
+          accuracyMeters: 24,
+          capturedAt: '2026-01-01T10:00:00.000Z',
+          address: { formatted: 'Rue de Rivoli, Paris', level: 'building', provider: 'geoapify' },
+        },
+      }),
+    });
+  });
+  await waitFor(() => textsOf(tree).includes('Rue de Rivoli, Paris'));
+  expect(textsOf(tree)).not.toContain('Resolving address…');
+
+  // Tapping the chip opens the editor; the edit rides the send as an addressOverride.
+  await pressLabel(tree, 'Edit current location');
+  await waitFor(() => labelsOf(tree).includes('Location address'));
+  const field = tree.root.find(node => node.props.accessibilityLabel === 'Location address' && typeof node.props.onChangeText === 'function');
+  await ReactTestRenderer.act(async () => {
+    field.props.onChangeText('Chez moi, 3eme etage');
+  });
+  await pressLabel(tree, 'Close menu');
+  expect(textsOf(tree)).toContain('Chez moi, 3eme etage');
+
+  await pressLabel(tree, 'Send message');
+  await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('addressOverride')));
+  const sent = JSON.parse(String(bridge.sendMessage.mock.calls.at(-1)?.[0])) as {
+    location?: { latitude?: number; addressOverride?: { formatted?: string } };
+  };
+  expect(sent.location?.latitude).toBe(48.8566);
+  expect(sent.location?.addressOverride?.formatted).toBe('Chez moi, 3eme etage');
+
+  await unmount(tree);
+});
+
 test('the session file explorer lists files with sizes and deletes them', async () => {
   const tree = await renderWithHistory();
 

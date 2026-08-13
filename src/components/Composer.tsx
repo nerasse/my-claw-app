@@ -29,9 +29,11 @@ export function Composer({
   onCommandEntered,
   attachments,
   location,
+  locationLabel,
   onPickAttachment,
   onRemoveAttachment,
   onRemoveLocation,
+  onPressLocation,
   locationBusy,
   uploading,
   uploadError,
@@ -62,10 +64,14 @@ export function Composer({
   attachments?: PendingAttachment[];
   /** One-shot location staged for the next message. */
   location?: LocationData;
+  /** Address line of the staged location: the preview value, the edit or its pending state. */
+  locationLabel?: string;
   /** Opens the attachment picker sheet. */
   onPickAttachment?: () => void;
   onRemoveAttachment?: (id: string) => void;
   onRemoveLocation?: () => void;
+  /** Opens the staged location editor: address preview, edit and removal. */
+  onPressLocation?: () => void;
   locationBusy?: boolean;
   uploading?: boolean;
   uploadError?: string | null;
@@ -163,12 +169,21 @@ export function Composer({
       {uploadError ? <Text style={styles.uploadError}>{uploadError}</Text> : null}
       {location ? (
         <View style={styles.locationChip}>
-          <View style={styles.locationText}>
+          <Pressable
+            style={styles.locationMain}
+            onPress={onPressLocation}
+            accessibilityRole="button"
+            accessibilityLabel="Edit current location">
             <Text style={styles.locationTitle}>Current location</Text>
+            {locationLabel ? (
+              <Text style={styles.locationAddress} numberOfLines={1}>
+                {locationLabel}
+              </Text>
+            ) : null}
             <Text style={styles.locationMeta}>
               Approximate · GPS accuracy +/- {Math.round(location.accuracyMeters)} m
             </Text>
-          </View>
+          </Pressable>
           {onRemoveLocation ? (
             <Pressable
               onPress={onRemoveLocation}
@@ -352,9 +367,10 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
   },
-  locationText: { flex: 1, gap: 2 },
+  locationMain: { flex: 1, gap: 2 },
   locationTitle: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text },
-  locationMeta: { fontSize: font.small, color: palette.textMuted },
+  locationAddress: { fontSize: font.small, color: palette.textMuted },
+  locationMeta: { fontSize: font.small, color: palette.textFaint },
   input: {
     flex: 1,
     maxHeight: 112,
