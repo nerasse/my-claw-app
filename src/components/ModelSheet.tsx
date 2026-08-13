@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ActionSheet, type SheetOption } from './ActionSheet';
 import { connection } from '../core/connection';
-import { useModelCatalog, useThreadModel } from '../core/model';
+import { useModelCatalog, useModelIndex, useThreadModel } from '../core/model';
 import { contextSummary, contextTiers } from '../core/context';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import {
@@ -160,9 +160,10 @@ export function useModelPickerFlow({
   page?: boolean;
 }): { preview: string; options: SheetOption[]; back: () => void; search: PickerSearch | null } {
   const { stage, path } = state;
-  const activeLabel = models.find(model => model.id === activeId)?.label ?? activeId;
+  const byId = useModelIndex(models);
+  const activeLabel = byId.get(activeId)?.label ?? activeId;
   const stagedModel = state.model ?? activeId;
-  const stagedEntry = models.find(model => model.id === stagedModel);
+  const stagedEntry = byId.get(stagedModel);
   const stagedLabel = stagedEntry?.label ?? stagedModel;
   const stagedIsTag = stagedModel.startsWith('tag:');
   const effortCurrent = effort?.current ?? '';
@@ -209,7 +210,7 @@ export function useModelPickerFlow({
   const advance = (from: PickerStage, staged: Partial<PickerState>): void => {
     const next = { ...state, ...staged, trail: [...state.trail, from] };
     const model = next.model ?? activeId;
-    const entry = models.find(option => option.id === model);
+    const entry = byId.get(model);
     const levels = effort ? entry?.effortLevels ?? [] : [];
     // A subject that already pins an effort keeps the step even on a model with no levels: the
     // pin is dead weight there and must stay removable. Only the "default" row is shown then.
@@ -521,8 +522,9 @@ export function ModelSheet({
   const thread = useThreadModel(threadId);
 
   const models = catalog.models;
+  const byId = useModelIndex(models);
   const activeModel = thread?.model ?? catalog.defaultModel;
-  const defaultLabel = models.find(model => model.id === catalog.defaultModel)?.label ?? catalog.defaultModel;
+  const defaultLabel = byId.get(catalog.defaultModel)?.label ?? catalog.defaultModel;
 
   const effort = thread?.effort;
   const effortActive = effort?.supported === true && (effort.levels?.length ?? 0) > 0;

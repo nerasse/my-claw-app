@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { AgentInfo, AgentsConfigResultFrame } from '../core/protocol';
 import type { AgentsStatus } from '../core/agents';
-import { useModelCatalog } from '../core/model';
+import { useModelCatalog, useModelIndex } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -56,9 +56,9 @@ export function AgentsSettingsScreen({
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
   const catalog = useModelCatalog();
+  const byId = useModelIndex(catalog.models);
   /** Ids are what the config stores; the label is what every other screen shows. */
-  const labelOf = (modelId: string): string =>
-    catalog.models.find(model => model.id === modelId)?.label ?? modelId;
+  const labelOf = (modelId: string): string => byId.get(modelId)?.label ?? modelId;
   const agents = config?.agents ?? [];
 
   return (

@@ -1,11 +1,58 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { Platform, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import type { RosterGroup, SubAgentsStatus } from '../core/subagents';
+import type { RosterGroup, RosterRow, SubAgentsStatus } from '../core/subagents';
 import type { SubAgentEntry } from '../core/protocol';
+
+/**
+ * A group as the list consumes it. `showMajor` is decided once, here, rather than by having every
+ * header look back at the group before it on every render.
+ */
+type AgentSection = { major: string; type: string; showMajor: boolean; data: RosterRow[] };
+
+const keyOfRow = (row: RosterRow): string => row.key;
+
+/** One sub-agent. Memoized: a busy conversation keeps every one-shot it ever spawned. */
+const AgentCard = React.memo(function AgentCardView({
+  row,
+  onOpen,
+}: {
+  row: RosterRow;
+  onOpen: (entry: SubAgentEntry) => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const entry = row.entry;
+  return (
+    <Pressable
+      style={styles.card}
+      onPress={() => onOpen(entry)}
+      accessibilityRole="button"
+      accessibilityLabel={`Open sub-agent ${entry.id}, ${entry.status}`}>
+      <View style={styles.cardHead}>
+        <Text style={row.kind === 'temporary' ? styles.glyphFaint : styles.glyph}>
+          {row.kind === 'temporary' ? '◇' : '◈'}
+        </Text>
+        {/* The id, not the display name: the model picks names and repeats them. */}
+        <Text style={styles.cardTitle} numberOfLines={1}>
+          {entry.id.replace(/^subagent\//, '')}
+        </Text>
+        {entry.status === 'running' ? (
+          <Text style={styles.running}>● running</Text>
+        ) : (
+          <Text style={styles.state}>idle</Text>
+        )}
+      </View>
+      <Text style={styles.cardMeta} numberOfLines={1}>
+        {`${entry.messageCount} msg${entry.messageCount === 1 ? '' : 's'} · ${entry.visibility}`}
+        {row.kind === 'temporary' ? ' · one-shot' : ''}
+        {entry.model ? ` · ${entry.model}` : ''}
+      </Text>
+    </Pressable>
+  );
+});
 
 /**
  * The sub-agents of one conversation, grouped named-then-temporary and by agent type inside each.
@@ -37,7 +84,38 @@ export function AgentsScreen({
   const { scrollProps, indicator } = useScrollIndicator();
   useDismissKeyboard();
 
-  const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
+  const total = useMemo(() => groups.reduce((sum, group) => sum + group.rows.length, 0), [groups]);
+  const sections = useMemo<AgentSection[]>(
+    () =>
+      groups.map((group, index) => ({
+        major: group.major,
+        type: group.type,
+        showMajor: index === 0 || groups[index - 1]!.major !== group.major,
+        data: group.rows,
+      })),
+    [groups],
+  );
+
+  const renderRow = useCallback(
+    ({ item }: { item: RosterRow }) => <AgentCard row={item} onOpen={onOpenAgent} />,
+    [onOpenAgent],
+  );
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: AgentSection }) => (
+      <View>
+        {section.showMajor ? (
+          <View style={styles.majorHead}>
+            <Text style={styles.major}>{section.major}</Text>
+            {section.major === 'temporary' ? <Text style={styles.majorNote}>read-only</Text> : null}
+          </View>
+        ) : null}
+        <Text style={styles.minor} numberOfLines={1}>
+          {section.type}
+        </Text>
+      </View>
+    ),
+    [styles],
+  );
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
@@ -69,49 +147,23 @@ export function AgentsScreen({
       ) : null}
 
       <View style={styles.listWrap}>
-        <ScrollView {...scrollProps} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          {groups.map((group, index) => (
-            <View key={`${group.major}/${group.type}`}>
-              {index === 0 || groups[index - 1]!.major !== group.major ? (
-                <View style={styles.majorHead}>
-                  <Text style={styles.major}>{group.major}</Text>
-                  {group.major === 'temporary' ? <Text style={styles.majorNote}>read-only</Text> : null}
-                </View>
-              ) : null}
-              <Text style={styles.minor} numberOfLines={1}>
-                {group.type}
-              </Text>
-              {group.rows.map(row => (
-                <Pressable
-                  key={row.key}
-                  style={styles.card}
-                  onPress={() => onOpenAgent(row.entry)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open sub-agent ${row.entry.id}, ${row.entry.status}`}>
-                  <View style={styles.cardHead}>
-                    <Text style={row.kind === 'temporary' ? styles.glyphFaint : styles.glyph}>
-                      {row.kind === 'temporary' ? '◇' : '◈'}
-                    </Text>
-                    {/* The id, not the display name: the model picks names and repeats them. */}
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {row.entry.id.replace(/^subagent\//, '')}
-                    </Text>
-                    {row.entry.status === 'running' ? (
-                      <Text style={styles.running}>● running</Text>
-                    ) : (
-                      <Text style={styles.state}>idle</Text>
-                    )}
-                  </View>
-                  <Text style={styles.cardMeta} numberOfLines={1}>
-                    {`${row.entry.messageCount} msg${row.entry.messageCount === 1 ? '' : 's'} · ${row.entry.visibility}`}
-                    {row.kind === 'temporary' ? ' · one-shot' : ''}
-                    {row.entry.model ? ` · ${row.entry.model}` : ''}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ))}
-        </ScrollView>
+        {/* Virtualized: a conversation keeps every one-shot it spawned, so this list has no
+            ceiling. Headers do not stick — they are read as separators, not as a position. */}
+        <SectionList
+          {...scrollProps}
+          sections={sections}
+          keyExtractor={keyOfRow}
+          renderItem={renderRow}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === 'android'}
+        />
         {indicator}
       </View>
     </View>

@@ -1,5 +1,11 @@
-import { useCallback, useSyncExternalStore } from 'react';
-import type { ContextState, EffortState, ModelListResultFrame, ModelResultFrame } from './protocol';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import type {
+  ContextState,
+  EffortState,
+  ModelListResultFrame,
+  ModelOption,
+  ModelResultFrame,
+} from './protocol';
 
 type Listener = () => void;
 
@@ -89,6 +95,15 @@ const subscribeToModels = (listener: Listener): (() => void) => modelStore.subsc
 
 export function useModelCatalog(): ModelListResultFrame {
   return useSyncExternalStore(subscribeToModels, () => modelStore.getSnapshot());
+}
+
+/**
+ * Models by id, rebuilt only when the catalogue is. A discovering provider brings hundreds of
+ * them, and every screen that names one was reaching for it with a linear scan — the model
+ * picker three times per render, the agents list once per row.
+ */
+export function useModelIndex(models: ModelOption[]): Map<string, ModelOption> {
+  return useMemo(() => new Map(models.map(model => [model.id, model])), [models]);
 }
 
 export function useThreadModel(threadId: string | null): ThreadModel | null {

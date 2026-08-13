@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useDismissKeyboard, useKeyboardHeight, useSheetBottomInset } from '../core/keyboard';
 import { useScrollIndicator } from './ScrollIndicator';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -23,6 +23,17 @@ export interface SheetSeparator {
 }
 
 export type SheetEntry = (SheetOption & { type?: undefined }) | SheetSeparator;
+
+const keyOfEntry = (entry: SheetEntry): string =>
+  entry.type === 'separator' ? entry.key ?? 'separator' : entry.key ?? entry.label;
+
+/**
+ * How many rows the sheet lays out before it starts batching. The model search caps itself at 40
+ * results precisely because a sheet is read, not scrolled; this covers that cap plus the rows
+ * around it (the overflow count, the back row). Virtualization therefore only ever kicks in on
+ * the one list that ignores the cap: browsing a provider group in a catalogue of hundreds.
+ */
+const EAGER_ROWS = 48;
 
 /**
  * The one bottom sheet of the app: message actions, conversation actions, confirmations,
@@ -57,6 +68,32 @@ export function ActionSheet({
   const bottomInset = useSheetBottomInset(space.xl);
   const keyboard = useKeyboardHeight();
   const { scrollProps, indicator } = useScrollIndicator();
+
+  const renderEntry = useCallback(
+    ({ item: option }: { item: SheetEntry }) =>
+      option.type === 'separator' ? (
+        <View style={styles.optionSeparator} />
+      ) : (
+        <Pressable
+          style={styles.option}
+          onPress={option.onPress}
+          accessibilityRole="button"
+          accessibilityState={{ selected: option.selected ?? false }}
+          accessibilityLabel={option.label}>
+          <View style={styles.optionMain}>
+            <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>{option.label}</Text>
+            {option.hint ? (
+              <Text style={styles.optionHint} numberOfLines={2}>
+                {option.hint}
+              </Text>
+            ) : null}
+          </View>
+          {option.selected ? <Text style={styles.check}>✓</Text> : null}
+        </Pressable>
+      ),
+    [styles],
+  );
+
   return (
     <View style={styles.backdrop}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
@@ -92,37 +129,21 @@ export function ActionSheet({
         {children}
         {options && options.length > 0 ? (
           <View style={styles.scrollWrap}>
-            <ScrollView
+            {/* Virtualized. Browsing a provider group in a catalogue of hundreds used to mount
+                every row of it at once, inside a sheet capped at 70% of the screen. */}
+            <FlatList
               {...scrollProps}
               style={styles.scroll}
+              data={options}
+              keyExtractor={keyOfEntry}
+              renderItem={renderEntry}
               keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled>
-              {options.map(option =>
-                option.type === 'separator' ? (
-                  <View key={option.key ?? 'separator'} style={styles.optionSeparator} />
-                ) : (
-                  <Pressable
-                    key={option.key ?? option.label}
-                    style={styles.option}
-                    onPress={option.onPress}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: option.selected ?? false }}
-                    accessibilityLabel={option.label}>
-                    <View style={styles.optionMain}>
-                      <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>
-                        {option.label}
-                      </Text>
-                      {option.hint ? (
-                        <Text style={styles.optionHint} numberOfLines={2}>
-                          {option.hint}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {option.selected ? <Text style={styles.check}>✓</Text> : null}
-                  </Pressable>
-                ),
-              )}
-            </ScrollView>
+              nestedScrollEnabled
+              initialNumToRender={EAGER_ROWS}
+              maxToRenderPerBatch={20}
+              updateCellsBatchingPeriod={50}
+              windowSize={9}
+            />
             {indicator}
           </View>
         ) : null}

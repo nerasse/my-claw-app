@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { TagInfo } from '../core/protocol';
-import { useModelCatalog } from '../core/model';
+import { useModelCatalog, useModelIndex } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -33,8 +33,8 @@ export function TagsScreen({
   const catalog = useModelCatalog();
   useDismissKeyboard();
 
-  const labelOf = (modelId: string): string =>
-    catalog.models.find(model => model.id === modelId)?.label ?? modelId;
+  const byId = useModelIndex(catalog.models);
+  const labelOf = (modelId: string): string => byId.get(modelId)?.label ?? modelId;
   const isDefault = (tag: TagInfo): boolean => tag.name === 'Default';
 
   return (
