@@ -289,7 +289,15 @@ export function AgentFileScreen({
           layersOff.length === 1 ? 'it' : 'them'
         }, even checked here`;
 
-  /** The chrome of a picker: its label, the entries it lost, and the filter over what is left. */
+  /**
+   * The chrome of a picker: its label, the entries it lost, and the filter over what is left.
+   *
+   * Known limit: the filters ride the section headers of a virtualized list. A section scrolled
+   * out of the render window is unmounted, so the field's *value* survives (it lives in parent
+   * state) but its keyboard *focus* does not — typing while the field left the window drops the
+   * keystrokes. `windowSize={9}` makes that all but impossible in practice; the honest fix if it
+   * ever bites is to lift the filters into fixed chrome outside the list.
+   */
   const renderSectionHeader = ({
     section,
   }: {
