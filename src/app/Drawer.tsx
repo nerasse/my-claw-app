@@ -124,7 +124,7 @@ export function Drawer({
         item={item}
         active={item.threadId === activeThread}
         unread={unreadIds.has(item.threadId)}
-        draggable={false}
+        pinned={false}
         onOpen={onOpenThread}
         onMenu={onThreadMenu}
       />
@@ -138,7 +138,7 @@ export function Drawer({
         item={item}
         active={item.threadId === activeThread}
         unread={unreadIds.has(item.threadId)}
-        draggable
+        pinned
         onOpen={onOpenThread}
         onMenu={onThreadMenu}
       />
@@ -191,8 +191,6 @@ export function Drawer({
           </Pressable>
         </View>
 
-        <Text style={styles.sectionLabel}>{`conversations · ${sectionCount(restRows.length, restTotal)}`}</Text>
-
         <TextInput
           style={styles.search}
           value={query}
@@ -218,29 +216,38 @@ export function Drawer({
             maxToRenderPerBatch={14}
             windowSize={9}
             removeClippedSubviews={Platform.OS === 'android'}
+            // Each heading sits on the list it counts, which is the whole separation: a
+            // labelled break reads as a break, where the hairline that used to stand here was
+            // the very rule the plain rows use between themselves and so said nothing.
             ListHeaderComponent={
-              pinnedRows.length > 0 ? (
-                <View style={styles.pinnedSection}>
-                  <Text style={styles.sectionLabel}>
-                    {`pinned · ${sectionCount(pinnedRows.length, pinnedTotal)}`}
-                  </Text>
-                  {/* A single column, not a Flex: Flex defaults to a wrapping row and leaves
-                      item width uncontrolled, so each row sized itself to its own title and
-                      pushed its actions button past the panel. A vertical grid owns the width,
-                      which is what makes `numberOfLines` bite. The whole row is the handle —
-                      holding a row is how a human expects to reorder one. */}
-                  <Sortable.Grid
-                    columns={1}
-                    data={pinnedRows}
-                    keyExtractor={keyOfThread}
-                    dragActivationDelay={400}
-                    hapticsEnabled
-                    renderItem={renderPinned}
-                    onDragEnd={handleDragEnd}
-                  />
-                  <Separator />
-                </View>
-              ) : null
+              <View>
+                {pinnedRows.length > 0 ? (
+                  <View style={styles.pinnedSection}>
+                    <Text style={styles.sectionLabel}>
+                      {`pinned · ${sectionCount(pinnedRows.length, pinnedTotal)}`}
+                    </Text>
+                    {/* A single column, not a Flex: Flex defaults to a wrapping row and leaves
+                        item width uncontrolled, so each row sized itself to its own title and
+                        pushed its actions button past the panel. A vertical grid owns the width,
+                        which is what makes `numberOfLines` bite. The whole row is the handle —
+                        holding a row is how a human expects to reorder one, and the gap is what
+                        makes the cards legible as separate things to pick up. */}
+                    <Sortable.Grid
+                      columns={1}
+                      data={pinnedRows}
+                      keyExtractor={keyOfThread}
+                      rowGap={space.sm}
+                      dragActivationDelay={400}
+                      hapticsEnabled
+                      renderItem={renderPinned}
+                      onDragEnd={handleDragEnd}
+                    />
+                  </View>
+                ) : null}
+                <Text style={styles.sectionLabel}>
+                  {`conversations · ${sectionCount(restRows.length, restTotal)}`}
+                </Text>
+              </View>
             }
             ListEmptyComponent={
               <Text style={styles.empty}>
@@ -347,8 +354,11 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
+  /** Indented onto the rows it heads: the list already pads by `sm`, the row's own main pads
+   *  by `sm` again, so the heading starts where the titles under it start. */
   sectionLabel: {
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.sm + space.sm,
+    paddingTop: space.sm,
     paddingBottom: space.xs,
     fontSize: font.micro,
     color: palette.textFaint,
@@ -357,7 +367,8 @@ const createStyles = (palette: Palette) => ({
   },
   listArea: { flex: 1 },
   list: { paddingHorizontal: space.sm },
-  pinnedSection: { paddingBottom: space.xs },
+  /** Breathing room under the cards, so the next heading is not glued to the last one. */
+  pinnedSection: { paddingBottom: space.sm },
   search: {
     marginHorizontal: space.md,
     marginBottom: space.sm,

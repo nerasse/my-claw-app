@@ -137,6 +137,32 @@ test('the pinned section is one column wide, and the row itself is the grab area
   await settleAndUnmount(tree);
 });
 
+test('each heading sits on its own list, pinned block first', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Actions for conversation Alpha');
+  await pressLabel(tree, 'Pin to top');
+  await waitFor(() => textsOf(tree).includes('pinned · 1'));
+
+  // The separation is the headings: the pinned count leads, the conversations count follows,
+  // instead of floating above the search box where it headed nothing.
+  const texts = textsOf(tree);
+  expect(texts.indexOf('pinned · 1')).toBeLessThan(texts.indexOf('conversations · 1'));
+
+  // And the blocks really are two: the pinned row lives inside the sortable, the plain one
+  // does not. (A bare title lookup would catch the open conversation in the top bar too.)
+  const grid = tree.root.find(node => node.props.testID === 'sortable-grid');
+  // Deduplicated: one Pressable surfaces as both its composite and its host node.
+  const inGrid = new Set(
+    grid
+      .findAll(node => typeof node.props.accessibilityLabel === 'string', { deep: true })
+      .map(node => node.props.accessibilityLabel as string)
+      .filter(label => label.startsWith('Conversation ')),
+  );
+  expect([...inGrid]).toEqual(['Conversation Alpha, hold to reorder']);
+  await settleAndUnmount(tree);
+});
+
 test('a drop reorders from the rows the sortable hands back', async () => {
   const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
   await pressLabel(tree, 'Open conversations');
