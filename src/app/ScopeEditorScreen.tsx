@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+
+/**
+ * The catalogue lives inside this page's scroll view, so it cannot virtualize: a list nested in a
+ * scrollable of the same axis mounts every row whatever it is told. On the tools kind that
+ * catalogue reaches the hundreds, so it is cut and the filter above it is how the rest is
+ * reached — the same bargain the model picker and the agent file make.
+ */
+const PICKER_MAX_ROWS = 40;
 
 /** The scope mode union the config and the agent file share: unset means "no key at all",
  *  which the config spells "inherit" and the file spells "absent". */
@@ -65,15 +73,25 @@ export function ScopeEditorScreen({
     setPicked(next);
   };
 
-  const selected = new Set(names);
-  const pickedUnknown = [...picked].filter(name => unknown.includes(name) || !available.some(item => item.name === name));
-  const filtered = available.filter(
-    item => !query || item.name.toLowerCase().includes(query.toLowerCase()) || item.description.toLowerCase().includes(query.toLowerCase()),
-  );
-  const activeNames =
-    chosen === 'list'
-      ? [...picked]
-      : [];
+  const selected = useMemo(() => new Set(names), [names]);
+  // Membership through a set, not a scan per pick: the tool catalogue reaches the hundreds and
+  // this was `O(picked × available)` on every keystroke in the filter above.
+  const pickedUnknown = useMemo(() => {
+    const known = new Set(available.map(item => item.name));
+    const gone = new Set(unknown);
+    return [...picked].filter(name => gone.has(name) || !known.has(name));
+  }, [available, picked, unknown]);
+  // The needle is lowercased once, not twice per candidate.
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return available;
+    return available.filter(
+      item =>
+        item.name.toLowerCase().includes(needle) || item.description.toLowerCase().includes(needle),
+    );
+  }, [available, query]);
+  const rows = filtered.slice(0, PICKER_MAX_ROWS);
+  const activeNames = chosen === 'list' ? [...picked] : [];
 
   const save = (): void => onSave(chosen, activeNames);
 
@@ -179,12 +197,12 @@ export function ScopeEditorScreen({
             <View style={styles.category}>
               <Text style={styles.section}>{kind === 'skills' ? 'installed skills' : kind === 'mcp' ? 'declared servers' : 'tool catalog'}</Text>
               <View style={styles.card}>
-                {filtered.length === 0 ? (
+                {rows.length === 0 ? (
                   <View style={styles.row}>
                     <Text style={styles.itemHint}>no match</Text>
                   </View>
                 ) : (
-                  filtered.map((item, index) => (
+                  rows.map((item, index) => (
                     <View key={item.name}>
                       {index > 0 ? <View style={styles.separator} /> : null}
                       <Pressable
@@ -204,6 +222,13 @@ export function ScopeEditorScreen({
                     </View>
                   ))
                 )}
+                {filtered.length > rows.length ? (
+                  <View style={styles.row}>
+                    <Text style={styles.itemHint}>
+                      {`${filtered.length - rows.length} more · narrow the filter`}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           </>

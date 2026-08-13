@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { AgentFileResultFrame, FileScopeMode } from '../core/protocol';
 import type { AgentFileEditorState } from '../core/agentsFile';
@@ -8,6 +8,33 @@ import { useDismissKeyboard } from '../core/keyboard';
 export interface ScopeOption {
   name: string;
   description: string;
+}
+
+const EMPTY_NAMES: string[] = [];
+
+/**
+ * These pickers live inside the page's own scroll view, so they cannot virtualize: a list nested
+ * in a scrollable of the same axis mounts every row whatever it is told. The catalogue reaches
+ * the hundreds, so the list is cut and the filter above it is how the rest is reached — the same
+ * bargain the model picker makes, for the same reason.
+ */
+const PICKER_MAX_ROWS = 40;
+
+/** Names the agent claims that no longer exist in the catalogue. */
+function unknownIn(options: ScopeOption[], names: string[] | undefined): string[] {
+  if (!names || names.length === 0) return EMPTY_NAMES;
+  const known = new Set(options.map(option => option.name));
+  return names.filter(name => !known.has(name));
+}
+
+/** The needle is lowercased once here, not once per candidate inside the predicate. */
+function matchScope(options: ScopeOption[], query: string | undefined): ScopeOption[] {
+  const needle = (query ?? '').trim().toLowerCase();
+  if (!needle) return options;
+  return options.filter(
+    option =>
+      option.name.toLowerCase().includes(needle) || option.description.toLowerCase().includes(needle),
+  );
 }
 
 /**
@@ -50,6 +77,28 @@ export function AgentFileScreen({
   const busy = editor.status === 'loading' || editor.status === 'saving';
   const frame = editor.frame;
 
+  // Everything derived is computed here, above the early return so the hook order never moves.
+  // The tool catalogue runs to the hundreds and this screen carries three filters: each of these
+  // used to be recomputed for all three lists on every keystroke in any one of them, with the
+  // needle lowercased once per candidate and membership tested twice per row.
+  const selected = useMemo(
+    () => ({
+      tools: new Set(frame?.tools ?? []),
+      skills: new Set(frame?.skills ?? []),
+      mcp: new Set(frame?.mcp ?? []),
+    }),
+    [frame?.tools, frame?.skills, frame?.mcp],
+  );
+  const unknownSkills = useMemo(() => unknownIn(skills, frame?.skills), [skills, frame?.skills]);
+  const unknownMcp = useMemo(() => unknownIn(mcpServers, frame?.mcp), [mcpServers, frame?.mcp]);
+  const shownSkills = useMemo(() => matchScope(skills, query.skills), [skills, query.skills]);
+  const shownMcp = useMemo(() => matchScope(mcpServers, query.mcp), [mcpServers, query.mcp]);
+  const shownTools = useMemo(() => {
+    const needle = (query.tools ?? '').trim().toLowerCase();
+    const all = frame?.toolOptions ?? EMPTY_NAMES;
+    return needle ? all.filter(name => name.toLowerCase().includes(needle)) : all;
+  }, [frame?.toolOptions, query.tools]);
+
   if (editor.status === 'loading' || frame === null) {
     return (
       <View style={styles.screen}>
@@ -74,21 +123,8 @@ export function AgentFileScreen({
     onChange({ [kind]: current.includes(name) ? current.filter(n => n !== name) : [...current, name] });
   };
 
-  const scopeOptions = (kind: 'skills' | 'mcp'): ScopeOption[] => (kind === 'skills' ? skills : mcpServers);
-  const unknownOf = (kind: 'skills' | 'mcp'): string[] => {
-    const known = new Set(scopeOptions(kind).map(o => o.name));
-    return (frame[kind] ?? []).filter(n => !known.has(n));
-  };
-  const unknownTools = frame.unknownTools ?? [];
-  const filtered = (kind: 'skills' | 'mcp'): ScopeOption[] => {
-    const q = query[kind] ?? '';
-    return scopeOptions(kind).filter(
-      o => !q || o.name.toLowerCase().includes(q.toLowerCase()) || o.description.toLowerCase().includes(q.toLowerCase()),
-    );
-  };
-  const filteredTools = (frame.toolOptions ?? []).filter(
-    t => !query.tools || t.toLowerCase().includes((query.tools ?? '').toLowerCase()),
-  );
+  const unknownTools = frame.unknownTools ?? EMPTY_NAMES;
+  const toolRows = shownTools.slice(0, PICKER_MAX_ROWS);
 
   return (
     <View style={styles.screen}>
@@ -170,12 +206,12 @@ export function AgentFileScreen({
                     onPress={() => toggleTool(name)}
                     accessibilityRole="button"
                     accessibilityLabel={`Toggle tool ${name}`}
-                    accessibilityState={{ selected: (frame.tools ?? []).includes(name) }}>
+                    accessibilityState={{ selected: selected.tools.has(name) }}>
                     <Text style={[styles.itemName, styles.removed]}>{name}</Text>
                     <Text style={[styles.itemHint, styles.removed]} numberOfLines={1}>
                       outside the baseline
                     </Text>
-                    <Text style={[styles.glyph, styles.removed]}>{(frame.tools ?? []).includes(name) ? '✓' : '✕'}</Text>
+                    <Text style={[styles.glyph, styles.removed]}>{selected.tools.has(name) ? '✓' : '✕'}</Text>
                   </Pressable>
                 </View>
               ))}
@@ -192,12 +228,12 @@ export function AgentFileScreen({
             accessibilityLabel="Filter tools"
           />
           <View style={styles.card}>
-            {filteredTools.length === 0 ? (
+            {toolRows.length === 0 ? (
               <View style={styles.row}>
                 <Text style={styles.itemHint}>no match</Text>
               </View>
             ) : (
-              filteredTools.map((name, index) => (
+              toolRows.map((name, index) => (
                 <View key={name}>
                   {index > 0 ? <View style={styles.separator} /> : null}
                   <Pressable
@@ -205,24 +241,31 @@ export function AgentFileScreen({
                     onPress={() => toggleTool(name)}
                     accessibilityRole="button"
                     accessibilityLabel={`Toggle tool ${name}`}
-                    accessibilityState={{ selected: (frame.tools ?? []).includes(name) }}>
+                    accessibilityState={{ selected: selected.tools.has(name) }}>
                     <View style={styles.itemMain}>
                       <Text style={styles.itemName}>{name}</Text>
                     </View>
-                    <Text style={styles.glyph}>{(frame.tools ?? []).includes(name) ? '✓' : ''}</Text>
+                    <Text style={styles.glyph}>{selected.tools.has(name) ? '✓' : ''}</Text>
                   </Pressable>
                 </View>
               ))
             )}
+            {shownTools.length > toolRows.length ? (
+              <View style={styles.row}>
+                <Text style={styles.itemHint}>
+                  {`${shownTools.length - toolRows.length} more · narrow the filter`}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
         <ScopeSection
           title="skills"
           mode={frame.skillsMode}
-          names={frame.skills ?? []}
-          unknown={unknownOf('skills')}
-          available={filtered('skills')}
+          selected={selected.skills}
+          unknown={unknownSkills}
+          available={shownSkills}
           query={query.skills}
           onQuery={value => setQuery({ ...query, skills: value })}
           onMode={skillsMode => onChange({ skillsMode } as Partial<AgentFileResultFrame>)}
@@ -232,9 +275,9 @@ export function AgentFileScreen({
         <ScopeSection
           title="MCP"
           mode={frame.mcpMode}
-          names={frame.mcp ?? []}
-          unknown={unknownOf('mcp')}
-          available={filtered('mcp')}
+          selected={selected.mcp}
+          unknown={unknownMcp}
+          available={shownMcp}
           query={query.mcp}
           onQuery={value => setQuery({ ...query, mcp: value })}
           onMode={mcpMode => onChange({ mcpMode } as Partial<AgentFileResultFrame>)}
@@ -448,7 +491,7 @@ function Chip({
 function ScopeSection({
   title,
   mode,
-  names,
+  selected,
   unknown,
   available,
   query,
@@ -458,7 +501,8 @@ function ScopeSection({
 }: {
   title: string;
   mode: FileScopeMode;
-  names: string[];
+  /** What the agent claims, as a set: the rows test membership twice each. */
+  selected: Set<string>;
   unknown: string[];
   available: ScopeOption[];
   query: string;
@@ -467,6 +511,7 @@ function ScopeSection({
   onToggle: (name: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const rows = available.slice(0, PICKER_MAX_ROWS);
   return (
     <View style={styles.category}>
       <Text style={styles.section}>{title}</Text>
@@ -499,12 +544,12 @@ function ScopeSection({
                     onPress={() => onToggle(name)}
                     accessibilityRole="button"
                     accessibilityLabel={`Toggle ${name}`}
-                    accessibilityState={{ selected: names.includes(name) }}>
+                    accessibilityState={{ selected: selected.has(name) }}>
                     <Text style={[styles.itemName, styles.removed]}>{name}</Text>
                     <Text style={[styles.itemHint, styles.removed]} numberOfLines={1}>
                       no longer exists
                     </Text>
-                    <Text style={[styles.glyph, styles.removed]}>{names.includes(name) ? '✓' : '✕'}</Text>
+                    <Text style={[styles.glyph, styles.removed]}>{selected.has(name) ? '✓' : '✕'}</Text>
                   </Pressable>
                 </View>
               ))}
@@ -521,12 +566,12 @@ function ScopeSection({
             accessibilityLabel={`Filter ${title}`}
           />
           <View style={styles.card}>
-            {available.length === 0 ? (
+            {rows.length === 0 ? (
               <View style={styles.row}>
                 <Text style={styles.itemHint}>no match</Text>
               </View>
             ) : (
-              available.map((item, index) => (
+              rows.map((item, index) => (
                 <View key={item.name}>
                   {index > 0 ? <View style={styles.separator} /> : null}
                   <Pressable
@@ -534,18 +579,25 @@ function ScopeSection({
                     onPress={() => onToggle(item.name)}
                     accessibilityRole="button"
                     accessibilityLabel={`Toggle ${item.name}`}
-                    accessibilityState={{ selected: names.includes(item.name) }}>
+                    accessibilityState={{ selected: selected.has(item.name) }}>
                     <View style={styles.itemMain}>
                       <Text style={styles.itemName}>{item.name}</Text>
                       <Text style={styles.itemHint} numberOfLines={1}>
                         {item.description}
                       </Text>
                     </View>
-                    <Text style={styles.glyph}>{names.includes(item.name) ? '✓' : ''}</Text>
+                    <Text style={styles.glyph}>{selected.has(item.name) ? '✓' : ''}</Text>
                   </Pressable>
                 </View>
               ))
             )}
+            {available.length > rows.length ? (
+              <View style={styles.row}>
+                <Text style={styles.itemHint}>
+                  {`${available.length - rows.length} more · narrow the filter`}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </>
       ) : null}
