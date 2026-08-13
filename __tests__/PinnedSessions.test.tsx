@@ -52,7 +52,7 @@ async function bootWith(sessions: ReturnType<typeof summary>[]): Promise<Tree> {
   return tree;
 }
 
-test('pinning lifts a conversation into its own section and arms its actions as a drag handle', async () => {
+test('pinning lifts a conversation into its own section and makes the row announce the hold', async () => {
   const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
   await pressLabel(tree, 'Open conversations');
   await waitFor(() => textsOf(tree).includes('conversations · 2'));
@@ -62,8 +62,10 @@ test('pinning lifts a conversation into its own section and arms its actions as 
 
   await waitFor(() => textsOf(tree).includes('pinned · 1'));
   expect(textsOf(tree)).toContain('conversations · 1');
-  // The same button still opens the menu; the label now says it also starts a drag.
-  expect(labelsOf(tree)).toContain('Actions for conversation Alpha, hold to reorder');
+  // The row itself is the grab area, so the row is what announces the hold — and the actions
+  // button goes back to being nothing but a button.
+  expect(labelsOf(tree)).toContain('Conversation Alpha, hold to reorder');
+  expect(labelsOf(tree)).toContain('Actions for conversation Alpha');
   await settleAndUnmount(tree);
 });
 
@@ -76,7 +78,7 @@ test('unpinning puts the conversation back into the list', async () => {
   await pressLabel(tree, 'Pin to top');
   await waitFor(() => textsOf(tree).includes('pinned · 1'));
 
-  await pressLabel(tree, 'Actions for conversation Alpha, hold to reorder');
+  await pressLabel(tree, 'Actions for conversation Alpha');
   await pressLabel(tree, 'Unpin');
 
   await waitFor(() => textsOf(tree).includes('conversations · 2'));
@@ -100,7 +102,10 @@ test('a dragged order sticks and survives a server refresh of the list', async (
   // Row order is read from the conversation labels: the pinned section renders its rows
   // first, so the dragged order must put Beta's row before Alpha's.
   const conversationOrder = () =>
-    labelsOf(tree).filter(label => label.startsWith('Conversation '));
+    labelsOf(tree)
+      .filter(label => label.startsWith('Conversation '))
+      // Pinned rows carry the reorder hint; the order is what is under test, not the wording.
+      .map(label => label.replace(', hold to reorder', ''));
   await waitFor(() => {
     const order = conversationOrder();
     return order.indexOf('Conversation Beta') >= 0
@@ -115,6 +120,47 @@ test('a dragged order sticks and survives a server refresh of the list', async (
   await settleAndUnmount(tree);
 });
 
+test('the pinned section is one column wide, and the row itself is the grab area', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha')]);
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Actions for conversation Alpha');
+  await pressLabel(tree, 'Pin to top');
+  await waitFor(() => textsOf(tree).includes('pinned · 1'));
+
+  // Both halves of the same bug: a sortable that is not told to be a single column falls back
+  // to a wrapping row, where each cell sizes itself to its own title and shoves the actions
+  // button past the edge of the panel — and a custom handle would then be the one thing you
+  // have to hit to drag, which is precisely the thing pushed out of reach.
+  const grid = tree.root.find(node => node.props.testID === 'sortable-grid');
+  expect(grid.props.columns).toBe(1);
+  expect(grid.props.customHandle).toBe(false);
+  await settleAndUnmount(tree);
+});
+
+test('a drop reorders from the rows the sortable hands back', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Actions for conversation Alpha');
+  await pressLabel(tree, 'Pin to top');
+  await pressLabel(tree, 'Actions for conversation Beta');
+  await pressLabel(tree, 'Pin to top');
+  await waitFor(() => textsOf(tree).includes('pinned · 2'));
+
+  // The drop itself, played through the callback the grid owns: the reordered rows come back
+  // as data, and the store must be written from them.
+  const grid = tree.root.find(node => node.props.testID === 'sortable-grid');
+  await ReactTestRenderer.act(async () => {
+    grid.props.onDragEnd({ data: [summary('t-beta', 'Beta'), summary('t-alpha', 'Alpha')] });
+  });
+
+  expect(pinnedStore.orderOf()).toEqual(['t-beta', 't-alpha']);
+  const order = labelsOf(tree)
+    .filter(label => label.startsWith('Conversation '))
+    .map(label => label.replace(', hold to reorder', ''));
+  expect(order.indexOf('Conversation Beta')).toBeLessThan(order.indexOf('Conversation Alpha'));
+  await settleAndUnmount(tree);
+});
+
 test('a session that disappears takes its pin with it', async () => {
   const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
   await pressLabel(tree, 'Open conversations');
@@ -125,6 +171,6 @@ test('a session that disappears takes its pin with it', async () => {
   await emit({ type: 'session.list.result', sessions: [summary('t-beta', 'Beta')] });
   await waitFor(() => textsOf(tree).includes('conversations · 1'));
   expect(textsOf(tree)).not.toContain('pinned · 1');
-  expect(labelsOf(tree)).not.toContain('Actions for conversation Alpha, hold to reorder');
+  expect(labelsOf(tree)).not.toContain('Conversation Alpha, hold to reorder');
   await settleAndUnmount(tree);
 });

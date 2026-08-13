@@ -152,15 +152,33 @@ jest.mock('react-native-image-picker', () => ({
 }));
 
 // react-native-sortables runs its drag engine on measured layout shared values; the reanimated
-// mock has no layout at all, so the provider crashes. The unit tests care about structure (the
-// pinned section, the handle) and the ordering logic, not the gesture: children pass through
-// as plain Views and the real drag is verified on a device.
+// mock has no layout at all, so the provider crashes. The gesture itself therefore stays device
+// territory. What this mock keeps testable is the contract the drawer leans on: the rows render
+// through `renderItem` in the order they are handed over, the layout is a single column, and no
+// custom handle steals the grab area from the row. Those props ride onto the View so a test can
+// read them back, and `onDragEnd` is exposed so a drop can be played without a finger.
 jest.mock('react-native-sortables', () => {
   const React = require('react');
   const { View } = require('react-native');
-  const Handle = ({ children }) => React.createElement(View, null, children);
-  const Flex = ({ children }) => React.createElement(View, { collapsable: false }, children);
-  return { __esModule: true, default: { Flex, Handle }, Handle, Flex };
+  const Grid = ({ data = [], renderItem, keyExtractor, columns, customHandle, onDragEnd }) =>
+    React.createElement(
+      View,
+      {
+        testID: 'sortable-grid',
+        collapsable: false,
+        columns,
+        customHandle: Boolean(customHandle),
+        onDragEnd,
+      },
+      data.map((item, index) =>
+        React.createElement(
+          View,
+          { key: keyExtractor ? keyExtractor(item) : index },
+          renderItem({ item, index }),
+        ),
+      ),
+    );
+  return { __esModule: true, default: { Grid }, Grid };
 });
 
 // The SAF file picker lives in our own Kotlin bridge, like the rest of the native modules.

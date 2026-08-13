@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Sortable from 'react-native-sortables';
 import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -10,8 +9,9 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
  * row. The handlers take what they need from the row rather than a per-row closure, so their
  * identity is stable — `onMenu` gets the whole session, which spares its owner a lookup table
  * whose identity would have moved with the list.
- * When `draggable`, the actions button doubles as the drag handle: a hold becomes a drag, a
- * quick tap still opens the menu.
+ * When `draggable`, the row carries no handle of its own: its sortable parent makes the whole
+ * cell the grab area, so a hold anywhere starts a drag and a tap still opens the thread. Only
+ * the label changes here, because a gesture nobody announces is a gesture nobody finds.
  */
 export const ThreadRow = React.memo(function ThreadRowRow({
   item,
@@ -24,7 +24,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   item: SessionSummary;
   active: boolean;
   unread: boolean;
-  /** The actions button is the drag handle; only pinned rows are draggable. */
+  /** Only pinned rows reorder, and the whole row is the grab area. */
   draggable: boolean;
   onOpen: (threadId: string) => void;
   onMenu: (thread: SessionSummary) => void;
@@ -36,7 +36,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
       style={styles.menu}
       onPress={() => onMenu(item)}
       accessibilityRole="button"
-      accessibilityLabel={`Actions for conversation ${item.title}${draggable ? ', hold to reorder' : ''}`}>
+      accessibilityLabel={`Actions for conversation ${item.title}`}>
       <Text style={styles.menuGlyph}>⋯</Text>
     </Pressable>
   );
@@ -47,7 +47,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
         onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}`}>
+        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${draggable ? ', hold to reorder' : ''}`}>
         <View style={styles.titleRow}>
           {unread ? <View style={styles.dot} /> : null}
           <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
@@ -60,7 +60,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
           <Text style={styles.workspace}>{item.workspace}</Text>
         ) : null}
       </Pressable>
-      {draggable ? <Sortable.Handle>{menuButton}</Sortable.Handle> : menuButton}
+      {menuButton}
     </View>
   );
 });

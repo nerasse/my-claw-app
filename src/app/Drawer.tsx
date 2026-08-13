@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import Sortable, { type SortableFlexDragEndParams } from 'react-native-sortables';
+import Sortable, { type SortableGridDragEndParams } from 'react-native-sortables';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
@@ -109,14 +109,11 @@ export function Drawer({
     if (kept.length !== pinnedOrder.length) pinnedStore.setOrder(kept);
   }, [sessions, pinnedOrder, threadsById]);
 
-  const handleDragEnd = useCallback(
-    (params: SortableFlexDragEndParams) => {
-      // The rendered order is the truth: `order` reshuffles what we hand it to match the new
-      // children order, and stale ids are not among the children.
-      pinnedStore.setOrder(params.order(pinnedRows.map(session => session.threadId)));
-    },
-    [pinnedRows],
-  );
+  const handleDragEnd = useCallback((params: SortableGridDragEndParams<SessionSummary>) => {
+    // The grid hands back the rows already reshuffled, so the drop reads straight off them
+    // rather than replaying an index permutation over a captured list.
+    pinnedStore.setOrder(params.data.map(session => session.threadId));
+  }, []);
 
   const sectionCount = (count: number, total: number): string =>
     query.trim() ? `${count} / ${total}` : String(total);
@@ -128,6 +125,20 @@ export function Drawer({
         active={item.threadId === activeThread}
         unread={unreadIds.has(item.threadId)}
         draggable={false}
+        onOpen={onOpenThread}
+        onMenu={onThreadMenu}
+      />
+    ),
+    [activeThread, onOpenThread, onThreadMenu, unreadIds],
+  );
+
+  const renderPinned = useCallback(
+    ({ item }: { item: SessionSummary }) => (
+      <ThreadRow
+        item={item}
+        active={item.threadId === activeThread}
+        unread={unreadIds.has(item.threadId)}
+        draggable
         onOpen={onOpenThread}
         onMenu={onThreadMenu}
       />
@@ -213,25 +224,20 @@ export function Drawer({
                   <Text style={styles.sectionLabel}>
                     {`pinned · ${sectionCount(pinnedRows.length, pinnedTotal)}`}
                   </Text>
-                  {/* Content-sized by design: the rows are the whole scroll range, so this
-                      inner scroll view never scrolls and the outer list keeps the wheel. */}
-                  <Sortable.Flex
-                    customHandle
-                    dragActivationDelay={200}
+                  {/* A single column, not a Flex: Flex defaults to a wrapping row and leaves
+                      item width uncontrolled, so each row sized itself to its own title and
+                      pushed its actions button past the panel. A vertical grid owns the width,
+                      which is what makes `numberOfLines` bite. The whole row is the handle —
+                      holding a row is how a human expects to reorder one. */}
+                  <Sortable.Grid
+                    columns={1}
+                    data={pinnedRows}
+                    keyExtractor={keyOfThread}
+                    dragActivationDelay={400}
                     hapticsEnabled
-                    onDragEnd={handleDragEnd}>
-                    {pinnedRows.map(session => (
-                      <ThreadRow
-                        key={session.threadId}
-                        item={session}
-                        active={session.threadId === activeThread}
-                        unread={unreadIds.has(session.threadId)}
-                        draggable
-                        onOpen={onOpenThread}
-                        onMenu={onThreadMenu}
-                      />
-                    ))}
-                  </Sortable.Flex>
+                    renderItem={renderPinned}
+                    onDragEnd={handleDragEnd}
+                  />
                   <Separator />
                 </View>
               ) : null
