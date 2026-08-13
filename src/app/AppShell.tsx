@@ -27,6 +27,7 @@ import {
 } from '../core/chat';
 import { subAgentStore, groupRoster, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
+import { pinnedStore, usePinnedOrder } from '../core/pinned';
 import { commandStore, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
 import { acknowledgeDiagnostics, flushDiagnostics, loadDiagnostics } from '../core/diagnostics';
@@ -607,6 +608,7 @@ export function AppShell(): React.JSX.Element {
   const items = useChatItems(activeThread);
   const sessions = useSessions();
   const archivedSessions = useArchivedSessions();
+  const pinnedOrder = usePinnedOrder();
   const unread = useUnreadThreads();
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
   const catalog = useModelCatalog();
@@ -1204,6 +1206,7 @@ export function AppShell(): React.JSX.Element {
         connection.send(encodeSessionList());
       });
     });
+    pinnedStore.hydrate().catch(() => {});
 
     // Reports of what killed the previous process, read before the first frame goes out. They
     // are queued natively if the socket is not up yet, so this does not need to wait for it.
@@ -1954,6 +1957,25 @@ export function AppShell(): React.JSX.Element {
    */
   const conversationActions = useCallback(
     (target: SessionSummary, close: () => void): SheetEntry[] => [
+      // Pinning is a drawer thing, but the drawer's own sheet is the same list; both menus
+      // answer here, so the entry lives with the rest of the conversation actions.
+      pinnedOrder.includes(target.threadId)
+        ? {
+            label: 'Unpin',
+            hint: 'back to the conversation list',
+            onPress: () => {
+              pinnedStore.setPinned(target.threadId, false);
+              close();
+            },
+          }
+        : {
+            label: 'Pin to top',
+            hint: 'keep it above the list',
+            onPress: () => {
+              pinnedStore.setPinned(target.threadId, true);
+              close();
+            },
+          },
       // First and standing alone: it is the one action both menus share for any conversation,
       // and it used to cost a whole header button.
       {
@@ -2017,7 +2039,7 @@ export function AppShell(): React.JSX.Element {
         },
       },
     ],
-    [openStatus, setThreadArchived, openFilesFor, workspaceOf],
+    [openStatus, setThreadArchived, openFilesFor, workspaceOf, pinnedOrder],
   );
 
   const threadActions: SheetEntry[] = threadMenu

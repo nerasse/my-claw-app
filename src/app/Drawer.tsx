@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Sortable, { type SortableFlexDragEndParams } from 'react-native-sortables';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
 import { PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
+import { pinnedStore, usePinnedOrder } from '../core/pinned';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -71,12 +73,6 @@ export function Drawer({
   // never focused on the way in: whatever keyboard is up belongs to the composer behind it.
   useDismissKeyboard(open);
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return sessions;
-    return sessions.filter(session => session.title.toLowerCase().includes(needle));
-  }, [sessions, query]);
-
   // Stable identities so React.memo on the rows keeps working while the list is long.
   const threadsById = useMemo(() => new Map(sessions.map(session => [session.threadId, session])), [sessions]);
   const handleOpen = useCallback((threadId: string) => onOpenThread(threadId), [onOpenThread]);
@@ -87,6 +83,48 @@ export function Drawer({
     },
     [onThreadMenu, threadsById],
   );
+
+  // The pinned set is a per-device preference, the sessions come from the server: the merge
+  // happens here. Pinned rows follow the user's order, the rest keeps the server's.
+  const pinnedOrder = usePinnedOrder();
+  const pinnedIds = useMemo(() => new Set(pinnedOrder), [pinnedOrder]);
+  const { pinnedRows, restRows, pinnedTotal, restTotal } = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const match = (session: SessionSummary) =>
+      !needle || session.title.toLowerCase().includes(needle);
+    const pinned: SessionSummary[] = [];
+    for (const threadId of pinnedOrder) {
+      const session = threadsById.get(threadId);
+      if (session && match(session)) pinned.push(session);
+    }
+    const rest = sessions.filter(session => match(session) && !pinnedIds.has(session.threadId));
+    const pinnedCount = sessions.reduce(
+      (count, session) => count + (pinnedIds.has(session.threadId) ? 1 : 0),
+      0,
+    );
+    return { pinnedRows: pinned, restRows: rest, pinnedTotal: pinnedCount, restTotal: sessions.length - pinnedCount };
+  }, [sessions, threadsById, pinnedOrder, pinnedIds, query]);
+
+  // Sessions that vanished (deleted, archived) leave a stale id behind; prune once the server
+  // has spoken, and never before: the list starts empty on boot and would wipe the pins.
+  useEffect(() => {
+    if (sessions.length === 0) return;
+    const stale = pinnedOrder.filter(threadId => !threadsById.has(threadId));
+    if (stale.length > 0)
+      pinnedStore.setOrder(pinnedOrder.filter(threadId => !stale.includes(threadId)));
+  }, [sessions, pinnedOrder, threadsById]);
+
+  const handleDragEnd = useCallback(
+    (params: SortableFlexDragEndParams) => {
+      // The rendered order is the truth: `order` reshuffles what we hand it to match the new
+      // children order, and stale ids are not among the children.
+      pinnedStore.setOrder(params.order(pinnedRows.map(session => session.threadId)));
+    },
+    [pinnedRows],
+  );
+
+  const sectionCount = (count: number, total: number): string =>
+    query.trim() ? `${count} / ${total}` : String(total);
 
   useEffect(() => {
     Animated.timing(progress, { toValue: open ? 1 : 0, duration: 200, useNativeDriver: true }).start();
@@ -133,9 +171,7 @@ export function Drawer({
           </Pressable>
         </View>
 
-        <Text style={styles.sectionLabel}>
-          conversations · {filtered.length === sessions.length ? sessions.length : `${filtered.length} / ${sessions.length}`}
-        </Text>
+        <Text style={styles.sectionLabel}>{`conversations · ${sectionCount(restRows.length, restTotal)}`}</Text>
 
         <TextInput
           style={styles.search}
@@ -152,7 +188,7 @@ export function Drawer({
           <FlatList
             {...scrollProps}
             style={styles.list}
-            data={filtered}
+            data={restRows}
             keyExtractor={item => item.threadId}
             ItemSeparatorComponent={Separator}
             keyboardShouldPersistTaps="handled"
@@ -162,9 +198,42 @@ export function Drawer({
             maxToRenderPerBatch={14}
             windowSize={9}
             removeClippedSubviews={Platform.OS === 'android'}
+            ListHeaderComponent={
+              pinnedRows.length > 0 ? (
+                <View style={styles.pinnedSection}>
+                  <Text style={styles.sectionLabel}>
+                    {`pinned · ${sectionCount(pinnedRows.length, pinnedTotal)}`}
+                  </Text>
+                  {/* Content-sized by design: the rows are the whole scroll range, so this
+                      inner scroll view never scrolls and the outer list keeps the wheel. */}
+                  <Sortable.Flex
+                    customHandle
+                    dragActivationDelay={200}
+                    hapticsEnabled
+                    onDragEnd={handleDragEnd}>
+                    {pinnedRows.map(session => (
+                      <ThreadRow
+                        key={session.threadId}
+                        item={session}
+                        active={session.threadId === activeThread}
+                        unread={unread.includes(session.threadId)}
+                        draggable
+                        onOpen={handleOpen}
+                        onMenu={handleMenu}
+                      />
+                    ))}
+                  </Sortable.Flex>
+                  <Separator />
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               <Text style={styles.empty}>
-                {query.trim() ? 'no match' : 'no conversations'}
+                {query.trim()
+                  ? 'no match'
+                  : pinnedRows.length > 0
+                    ? 'no more conversations'
+                    : 'no conversations'}
               </Text>
             }
             renderItem={({ item }) => (
@@ -172,6 +241,7 @@ export function Drawer({
                 item={item}
                 active={item.threadId === activeThread}
                 unread={unread.includes(item.threadId)}
+                draggable={false}
                 onOpen={handleOpen}
                 onMenu={handleMenu}
               />
@@ -280,6 +350,7 @@ const createStyles = (palette: Palette) => ({
   },
   listArea: { flex: 1 },
   list: { paddingHorizontal: space.sm },
+  pinnedSection: { paddingBottom: space.xs },
   search: {
     marginHorizontal: space.md,
     marginBottom: space.sm,

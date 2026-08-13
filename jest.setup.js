@@ -106,7 +106,16 @@ jest.mock('@likashefqet/react-native-image-zoom', () => {
   return { __esModule: true, default: stub, ImageZoom: stub, Zoomable: stub };
 });
 
-jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+jest.mock('react-native-reanimated', () => {
+  const mock = require('react-native-reanimated/mock');
+  return {
+    ...mock,
+    default: { ...mock.default },
+    // The official mock lacks this predicate that react-native-sortables calls on drag
+    // handlers; a plain function is never a worklet, which is what the mock world needs.
+    isWorkletFunction: fn => typeof fn === 'function' && typeof fn.__workletHash === 'number',
+  };
+});
 
 jest.mock('react-native-marked', () => {
   const React = require('react');
@@ -141,6 +150,18 @@ jest.mock('react-native-image-picker', () => ({
     callback({ didCancel: true }),
   ),
 }));
+
+// react-native-sortables runs its drag engine on measured layout shared values; the reanimated
+// mock has no layout at all, so the provider crashes. The unit tests care about structure (the
+// pinned section, the handle) and the ordering logic, not the gesture: children pass through
+// as plain Views and the real drag is verified on a device.
+jest.mock('react-native-sortables', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const Handle = ({ children }) => React.createElement(View, null, children);
+  const Flex = ({ children }) => React.createElement(View, { collapsable: false }, children);
+  return { __esModule: true, default: { Flex, Handle }, Handle, Flex };
+});
 
 // The SAF file picker lives in our own Kotlin bridge, like the rest of the native modules.
 jest.mock('./src/core/nativeBridge', () => ({

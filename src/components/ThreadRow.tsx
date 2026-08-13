@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import Sortable from 'react-native-sortables';
 import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -7,21 +8,36 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 /**
  * Memoized: with hundreds of sessions, a scroll or an unread change must not re-render every
  * row. The handlers take the threadId instead of a per-row closure so their identity is stable.
+ * When `draggable`, the actions button doubles as the drag handle: a hold becomes a drag, a
+ * quick tap still opens the menu.
  */
 export const ThreadRow = React.memo(function ThreadRowRow({
   item,
   active,
   unread,
+  draggable,
   onOpen,
   onMenu,
 }: {
   item: SessionSummary;
   active: boolean;
   unread: boolean;
+  /** The actions button is the drag handle; only pinned rows are draggable. */
+  draggable: boolean;
   onOpen: (threadId: string) => void;
   onMenu: (threadId: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const menuButton = (
+    <Pressable
+      hitSlop={6}
+      style={styles.menu}
+      onPress={() => onMenu(item.threadId)}
+      accessibilityRole="button"
+      accessibilityLabel={`Actions for conversation ${item.title}${draggable ? ', hold to reorder' : ''}`}>
+      <Text style={styles.menuGlyph}>⋯</Text>
+    </Pressable>
+  );
   return (
     <View style={[styles.row, active && styles.rowActive]}>
       <Pressable
@@ -42,14 +58,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
           <Text style={styles.workspace}>{item.workspace}</Text>
         ) : null}
       </Pressable>
-      <Pressable
-        hitSlop={6}
-        style={styles.menu}
-        onPress={() => onMenu(item.threadId)}
-        accessibilityRole="button"
-        accessibilityLabel={`Actions for conversation ${item.title}`}>
-        <Text style={styles.menuGlyph}>⋯</Text>
-      </Pressable>
+      {draggable ? <Sortable.Handle>{menuButton}</Sortable.Handle> : menuButton}
     </View>
   );
 });

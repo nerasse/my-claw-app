@@ -65,6 +65,7 @@ export function ArchivesScreen({
               item={item}
               active={false}
               unread={false}
+              draggable={false}
               onOpen={onOpenThread}
               onMenu={handleMenu}
             />
