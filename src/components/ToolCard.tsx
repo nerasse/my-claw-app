@@ -12,8 +12,10 @@ import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } fro
  * The card is a View whose head is the pressable, not one big Pressable: the expanded body of a
  * `spawn` card carries a button of its own, and a control inside a control is announced as one
  * thing by a screen reader and steals the toggle's touch.
+ *
+ * Memoized, and `onOpenSubAgent` takes the card id rather than being closed over it: see Bubble.
  */
-export function ToolCard({
+export const ToolCard = React.memo(function ToolCardView({
   item,
   subagent,
   onOpenSubAgent,
@@ -21,7 +23,7 @@ export function ToolCard({
   item: ToolItem;
   /** Set when this card spawned a named sub-agent that still exists; the door to it. */
   subagent?: { label: string; status: 'idle' | 'running' };
-  onOpenSubAgent?: () => void;
+  onOpenSubAgent?: (toolItemId: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
@@ -69,7 +71,7 @@ export function ToolCard({
           {subagent && onOpenSubAgent ? (
             <Pressable
               style={styles.door}
-              onPress={onOpenSubAgent}
+              onPress={() => onOpenSubAgent(item.id)}
               accessibilityRole="button"
               accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}>
               <Text style={styles.doorGlyph}>◈</Text>
@@ -84,7 +86,7 @@ export function ToolCard({
       ) : null}
     </View>
   );
-}
+});
 
 const createStyles = (palette: Palette) => ({
   card: {

@@ -13,7 +13,12 @@ function clock(ts: number): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-export function Bubble({
+/**
+ * One message. Memoized, and its callbacks take the item rather than closing over it: a long
+ * thread re-renders on every streaming delta, and a per-row closure rebuilt each time would make
+ * the memo a no-op — every mounted bubble would re-parse its markdown for one changed character.
+ */
+export const Bubble = React.memo(function BubbleView({
   item,
   mediaBase,
   deviceInfo,
@@ -28,7 +33,7 @@ export function Bubble({
   /** Same author as the previous item: tighten the gap instead of repeating a full margin. */
   grouped: boolean;
   showTime: boolean;
-  onMenu: () => void;
+  onMenu: (item: TextItem) => void;
   onOpenAttachment?: (
     kind: 'image' | 'text' | 'video' | 'file',
     target: { url: string; filename: string; sizeBytes?: number },
@@ -100,7 +105,7 @@ export function Bubble({
         <Pressable
           hitSlop={12}
           style={[styles.menu, agent ? styles.menuAgent : styles.menuUser]}
-          onPress={onMenu}
+          onPress={() => onMenu(item)}
           accessibilityRole="button"
           accessibilityLabel="Message actions">
           <Text style={styles.menuGlyph}>⋯</Text>
@@ -108,7 +113,7 @@ export function Bubble({
       </View>
     </View>
   );
-}
+});
 
 const createStyles = (palette: Palette) => ({
   row: { width: '100%' as const, flexDirection: 'row' as const, marginBottom: space.md },

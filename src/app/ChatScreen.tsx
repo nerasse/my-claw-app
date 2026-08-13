@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Linking, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
@@ -40,6 +40,8 @@ function isGrouped(items: ChatItem[], index: number): boolean {
   if (!item || !previous || item.kind !== 'text' || previous.kind !== 'text') return false;
   return previous.role === item.role && item.ts - previous.ts < GROUP_WINDOW_MS;
 }
+
+const keyOfItem = (item: ChatItem): string => item.id;
 
 export function ChatScreen({
   threadId,
@@ -127,6 +129,8 @@ export function ChatScreen({
   const viewportRef = useRef(0);
   const offsetRef = useRef(0);
   const contentRef = useRef(0);
+  /** False until this thread has been placed at its bottom once; gates the scroll animation. */
+  const settledRef = useRef(false);
   const [draft, setDraft] = useState('');
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
@@ -150,11 +154,19 @@ export function ChatScreen({
     setAddressOverride(null);
     setLocationSheet(false);
     setLocationDraft('');
+    settledRef.current = false;
   }, [threadId]);
 
+  // Follow the bottom as the answer grows. The first landing of a thread is a jump, not a scroll:
+  // history arrives in one frame, and gliding through it would animate past every message the
+  // user did not ask to re-read. Only what happens after that first paint is worth animating.
   useEffect(() => {
     if (!atBottom) return;
-    const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 40);
+    const animated = settledRef.current;
+    const timer = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated });
+      settledRef.current = true;
+    }, 40);
     return () => clearTimeout(timer);
   }, [items, atBottom]);
 
@@ -368,6 +380,42 @@ export function ChatScreen({
 
   const empty = items.length === 0;
 
+  // `grouped[i]` says row i continues the previous author's block. Computed once per items change
+  // rather than twice per row on every render: the whole list re-renders on each streaming delta,
+  // and this used to be O(rows) comparisons per frame for an answer that changed by one letter.
+  const grouped = useMemo(() => items.map((_, index) => isGrouped(items, index)), [items]);
+
+  // Stable identities, or the memo on Bubble/ToolCard never holds. onBubbleMenu and the four
+  // viewer setters come from AppShell as state setters, so this closure only changes when the
+  // screen genuinely changes.
+  const openAttachment = useCallback(
+    (kind: 'image' | 'text' | 'video' | 'file', target: { url: string; filename: string; sizeBytes?: number }) => {
+      if (kind === 'image') return onOpenImage(target);
+      if (kind === 'text') return onOpenText(target);
+      if (kind === 'video') return onOpenVideo(target);
+      return onOpenFile(target);
+    },
+    [onOpenImage, onOpenText, onOpenVideo, onOpenFile],
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: ChatItem; index: number }) =>
+      item.kind === 'tool' ? (
+        <ToolCard item={item} subagent={subagentDoors.get(item.id)} onOpenSubAgent={onOpenSubAgent} />
+      ) : (
+        <Bubble
+          item={item}
+          mediaBase={mediaBase}
+          deviceInfo={deviceInfo}
+          grouped={grouped[index] ?? false}
+          showTime={!(grouped[index + 1] ?? false)}
+          onMenu={onBubbleMenu}
+          onOpenAttachment={openAttachment}
+        />
+      ),
+    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, subagentDoors],
+  );
+
   const locationLabel = location
     ? addressOverride !== null
       ? addressOverride.trim() || 'Coordinates only'
@@ -537,38 +585,19 @@ export function ChatScreen({
               ref={listRef}
               {...scrollProps}
               data={items}
-              keyExtractor={item => item.id}
+              keyExtractor={keyOfItem}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
-              renderItem={({ item, index }) =>
-                item.kind === 'tool' ? (
-                  <ToolCard
-                    item={item}
-                    {...(subagentDoors.get(item.id)
-                      ? { subagent: subagentDoors.get(item.id)!, onOpenSubAgent: () => onOpenSubAgent?.(item.id) }
-                      : {})}
-                  />
-                ) : (
-                  <Bubble
-                    item={item}
-                    mediaBase={mediaBase}
-                    deviceInfo={deviceInfo}
-                grouped={isGrouped(items, index)}
-                showTime={!isGrouped(items, index + 1)}
-                onMenu={() => onBubbleMenu(item)}
-                onOpenAttachment={(kind, target) =>
-                  kind === 'image'
-                    ? onOpenImage(target)
-                    : kind === 'text'
-                      ? onOpenText(target)
-                      : kind === 'video'
-                        ? onOpenVideo(target)
-                        : onOpenFile(target)
-                }
-              />
-            )
-          }
-        />
+              renderItem={renderItem}
+              // Bubbles have no knowable height (markdown, images, tool output), so getItemLayout
+              // is out and these numbers are the only handle on how much is mounted at once.
+              initialNumToRender={12}
+              maxToRenderPerBatch={8}
+              updateCellsBatchingPeriod={50}
+              windowSize={11}
+              // removeClippedSubviews is deliberately off: the ⋯ menu sits absolutely positioned
+              // outside its bubble, and Android clips exactly that away.
+            />
 
         {indicator}
 

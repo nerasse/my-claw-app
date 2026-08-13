@@ -527,6 +527,30 @@ describe('attachments in a replayed turn', () => {
   });
 });
 
+describe('landing at the bottom of a conversation', () => {
+  test('opening jumps to the latest, what arrives afterwards glides', async () => {
+    const spy = jest.spyOn(FlatList.prototype, 'scrollToEnd').mockImplementation(() => {});
+    const tree = await renderWithHistory();
+
+    // The history arrives in one frame. Animating through it would scroll past every message the
+    // user did not ask to re-read, and on a long thread that animation is the jank people report.
+    // The autoscroll is debounced by 40ms, which is more than the default drain affords.
+    await waitFor(() => spy.mock.calls.length > 0, 200);
+    expect(spy.mock.calls.map(([options]) => options?.animated)).not.toContain(true);
+    spy.mockClear();
+
+    await ReactTestRenderer.act(async () => {
+      chatStore.addAgentMessage(THREAD, 'h-3', 'and one more thing', []);
+    });
+
+    // Once the thread is settled, following the answer as it grows is a scroll, not a jump.
+    await waitFor(() => spy.mock.calls.length > 0, 200);
+    expect(spy).toHaveBeenCalledWith({ animated: true });
+    spy.mockRestore();
+    await unmount(tree);
+  });
+});
+
 describe('keeping the same place when the keyboard opens', () => {
   /** The message list of the chat screen, identified by the seeded history it renders. */
   function chatList(tree: Tree): ReactTestRenderer.ReactTestInstance {
