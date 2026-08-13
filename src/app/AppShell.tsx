@@ -192,6 +192,7 @@ import { font, radius, space, useTheme, useThemedStyles, type Palette } from '..
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
 
+/** One page of replayed history, not a ceiling: scrolling past the oldest asks for the next. */
 const HISTORY_LIMIT = 50;
 
 /**

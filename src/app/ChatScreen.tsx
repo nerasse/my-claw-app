@@ -131,10 +131,6 @@ export function ChatScreen({
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
   const listRef = useRef<FlatList<ChatItem>>(null);
-  // How far the list is from the newest message. The keyboard used to need a compensation pass
-  // here — it shrinks the viewport without scrolling — but an inverted list anchors its content
-  // to the bottom edge, so the message above the keyboard stays put on its own.
-  const offsetRef = useRef(0);
   const [draft, setDraft] = useState('');
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
@@ -424,9 +420,7 @@ export function ChatScreen({
   // scroll range. That is the whole point of inverting it — no scrollToEnd on open, no content
   // height to estimate, and the keyboard shrinking the viewport leaves offset 0 where it was.
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-    const offset = event.nativeEvent.contentOffset.y;
-    offsetRef.current = offset;
-    const nearBottom = offset <= 120;
+    const nearBottom = event.nativeEvent.contentOffset.y <= 120;
     if (nearBottom !== atBottom) setAtBottom(nearBottom);
   }, [atBottom]);
   const { scrollProps, indicator } = useScrollIndicator(handleScroll);
