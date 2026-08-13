@@ -20,6 +20,7 @@ const keyOfRun = (run: JobRunEntry): string => run.threadId;
 
 /** Frozen, so "still loading" and "no runs" do not hand FlatList a fresh array on every render. */
 const EMPTY_RUNS: JobRunEntry[] = [];
+Object.freeze(EMPTY_RUNS);
 
 function Separator(): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

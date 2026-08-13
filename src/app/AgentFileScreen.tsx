@@ -10,7 +10,9 @@ export interface ScopeOption {
   description: string;
 }
 
+/** Frozen so an absent list is always the same reference, and never grown by accident. */
 const EMPTY_NAMES: string[] = [];
+Object.freeze(EMPTY_NAMES);
 
 /**
  * These pickers live inside the page's own scroll view, so they cannot virtualize: a list nested

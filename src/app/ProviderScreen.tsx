@@ -230,7 +230,6 @@ const createStyles = (palette: Palette) => ({
   linkMain: { flex: 1, gap: 2 },
   linkTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
   linkTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  linkGlyph: { fontSize: 20, color: palette.textFaint },
   hint: { fontSize: font.small, color: palette.textMuted },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
   badge: {

@@ -198,6 +198,7 @@ const HISTORY_LIMIT = 50;
  * same but is a new identity every render, which silently defeats the memo of whatever gets it.
  */
 const EMPTY_MODELS: ModelOption[] = [];
+Object.freeze(EMPTY_MODELS);
 
 /** The config scope shape ("["*"]" for all, absent for inherit) as the editor's mode union. */
 function scopeModeOf(scope: string[] | null | undefined): ScopeMode {

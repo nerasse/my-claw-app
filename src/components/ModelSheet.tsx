@@ -23,8 +23,9 @@ function splitGroup(model: ModelOption): string[] {
 const SEARCH_MIN_MODELS = 12;
 
 /**
- * A one-letter query matches hundreds of models. The sheet renders every option it is given
- * (no virtualization), so the list is cut and the count says what the cut hides.
+ * A one-letter query matches hundreds of models. The sheet virtualizes, so this is not about what
+ * it costs to draw: a result list nobody can read to the end is a worse answer than a cut one, so
+ * the list is cut and the count says what the cut hides, which is a prompt to narrow the search.
  */
 const SEARCH_MAX_RESULTS = 40;
 
