@@ -21,11 +21,24 @@ import { useTheme } from '../theme';
 const THUMB_MIN = 24;
 const HIDE_DELAY_MS = 1000;
 
-export function useScrollIndicator(
-  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void,
-  onContentSizeChange?: (width: number, height: number) => void,
-  onLayout?: (event: LayoutChangeEvent) => void,
-): {
+export interface ScrollIndicatorOptions {
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentSizeChange?: (width: number, height: number) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
+  /**
+   * The list this bar belongs to is inverted, so offset 0 is its bottom. The bar is a sibling of
+   * the list rather than a child, so it is outside the flip the list applies to itself: without
+   * this it would ride to the top while the reader sits on the newest message.
+   */
+  inverted?: boolean;
+}
+
+export function useScrollIndicator({
+  onScroll,
+  onContentSizeChange,
+  onLayout,
+  inverted = false,
+}: ScrollIndicatorOptions = {}): {
   scrollProps: {
     showsVerticalScrollIndicator: boolean;
     scrollEventThrottle: number;
@@ -79,9 +92,12 @@ export function useScrollIndicator(
 
   const overflows = viewport > 0 && content > viewport + 1;
   const thumbHeight = overflows ? Math.max(THUMB_MIN, (viewport * viewport) / content) : 0;
+  const travel = Math.max(viewport - thumbHeight, 0);
   const translateY = scrollY.interpolate({
     inputRange: [0, Math.max(content - viewport, 1)],
-    outputRange: [0, Math.max(viewport - thumbHeight, 0)],
+    // An inverted list counts its offset from the bottom, so the bar has to travel the other way
+    // to point at what is actually on screen.
+    outputRange: inverted ? [travel, 0] : [0, travel],
     extrapolate: 'clamp',
   });
 

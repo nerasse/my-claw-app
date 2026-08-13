@@ -8,12 +8,13 @@ import ReactTestRenderer from 'react-test-renderer';
 import { useScrollIndicator } from '../src/components/ScrollIndicator';
 import { ThemeProvider } from '../src/theme/ThemeProvider';
 
-function Host({ rows }: { rows: number[] }): React.JSX.Element {
-  const { scrollProps, indicator } = useScrollIndicator();
+function Host({ rows, inverted = false }: { rows: number[]; inverted?: boolean }): React.JSX.Element {
+  const { scrollProps, indicator } = useScrollIndicator({ inverted });
   return (
     <View>
       <FlatList
         {...scrollProps}
+        inverted={inverted}
         data={rows}
         keyExtractor={item => String(item)}
         renderItem={({ item }) => <Text>{item}</Text>}
@@ -24,12 +25,12 @@ function Host({ rows }: { rows: number[] }): React.JSX.Element {
   );
 }
 
-function renderHost(rows: number[]): ReactTestRenderer.ReactTestRenderer {
+function renderHost(rows: number[], inverted = false): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
       <ThemeProvider>
-        <Host rows={rows} />
+        <Host rows={rows} inverted={inverted} />
       </ThemeProvider>,
     );
   });
@@ -81,6 +82,20 @@ test('the native scrollbar is off and the custom bar appears only when content o
   await ReactTestRenderer.act(async () => tree.unmount());
 });
 
+function translateYOf(tree: ReactTestRenderer.ReactTestRenderer): number {
+  const thumb = tree.root.find(node => node.props.testID === 'scroll-indicator-thumb');
+  return (thumb.props.style as unknown[]).reduce((acc: number, entry: unknown) => {
+    if (!entry || typeof entry !== 'object') return acc;
+    const transform = (entry as { transform?: unknown[] }).transform;
+    if (!transform) return acc;
+    for (const op of transform) {
+      const translation = (op as { translateY?: { __getValue: () => number } }).translateY;
+      if (translation) return translation.__getValue();
+    }
+    return acc;
+  }, 0);
+}
+
 test('the thumb rides the scroll offset between the top and the bottom', async () => {
   const tree = renderHost([1, 2, 3]);
   act(() => {
@@ -88,22 +103,7 @@ test('the thumb rides the scroll offset between the top and the bottom', async (
     listProps(tree).onContentSizeChange(100, 2000);
   });
 
-  const thumb = () =>
-    tree.root.find(node => node.props.testID === 'scroll-indicator-thumb');
-  const translateY = () =>
-    (thumb().props.style as unknown[]).reduce(
-      (acc: number, entry: unknown) => {
-        if (!entry || typeof entry !== 'object') return acc;
-        const transform = (entry as { transform?: unknown[] }).transform;
-        if (!transform) return acc;
-        for (const op of transform) {
-          const translation = (op as { translateY?: { __getValue: () => number } }).translateY;
-          if (translation) return translation.__getValue();
-        }
-        return acc;
-      },
-      0,
-    );
+  const translateY = () => translateYOf(tree);
 
   // Halfway through 1600px of travel: the thumb has covered half of its 320px of room.
   act(() => {
@@ -121,6 +121,35 @@ test('the thumb rides the scroll offset between the top and the bottom', async (
     listProps(tree).onScroll({ nativeEvent: { contentOffset: { y: 0 } } });
   });
   expect(translateY()).toBeCloseTo(0, 0);
+
+  await ReactTestRenderer.act(async () => tree.unmount());
+});
+
+test('on an inverted list the thumb runs the other way, because offset 0 is the bottom', async () => {
+  const tree = renderHost([1, 2, 3], true);
+  act(() => {
+    listProps(tree).onLayout({ nativeEvent: { layout: { height: 400 } } });
+    listProps(tree).onContentSizeChange(100, 2000);
+  });
+
+  // Offset 0 on an inverted list is the newest message, at the bottom of the screen. The bar is
+  // a sibling of the list, so it is outside the flip the list applies to itself and has to be
+  // told: drawn the normal way it points at the top while the reader sits at the bottom.
+  act(() => {
+    listProps(tree).onScroll({ nativeEvent: { contentOffset: { y: 0 } } });
+  });
+  expect(translateYOf(tree)).toBeCloseTo(320, 0);
+
+  act(() => {
+    listProps(tree).onScroll({ nativeEvent: { contentOffset: { y: 800 } } });
+  });
+  expect(translateYOf(tree)).toBeCloseTo(160, 0);
+
+  // Scrolled all the way back through the history: the bar has reached the top of its track.
+  act(() => {
+    listProps(tree).onScroll({ nativeEvent: { contentOffset: { y: 2000 } } });
+  });
+  expect(translateYOf(tree)).toBeCloseTo(0, 0);
 
   await ReactTestRenderer.act(async () => tree.unmount());
 });

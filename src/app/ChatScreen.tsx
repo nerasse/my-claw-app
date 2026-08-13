@@ -423,7 +423,7 @@ export function ChatScreen({
     const nearBottom = event.nativeEvent.contentOffset.y <= 120;
     if (nearBottom !== atBottom) setAtBottom(nearBottom);
   }, [atBottom]);
-  const { scrollProps, indicator } = useScrollIndicator(handleScroll);
+  const { scrollProps, indicator } = useScrollIndicator({ onScroll: handleScroll, inverted: true });
 
   return (
     <View style={styles.screen}>

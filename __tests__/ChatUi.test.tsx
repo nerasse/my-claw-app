@@ -552,6 +552,24 @@ describe('reading a conversation from its newest message', () => {
     expect(toEnd).not.toHaveBeenCalled();
     expect(toOffset).not.toHaveBeenCalled();
 
+    // The scrollbar is a sibling of the list, so it does not inherit the flip: sitting on the
+    // newest message must put the thumb at the bottom of its track, not the top.
+    ReactTestRenderer.act(() => {
+      list.props.onLayout({ nativeEvent: { layout: { height: 400 } } });
+      list.props.onContentSizeChange(100, 2000);
+      list.props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } });
+    });
+    const thumb = tree.root.find(node => node.props.testID === 'scroll-indicator-thumb');
+    const translateY = (thumb.props.style as unknown[]).reduce((acc: number, entry: unknown) => {
+      const transform = (entry as { transform?: unknown[] } | null)?.transform;
+      for (const op of transform ?? []) {
+        const translation = (op as { translateY?: { __getValue: () => number } }).translateY;
+        if (translation) return translation.__getValue();
+      }
+      return acc;
+    }, 0);
+    expect(translateY).toBeCloseTo(320, 0);
+
     toEnd.mockRestore();
     toOffset.mockRestore();
     await unmount(tree);
