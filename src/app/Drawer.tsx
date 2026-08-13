@@ -236,7 +236,7 @@ export function Drawer({
                       columns={1}
                       data={pinnedRows}
                       keyExtractor={keyOfThread}
-                      rowGap={space.sm}
+                      rowGap={space.xs}
                       dragActivationDelay={400}
                       hapticsEnabled
                       renderItem={renderPinned}
@@ -358,8 +358,8 @@ const createStyles = (palette: Palette) => ({
    *  by `sm` again, so the heading starts where the titles under it start. */
   sectionLabel: {
     paddingHorizontal: space.sm + space.sm,
-    paddingTop: space.sm,
-    paddingBottom: space.xs,
+    paddingTop: space.xs,
+    paddingBottom: space.xxs,
     fontSize: font.micro,
     color: palette.textFaint,
     letterSpacing: 0.5,
@@ -367,8 +367,8 @@ const createStyles = (palette: Palette) => ({
   },
   listArea: { flex: 1 },
   list: { paddingHorizontal: space.sm },
-  /** Breathing room under the cards, so the next heading is not glued to the last one. */
-  pinnedSection: { paddingBottom: space.sm },
+  /** Just enough under the cards that the next heading is not glued to the last one. */
+  pinnedSection: { paddingBottom: space.xs },
   search: {
     marginHorizontal: space.md,
     marginBottom: space.sm,

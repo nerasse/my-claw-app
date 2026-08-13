@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -69,10 +69,12 @@ export const ThreadRow = React.memo(function ThreadRowRow({
 
 const createStyles = (palette: Palette) => ({
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: radius.sm },
-  /** A pinned row is a card: the plain list below is flat, so the block reads as its own. */
+  /** A pinned row is a card: the plain list below is flat, so the block reads as its own. The
+   *  edge is a hairline, like the drawer's own footer rules — enough to define the card without
+   *  spending two pixels of row height on it. */
   rowPinned: {
     backgroundColor: palette.surfaceAlt,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: palette.border,
   },
   rowActive: { backgroundColor: palette.accentSoft },
