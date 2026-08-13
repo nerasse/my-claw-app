@@ -32,6 +32,8 @@ interface ThreadModel {
  */
 class ModelStoreImpl {
   private catalog: ModelListResultFrame = EMPTY;
+  /** The catalogue keyed by id, rebuilt with it: naming a model is a lookup, not a scan. */
+  private index = new Map<string, ModelOption>();
   private perThread = new Map<string, ThreadModel>();
   private listeners = new Set<Listener>();
 
@@ -47,7 +49,7 @@ class ModelStoreImpl {
   }
 
   catalogModel(id: string): string {
-    return this.catalog.models.find(model => model.id === id)?.label ?? id;
+    return this.index.get(id)?.label ?? id;
   }
 
   threadModel(threadId: string | null): ThreadModel | null {
@@ -63,6 +65,7 @@ class ModelStoreImpl {
 
   replaceCatalog(frame: ModelListResultFrame): void {
     this.catalog = frame;
+    this.index = new Map(frame.models.map(model => [model.id, model]));
     this.emit();
   }
 

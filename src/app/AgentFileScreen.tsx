@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import type { AgentFileResultFrame, FileScopeMode } from '../core/protocol';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Pressable, SectionList, Text, TextInput, View } from 'react-native';
+import type { AgentFileResultFrame } from '../core/protocol';
 import type { AgentFileEditorState } from '../core/agentsFile';
+import { CardEdge } from '../components/CardEdge';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -14,28 +15,84 @@ export interface ScopeOption {
 const EMPTY_NAMES: string[] = [];
 Object.freeze(EMPTY_NAMES);
 
-/**
- * These pickers live inside the page's own scroll view, so they cannot virtualize: a list nested
- * in a scrollable of the same axis mounts every row whatever it is told. The catalogue reaches
- * the hundreds, so the list is cut and the filter above it is how the rest is reached — the same
- * bargain the model picker makes, for the same reason.
- */
-const PICKER_MAX_ROWS = 40;
+/** A picker section of the form: its rows are list items, its chrome is the section header. */
+type PickKind = 'tools' | 'skills' | 'mcp';
+interface PickSection {
+  kind: PickKind;
+  /** Names only: the catalogue description is looked up from `byName` when the row is drawn. */
+  data: string[];
+  byName: Map<string, string>;
+}
+
+const keyOfName = (name: string, index: number): string => `${index}:${name}`;
+
+/** One checkable catalogue entry. Memoized, and handed the name: tools run to the hundreds. */
+const PickRow = React.memo(function PickRowView({
+  name,
+  description,
+  checked,
+  first,
+  last,
+  onToggle,
+}: {
+  name: string;
+  description?: string;
+  checked: boolean;
+  first: boolean;
+  last: boolean;
+  onToggle: (name: string) => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <CardEdge first={first} last={last}>
+      <Pressable
+        style={styles.row}
+        onPress={() => onToggle(name)}
+        accessibilityRole="button"
+        accessibilityLabel={`Toggle ${name}`}
+        accessibilityState={{ selected: checked }}
+      >
+        <View style={styles.itemMain}>
+          <Text style={styles.itemName}>{name}</Text>
+          {description ? (
+            <Text style={styles.itemHint} numberOfLines={1}>
+              {description}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={styles.glyph}>{checked ? '✓' : ''}</Text>
+      </Pressable>
+    </CardEdge>
+  );
+});
 
 /** Names the agent claims that no longer exist in the catalogue. */
-function unknownIn(options: ScopeOption[], names: string[] | undefined): string[] {
+function unknownIn(
+  options: ScopeOption[],
+  names: string[] | undefined,
+): string[] {
   if (!names || names.length === 0) return EMPTY_NAMES;
   const known = new Set(options.map(option => option.name));
   return names.filter(name => !known.has(name));
 }
 
+/** Tool names carry no description of their own; the row simply shows nothing under them. */
+const NO_DESCRIPTIONS = new Map<string, string>();
+
+const describe = (options: ScopeOption[]): Map<string, string> =>
+  new Map(options.map(option => [option.name, option.description]));
+
 /** The needle is lowercased once here, not once per candidate inside the predicate. */
-function matchScope(options: ScopeOption[], query: string | undefined): ScopeOption[] {
+function matchScope(
+  options: ScopeOption[],
+  query: string | undefined,
+): ScopeOption[] {
   const needle = (query ?? '').trim().toLowerCase();
   if (!needle) return options;
   return options.filter(
     option =>
-      option.name.toLowerCase().includes(needle) || option.description.toLowerCase().includes(needle),
+      option.name.toLowerCase().includes(needle) ||
+      option.description.toLowerCase().includes(needle),
   );
 }
 
@@ -74,7 +131,11 @@ export function AgentFileScreen({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
-  const [query, setQuery] = useState<Record<string, string>>({ skills: '', mcp: '', tools: '' });
+  const [query, setQuery] = useState<Record<string, string>>({
+    skills: '',
+    mcp: '',
+    tools: '',
+  });
 
   const busy = editor.status === 'loading' || editor.status === 'saving';
   const frame = editor.frame;
@@ -91,20 +152,116 @@ export function AgentFileScreen({
     }),
     [frame?.tools, frame?.skills, frame?.mcp],
   );
-  const unknownSkills = useMemo(() => unknownIn(skills, frame?.skills), [skills, frame?.skills]);
-  const unknownMcp = useMemo(() => unknownIn(mcpServers, frame?.mcp), [mcpServers, frame?.mcp]);
-  const shownSkills = useMemo(() => matchScope(skills, query.skills), [skills, query.skills]);
-  const shownMcp = useMemo(() => matchScope(mcpServers, query.mcp), [mcpServers, query.mcp]);
+  const unknownSkills = useMemo(
+    () => unknownIn(skills, frame?.skills),
+    [skills, frame?.skills],
+  );
+  const unknownMcp = useMemo(
+    () => unknownIn(mcpServers, frame?.mcp),
+    [mcpServers, frame?.mcp],
+  );
+  const shownSkills = useMemo(
+    () => matchScope(skills, query.skills),
+    [skills, query.skills],
+  );
+  const shownMcp = useMemo(
+    () => matchScope(mcpServers, query.mcp),
+    [mcpServers, query.mcp],
+  );
   const shownTools = useMemo(() => {
     const needle = (query.tools ?? '').trim().toLowerCase();
     const all = frame?.toolOptions ?? EMPTY_NAMES;
-    return needle ? all.filter(name => name.toLowerCase().includes(needle)) : all;
+    return needle
+      ? all.filter(name => name.toLowerCase().includes(needle))
+      : all;
   }, [frame?.toolOptions, query.tools]);
+
+  // A scope section with no key, or set to "all", has nothing checkable under it: its rows are
+  // empty and only its chips are drawn.
+  const sections = useMemo<PickSection[]>(
+    () => [
+      { kind: 'tools', data: shownTools, byName: NO_DESCRIPTIONS },
+      {
+        kind: 'skills',
+        data:
+          frame?.skillsMode === 'list'
+            ? shownSkills.map(option => option.name)
+            : EMPTY_NAMES,
+        byName: describe(shownSkills),
+      },
+      {
+        kind: 'mcp',
+        data:
+          frame?.mcpMode === 'list'
+            ? shownMcp.map(option => option.name)
+            : EMPTY_NAMES,
+        byName: describe(shownMcp),
+      },
+    ],
+    [frame?.skillsMode, frame?.mcpMode, shownMcp, shownSkills, shownTools],
+  );
+
+  const toggleIn = useCallback(
+    (kind: PickKind, name: string) => {
+      const current = editor.frame?.[kind] ?? EMPTY_NAMES;
+      onChange({
+        [kind]: current.includes(name)
+          ? current.filter(n => n !== name)
+          : [...current, name],
+      } as Partial<AgentFileResultFrame>);
+    },
+    [editor.frame, onChange],
+  );
+  const toggleTools = useCallback(
+    (name: string) => toggleIn('tools', name),
+    [toggleIn],
+  );
+  const toggleSkills = useCallback(
+    (name: string) => toggleIn('skills', name),
+    [toggleIn],
+  );
+  const toggleMcp = useCallback(
+    (name: string) => toggleIn('mcp', name),
+    [toggleIn],
+  );
+  const togglers: Record<PickKind, (name: string) => void> = useMemo(
+    () => ({ tools: toggleTools, skills: toggleSkills, mcp: toggleMcp }),
+    [toggleMcp, toggleSkills, toggleTools],
+  );
+
+  const renderPickRow = useCallback(
+    ({
+      item,
+      index,
+      section,
+    }: {
+      item: string;
+      index: number;
+      section: PickSection;
+    }) => (
+      <PickRow
+        name={item}
+        description={section.byName.get(item)}
+        checked={selected[section.kind].has(item)}
+        first={index === 0}
+        last={index === section.data.length - 1}
+        onToggle={togglers[section.kind]}
+      />
+    ),
+    [selected, togglers],
+  );
 
   if (editor.status === 'loading' || frame === null) {
     return (
       <View style={styles.screen}>
-        <Header title={editor.name} editable={editor.editable} busy={busy} onBack={onBack} onSave={onSave} canSave={false} />
+        <Header
+          title={editor.name}
+          editable={editor.editable}
+          busy={busy}
+          onBack={onBack}
+          onSave={onSave}
+          canSave={false}
+        />
         <View style={styles.emptyArea}>
           <Text style={styles.empty}>loading...</Text>
         </View>
@@ -113,20 +270,137 @@ export function AgentFileScreen({
   }
 
   const canSave =
-    editor.editable && !busy && editor.status !== 'conflict' && frame.description.trim().length > 0;
-
-  const toggleTool = (name: string): void => {
-    const current = frame.tools ?? [];
-    onChange({ tools: current.includes(name) ? current.filter(n => n !== name) : [...current, name] });
-  };
-
-  const toggleName = (kind: 'skills' | 'mcp', name: string): void => {
-    const current = frame[kind] ?? [];
-    onChange({ [kind]: current.includes(name) ? current.filter(n => n !== name) : [...current, name] });
-  };
+    editor.editable &&
+    !busy &&
+    editor.status !== 'conflict' &&
+    frame.description.trim().length > 0;
 
   const unknownTools = frame.unknownTools ?? EMPTY_NAMES;
-  const toolRows = shownTools.slice(0, PICKER_MAX_ROWS);
+
+  // A layer this agent checks that its workspace has switched off: checked here it still will not
+  // arrive, so the contradiction is named rather than silently resolved.
+  const layersOff = (frame.instructions ?? EMPTY_NAMES).filter(layer => layerOff?.[layer]);
+  const layersOffNote =
+    layersOff.length === 0
+      ? null
+      : `${layersOff.join(', ')} ${layersOff.length === 1 ? 'is' : 'are'} off for the ${
+          frame.workspace ?? 'default'
+        } workspace · this agent will not get ${
+          layersOff.length === 1 ? 'it' : 'them'
+        }, even checked here`;
+
+  /** The chrome of a picker: its label, the entries it lost, and the filter over what is left. */
+  const renderSectionHeader = ({
+    section,
+  }: {
+    section: PickSection;
+  }): React.JSX.Element => {
+    const kind = section.kind;
+    const mode =
+      kind === 'skills'
+        ? frame.skillsMode
+        : kind === 'mcp'
+          ? frame.mcpMode
+          : 'list';
+    const gone =
+      kind === 'tools'
+        ? unknownTools
+        : kind === 'skills'
+          ? unknownSkills
+          : unknownMcp;
+    const title = kind === 'mcp' ? 'MCP' : kind;
+    return (
+      <View style={styles.sectionHead}>
+        <Text style={styles.section}>{title}</Text>
+        {kind === 'tools' ? (
+          <Text style={styles.note}>
+            names are intersected with the {frame.base ?? 'general'} baseline ·
+            naming one outside it is ignored at run time
+          </Text>
+        ) : (
+          <View style={styles.chips}>
+            {(
+              [
+                ['absent', 'Unset'],
+                ['all', 'All'],
+                ['list', 'Select'],
+              ] as const
+            ).map(([value, label]) => (
+              <Chip
+                key={value}
+                label={label}
+                active={mode === value}
+                onPress={() =>
+                  onChange(
+                    (kind === 'skills'
+                      ? { skillsMode: value }
+                      : { mcpMode: value }) as Partial<AgentFileResultFrame>,
+                  )
+                }
+                accessibilityLabel={`${title} mode ${label}`}
+              />
+            ))}
+          </View>
+        )}
+        {mode === 'list' ? (
+          <>
+            {gone.map((name, index) => (
+              <CardEdge
+                key={name}
+                danger
+                first={index === 0}
+                last={index === gone.length - 1}
+              >
+                <Pressable
+                  style={styles.row}
+                  onPress={() => togglers[kind](name)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    kind === 'tools' ? `Toggle tool ${name}` : `Toggle ${name}`
+                  }
+                  accessibilityState={{ selected: selected[kind].has(name) }}
+                >
+                  <Text style={[styles.itemName, styles.removed]}>{name}</Text>
+                  <Text
+                    style={[styles.itemHint, styles.removed]}
+                    numberOfLines={1}
+                  >
+                    {kind === 'tools'
+                      ? 'outside the baseline'
+                      : 'no longer exists'}
+                  </Text>
+                  <Text style={[styles.glyph, styles.removed]}>
+                    {selected[kind].has(name) ? '✓' : '✕'}
+                  </Text>
+                </Pressable>
+              </CardEdge>
+            ))}
+            <TextInput
+              style={styles.input}
+              value={query[kind]}
+              onChangeText={value =>
+                setQuery(current => ({ ...current, [kind]: value }))
+              }
+              placeholder={`filter ${title.toLowerCase()}...`}
+              placeholderTextColor={styles.placeholder.color}
+              autoCorrect={false}
+              autoCapitalize="none"
+              accessibilityLabel={
+                kind === 'tools' ? 'Filter tools' : `Filter ${title}`
+              }
+            />
+            {section.data.length === 0 ? (
+              <CardEdge first last>
+                <View style={styles.row}>
+                  <Text style={styles.itemHint}>no match</Text>
+                </View>
+              </CardEdge>
+            ) : null}
+          </>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.screen}>
@@ -140,282 +414,240 @@ export function AgentFileScreen({
       />
 
       {editor.status === 'conflict' ? (
-        <Text style={styles.conflict} accessibilityLabel={`Agent file conflict ${editor.error ?? ''}`}>
+        <Text
+          style={styles.conflict}
+          accessibilityLabel={`Agent file conflict ${editor.error ?? ''}`}
+        >
           {editor.error ?? 'changed on the server since it was opened'}
         </Text>
       ) : error ? (
-        <Text style={styles.error} accessibilityLabel={`Agent file error ${error}`}>
+        <Text
+          style={styles.error}
+          accessibilityLabel={`Agent file error ${error}`}
+        >
           {error}
         </Text>
       ) : null}
 
       {!editor.editable ? (
         <View style={styles.forkArea}>
-          <Text style={styles.error}>built-in agents are repo-synced · edit your own copy instead</Text>
+          <Text style={styles.error}>
+            built-in agents are repo-synced · edit your own copy instead
+          </Text>
           <Pressable
             onPress={onFork}
             style={styles.forkButton}
             accessibilityRole="button"
-            accessibilityLabel={`Fork agent ${editor.name} to custom`}>
+            accessibilityLabel={`Fork agent ${editor.name} to custom`}
+          >
             <Text style={styles.forkText}>Fork to custom</Text>
           </Pressable>
         </View>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <View style={styles.category}>
-          <Text style={styles.section}>description</Text>
-          <TextInput
-            style={styles.input}
-            value={frame.description}
-            onChangeText={description => onChange({ description })}
-            editable={editor.editable}
-            placeholder="what the orchestrator reads before spawning this agent"
-            placeholderTextColor={styles.placeholder.color}
-            autoCorrect={false}
-            autoCapitalize="none"
-            accessibilityLabel="Agent description"
-          />
-        </View>
-
-        <View style={styles.category}>
-          <Text style={styles.section}>base</Text>
-          <View style={styles.chips}>
-            {(['general', 'research'] as const).map(base => (
-              <Chip
-                key={base}
-                label={base}
-                active={frame.base === base}
-                onPress={() => onChange({ base })}
-                accessibilityLabel={`Agent base ${base}`}
+      {/* A SectionList, not a scroll view: the tool catalogue alone runs to the hundreds, and
+          three pickers nested in one scrollable would each have to mount every row they hold.
+          The fields that are not lists are the header and the footer. */}
+      <SectionList
+        sections={sections}
+        keyExtractor={keyOfName}
+        renderItem={renderPickRow}
+        renderSectionHeader={renderSectionHeader}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={14}
+        maxToRenderPerBatch={12}
+        updateCellsBatchingPeriod={50}
+        windowSize={9}
+        ListHeaderComponent={
+          <View style={styles.formBlock}>
+            <View style={styles.category}>
+              <Text style={styles.section}>description</Text>
+              <TextInput
+                style={styles.input}
+                value={frame.description}
+                onChangeText={description => onChange({ description })}
+                editable={editor.editable}
+                placeholder="what the orchestrator reads before spawning this agent"
+                placeholderTextColor={styles.placeholder.color}
+                autoCorrect={false}
+                autoCapitalize="none"
+                accessibilityLabel="Agent description"
               />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.category}>
-          <Text style={styles.section}>tools</Text>
-          <Text style={styles.note}>
-            names are intersected with the {frame.base ?? 'general'} baseline · naming one outside it is ignored at run time
-          </Text>
-          {unknownTools.length > 0 ? (
-            <View style={[styles.card, styles.cardRemoved]}>
-              {unknownTools.map((name, index) => (
-                <View key={name}>
-                  {index > 0 ? <View style={styles.separator} /> : null}
-                  <Pressable
-                    style={[styles.row, styles.link]}
-                    onPress={() => toggleTool(name)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Toggle tool ${name}`}
-                    accessibilityState={{ selected: selected.tools.has(name) }}>
-                    <Text style={[styles.itemName, styles.removed]}>{name}</Text>
-                    <Text style={[styles.itemHint, styles.removed]} numberOfLines={1}>
-                      outside the baseline
-                    </Text>
-                    <Text style={[styles.glyph, styles.removed]}>{selected.tools.has(name) ? '✓' : '✕'}</Text>
-                  </Pressable>
-                </View>
-              ))}
             </View>
-          ) : null}
-          <TextInput
-            style={styles.input}
-            value={query.tools}
-            onChangeText={tools => setQuery({ ...query, tools })}
-            placeholder="filter tools..."
-            placeholderTextColor={styles.placeholder.color}
-            autoCorrect={false}
-            autoCapitalize="none"
-            accessibilityLabel="Filter tools"
-          />
-          <View style={styles.card}>
-            {toolRows.length === 0 ? (
-              <View style={styles.row}>
-                <Text style={styles.itemHint}>no match</Text>
+
+            <View style={styles.category}>
+              <Text style={styles.section}>base</Text>
+              <View style={styles.chips}>
+                {(['general', 'research'] as const).map(base => (
+                  <Chip
+                    key={base}
+                    label={base}
+                    active={frame.base === base}
+                    onPress={() => onChange({ base })}
+                    accessibilityLabel={`Agent base ${base}`}
+                  />
+                ))}
               </View>
-            ) : (
-              toolRows.map((name, index) => (
-                <View key={name}>
-                  {index > 0 ? <View style={styles.separator} /> : null}
-                  <Pressable
-                    style={[styles.row, styles.link]}
-                    onPress={() => toggleTool(name)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Toggle tool ${name}`}
-                    accessibilityState={{ selected: selected.tools.has(name) }}>
-                    <View style={styles.itemMain}>
-                      <Text style={styles.itemName}>{name}</Text>
-                    </View>
-                    <Text style={styles.glyph}>{selected.tools.has(name) ? '✓' : ''}</Text>
-                  </Pressable>
+            </View>
+          </View>
+        }
+        ListFooterComponent={
+          <View style={styles.formBlock}>
+            <View style={styles.category}>
+              <Text style={styles.section}>model</Text>
+              <TextInput
+                style={styles.input}
+                value={frame.model ?? ''}
+                onChangeText={model => onChange({ model: model || undefined })}
+                editable={editor.editable}
+                placeholder="a model id from the configured providers"
+                placeholderTextColor={styles.placeholder.color}
+                autoCorrect={false}
+                autoCapitalize="none"
+                accessibilityLabel="Agent model id"
+              />
+            </View>
+
+            <View style={styles.category}>
+              <Text style={styles.section}>workspace</Text>
+              <TextInput
+                style={styles.input}
+                value={frame.workspace ?? ''}
+                onChangeText={workspace =>
+                  onChange({ workspace: workspace || undefined })
+                }
+                editable={editor.editable}
+                placeholder="a key from config.workspaces"
+                placeholderTextColor={styles.placeholder.color}
+                autoCorrect={false}
+                autoCapitalize="none"
+                accessibilityLabel="Agent workspace key"
+              />
+            </View>
+
+            <View style={styles.category}>
+              <Text style={styles.section}>limits</Text>
+              <View style={styles.rowPair}>
+                <View style={styles.pairColumn}>
+                  <Text style={styles.itemHint}>maxIterations</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={
+                      frame.maxIterations === undefined
+                        ? ''
+                        : String(frame.maxIterations)
+                    }
+                    onChangeText={value => {
+                      const n = Number(value);
+                      onChange({
+                        maxIterations:
+                          value === '' || !Number.isInteger(n) || n <= 0
+                            ? undefined
+                            : n,
+                      });
+                    }}
+                    editable={editor.editable}
+                    keyboardType="number-pad"
+                    placeholder="inherit"
+                    placeholderTextColor={styles.placeholder.color}
+                    accessibilityLabel="Agent max iterations"
+                  />
                 </View>
-              ))
-            )}
-            {shownTools.length > toolRows.length ? (
-              <View style={styles.row}>
-                <Text style={styles.itemHint}>
-                  {`${shownTools.length - toolRows.length} more · narrow the filter`}
-                </Text>
+                <View style={styles.pairColumn}>
+                  <Text style={styles.itemHint}>contextCap (0 = none)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={
+                      frame.contextCap === undefined
+                        ? ''
+                        : String(frame.contextCap)
+                    }
+                    onChangeText={value => {
+                      const n = Number(value);
+                      onChange({
+                        contextCap:
+                          value === '' || !Number.isInteger(n) || n < 0
+                            ? undefined
+                            : n,
+                      });
+                    }}
+                    editable={editor.editable}
+                    keyboardType="number-pad"
+                    placeholder="inherit"
+                    placeholderTextColor={styles.placeholder.color}
+                    accessibilityLabel="Agent context cap"
+                  />
+                </View>
               </View>
+            </View>
+
+            <View style={styles.category}>
+              <Text style={styles.section}>instructions</Text>
+              <View style={styles.chips}>
+                {(['CORE', 'SOUL', 'AGENTS', 'USER'] as const).map(layer => {
+                  const active = (frame.instructions ?? []).includes(layer);
+                  return (
+                    <Chip
+                      key={layer}
+                      label={layer}
+                      active={active}
+                      onPress={() =>
+                        onChange({
+                          instructions: active
+                            ? (frame.instructions ?? []).filter(
+                                l => l !== layer,
+                              )
+                            : [...(frame.instructions ?? []), layer],
+                        })
+                      }
+                      accessibilityLabel={`Prompt layer ${layer}`}
+                    />
+                  );
+                })}
+              </View>
+              {layersOffNote ? (
+                <Text
+                  style={styles.layerOffNote}
+                  accessibilityLabel="Warning a layer is off at the workspace level"
+                >
+                  {layersOffNote}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.category}>
+              <Text style={styles.section}>prompt</Text>
+              <TextInput
+                style={[styles.input, styles.bodyInput]}
+                value={frame.prompt}
+                onChangeText={prompt => onChange({ prompt })}
+                editable={editor.editable}
+                multiline
+                autoCorrect={false}
+                autoCapitalize="none"
+                spellCheck={false}
+                textAlignVertical="top"
+                placeholder="what this agent does, beyond the metadata"
+                placeholderTextColor={styles.placeholder.color}
+                accessibilityLabel="Agent prompt body"
+              />
+            </View>
+
+            {editor.editable ? (
+              <Pressable
+                onPress={onDelete}
+                style={styles.deleteButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete agent ${editor.name}`}
+              >
+                <Text style={styles.deleteText}>Delete agent</Text>
+              </Pressable>
             ) : null}
           </View>
-        </View>
-
-        <ScopeSection
-          title="skills"
-          mode={frame.skillsMode}
-          selected={selected.skills}
-          unknown={unknownSkills}
-          available={shownSkills}
-          query={query.skills}
-          onQuery={value => setQuery({ ...query, skills: value })}
-          onMode={skillsMode => onChange({ skillsMode } as Partial<AgentFileResultFrame>)}
-          onToggle={name => toggleName('skills', name)}
-        />
-
-        <ScopeSection
-          title="MCP"
-          mode={frame.mcpMode}
-          selected={selected.mcp}
-          unknown={unknownMcp}
-          available={shownMcp}
-          query={query.mcp}
-          onQuery={value => setQuery({ ...query, mcp: value })}
-          onMode={mcpMode => onChange({ mcpMode } as Partial<AgentFileResultFrame>)}
-          onToggle={name => toggleName('mcp', name)}
-        />
-
-        <View style={styles.category}>
-          <Text style={styles.section}>model</Text>
-          <TextInput
-            style={styles.input}
-            value={frame.model ?? ''}
-            onChangeText={model => onChange({ model: model || undefined })}
-            editable={editor.editable}
-            placeholder="a model id from the configured providers"
-            placeholderTextColor={styles.placeholder.color}
-            autoCorrect={false}
-            autoCapitalize="none"
-            accessibilityLabel="Agent model id"
-          />
-        </View>
-
-        <View style={styles.category}>
-          <Text style={styles.section}>workspace</Text>
-          <TextInput
-            style={styles.input}
-            value={frame.workspace ?? ''}
-            onChangeText={workspace => onChange({ workspace: workspace || undefined })}
-            editable={editor.editable}
-            placeholder="a key from config.workspaces"
-            placeholderTextColor={styles.placeholder.color}
-            autoCorrect={false}
-            autoCapitalize="none"
-            accessibilityLabel="Agent workspace key"
-          />
-        </View>
-
-        <View style={styles.category}>
-          <Text style={styles.section}>limits</Text>
-          <View style={styles.rowPair}>
-            <View style={styles.pairColumn}>
-              <Text style={styles.itemHint}>maxIterations</Text>
-              <TextInput
-                style={styles.input}
-                value={frame.maxIterations === undefined ? '' : String(frame.maxIterations)}
-                onChangeText={value => {
-                  const n = Number(value);
-                  onChange({ maxIterations: value === '' || !Number.isInteger(n) || n <= 0 ? undefined : n });
-                }}
-                editable={editor.editable}
-                keyboardType="number-pad"
-                placeholder="inherit"
-                placeholderTextColor={styles.placeholder.color}
-                accessibilityLabel="Agent max iterations"
-              />
-            </View>
-            <View style={styles.pairColumn}>
-              <Text style={styles.itemHint}>contextCap (0 = none)</Text>
-              <TextInput
-                style={styles.input}
-                value={frame.contextCap === undefined ? '' : String(frame.contextCap)}
-                onChangeText={value => {
-                  const n = Number(value);
-                  onChange({ contextCap: value === '' || !Number.isInteger(n) || n < 0 ? undefined : n });
-                }}
-                editable={editor.editable}
-                keyboardType="number-pad"
-                placeholder="inherit"
-                placeholderTextColor={styles.placeholder.color}
-                accessibilityLabel="Agent context cap"
-              />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.category}>
-          <Text style={styles.section}>instructions</Text>
-          <View style={styles.chips}>
-            {(['CORE', 'SOUL', 'AGENTS', 'USER'] as const).map(layer => {
-              const active = (frame.instructions ?? []).includes(layer);
-              return (
-                <Chip
-                  key={layer}
-                  label={layer}
-                  active={active}
-                  onPress={() =>
-                    onChange({
-                      instructions: active
-                        ? (frame.instructions ?? []).filter(l => l !== layer)
-                        : [...(frame.instructions ?? []), layer],
-                    })
-                  }
-                  accessibilityLabel={`Prompt layer ${layer}`}
-                />
-              );
-            })}
-          </View>
-          {(() => {
-            const offChecked = (frame.instructions ?? []).filter(layer => layerOff?.[layer]);
-            if (offChecked.length === 0) return null;
-            const workspace = frame.workspace ?? 'default';
-            return (
-              <Text style={styles.layerOffNote} accessibilityLabel="Warning a layer is off at the workspace level">
-                {`${offChecked.join(', ')} ${offChecked.length === 1 ? 'is' : 'are'} off for the ${workspace} workspace · this agent will not get ${offChecked.length === 1 ? 'it' : 'them'}, even checked here`}
-              </Text>
-            );
-          })()}
-        </View>
-
-        <View style={styles.category}>
-          <Text style={styles.section}>prompt</Text>
-          <TextInput
-            style={[styles.input, styles.bodyInput]}
-            value={frame.prompt}
-            onChangeText={prompt => onChange({ prompt })}
-            editable={editor.editable}
-            multiline
-            autoCorrect={false}
-            autoCapitalize="none"
-            spellCheck={false}
-            textAlignVertical="top"
-            placeholder="what this agent does, beyond the metadata"
-            placeholderTextColor={styles.placeholder.color}
-            accessibilityLabel="Agent prompt body"
-          />
-        </View>
-
-        {editor.editable ? (
-          <Pressable
-            onPress={onDelete}
-            style={styles.deleteButton}
-            accessibilityRole="button"
-            accessibilityLabel={`Delete agent ${editor.name}`}>
-            <Text style={styles.deleteText}>Delete agent</Text>
-          </Pressable>
-        ) : null}
-      </ScrollView>
+        }
+      />
     </View>
   );
 }
@@ -442,24 +674,33 @@ function Header({
         onPress={onBack}
         style={styles.backButton}
         accessibilityRole="button"
-        accessibilityLabel="Back to agent">
+        accessibilityLabel="Back to agent"
+      >
         <Text style={styles.backGlyph}>‹</Text>
       </Pressable>
       <View style={styles.headerText}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle} numberOfLines={1}>
-          {editable ? 'definition file, editable' : 'definition file, read-only'}
+          {editable
+            ? 'definition file, editable'
+            : 'definition file, read-only'}
         </Text>
       </View>
       {editable ? (
         <Pressable
           onPress={onSave}
           disabled={!canSave}
-          style={[styles.saveButton, canSave ? styles.saveEnabled : styles.saveDisabled]}
+          style={[
+            styles.saveButton,
+            canSave ? styles.saveEnabled : styles.saveDisabled,
+          ]}
           accessibilityRole="button"
           accessibilityState={{ disabled: !canSave }}
-          accessibilityLabel={busy ? 'Saving agent file' : 'Save agent file'}>
-          <Text style={canSave ? styles.saveText : styles.saveTextOff}>{busy ? '...' : 'Save'}</Text>
+          accessibilityLabel={busy ? 'Saving agent file' : 'Save agent file'}
+        >
+          <Text style={canSave ? styles.saveText : styles.saveTextOff}>
+            {busy ? '...' : 'Save'}
+          </Text>
         </Pressable>
       ) : null}
     </View>
@@ -484,126 +725,12 @@ function Chip({
       style={[styles.chip, active ? styles.chipActive : styles.chipIdle]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ selected: active }}>
-      <Text style={active ? styles.chipTextActive : styles.chipTextIdle}>{label}</Text>
+      accessibilityState={{ selected: active }}
+    >
+      <Text style={active ? styles.chipTextActive : styles.chipTextIdle}>
+        {label}
+      </Text>
     </Pressable>
-  );
-}
-
-function ScopeSection({
-  title,
-  mode,
-  selected,
-  unknown,
-  available,
-  query,
-  onQuery,
-  onMode,
-  onToggle,
-}: {
-  title: string;
-  mode: FileScopeMode;
-  /** What the agent claims, as a set: the rows test membership twice each. */
-  selected: Set<string>;
-  unknown: string[];
-  available: ScopeOption[];
-  query: string;
-  onQuery: (query: string) => void;
-  onMode: (mode: FileScopeMode) => void;
-  onToggle: (name: string) => void;
-}): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
-  const rows = available.slice(0, PICKER_MAX_ROWS);
-  return (
-    <View style={styles.category}>
-      <Text style={styles.section}>{title}</Text>
-      <View style={styles.chips}>
-        {(
-          [
-            ['absent', 'Unset'],
-            ['all', 'All'],
-            ['list', 'Select'],
-          ] as const
-        ).map(([value, label]) => (
-          <Chip
-            key={value}
-            label={label}
-            active={mode === value}
-            onPress={() => onMode(value)}
-            accessibilityLabel={`${title} mode ${label}`}
-          />
-        ))}
-      </View>
-      {mode === 'list' ? (
-        <>
-          {unknown.length > 0 ? (
-            <View style={[styles.card, styles.cardRemoved]}>
-              {unknown.map((name, index) => (
-                <View key={name}>
-                  {index > 0 ? <View style={styles.separator} /> : null}
-                  <Pressable
-                    style={[styles.row, styles.link]}
-                    onPress={() => onToggle(name)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Toggle ${name}`}
-                    accessibilityState={{ selected: selected.has(name) }}>
-                    <Text style={[styles.itemName, styles.removed]}>{name}</Text>
-                    <Text style={[styles.itemHint, styles.removed]} numberOfLines={1}>
-                      no longer exists
-                    </Text>
-                    <Text style={[styles.glyph, styles.removed]}>{selected.has(name) ? '✓' : '✕'}</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <TextInput
-            style={styles.input}
-            value={query}
-            onChangeText={onQuery}
-            placeholder={`filter ${title.toLowerCase()}...`}
-            placeholderTextColor={styles.placeholder.color}
-            autoCorrect={false}
-            autoCapitalize="none"
-            accessibilityLabel={`Filter ${title}`}
-          />
-          <View style={styles.card}>
-            {rows.length === 0 ? (
-              <View style={styles.row}>
-                <Text style={styles.itemHint}>no match</Text>
-              </View>
-            ) : (
-              rows.map((item, index) => (
-                <View key={item.name}>
-                  {index > 0 ? <View style={styles.separator} /> : null}
-                  <Pressable
-                    style={[styles.row, styles.link]}
-                    onPress={() => onToggle(item.name)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Toggle ${item.name}`}
-                    accessibilityState={{ selected: selected.has(item.name) }}>
-                    <View style={styles.itemMain}>
-                      <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemHint} numberOfLines={1}>
-                        {item.description}
-                      </Text>
-                    </View>
-                    <Text style={styles.glyph}>{selected.has(item.name) ? '✓' : ''}</Text>
-                  </Pressable>
-                </View>
-              ))
-            )}
-            {available.length > rows.length ? (
-              <View style={styles.row}>
-                <Text style={styles.itemHint}>
-                  {`${available.length - rows.length} more · narrow the filter`}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </>
-      ) : null}
-    </View>
   );
 }
 
@@ -627,7 +754,11 @@ const createStyles = (palette: Palette) => ({
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   headerText: { flex: 1, gap: 1 },
-  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
+  title: {
+    fontSize: font.title,
+    fontWeight: '600' as const,
+    color: palette.text,
+  },
   subtitle: { fontSize: font.small, color: palette.textFaint },
   saveButton: {
     paddingHorizontal: space.md,
@@ -636,9 +767,21 @@ const createStyles = (palette: Palette) => ({
   },
   saveEnabled: { backgroundColor: palette.accent },
   saveDisabled: { backgroundColor: palette.surfaceAlt },
-  saveText: { fontSize: font.body, fontWeight: '600' as const, color: palette.surface },
-  saveTextOff: { fontSize: font.body, fontWeight: '600' as const, color: palette.textFaint },
-  body: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
+  saveText: {
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    color: palette.surface,
+  },
+  saveTextOff: {
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    color: palette.textFaint,
+  },
+  // No `gap` here: the rows of a picker are list items, and a gap would prise the card apart.
+  // The blocks that are not rows carry their own spacing instead.
+  body: { padding: space.md, paddingBottom: space.xl },
+  formBlock: { gap: space.lg, paddingVertical: space.lg },
+  sectionHead: { gap: space.xs, paddingTop: space.lg, paddingBottom: space.xs },
   category: { gap: space.xs },
   section: {
     fontSize: font.micro,
@@ -646,8 +789,16 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
   },
-  note: { fontSize: font.micro, color: palette.textFaint, paddingHorizontal: space.xs },
-  chips: { flexDirection: 'row' as const, gap: space.sm, flexWrap: 'wrap' as const },
+  note: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    paddingHorizontal: space.xs,
+  },
+  chips: {
+    flexDirection: 'row' as const,
+    gap: space.sm,
+    flexWrap: 'wrap' as const,
+  },
   chip: {
     flex: 1,
     minWidth: 84,
@@ -658,7 +809,11 @@ const createStyles = (palette: Palette) => ({
   },
   chipActive: { backgroundColor: palette.accent, borderColor: palette.accent },
   chipIdle: { backgroundColor: palette.surface, borderColor: palette.border },
-  chipTextActive: { fontSize: font.small, fontWeight: '600' as const, color: palette.surface },
+  chipTextActive: {
+    fontSize: font.small,
+    fontWeight: '600' as const,
+    color: palette.surface,
+  },
   chipTextIdle: { fontSize: font.small, color: palette.textMuted },
   input: {
     borderRadius: radius.md,
@@ -672,14 +827,8 @@ const createStyles = (palette: Palette) => ({
   },
   bodyInput: { minHeight: 160 },
   placeholder: { color: palette.textFaint },
-  card: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.surface,
-    overflow: 'hidden' as const,
-  },
-  cardRemoved: { borderColor: palette.danger },
+  // The card and its separators live in CardEdge now: they are drawn per row so the pickers
+  // inside them can virtualize.
   row: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -687,13 +836,20 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingVertical: space.md,
   },
-  link: { flexDirection: 'row' as const, alignItems: 'center' as const },
   itemMain: { flex: 1, gap: 2 },
-  itemName: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
+  itemName: {
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    color: palette.text,
+  },
   itemHint: { fontSize: font.small, color: palette.textMuted },
-  glyph: { fontSize: 18, color: palette.accent, width: 22, textAlign: 'center' as const },
+  glyph: {
+    fontSize: 18,
+    color: palette.accent,
+    width: 22,
+    textAlign: 'center' as const,
+  },
   removed: { color: palette.danger },
-  separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
   rowPair: { flexDirection: 'row' as const, gap: space.md },
   pairColumn: { flex: 1, gap: space.xs },
   deleteButton: {
@@ -704,7 +860,11 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.danger,
     alignItems: 'center' as const,
   },
-  deleteText: { fontSize: font.body, fontWeight: '600' as const, color: palette.danger },
+  deleteText: {
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    color: palette.danger,
+  },
   forkArea: { gap: space.md, paddingHorizontal: space.xs },
   forkButton: {
     paddingVertical: space.md,
@@ -713,10 +873,27 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.accent,
     alignItems: 'center' as const,
   },
-  forkText: { fontSize: font.body, fontWeight: '600' as const, color: palette.accent },
-  layerOffNote: { fontSize: font.micro, color: palette.danger, paddingHorizontal: space.xs },
-  emptyArea: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: space.lg },
-  empty: { fontSize: font.meta, color: palette.textFaint, textAlign: 'center' as const },
+  forkText: {
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    color: palette.accent,
+  },
+  layerOffNote: {
+    fontSize: font.micro,
+    color: palette.danger,
+    paddingHorizontal: space.xs,
+  },
+  emptyArea: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    padding: space.lg,
+  },
+  empty: {
+    fontSize: font.meta,
+    color: palette.textFaint,
+    textAlign: 'center' as const,
+  },
   error: {
     textAlign: 'center' as const,
     fontSize: font.meta,

@@ -1,10 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ActionSheet, type SheetOption } from './ActionSheet';
 import { connection } from '../core/connection';
 import { useModelCatalog, useModelIndex, useThreadModel } from '../core/model';
 import { contextSummary, contextTiers } from '../core/context';
-import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import {
+  font,
+  radius,
+  space,
+  useTheme,
+  useThemedStyles,
+  type Palette,
+} from '../theme';
 import {
   encodeModelContextSet,
   encodeModelEffortSet,
@@ -13,7 +20,10 @@ import {
 } from '../core/protocol';
 
 function splitGroup(model: ModelOption): string[] {
-  return (model.group ?? '').split('/').map(part => part.trim()).filter(Boolean);
+  return (model.group ?? '')
+    .split('/')
+    .map(part => part.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -33,6 +43,12 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
+/** Frozen empties, so an absent effort or window does not hand the row memo a new array. */
+const EMPTY_LEVELS: string[] = [];
+const EMPTY_TIERS: ReturnType<typeof contextTiers> = [];
+Object.freeze(EMPTY_LEVELS);
+Object.freeze(EMPTY_TIERS);
+
 /**
  * A level named `none` lands one row above `default (inherit)`, and the two read alike while
  * meaning opposites: `none` pins "do not reason", the other hands the choice back to the defaults.
@@ -44,7 +60,10 @@ function effortLabel(level: string): string {
 
 /** Where the model sits, so a hit found across groups still says which provider it came from. */
 function searchHint(model: ModelOption): string | undefined {
-  const parts = [model.group, model.id === model.label ? null : model.id].filter(Boolean);
+  const parts = [
+    model.group,
+    model.id === model.label ? null : model.id,
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
@@ -148,7 +167,11 @@ export function useModelPickerFlow({
   onStateChange: (state: PickerState) => void;
   /** The staged combo, applied in one go from the confirm step. `effort: null` is a deliberate
    *  "back to default", distinct from an effort step never visited. */
-  onCommit: (choice: { model: string; effort?: string | null; context?: number | 'full' }) => void;
+  onCommit: (choice: {
+    model: string;
+    effort?: string | null;
+    context?: number | 'full';
+  }) => void;
   onClose: () => void;
   rootOption?: PickerRootOption | null;
   effort?: PickerEffort | null;
@@ -159,7 +182,12 @@ export function useModelPickerFlow({
   skipPinsOnTag?: boolean;
   /** Full-page presentation: the page's own back entry replaces the in-flow "< Back" rows. */
   page?: boolean;
-}): { preview: string; options: SheetOption[]; back: () => void; search: PickerSearch | null } {
+}): {
+  preview: string;
+  options: SheetOption[];
+  back: () => void;
+  search: PickerSearch | null;
+} {
   const { stage, path } = state;
   const byId = useModelIndex(models);
   const activeLabel = byId.get(activeId)?.label ?? activeId;
@@ -169,18 +197,33 @@ export function useModelPickerFlow({
   const stagedIsTag = stagedModel.startsWith('tag:');
   const effortCurrent = effort?.current ?? '';
 
-  const effortLevels = effort ? stagedEntry?.effortLevels ?? [] : [];
-  const tiers =
-    context && !(skipPinsOnTag && stagedIsTag)
-      ? contextTiers(stagedEntry?.context, context.cap, state.context ?? context.current)
-      : [];
+  // Both held: they feed the memo that builds the rows, and a fresh `[]` on every render would
+  // invalidate it every time.
+  const effortLevels = useMemo(
+    () => (effort ? (stagedEntry?.effortLevels ?? EMPTY_LEVELS) : EMPTY_LEVELS),
+    [effort, stagedEntry?.effortLevels],
+  );
+  const tiers = useMemo(
+    () =>
+      context && !(skipPinsOnTag && stagedIsTag)
+        ? contextTiers(stagedEntry?.context, context.cap, state.context ?? context.current)
+        : EMPTY_TIERS,
+    [context, skipPinsOnTag, stagedEntry?.context, stagedIsTag, state.context],
+  );
 
   const query = state.query ?? '';
   const needle = normalize(query);
   // The search deliberately ignores `path`: the point is to reach a model without knowing which
   // group holds it, and the groups are now one per provider.
   const matches = useMemo(
-    () => (needle ? models.filter(model => normalize(model.label).includes(needle) || normalize(model.id).includes(needle)) : []),
+    () =>
+      needle
+        ? models.filter(
+            model =>
+              normalize(model.label).includes(needle) ||
+              normalize(model.id).includes(needle),
+          )
+        : [],
     [models, needle],
   );
 
@@ -197,7 +240,10 @@ export function useModelPickerFlow({
       }
       if (groupPath === prefix) {
         visible.push(model);
-      } else if (segments.length > path.length && groupPath.startsWith(prefix ? `${prefix}/` : '')) {
+      } else if (
+        segments.length > path.length &&
+        groupPath.startsWith(prefix ? `${prefix}/` : '')
+      ) {
         // Any depth below, not just one level: a group whose models all sit in sub-groups has
         // nothing of its own to show, and requiring an exact depth hid it entirely.
         const child = segments[path.length]!;
@@ -208,152 +254,213 @@ export function useModelPickerFlow({
   }, [models, path]);
 
   /** Moves to the next screen that has something to decide, else straight to the confirmation. */
-  const advance = (from: PickerStage, staged: Partial<PickerState>): void => {
-    const next = { ...state, ...staged, trail: [...state.trail, from] };
-    const model = next.model ?? activeId;
-    const entry = byId.get(model);
-    const levels = effort ? entry?.effortLevels ?? [] : [];
-    // A subject that already pins an effort keeps the step even on a model with no levels: the
-    // pin is dead weight there and must stay removable. Only the "default" row is shown then.
-    const effortStep = effort && (levels.length > 0 || effortCurrent !== '');
-    // Both pins belong to the tag, so neither step is offered on top of one.
-    const tagPins = skipPinsOnTag && model.startsWith('tag:');
-    const showEffort = Boolean(effortStep) && !tagPins;
-    const ceilings = context && !tagPins ? contextTiers(entry?.context, context.cap, next.context ?? context.current) : [];
-    if (from === 'model' && showEffort) {
-      onStateChange({ ...next, stage: 'effort' });
-      return;
-    }
-    if ((from === 'model' || from === 'effort') && ceilings.length > 0) {
-      onStateChange({ ...next, stage: 'context' });
-      return;
-    }
-    onStateChange({ ...next, stage: 'confirm' });
-  };
+  const advance = useCallback(
+    (from: PickerStage, staged: Partial<PickerState>): void => {
+      const next = { ...state, ...staged, trail: [...state.trail, from] };
+      const model = next.model ?? activeId;
+      const entry = byId.get(model);
+      const levels = effort ? (entry?.effortLevels ?? []) : [];
+      // A subject that already pins an effort keeps the step even on a model with no levels: the
+      // pin is dead weight there and must stay removable. Only the "default" row is shown then.
+      const effortStep = effort && (levels.length > 0 || effortCurrent !== '');
+      // Both pins belong to the tag, so neither step is offered on top of one.
+      const tagPins = skipPinsOnTag && model.startsWith('tag:');
+      const showEffort = Boolean(effortStep) && !tagPins;
+      const ceilings =
+        context && !tagPins
+          ? contextTiers(
+              entry?.context,
+              context.cap,
+              next.context ?? context.current,
+            )
+          : [];
+      if (from === 'model' && showEffort) {
+        onStateChange({ ...next, stage: 'effort' });
+        return;
+      }
+      if ((from === 'model' || from === 'effort') && ceilings.length > 0) {
+        onStateChange({ ...next, stage: 'context' });
+        return;
+      }
+      onStateChange({ ...next, stage: 'confirm' });
+    },
+    [
+      activeId,
+      byId,
+      context,
+      effort,
+      effortCurrent,
+      onStateChange,
+      skipPinsOnTag,
+      state,
+    ],
+  );
 
-  const back = (): void => {
+  const back = useCallback((): void => {
     const previous = pickerBack(state);
     if (previous === null) onClose();
     else onStateChange(previous);
-  };
+  }, [onClose, onStateChange, state]);
 
-  /** In-flow back rows exist only in the sheet: the page has a back entry of its own. */
-  const backRow = page ? [] : [{ label: '< Back', onPress: back }];
+  // Held across renders. This array is the sheet's `data`, and on a browsed provider group it is
+  // hundreds of rows, each with a closure of its own: rebuilt every render, nothing downstream
+  // could ever conclude that the list had not moved.
+  const { options, preview } = useMemo(() => {
+    /** In-flow back rows exist only in the sheet: the page has a back entry of its own. */
+    const backRow = page ? [] : [{ label: '< Back', onPress: back }];
+    const rows: SheetOption[] = [];
+    let head = '';
 
-  const options: SheetOption[] = [];
-  let preview = '';
-
-  if (stage === 'model' && needle) {
-    const shown = matches.slice(0, SEARCH_MAX_RESULTS);
-    preview = `${matches.length} match${matches.length === 1 ? '' : 'es'} for "${query.trim()}"`;
-    for (const model of shown) {
-      options.push({
-        key: model.id,
-        label: model.label,
-        hint: searchHint(model),
-        selected: model.id === activeId,
-        onPress: () => advance('model', { model: model.id }),
-      });
-    }
-    if (matches.length === 0) {
-      options.push({ key: 'empty', label: 'no model matches', onPress: () => {} });
-    } else if (matches.length > shown.length) {
-      options.push({
-        key: 'more',
-        label: `${matches.length - shown.length} more · narrow the search`,
-        onPress: () => {},
-      });
-    }
-    options.push(...backRow);
-  } else if (stage === 'model') {
-    preview =
-      path.length > 0
-        ? `${path[path.length - 1]} · current: ${activeLabel}`
-        : `${title} · current: ${activeLabel}`;
-    if (path.length === 0 && rootOption) {
-      options.push({ label: rootOption.label, selected: rootOption.selected, onPress: rootOption.onPress });
-    }
-    for (const subgroup of list.subgroups) {
-      options.push({
-        label: `${subgroup} ›`,
-        onPress: () => onStateChange({ ...state, path: [...path, subgroup] }),
-      });
-    }
-    for (const model of list.visible) {
-      options.push({
-        key: model.id,
-        label: model.label,
-        hint: model.id === model.label ? undefined : model.id,
-        selected: model.id === activeId,
-        onPress: () => advance('model', { model: model.id }),
-      });
-    }
-    if (path.length > 0) options.push(...backRow);
-  } else if (stage === 'effort') {
-    preview = `Effort for ${stagedLabel} · current: ${effortCurrent ? effortLabel(effortCurrent) : 'default'}`;
-    for (const level of effortLevels) {
-      options.push({
-        label: effortLabel(level),
-        selected: (state.effort ?? effortCurrent) === level,
-        onPress: () => advance('effort', { effort: level }),
-      });
-    }
-    options.push({
-      label: 'default (inherit)',
-      selected: (state.effort ?? effortCurrent) === '',
-      onPress: () => advance('effort', { effort: null }),
-    });
-    if (effortLevels.length > 0) {
-      options.push({
-        label: `Keep current: ${effortCurrent ? effortLabel(effortCurrent) : 'default'}`,
-        onPress: () => advance('effort', { effort: undefined }),
-      });
-    }
-    options.push(...backRow);
-  } else if (stage === 'context') {
-    preview = `Context for ${stagedLabel} · ${contextSummary(stagedEntry?.context, context?.effective)}`;
-    for (const tier of tiers) {
-      options.push({
-        label: tier.label,
-        selected: tier.selected,
-        onPress: () => advance('context', { context: tier.ceiling ?? 'full' }),
-      });
-    }
-    options.push({
-      label: 'Keep current',
-      onPress: () => advance('context', { context: undefined }),
-    });
-    options.push(...backRow);
-  } else {
-    const effortLine =
-      state.effort === null
-        ? 'effort: default'
-        : state.effort !== undefined
-          ? `effort: ${effortLabel(state.effort)}`
-          : skipPinsOnTag && stagedIsTag && stagedEntry?.effort
-            ? `effort: ${effortLabel(stagedEntry.effort)} (tag pin)`
-            : null;
-    const parts = [
-      `model: ${stagedLabel}`,
-      effortLine,
-      state.context === undefined
-        ? null
-        : `context: ${state.context === 'full' ? 'full window' : `${state.context} tokens`}`,
-    ].filter(Boolean);
-    preview = parts.join(' · ');
-    options.push({
-      label: 'Apply',
-      onPress: () => {
-        onCommit({
-          model: stagedModel,
-          ...(state.effort === undefined ? {} : { effort: state.effort }),
-          ...(state.context === undefined ? {} : { context: state.context }),
+    if (stage === 'model' && needle) {
+      const shown = matches.slice(0, SEARCH_MAX_RESULTS);
+      head = `${matches.length} match${matches.length === 1 ? '' : 'es'} for "${query.trim()}"`;
+      for (const model of shown) {
+        rows.push({
+          key: model.id,
+          label: model.label,
+          hint: searchHint(model),
+          selected: model.id === activeId,
+          onPress: () => advance('model', { model: model.id }),
         });
-        onClose();
-      },
-    });
-    options.push(...backRow);
-  }
+      }
+      if (matches.length === 0) {
+        rows.push({
+          key: 'empty',
+          label: 'no model matches',
+          onPress: () => {},
+        });
+      } else if (matches.length > shown.length) {
+        rows.push({
+          key: 'more',
+          label: `${matches.length - shown.length} more · narrow the search`,
+          onPress: () => {},
+        });
+      }
+      rows.push(...backRow);
+    } else if (stage === 'model') {
+      head =
+        path.length > 0
+          ? `${path[path.length - 1]} · current: ${activeLabel}`
+          : `${title} · current: ${activeLabel}`;
+      if (path.length === 0 && rootOption) {
+        rows.push({
+          label: rootOption.label,
+          selected: rootOption.selected,
+          onPress: rootOption.onPress,
+        });
+      }
+      for (const subgroup of list.subgroups) {
+        rows.push({
+          label: `${subgroup} ›`,
+          onPress: () => onStateChange({ ...state, path: [...path, subgroup] }),
+        });
+      }
+      for (const model of list.visible) {
+        rows.push({
+          key: model.id,
+          label: model.label,
+          hint: model.id === model.label ? undefined : model.id,
+          selected: model.id === activeId,
+          onPress: () => advance('model', { model: model.id }),
+        });
+      }
+      if (path.length > 0) rows.push(...backRow);
+    } else if (stage === 'effort') {
+      head = `Effort for ${stagedLabel} · current: ${effortCurrent ? effortLabel(effortCurrent) : 'default'}`;
+      for (const level of effortLevels) {
+        rows.push({
+          label: effortLabel(level),
+          selected: (state.effort ?? effortCurrent) === level,
+          onPress: () => advance('effort', { effort: level }),
+        });
+      }
+      rows.push({
+        label: 'default (inherit)',
+        selected: (state.effort ?? effortCurrent) === '',
+        onPress: () => advance('effort', { effort: null }),
+      });
+      if (effortLevels.length > 0) {
+        rows.push({
+          label: `Keep current: ${effortCurrent ? effortLabel(effortCurrent) : 'default'}`,
+          onPress: () => advance('effort', { effort: undefined }),
+        });
+      }
+      rows.push(...backRow);
+    } else if (stage === 'context') {
+      head = `Context for ${stagedLabel} · ${contextSummary(stagedEntry?.context, context?.effective)}`;
+      for (const tier of tiers) {
+        rows.push({
+          label: tier.label,
+          selected: tier.selected,
+          onPress: () =>
+            advance('context', { context: tier.ceiling ?? 'full' }),
+        });
+      }
+      rows.push({
+        label: 'Keep current',
+        onPress: () => advance('context', { context: undefined }),
+      });
+      rows.push(...backRow);
+    } else {
+      const effortLine =
+        state.effort === null
+          ? 'effort: default'
+          : state.effort !== undefined
+            ? `effort: ${effortLabel(state.effort)}`
+            : skipPinsOnTag && stagedIsTag && stagedEntry?.effort
+              ? `effort: ${effortLabel(stagedEntry.effort)} (tag pin)`
+              : null;
+      const parts = [
+        `model: ${stagedLabel}`,
+        effortLine,
+        state.context === undefined
+          ? null
+          : `context: ${state.context === 'full' ? 'full window' : `${state.context} tokens`}`,
+      ].filter(Boolean);
+      head = parts.join(' · ');
+      rows.push({
+        label: 'Apply',
+        onPress: () => {
+          onCommit({
+            model: stagedModel,
+            ...(state.effort === undefined ? {} : { effort: state.effort }),
+            ...(state.context === undefined ? {} : { context: state.context }),
+          });
+          onClose();
+        },
+      });
+      rows.push(...backRow);
+    }
+
+    return { options: rows, preview: head };
+  }, [
+    activeId,
+    activeLabel,
+    advance,
+    back,
+    context,
+    effortCurrent,
+    effortLevels,
+    list,
+    matches,
+    needle,
+    onClose,
+    onCommit,
+    onStateChange,
+    page,
+    path,
+    query,
+    rootOption,
+    skipPinsOnTag,
+    stagedEntry,
+    stagedIsTag,
+    stagedLabel,
+    stagedModel,
+    stage,
+    state,
+    tiers,
+    title,
+  ]);
 
   // Only the model stage: effort and window are four rows each, and the field would carry a
   // query that no longer filters anything.
@@ -372,7 +479,9 @@ export function useModelPickerFlow({
 }
 
 /** The bottom-sheet presentation of the flow: chat, and the jobs editor. */
-export function ModelPickerSheet(props: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'>): React.JSX.Element {
+export function ModelPickerSheet(
+  props: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'>,
+): React.JSX.Element {
   const flow = useModelPickerFlow(props);
   return (
     <ActionSheet
@@ -393,7 +502,9 @@ export function ModelPickerSheet(props: Omit<Parameters<typeof useModelPickerFlo
 export function ModelPickerPage({
   backLabel,
   ...flowProps
-}: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'> & { backLabel: string }): React.JSX.Element {
+}: Omit<Parameters<typeof useModelPickerFlow>[0], 'page'> & {
+  backLabel: string;
+}): React.JSX.Element {
   const flow = useModelPickerFlow({ ...flowProps, page: true });
   const styles = useThemedStyles(createPageStyles);
   const { palette } = useTheme();
@@ -404,7 +515,8 @@ export function ModelPickerPage({
           onPress={flow.back}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel={backLabel}>
+          accessibilityLabel={backLabel}
+        >
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
@@ -427,7 +539,10 @@ export function ModelPickerPage({
           accessibilityLabel={flow.search.placeholder}
         />
       ) : null}
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+      >
         {flow.options.map(option => (
           <Pressable
             key={option.key ?? option.label}
@@ -435,7 +550,8 @@ export function ModelPickerPage({
             onPress={option.onPress}
             accessibilityRole="button"
             accessibilityState={{ selected: option.selected ?? false }}
-            accessibilityLabel={option.label}>
+            accessibilityLabel={option.label}
+          >
             <View style={styles.optionMain}>
               <Text style={styles.optionLabel}>{option.label}</Text>
               {option.hint ? (
@@ -472,7 +588,11 @@ const createPageStyles = (palette: Palette) => ({
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   headerText: { flex: 1, gap: 1 },
-  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
+  title: {
+    fontSize: font.title,
+    fontWeight: '600' as const,
+    color: palette.text,
+  },
   subtitle: { fontSize: font.small, color: palette.textFaint },
   search: {
     minHeight: 40,
@@ -499,7 +619,11 @@ const createPageStyles = (palette: Palette) => ({
   optionMain: { flex: 1, gap: 1 },
   optionLabel: { fontSize: font.title, color: palette.text },
   optionHint: { fontSize: font.small, color: palette.textFaint },
-  check: { fontSize: font.body, color: palette.accent, fontWeight: '700' as const },
+  check: {
+    fontSize: font.body,
+    color: palette.accent,
+    fontWeight: '700' as const,
+  },
 });
 
 /**
@@ -525,10 +649,12 @@ export function ModelSheet({
   const models = catalog.models;
   const byId = useModelIndex(models);
   const activeModel = thread?.model ?? catalog.defaultModel;
-  const defaultLabel = byId.get(catalog.defaultModel)?.label ?? catalog.defaultModel;
+  const defaultLabel =
+    byId.get(catalog.defaultModel)?.label ?? catalog.defaultModel;
 
   const effort = thread?.effort;
-  const effortActive = effort?.supported === true && (effort.levels?.length ?? 0) > 0;
+  const effortActive =
+    effort?.supported === true && (effort.levels?.length ?? 0) > 0;
 
   return (
     <ModelPickerSheet
@@ -541,14 +667,20 @@ export function ModelSheet({
       onCommit={choice => {
         if (!threadId) return;
         if (choice.model !== activeModel) {
-          connection.send(encodeModelSet(threadId, choice.model)).catch(() => {});
+          connection
+            .send(encodeModelSet(threadId, choice.model))
+            .catch(() => {});
         }
         // null stages a deliberate clear: the session hands its effort back to the defaults.
         if (choice.effort !== undefined) {
-          connection.send(encodeModelEffortSet(threadId, choice.effort ?? '')).catch(() => {});
+          connection
+            .send(encodeModelEffortSet(threadId, choice.effort ?? ''))
+            .catch(() => {});
         }
         if (choice.context !== undefined) {
-          connection.send(encodeModelContextSet(threadId, choice.context)).catch(() => {});
+          connection
+            .send(encodeModelContextSet(threadId, choice.context))
+            .catch(() => {});
         }
       }}
       // The default is the one option that exists even when no session does: picking it clears
@@ -561,8 +693,12 @@ export function ModelSheet({
               selected: activeModel === catalog.defaultModel || thread === null,
               onPress: () => {
                 if (threadId) {
-                  connection.send(encodeModelSet(threadId, catalog.defaultModel)).catch(() => {});
-                  connection.send(encodeModelEffortSet(threadId, '')).catch(() => {});
+                  connection
+                    .send(encodeModelSet(threadId, catalog.defaultModel))
+                    .catch(() => {});
+                  connection
+                    .send(encodeModelEffortSet(threadId, ''))
+                    .catch(() => {});
                 }
                 onClose();
               },
@@ -573,8 +709,12 @@ export function ModelSheet({
       context={
         thread?.context
           ? {
-              ...(thread.context.cap === undefined ? {} : { cap: thread.context.cap }),
-              ...(thread.context.choice === undefined ? {} : { current: thread.context.choice }),
+              ...(thread.context.cap === undefined
+                ? {}
+                : { cap: thread.context.cap }),
+              ...(thread.context.choice === undefined
+                ? {}
+                : { current: thread.context.choice }),
               effective: thread.context.effective,
             }
           : null
