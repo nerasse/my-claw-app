@@ -105,6 +105,8 @@ export interface DeviceBridgeNative {
     versionName: string;
     exits: { reason: string; at: number; status: number; description: string }[];
   }>;
+  /** The running build's version name ("0.2.78"). */
+  getAppVersion(): Promise<string>;
   pickFile(): Promise<PickedFile[]>;
   /** Copies a content:// or file:// uri into the cache and returns a readable file:// uri. */
   prepareFile(
@@ -196,6 +198,7 @@ export const deviceBridge: DeviceBridgeNative = {
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
   getExitInfo: () =>
     native?.getExitInfo() ?? Promise.resolve({ versionName: '', exits: [] }),
+  getAppVersion: () => native?.getAppVersion() ?? Promise.resolve(''),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   prepareFile: uri =>
     native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),

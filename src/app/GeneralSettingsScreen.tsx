@@ -38,6 +38,8 @@ export function GeneralSettingsScreen({
   url,
   onUrlChange,
   status,
+  serverVersion,
+  appVersion,
   pending,
   deviceInfo,
   onConnect,
@@ -50,6 +52,10 @@ export function GeneralSettingsScreen({
   url: string;
   onUrlChange: (url: string) => void;
   status: WsStatusPayload;
+  /** The version the connected server announced (`hello` frame); null until it speaks. */
+  serverVersion: string | null;
+  /** The running build's version name; null until the native side answers. */
+  appVersion: string | null;
   pending: number;
   deviceInfo: DeviceInfo | null;
   onConnect: () => void;
@@ -88,6 +94,10 @@ export function GeneralSettingsScreen({
           <View style={styles.card}>
             {deviceInfo ? (
               <>
+                <View style={styles.kv}>
+                  <Text style={styles.key}>app</Text>
+                  <Text style={styles.value}>{appVersion ?? '…'}</Text>
+                </View>
                 <View style={styles.kv}>
                   <Text style={styles.key}>device</Text>
                   <Text style={[styles.value, styles.mono]} selectable>
@@ -163,8 +173,9 @@ export function GeneralSettingsScreen({
             <View style={styles.kv}>
               <Text style={styles.key}>state</Text>
               <Text style={styles.value}>
-                {status.state}
-                {status.attempts ? ` · attempt ${status.attempts}` : ''}
+                {`${status.state}${serverVersion ? ` · v${serverVersion}` : ''}${
+                  status.attempts ? ` · attempt ${status.attempts}` : ''
+                }`}
               </Text>
             </View>
             {status.reason ? (

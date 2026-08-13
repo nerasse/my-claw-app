@@ -140,6 +140,7 @@ import { InstructionLayerScreen } from './InstructionLayerScreen';
 import { InstructionEditorScreen } from './InstructionEditorScreen';
 import { skillUrl } from '../core/skills';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
+import { deviceBridge } from '../core/nativeBridge';
 import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
 import { httpOrigin, uuid } from '../core/utils';
@@ -425,8 +426,12 @@ export function AppShell(): React.JSX.Element {
 
   const [url, setUrl] = useState(prefs.get().serverUrl);
   const [status, setStatus] = useState<WsStatusPayload>({ state: 'idle' });
+  /** The version the connected server announced (`hello` frame); null until it speaks. */
+  const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  /** The running build's version name, read from the package once at boot. */
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -830,7 +835,12 @@ export function AppShell(): React.JSX.Element {
 
     const offState = connection.onState(next => {
       setStatus(next);
-      if (next.state !== 'connected') setLocationEnabled(false);
+      if (next.state !== 'connected') {
+        // A server's version belongs to its socket: gone with it, or a reconnect to a newer
+        // server would show yesterday's label.
+        setServerVersion(null);
+        setLocationEnabled(false);
+      }
       if (next.state === 'connected') {
         connection.send(encodeSessionList());
         connection.send(encodeCommandsList());
@@ -1109,6 +1119,10 @@ export function AppShell(): React.JSX.Element {
           vapidRef.current = frame.vapidPublicKey;
           registerForPush(frame.vapidPublicKey).catch(() => {});
           break;
+        case 'hello':
+          // The server names itself on connect: the settings page labels "connected" with it.
+          setServerVersion(frame.version);
+          break;
         case 'chat.cleared':
           chatStore.clearThread(frame.threadId);
           break;
@@ -1199,6 +1213,10 @@ export function AppShell(): React.JSX.Element {
 
     getDeviceInfo()
       .then(setDeviceInfo)
+      .catch(() => {});
+    deviceBridge
+      .getAppVersion()
+      .then(version => setAppVersion(version || null))
       .catch(() => {});
     connection
       .pendingCount()
@@ -2601,6 +2619,8 @@ export function AppShell(): React.JSX.Element {
                 voice={voice}
                 onVoiceModeChange={changeVoiceMode}
                 status={status}
+                serverVersion={serverVersion}
+                appVersion={appVersion}
                 pending={pending}
                 deviceInfo={deviceInfo}
                 onConnect={() => connection.connect(url)}

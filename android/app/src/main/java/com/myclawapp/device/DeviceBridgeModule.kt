@@ -825,6 +825,11 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    * can reach it. Empty below API 30, where the API does not exist.
    */
   @ReactMethod
+  fun getAppVersion(promise: Promise) {
+    promise.resolve(versionName())
+  }
+
+  @ReactMethod
   fun getExitInfo(promise: Promise) {
     val exits = Arguments.createArray()
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

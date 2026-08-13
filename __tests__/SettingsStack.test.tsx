@@ -263,3 +263,20 @@ test('only the conversation screen lets a back press fall through to Android', a
 
   await settleAndUnmount(tree);
 });
+
+test('the general page labels a connected server with its announced version', async () => {
+  const tree = await boot();
+  await openSettings(tree);
+  await pressLabel(tree, 'Open general');
+  await waitFor(() => labelsOf(tree).includes('Server address'));
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:state', { state: 'connected', url: 'wss://server/my-claw-app' });
+  });
+  await emit({ type: 'hello', version: '0.1.204' });
+
+  await waitFor(() => textsOf(tree).includes('connected · v0.1.204'));
+  // The device card names the running build alongside the announced server version.
+  await waitFor(() => textsOf(tree).includes('0.0.1-test'));
+  await settleAndUnmount(tree);
+});

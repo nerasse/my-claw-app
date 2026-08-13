@@ -943,6 +943,15 @@ export interface NotificationsInfoFrame {
   vapidPublicKey: string;
 }
 
+/**
+ * The server's own version, sent once as the socket opens so the settings page can label
+ * its "connected" state with the server it is talking to.
+ */
+export interface HelloFrame {
+  type: 'hello';
+  version: string;
+}
+
 export type ServerFrame =
   | ChatMessageFrame
   | LocationCapabilitiesFrame
@@ -991,6 +1000,7 @@ export type ServerFrame =
   | TagsResultFrame
   | ProvidersEnvResultFrame
   | NotificationsInfoFrame
+  | HelloFrame
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
@@ -1037,6 +1047,7 @@ const FRAME_TYPES = new Set([
   'jobs.runs.result',
   'subagents.list.result',
   'notifications.info',
+  'hello',
   'tags.result',
   'providers.env.result',
   'chat.transcript',
