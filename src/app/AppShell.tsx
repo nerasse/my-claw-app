@@ -98,6 +98,7 @@ import {
   type JobFieldsOut,
   type LogsTailQuery,
   type McpEntry,
+  type ModelOption,
   type SessionFileMeta,
   type SessionSummary,
   type SkillEntry,
@@ -160,7 +161,7 @@ import { NewAgentScreen } from './NewAgentScreen';
 import { McpsScreen } from './McpsScreen';
 import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
 import { ProvidersScreen } from './ProvidersScreen';
-import { ProviderScreen } from './ProviderScreen';
+import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ProviderEditScreen } from './ProviderEditScreen';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
@@ -191,6 +192,12 @@ import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
 
 const HISTORY_LIMIT = 50;
+
+/**
+ * A frozen empty for the model list this shell hands to the provider page. A fresh `[]` reads the
+ * same but is a new identity every render, which silently defeats the memo of whatever gets it.
+ */
+const EMPTY_MODELS: ModelOption[] = [];
 
 /** The config scope shape ("["*"]" for all, absent for inherit) as the editor's mode union. */
 function scopeModeOf(scope: string[] | null | undefined): ScopeMode {
@@ -486,7 +493,12 @@ export function AppShell(): React.JSX.Element {
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
   const [agentModelFor, setAgentModelFor] = useState<string | null>(null);
   const [agentPicker, setAgentPicker] = useState<PickerState>(pickerStart);
-  const [providerQuery, setProviderQuery] = useState('');
+  /**
+   * The provider page's search box lives on that page, not here: it filters the longest list in
+   * the app, and as shell state every keystroke redrew the whole tree. The back key still clears
+   * it before leaving, and reaches it through this handle.
+   */
+  const providerSearch = useRef<ProviderSearch>({ query: '', clear: () => {} });
   const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [tools, setTools] = useState<ToolEntry[]>([]);
   const [toolsError, setToolsError] = useState<string | null>(null);
@@ -664,6 +676,24 @@ export function AppShell(): React.JSX.Element {
     [selectThread],
   );
 
+  // The two thread lists differ only by where the back arrow should lead afterwards. Held stable
+  // here rather than written inline at the call site: they are handed to memoized rows, and a
+  // fresh arrow per render would make every visible row redraw on every frame the shell receives.
+  const openThreadFromDrawer = useCallback(
+    (threadId: string) => {
+      fromArchivesRef.current = false;
+      openThread(threadId);
+    },
+    [openThread],
+  );
+  const openThreadFromArchives = useCallback(
+    (threadId: string) => {
+      fromArchivesRef.current = true;
+      openThread(threadId);
+    },
+    [openThread],
+  );
+
   /**
    * The + and /new propose a workspace before the conversation exists: default preselected,
    * every named workspace available. The pick itself creates the thread and tells the server
@@ -732,6 +762,15 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeJobsList()).catch(() => {});
   }, []);
 
+  const setGlobalDefaultModel = useCallback((modelId: string) => {
+    connection.send(encodeAgentsModelSet('global', modelId)).catch(() => {});
+  }, []);
+
+  const editJob = useCallback((job: JobEntry) => {
+    setJobsError(null);
+    setJobsEditor(job);
+  }, []);
+
   const openJobSessions = useCallback((job: JobEntry) => {
     setJobsEditor(null);
     setJobSessions({ jobId: job.id, jobName: job.name });
@@ -781,6 +820,20 @@ export function AppShell(): React.JSX.Element {
       connection.send(encodeSessionHistory(entry.threadId, HISTORY_LIMIT));
     },
     [selectThread],
+  );
+
+  /**
+   * A shared agent answers to the conversation on screen: that is what the back row names, and
+   * what authorizes the send (a global accepts any caller).
+   */
+  const openGlobalAgent = useCallback(
+    (entry: SubAgentEntry) => {
+      const parent = activeThreadRef.current;
+      if (!parent) return;
+      setAgentsGlobalOpen(false);
+      openSubAgent(entry, parent);
+    },
+    [openSubAgent],
   );
 
   /** Back out of a sub-agent to the conversation that reached it. */
@@ -1382,8 +1435,8 @@ export function AppShell(): React.JSX.Element {
           return true;
         }
         if (settingsPage === 'provider') {
-          if (providerQuery) {
-            setProviderQuery('');
+          if (providerSearch.current.query) {
+            providerSearch.current.clear();
             return true;
           }
           setSettingsPage('providers');
@@ -1522,7 +1575,6 @@ export function AppShell(): React.JSX.Element {
     modelPicker,
     newTagPrompt,
     providerEdit,
-    providerQuery,
     providerToDelete,
     scopeEditor,
     selectThread,
@@ -1569,6 +1621,7 @@ export function AppShell(): React.JSX.Element {
         }),
     [roster.agents],
   );
+  const globalGroups = useMemo(() => groupRoster(globalAgents), [globalAgents]);
   const subagentCount = useMemo(
     () => ({
       total: rosterGroups.reduce((sum, group) => sum + group.rows.length, 0),
@@ -2200,11 +2253,52 @@ export function AppShell(): React.JSX.Element {
     agentsConfig?.providers.find(provider => provider.key === selectedProvider) ?? null;
   // Same grouping rule as the server's provider count: a model with no provider of its own
   // follows the global default provider.
-  const providerModels = selectedProvider
-    ? catalog.models.filter(
-        model => (model.provider ?? agentsConfig?.defaultProvider) === selectedProvider,
-      )
-    : [];
+  // Memoized because a discovering provider floods this with hundreds of models, and the array
+  // identity is what ProviderScreen's own filter memo keys on: rebuilt here, it made that memo a
+  // no-op and re-filtered the whole catalogue on every keystroke.
+  const providerModels = useMemo(
+    () =>
+      selectedProvider
+        ? catalog.models.filter(
+            model => (model.provider ?? agentsConfig?.defaultProvider) === selectedProvider,
+          )
+        : EMPTY_MODELS,
+    [agentsConfig?.defaultProvider, catalog.models, selectedProvider],
+  );
+  // Shapes handed to the scope pickers and the agent file editor. Built here once per catalogue
+  // change instead of inside the JSX: rebuilt in the render body they were a new array on every
+  // frame the shell received, and no child could hold a memo across one.
+  const skillOptions = useMemo(
+    () => skills.map(s => ({ name: s.name, description: s.description })),
+    [skills],
+  );
+  const mcpOptions = useMemo(
+    () =>
+      mcpServers.map(s => ({
+        name: s.name,
+        description: `${s.transport} · ${s.state}`,
+      })),
+    [mcpServers],
+  );
+  const mcpScopeOptions = useMemo(
+    () =>
+      mcpServers.map(s => ({
+        name: s.name,
+        description: `${s.transport} · ${s.state}${s.state === 'failed' ? ` · ${s.lastError ?? ''}` : ''}`,
+      })),
+    [mcpServers],
+  );
+  const workspaceKeys = useMemo(() => workspaces.map(w => w.key), [workspaces]);
+  /** Which instruction layers the agent file's workspace has switched off. */
+  const agentFileLayerOff = useMemo(() => {
+    const ws = agentsFile.editor?.frame?.workspace ?? 'default';
+    const off: Record<string, boolean> = {};
+    for (const entry of instructions.entries) {
+      if (entry.workspace === ws && entry.off) off[layerOfFile(entry.file)] = true;
+    }
+    return off;
+  }, [agentsFile.editor?.frame?.workspace, instructions.entries]);
+
   const openInstruction = (workspace: string, file: string): void => {
     instructionsStore.openEditor(workspace, file);
     setSettingsPage('instruction');
@@ -2224,7 +2318,7 @@ export function AppShell(): React.JSX.Element {
       entries={instructions.entries}
       nested={instructions.nested}
       nestedTruncated={instructions.nestedTruncated}
-      workspaceKeys={workspaces.map(w => w.key)}
+      workspaceKeys={workspaceKeys}
       status={instructions.status}
       error={instructions.error}
       configError={workspacesError}
@@ -2359,7 +2453,6 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('tags');
           return;
         }
-        setProviderQuery('');
         setSelectedProvider(key);
         setSettingsPage('provider');
       }}
@@ -2769,15 +2862,15 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'provider' ? (
               selectedProviderInfo ? (
                 <ProviderScreen
+                  // Keyed by provider: switching to another one starts with an empty search
+                  // instead of the previous provider's, and without a reset to remember.
+                  key={selectedProviderInfo.key}
                   provider={selectedProviderInfo}
                   models={providerModels}
                   defaultModel={agentsConfig?.defaultModel ?? ''}
-                  query={providerQuery}
-                  onQueryChange={setProviderQuery}
+                  searchHandle={providerSearch}
                   error={agentsState.error}
-                  onSetDefault={modelId => {
-                    connection.send(encodeAgentsModelSet('global', modelId)).catch(() => {});
-                  }}
+                  onSetDefault={setGlobalDefaultModel}
                   onEditProvider={() => {
                     setProviderBusy(false);
                     setProviderEdit({ mode: 'edit', key: selectedProviderInfo.key });
@@ -2876,14 +2969,7 @@ export function AppShell(): React.JSX.Element {
                     scopeEditor.target === 'config' ? 'saved to the server config' : 'edited in the definition file'
                   }`}
                   kind={scopeEditor.kind}
-                  available={
-                    scopeEditor.kind === 'skills'
-                      ? skills.map(s => ({ name: s.name, description: s.description }))
-                      : mcpServers.map(s => ({
-                          name: s.name,
-                          description: `${s.transport} · ${s.state}${s.state === 'failed' ? ` · ${s.lastError ?? ''}` : ''}`,
-                        }))
-                  }
+                  available={scopeEditor.kind === 'skills' ? skillOptions : mcpScopeOptions}
                   mode={scopeSubject.mode}
                   names={scopeSubject.names}
                   unknown={scopeSubject.unknown}
@@ -2954,17 +3040,10 @@ export function AppShell(): React.JSX.Element {
               agentsFile.editor ? (
                 <AgentFileScreen
                   editor={agentsFile.editor}
-                  skills={skills.map(s => ({ name: s.name, description: s.description }))}
-                  mcpServers={mcpServers.map(s => ({ name: s.name, description: `${s.transport} · ${s.state}` }))}
+                  skills={skillOptions}
+                  mcpServers={mcpOptions}
                   error={agentsFile.error}
-                  layerOff={(() => {
-                    const ws = agentsFile.editor?.frame?.workspace ?? 'default';
-                    const off: Record<string, boolean> = {};
-                    for (const entry of instructions.entries) {
-                      if (entry.workspace === ws && entry.off) off[layerOfFile(entry.file)] = true;
-                    }
-                    return off;
-                  })()}
+                  layerOff={agentFileLayerOff}
                   onBack={closeAgentFile}
                   onChange={patch => {
                     const editor = agentsFile.editor;
@@ -3065,10 +3144,7 @@ export function AppShell(): React.JSX.Element {
             <ArchivesScreen
               sessions={archivedSessions}
               onBack={() => setArchivesOpen(false)}
-              onOpenThread={threadId => {
-                fromArchivesRef.current = true;
-                openThread(threadId);
-              }}
+              onOpenThread={openThreadFromArchives}
               onThreadMenu={setThreadMenu}
             />
           ) : filesOpen ? (
@@ -3141,10 +3217,7 @@ export function AppShell(): React.JSX.Element {
         connectionState={status.state}
         pending={pending}
         onClose={() => setDrawerOpen(false)}
-        onOpenThread={threadId => {
-          fromArchivesRef.current = false;
-          openThread(threadId);
-        }}
+        onOpenThread={openThreadFromDrawer}
         subagentCount={globalAgents.length}
         onOpenSubAgents={() => {
           setDrawerOpen(false);
@@ -3452,17 +3525,10 @@ export function AppShell(): React.JSX.Element {
         <AgentsScreen
           parentTitle="conversations"
           subtitle="shared across conversations"
-          groups={groupRoster(globalAgents)}
+          groups={globalGroups}
           status={roster.status}
           onClose={() => setAgentsGlobalOpen(false)}
-          onOpenAgent={entry => {
-            // A shared agent answers to the conversation on screen: that is what the back row
-            // names, and what authorizes the send (a global accepts any caller).
-            const parent = activeThreadRef.current;
-            if (!parent) return;
-            setAgentsGlobalOpen(false);
-            openSubAgent(entry, parent);
-          }}
+          onOpenAgent={openGlobalAgent}
         />
       ) : null}
 
@@ -3515,10 +3581,7 @@ export function AppShell(): React.JSX.Element {
               setJobsOpen(false);
             }}
             onAdd={() => setJobsEditor('new')}
-            onEdit={job => {
-              setJobsError(null);
-              setJobsEditor(job);
-            }}
+            onEdit={editJob}
             onSessions={openJobSessions}
           />
           {jobSessions ? (

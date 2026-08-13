@@ -85,23 +85,41 @@ export function useScrollIndicator(
     extrapolate: 'clamp',
   });
 
-  return {
-    scrollProps: {
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      setViewport(event.nativeEvent.layout.height);
+      onLayout?.(event);
+    },
+    [onLayout],
+  );
+
+  const handleContentSize = useCallback(
+    (width: number, height: number) => {
+      setContent(height);
+      onContentSizeChange?.(width, height);
+    },
+    [onContentSizeChange],
+  );
+
+  // Held stable. This object is spread onto every list in the app, and a fresh onLayout /
+  // onContentSizeChange on each render made those lists look changed to React even when their
+  // data had not moved.
+  const scrollProps = useMemo(
+    () => ({
       showsVerticalScrollIndicator: false,
       scrollEventThrottle: 16,
       onScroll: onScrollEvent,
-      onLayout: (event: LayoutChangeEvent) => {
-        setViewport(event.nativeEvent.layout.height);
-        onLayout?.(event);
-      },
-      onContentSizeChange: (width: number, height: number) => {
-        setContent(height);
-        onContentSizeChange?.(width, height);
-      },
+      onLayout: handleLayout,
+      onContentSizeChange: handleContentSize,
       onScrollBeginDrag: show,
       onScrollEndDrag: scheduleHide,
       onMomentumScrollEnd: scheduleHide,
-    },
+    }),
+    [handleContentSize, handleLayout, onScrollEvent, scheduleHide, show],
+  );
+
+  return {
+    scrollProps,
     indicator: overflows ? (
       <Animated.View
         pointerEvents="none"

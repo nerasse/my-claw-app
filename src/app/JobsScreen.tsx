@@ -6,13 +6,16 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { useJobs } from '../core/jobs';
 import type { JobEntry } from '../core/protocol';
 
+// Built once: a card shows two of these, and a rebuilt Intl.DateTimeFormat per call was the
+// most expensive thing on the screen.
+const dayFormat = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' });
+const timeFormat = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
 function when(iso: string | null): string {
   if (!iso) return '·';
   const date = new Date(iso);
   if (isNaN(date.getTime())) return '·';
-  const day = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-  const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  return `${day} ${time}`;
+  return `${dayFormat.format(date)} ${timeFormat.format(date)}`;
 }
 
 /** The scheduled tasks of the server: one row per job, a tap opens the editor. Values that
@@ -83,7 +86,11 @@ export function JobsScreen({
   );
 }
 
-function JobCard({
+/**
+ * Memoized: this screen stays mounted under JobSessionsScreen, so it redraws every time that one
+ * does. The handlers take the job rather than being closed over it, so their identity holds.
+ */
+const JobCard = React.memo(function JobCardView({
   job,
   index,
   onEdit,
@@ -171,7 +178,7 @@ function JobCard({
       </Pressable>
     </View>
   );
-}
+});
 
 const createStyles = (palette: Palette) => ({
   stage: { backgroundColor: palette.bg },

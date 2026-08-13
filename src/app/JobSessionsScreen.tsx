@@ -1,17 +1,59 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback } from 'react';
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import type { JobRunEntry } from '../core/protocol';
 
+// Built once, not per row: a job on a five-minute cron writes ~288 runs a day and this list is
+// never pruned, so a per-call Intl.DateTimeFormat was thousands of constructions in one pass.
+const dayFormat = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' });
+const timeFormat = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
 function when(ts: number): string {
   const date = new Date(ts);
   if (isNaN(date.getTime())) return '·';
-  const day = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-  const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  return `${day} ${time}`;
+  return `${dayFormat.format(date)} ${timeFormat.format(date)}`;
 }
+
+const keyOfRun = (run: JobRunEntry): string => run.threadId;
+
+/** Frozen, so "still loading" and "no runs" do not hand FlatList a fresh array on every render. */
+const EMPTY_RUNS: JobRunEntry[] = [];
+
+function Separator(): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return <View style={styles.separator} />;
+}
+
+/** One run. Memoized and handed the id, so a re-render of the screen does not redraw the history. */
+const RunRow = React.memo(function RunRowView({
+  run,
+  onOpen,
+}: {
+  run: JobRunEntry;
+  onOpen: (threadId: string) => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Pressable
+      style={styles.card}
+      onPress={() => onOpen(run.threadId)}
+      accessibilityRole="button"
+      accessibilityLabel={`Open run ${run.title}`}>
+      <View style={styles.cardHead}>
+        <Text style={styles.cardTitle} numberOfLines={1}>
+          {run.title}
+        </Text>
+        <Text style={styles.cardTime}>{when(run.runAt)}</Text>
+      </View>
+      <Text style={styles.cardMeta}>
+        {run.messageCount === 0 ? 'empty run' : `${run.messageCount} message${run.messageCount > 1 ? 's' : ''}`}
+        {' · tap to open and chat on it'}
+      </Text>
+    </Pressable>
+  );
+});
 
 /**
  * The runs of one job: every run is a real session the server kept, so each row reopens it as
@@ -36,6 +78,11 @@ export function JobSessionsScreen({
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   useDismissKeyboard();
+
+  const renderRun = useCallback(
+    ({ item }: { item: JobRunEntry }) => <RunRow run={item} onOpen={onOpenRun} />,
+    [onOpenRun],
+  );
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
@@ -75,31 +122,22 @@ export function JobSessionsScreen({
         <Text style={styles.empty}>no run yet · the job will create one at its next run</Text>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {(runs ?? []).map((run, index) => (
-          <View key={run.threadId}>
-            {index > 0 ? <View style={styles.separator} /> : null}
-            <Pressable
-              style={styles.card}
-              onPress={() => onOpenRun(run.threadId)}
-              accessibilityRole="button"
-              accessibilityLabel={`Open run ${run.title}`}>
-              <View style={styles.cardHead}>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                  {run.title}
-                </Text>
-                <Text style={styles.cardTime}>{when(run.runAt)}</Text>
-              </View>
-              <Text style={styles.cardMeta}>
-                {run.messageCount === 0
-                  ? 'empty run'
-                  : `${run.messageCount} message${run.messageCount > 1 ? 's' : ''}`}
-                {' · tap to open and chat on it'}
-              </Text>
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
+      {/* Virtualized, because nothing caps this list: the server keeps every run of every job,
+          and a five-minute cron reaches four figures within the week. No getItemLayout — a run
+          title can carry an emoji, and the theme deliberately leaves those lines unpinned. */}
+      <FlatList
+        data={runs ?? EMPTY_RUNS}
+        keyExtractor={keyOfRun}
+        renderItem={renderRun}
+        ItemSeparatorComponent={Separator}
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        windowSize={9}
+        removeClippedSubviews={Platform.OS === 'android'}
+      />
     </View>
   );
 }

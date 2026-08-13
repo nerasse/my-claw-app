@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import type { ModelOption, ProviderInfo } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -16,6 +16,49 @@ function Separator(): React.JSX.Element {
  */
 const SEARCH_MIN_MODELS = 12;
 
+const keyOfModel = (model: ModelOption): string => model.id;
+
+/**
+ * How the hardware back key reaches the search box. The query stays local to this screen — lifted
+ * into the shell it re-rendered the entire app on every keystroke, over the longest list in it —
+ * so the one caller that needs it from the outside gets a handle rather than a prop.
+ */
+export type ProviderSearch = { query: string; clear: () => void };
+
+/** One model. Memoized, and handed the id: a provider page can hold hundreds of these. */
+const ModelRow = React.memo(function ModelRowView({
+  model,
+  isDefault,
+  onSetDefault,
+}: {
+  model: ModelOption;
+  isDefault: boolean;
+  onSetDefault: (modelId: string) => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <Pressable
+      style={styles.row}
+      onPress={() => onSetDefault(model.id)}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isDefault }}
+      accessibilityLabel={isDefault ? `${model.label}, already the default` : `Set default ${model.label}`}>
+      <View style={styles.linkMain}>
+        <View style={styles.linkTitleLine}>
+          <Text style={styles.linkTitle}>{model.label}</Text>
+          {isDefault ? <Text style={styles.badge}>default</Text> : null}
+        </View>
+        {model.id !== model.label ? (
+          <Text style={styles.hint} numberOfLines={1}>
+            {model.id}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={styles.checkmark}>{isDefault ? '✓' : ''}</Text>
+    </Pressable>
+  );
+});
+
 /**
  * The models one provider contributes, filtered from the shared catalog with the same rule the
  * server uses to count them (a model with no provider of its own follows the global default).
@@ -25,8 +68,7 @@ export function ProviderScreen({
   provider,
   models,
   defaultModel,
-  query,
-  onQueryChange,
+  searchHandle,
   error,
   onSetDefault,
   onEditProvider,
@@ -36,9 +78,8 @@ export function ProviderScreen({
   models: ModelOption[];
   /** The global default id, so the row in force is marked. */
   defaultModel: string;
-  /** Search text over the model list; the row clears it and the hardware back key does too. */
-  query: string;
-  onQueryChange: (value: string) => void;
+  /** Where the hardware back key reads and clears the search from. */
+  searchHandle?: React.MutableRefObject<ProviderSearch>;
   /** Server refused the last write: shown here, where the user asked for it. */
   error: string | null;
   onSetDefault: (modelId: string) => void;
@@ -49,7 +90,8 @@ export function ProviderScreen({
   const { palette } = useTheme();
   useDismissKeyboard();
 
-  const needle = query.trim().toLowerCase();
+  const [query, setQuery] = useState('');
+  const needle = useMemo(() => query.trim().toLowerCase(), [query]);
   const shown = useMemo(
     () =>
       needle
@@ -58,6 +100,22 @@ export function ProviderScreen({
           )
         : models,
     [models, needle],
+  );
+
+  useEffect(() => {
+    if (!searchHandle) return;
+    const handle = searchHandle;
+    handle.current = { query, clear: () => setQuery('') };
+    return () => {
+      handle.current = { query: '', clear: () => {} };
+    };
+  }, [query, searchHandle]);
+
+  const renderModel = useCallback(
+    ({ item }: { item: ModelOption }) => (
+      <ModelRow model={item} isDefault={item.id === defaultModel} onSetDefault={onSetDefault} />
+    ),
+    [defaultModel, onSetDefault],
   );
 
   return (
@@ -95,7 +153,7 @@ export function ProviderScreen({
         <TextInput
           style={styles.search}
           value={query}
-          onChangeText={onQueryChange}
+          onChangeText={setQuery}
           placeholder="Search models"
           placeholderTextColor={palette.textFaint}
           autoCorrect={false}
@@ -109,32 +167,14 @@ export function ProviderScreen({
           the header, the error and the card look stay put above it. */}
       <FlatList
         data={shown}
-        keyExtractor={model => model.id}
-        renderItem={({ item: model }) => {
-          const isDefault = model.id === defaultModel;
-          return (
-            <Pressable
-              style={[styles.row, styles.link]}
-              onPress={() => onSetDefault(model.id)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isDefault }}
-              accessibilityLabel={isDefault ? `${model.label}, already the default` : `Set default ${model.label}`}>
-              <View style={styles.linkMain}>
-                <View style={styles.linkTitleLine}>
-                  <Text style={styles.linkTitle}>{model.label}</Text>
-                  {isDefault ? <Text style={styles.badge}>default</Text> : null}
-                </View>
-                {model.id !== model.label ? (
-                  <Text style={styles.hint} numberOfLines={1}>
-                    {model.id}
-                  </Text>
-                ) : null}
-              </View>
-              <Text style={styles.checkmark}>{isDefault ? '✓' : ''}</Text>
-            </Pressable>
-          );
-        }}
+        keyExtractor={keyOfModel}
+        renderItem={renderModel}
         ItemSeparatorComponent={Separator}
+        initialNumToRender={14}
+        maxToRenderPerBatch={12}
+        updateCellsBatchingPeriod={50}
+        windowSize={9}
+        removeClippedSubviews={Platform.OS === 'android'}
         ListEmptyComponent={
           <View style={styles.emptyArea}>
             <Text style={styles.empty}>
@@ -187,7 +227,6 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingVertical: space.md,
   },
-  link: { flexDirection: 'row' as const, alignItems: 'center' as const },
   linkMain: { flex: 1, gap: 2 },
   linkTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
   linkTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },

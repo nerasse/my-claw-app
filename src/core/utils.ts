@@ -34,15 +34,19 @@ export function viewerFor(
   return null;
 }
 
+// Built once. `toLocaleTimeString` builds a fresh Intl.DateTimeFormat on every call, and this runs
+// once per visible row of every session, file and job list — it was the most expensive thing a row
+// did. Locale changes need an app restart anyway, so there is nothing to invalidate.
+const clockFormat = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+const dayFormat = new Intl.DateTimeFormat(undefined, { day: '2-digit', month: '2-digit' });
+
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   const today = new Date();
   const sameDay =
     date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-  return sameDay
-    ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    : date.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' });
+  return sameDay ? clockFormat.format(date) : dayFormat.format(date);
 }
 
 export function formatBytes(bytes: number): string {
