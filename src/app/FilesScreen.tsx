@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
@@ -25,6 +25,59 @@ function mediaUrl(
     ? `${mediaBase}/media/${id}?device=${deviceInfo.deviceId}&token=${deviceInfo.token}`
     : '';
 }
+
+const keyOfFile = (item: SessionFileMeta): string => item.id;
+
+/** One attachment. Memoized, and the callbacks take the file rather than closing over it. */
+const FileRow = React.memo(function FileRowView({
+  item,
+  uri,
+  danger,
+  onOpen,
+  onDelete,
+}: {
+  item: SessionFileMeta;
+  /** Pre-built so the row does not need the media base or the device token. */
+  uri: string;
+  danger: string;
+  onOpen: (item: SessionFileMeta) => void;
+  onDelete: (item: SessionFileMeta) => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.row}>
+      <Pressable
+        style={styles.rowMain}
+        onPress={() => onOpen(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open file ${item.filename}`}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.thumb} resizeMode="cover" accessibilityLabel={item.filename} />
+        ) : (
+          <View style={[styles.thumb, styles.thumbLabel]}>
+            <Text style={styles.thumbLabelText}>{TYPE_LABEL[item.type]}</Text>
+          </View>
+        )}
+        <View style={styles.rowMainText}>
+          <Text style={styles.filename} numberOfLines={1}>
+            {item.filename}
+          </Text>
+          <Text style={styles.meta}>
+            {formatBytes(item.sizeBytes)} · {formatDate(item.ts)}
+          </Text>
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={() => onDelete(item)}
+        hitSlop={10}
+        style={styles.delete}
+        accessibilityRole="button"
+        accessibilityLabel={`Delete file ${item.filename}`}>
+        <TrashIcon size={17} color={danger} />
+      </Pressable>
+    </View>
+  );
+});
 
 export function FilesScreen({
   mediaBase,
@@ -58,6 +111,35 @@ export function FilesScreen({
   const [viewer, setViewer] = useState<SessionFileMeta | null>(null);
   const { scrollProps, indicator } = useScrollIndicator();
 
+  const openFile = useCallback(
+    (item: SessionFileMeta) => {
+      const target = {
+        url: mediaUrl(mediaBase, deviceInfo, item.id),
+        filename: item.filename,
+        sizeBytes: item.sizeBytes,
+      };
+      const kind = viewerFor(item.type, item.filename);
+      if (kind === 'image') onOpenImage(target);
+      else if (kind === 'text') onOpenText(target);
+      else if (kind === 'video') onOpenVideo(target);
+      else setViewer(item);
+    },
+    [deviceInfo, mediaBase, onOpenImage, onOpenText, onOpenVideo],
+  );
+
+  const renderFile = useCallback(
+    ({ item }: { item: SessionFileMeta }) => (
+      <FileRow
+        item={item}
+        uri={item.type === 'image' ? mediaUrl(mediaBase, deviceInfo, item.id) : ''}
+        danger={palette.danger}
+        onOpen={openFile}
+        onDelete={onDelete}
+      />
+    ),
+    [deviceInfo, mediaBase, onDelete, openFile, palette.danger],
+  );
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -89,72 +171,18 @@ export function FilesScreen({
           {...scrollProps}
           style={styles.list}
           data={files}
-          keyExtractor={item => item.id}
+          keyExtractor={keyOfFile}
           contentContainerStyle={
             files.length === 0 ? styles.emptyContent : styles.listContent
           }
           ListEmptyComponent={
             <Text style={styles.empty}>no files in this conversation</Text>
           }
-        renderItem={({ item }) => {
-          const uri =
-            item.type === 'image'
-              ? mediaUrl(mediaBase, deviceInfo, item.id)
-              : '';
-          return (
-            <View style={styles.row}>
-              <Pressable
-                style={styles.rowMain}
-                onPress={() => {
-                  const target = {
-                    url: mediaUrl(mediaBase, deviceInfo, item.id),
-                    filename: item.filename,
-                    sizeBytes: item.sizeBytes,
-                  };
-                  const kind = viewerFor(item.type, item.filename);
-                  if (kind === 'image') onOpenImage(target);
-                  else if (kind === 'text') onOpenText(target);
-                  else if (kind === 'video') onOpenVideo(target);
-                  else setViewer(item);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Open file ${item.filename}`}
-              >
-                {uri ? (
-                  <Image
-                    source={{ uri }}
-                    style={styles.thumb}
-                    resizeMode="cover"
-                    accessibilityLabel={item.filename}
-                  />
-                ) : (
-                  <View style={[styles.thumb, styles.thumbLabel]}>
-                    <Text style={styles.thumbLabelText}>
-                      {TYPE_LABEL[item.type]}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.rowMainText}>
-                  <Text style={styles.filename} numberOfLines={1}>
-                    {item.filename}
-                  </Text>
-                  <Text style={styles.meta}>
-                    {formatBytes(item.sizeBytes)} · {formatDate(item.ts)}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                onPress={() => onDelete(item)}
-                hitSlop={10}
-                style={styles.delete}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete file ${item.filename}`}
-              >
-                <TrashIcon size={17} color={palette.danger} />
-              </Pressable>
-            </View>
-          );
-        }}
+          renderItem={renderFile}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          windowSize={9}
         />
         {indicator}
       </View>

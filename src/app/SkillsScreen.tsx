@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import type { SkillEntry, WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -45,6 +45,13 @@ function buildRows(skills: SkillEntry[], workspaces: WorkspaceEntry[]): Row[] {
   return rows;
 }
 
+const keyOfRow = (row: Row): string =>
+  row.kind === 'header'
+    ? `h:${row.source}`
+    : row.kind === 'wsHeader'
+      ? `w:${row.workspace}`
+      : `s:${row.skill.source}:${row.skill.workspace ?? 'default'}:${row.skill.name}`;
+
 export function SkillsScreen({
   skills,
   workspaces,
@@ -64,7 +71,9 @@ export function SkillsScreen({
   // nothing to type into on this page.
   useDismissKeyboard();
   const { scrollProps, indicator } = useScrollIndicator();
-  const rows = buildRows(skills, workspaces);
+  // buildRows walks the catalogue several times over; held across renders so `data` keeps its
+  // identity between the frames this shell receives.
+  const rows = useMemo(() => buildRows(skills, workspaces), [skills, workspaces]);
 
   return (
     <View style={styles.screen}>
@@ -96,14 +105,12 @@ export function SkillsScreen({
           {...scrollProps}
           style={styles.list}
           data={rows}
-          keyExtractor={row =>
-            row.kind === 'header'
-              ? `h:${row.source}`
-              : row.kind === 'wsHeader'
-                ? `w:${row.workspace}`
-                : `s:${row.skill.source}:${row.skill.workspace ?? 'default'}:${row.skill.name}`
-          }
+          keyExtractor={keyOfRow}
           contentContainerStyle={rows.length === 0 ? styles.emptyContent : styles.listContent}
+          initialNumToRender={14}
+          maxToRenderPerBatch={12}
+          updateCellsBatchingPeriod={50}
+          windowSize={9}
           ListEmptyComponent={
             <Text style={styles.empty}>
               {error ? undefined : 'no skills found'}

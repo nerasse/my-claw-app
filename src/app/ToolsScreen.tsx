@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import type { ToolEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -43,6 +43,17 @@ function buildRows(tools: ToolEntry[]): Row[] {
   return rows;
 }
 
+const keyOfRow = (row: Row): string =>
+  row.kind === 'header'
+    ? `h:${row.source}`
+    : row.kind === 'missingHeader'
+      ? 'missing:h'
+      : row.kind === 'missing'
+        ? `missing:${row.name}`
+        : row.kind === 'mcpHeader'
+          ? `m:${row.server}`
+          : `t:${row.tool.source}:${row.tool.server ?? ''}:${row.tool.name}`;
+
 /** The short part of `mcp__<server>__<tool>`: the page already groups by server. */
 function shortName(tool: ToolEntry): string {
   const prefix = tool.server ? `mcp__${tool.server}__` : '';
@@ -70,15 +81,22 @@ export function ToolsScreen({
   // nothing to type into on this page.
   useDismissKeyboard();
   const { scrollProps, indicator } = useScrollIndicator();
-  const rows = buildRows(tools);
-  const disabledCount = tools.filter(tool => tool.disabled).length;
+  // The catalogue is built-ins plus tools.d plus every MCP namespace, so it reaches the hundreds
+  // and buildRows walks it several times over. Held across renders, and handed to the list as one
+  // array: rebuilt inline, `data` was a new identity on every frame the shell received and the
+  // list could never conclude that nothing had moved.
+  const rows = useMemo(() => {
+    const missingRows: Row[] =
+      missing.length > 0
+        ? [{ kind: 'missingHeader' }, ...missing.map(name => ({ kind: 'missing' as const, name }))]
+        : [];
+    return [...missingRows, ...buildRows(tools)];
+  }, [missing, tools]);
+  const disabledCount = useMemo(() => tools.filter(tool => tool.disabled).length, [tools]);
   // One string: a Text split across expressions reads as an array to textsOf in tests.
   const subtitle = `${tools.length} tool${tools.length === 1 ? '' : 's'}${
     disabledCount > 0 ? ` · ${disabledCount} disabled` : ''
   }${missing.length > 0 ? ` · ${missing.length} removed` : ''}`;
-
-  const missingRows: Row[] =
-    missing.length > 0 ? [{ kind: 'missingHeader' }, ...missing.map(name => ({ kind: 'missing' as const, name }))] : [];
 
   return (
     <View style={styles.screen}>
@@ -107,19 +125,13 @@ export function ToolsScreen({
         <FlatList
           {...scrollProps}
           style={styles.list}
-          data={[...missingRows, ...rows]}
-          keyExtractor={row =>
-            row.kind === 'header'
-              ? `h:${row.source}`
-              : row.kind === 'missingHeader'
-                ? 'missing:h'
-                : row.kind === 'missing'
-                  ? `missing:${row.name}`
-                  : row.kind === 'mcpHeader'
-                    ? `m:${row.server}`
-                    : `t:${row.tool.source}:${row.tool.server ?? ''}:${row.tool.name}`
-          }
-          contentContainerStyle={rows.length === 0 && missing.length === 0 ? styles.emptyContent : styles.listContent}
+          data={rows}
+          keyExtractor={keyOfRow}
+          contentContainerStyle={rows.length === 0 ? styles.emptyContent : styles.listContent}
+          initialNumToRender={14}
+          maxToRenderPerBatch={12}
+          updateCellsBatchingPeriod={50}
+          windowSize={9}
           ListEmptyComponent={
             <Text style={styles.empty}>
               {error ? undefined : 'no tools found'}
