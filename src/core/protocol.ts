@@ -470,7 +470,10 @@ export interface StatusPayload {
     };
   } | null;
   model: {
+    /** The model the API actually receives: a `tag:` reference is resolved to its leaf. */
     current: string;
+    /** Set when the current model is a `tag:` reference, naming the tag. */
+    tag?: string;
     /** The agent's configured default, present when the session overrides it. */
     configDefault?: string;
     effort?: string;

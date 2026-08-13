@@ -70,6 +70,7 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
           <Text style={styles.title}>Status</Text>
           <Text style={styles.headerSub} numberOfLines={1}>
             {payload ? payload.model.current : 'this conversation'}
+            {payload?.model.tag ? ` · tag ${payload.model.tag}` : ''}
           </Text>
         </View>
       </View>
