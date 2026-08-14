@@ -3,6 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
+import { AgentMarkdown } from '../src/components/AgentMarkdown';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import type { HistoryEntry } from '../src/core/protocol';
@@ -65,6 +66,25 @@ test('tapping the line reveals the thinking, tapping again hides it', async () =
 
   await pressLabel(tree, 'Reasoning');
   expect(textsOf(tree)).not.toContain(THOUGHT);
+  await unmount(tree);
+});
+
+/**
+ * The model writes its thinking in markdown -- lists, paths, code spans -- and it used to be
+ * dumped as one raw blob. It renders like the answer does, one tone down (see MarkdownTone),
+ * and only once opened: the body grows with every streamed delta, and parsing a folded block
+ * on each one would be work nobody can see.
+ */
+test('the thinking renders as markdown, at aside tone, and only once opened', async () => {
+  const tree = await renderWith(replyWithReasoning());
+  await waitFor(() => textsOf(tree).includes('Reasoning'));
+
+  expect(tree.root.findAllByType(AgentMarkdown).some(node => node.props.tone === 'aside')).toBe(false);
+
+  await pressLabel(tree, 'Reasoning');
+  const aside = tree.root.findAllByType(AgentMarkdown).filter(node => node.props.tone === 'aside');
+  expect(aside).toHaveLength(1);
+  expect(aside[0]?.props.text).toBe(THOUGHT);
   await unmount(tree);
 });
 
