@@ -5,6 +5,7 @@ import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
 import { CollapsibleAside } from './CollapsibleAside';
+import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine } from './ReasoningLine';
 import { LocationView } from './LocationView';
 import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -88,7 +89,9 @@ export const Bubble = React.memo(function BubbleView({
                 lineBoxFor(font.body, item.text),
               ]}>
               {item.text}
-              {item.streaming ? '▍' : ''}
+              {/* A command the server is still running says how long it has been at it; a
+                  caret would only blink on text nobody is writing. */}
+              {item.streaming ? item.command ? <CommandElapsed since={item.ts} /> : '▍' : ''}
             </Text>
           )
         ) : item.streaming && !thinkingShown ? (

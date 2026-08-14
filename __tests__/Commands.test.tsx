@@ -5,6 +5,7 @@
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { AgentMarkdown } from '../src/components/AgentMarkdown';
+import { CommandElapsed } from '../src/components/CommandElapsed';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
@@ -399,12 +400,17 @@ test('a slow command shows it is running, and the result replaces that bubble', 
 
   await emit({ type: 'chat.command.pending', threadId: THREAD, replyToId: 'u2', text: 'Running /compact...' });
   await waitFor(() => allTexts(tree).some(text => text.includes('Running /compact...')), 60);
+  // Nothing comes over the wire for the next minute or two, so the bubble counts on its own.
+  expect(tree.root.findAllByType(CommandElapsed)).toHaveLength(1);
+  expect(allTexts(tree).some(text => text.trim() === '0s')).toBe(true);
 
   await emit({ type: 'chat.command.result', threadId: THREAD, replyToId: 'u2', text: 'Context compacted (SDK session summarized).' });
   await waitFor(() => allTexts(tree).some(text => text.includes('Context compacted')), 60);
   // One bubble, not two: the wait and its answer are the same place in the conversation.
   expect(allTexts(tree).some(text => text.includes('Running /compact...'))).toBe(false);
   expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.role === 'agent')).toHaveLength(1);
+  // The answer is not a wait: the counter goes with the placeholder it belonged to.
+  expect(tree.root.findAllByType(CommandElapsed)).toHaveLength(0);
 
   await settleAndUnmount(tree);
 });
