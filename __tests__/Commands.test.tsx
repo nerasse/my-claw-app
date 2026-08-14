@@ -390,6 +390,40 @@ test('a command result arrives as its own bubble, not an agent reply', async () 
   await settleAndUnmount(tree);
 });
 
+test('a slow command shows it is running, and the result replaces that bubble', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u2', '/compact', []);
+  });
+
+  await emit({ type: 'chat.command.pending', threadId: THREAD, replyToId: 'u2', text: 'Running /compact...' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('Running /compact...')), 60);
+
+  await emit({ type: 'chat.command.result', threadId: THREAD, replyToId: 'u2', text: 'Context compacted (SDK session summarized).' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('Context compacted')), 60);
+  // One bubble, not two: the wait and its answer are the same place in the conversation.
+  expect(allTexts(tree).some(text => text.includes('Running /compact...'))).toBe(false);
+  expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.role === 'agent')).toHaveLength(1);
+
+  await settleAndUnmount(tree);
+});
+
+test('a placeholder left by a command the server does not know goes away when the agent answers', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u3', '/whatever', []);
+  });
+  await emit({ type: 'chat.command.pending', threadId: THREAD, replyToId: 'u3', text: 'Running /whatever...' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('Running /whatever...')), 60);
+
+  await emit({ type: 'chat.stream.start', threadId: THREAD, id: 's1', replyToId: 'u3' });
+  await emit({ type: 'chat.stream.delta', threadId: THREAD, id: 's1', text: 'no such command' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('no such command')), 60);
+  expect(allTexts(tree).some(text => text.includes('Running /whatever...'))).toBe(false);
+
+  await settleAndUnmount(tree);
+});
+
 test('emptying a conversation is gone: archive files it away, delete destroys it', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {

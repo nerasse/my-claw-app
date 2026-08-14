@@ -100,6 +100,8 @@ class ChatStoreImpl {
   private lastStream = new Map<string, string>();
   /** Threads with a run in flight on the server: drives the Stop button across the whole run. */
   private activeRuns = new Set<string>();
+  /** Placeholder bubble per thread while a slow command runs, keyed by thread -> bubble id. */
+  private pendingCommands = new Map<string, string>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
@@ -255,10 +257,54 @@ class ChatStoreImpl {
   }
 
   /**
+   * A command is taking its time (`/compact` runs for minutes on a full session). The bubble is
+   * a placeholder: the result replaces it in place, so the chat never shows both.
+   */
+  addCommandPending(threadId: string, replyToId: string, text: string): void {
+    const existing = this.pendingCommands.get(threadId);
+    if (existing) this.patch(threadId, existing, { text });
+    else {
+      const parent = this.getItems(threadId).find(item => item.id === replyToId);
+      const id = `cmd-pending-${replyToId}`;
+      this.pendingCommands.set(threadId, id);
+      this.append(threadId, {
+        kind: 'text',
+        id,
+        role: 'agent',
+        text,
+        attachments: [],
+        streaming: true,
+        command: true,
+        ts: parent ? parent.ts + 1 : Date.now(),
+      });
+    }
+  }
+
+  /**
+   * Drops a placeholder that will never be answered: the agent replied instead (a command the
+   * server does not know is a question like any other) or the conversation moved on.
+   */
+  clearCommandPending(threadId: string): void {
+    const id = this.pendingCommands.get(threadId);
+    if (!id) return;
+    this.pendingCommands.delete(threadId);
+    this.removeItem(threadId, id);
+  }
+
+  /**
    * Output of a command the server executed. Rendered as its own bubble so `/status` never
    * masquerades as an agent answer: the agent is not the author of it.
    */
   addCommandResult(threadId: string, id: string, text: string, replyToId?: string): void {
+    const pending = this.pendingCommands.get(threadId);
+    this.pendingCommands.delete(threadId);
+    // In place, keeping the placeholder's position: the answer belongs where the wait was. A
+    // placeholder the thread no longer holds (history replaced under it) falls through to a
+    // fresh bubble rather than patching an id that is gone, which would drop the answer.
+    if (pending && this.getItems(threadId).some(item => item.id === pending)) {
+      this.patch(threadId, pending, { text, streaming: false });
+      return;
+    }
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
     this.append(threadId, {
       kind: 'text',
@@ -397,6 +443,7 @@ class ChatStoreImpl {
     this.threads.delete(threadId);
     this.activeRuns.delete(threadId);
     this.lastStream.delete(threadId);
+    this.pendingCommands.delete(threadId);
     if (this.unread.delete(threadId)) this.refreshUnread();
     this.emit();
   }
@@ -407,6 +454,7 @@ class ChatStoreImpl {
     this.reasoning.clear();
     this.lastStream.clear();
     this.activeRuns.clear();
+    this.pendingCommands.clear();
     this.unread.clear();
     this.unreadSnapshot = EMPTY_THREADS;
     this.emit();

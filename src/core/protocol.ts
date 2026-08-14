@@ -456,6 +456,18 @@ export interface ModelResultFrame {
   context?: ContextState;
 }
 
+/**
+ * A command the server is still running. Sent only past a short delay, so a fast command never
+ * flickers a placeholder; the matching result replaces this bubble.
+ */
+export interface CommandPendingFrame {
+  type: 'chat.command.pending';
+  threadId: string;
+  /** The chat.send id that carried the command: the result carries it as replyToId. */
+  replyToId: string;
+  text: string;
+}
+
 /** Output of a command the server executed; rendered as a distinct bubble, not an agent reply. */
 export interface CommandResultFrame {
   type: 'chat.command.result';
@@ -998,6 +1010,7 @@ export type ServerFrame =
   | ToolsListResultFrame
   | WorkspacesListResultFrame
   | ModelResultFrame
+  | CommandPendingFrame
   | CommandResultFrame
   | ChatClearedFrame
   | TranscriptFrame
@@ -1036,6 +1049,7 @@ const FRAME_TYPES = new Set([
   'chat.stream.abort',
   'chat.tool',
   'chat.history',
+  'chat.command.pending',
   'chat.command.result',
   'chat.cleared',
   'session.list.result',

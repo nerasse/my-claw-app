@@ -985,6 +985,9 @@ export function AppShell(): React.JSX.Element {
           subAgentStore.receive(frame);
           break;
         case 'chat.stream.start':
+          // The agent is answering, so no command result is coming: a placeholder left by a
+          // command this server does not know would sit there forever.
+          chatStore.clearCommandPending(frame.threadId);
           chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
           noteActivity(frame.threadId, '');
           break;
@@ -1164,10 +1167,14 @@ export function AppShell(): React.JSX.Element {
         case 'instructions.saved':
           instructionsStore.receiveSaved(frame);
           break;
+        case 'chat.command.pending':
+          chatStore.addCommandPending(frame.threadId, frame.replyToId, frame.text);
+          break;
         case 'chat.command.result':
           if (frame.status) {
             // A /status answered by the server: the page replaces the bubble, so the report
-            // never takes space in the conversation.
+            // never takes space in the conversation. Its placeholder goes with it.
+            chatStore.clearCommandPending(frame.threadId);
             statusStore.receive({
               type: 'status.result',
               threadId: frame.threadId,
