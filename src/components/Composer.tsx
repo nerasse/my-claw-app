@@ -80,7 +80,7 @@ export function Composer({
   /** A finished voice note. Absent means the composer offers no microphone at all. */
   onRecorded?: (recording: VoiceRecording) => void;
   onRecordingError?: (message: string) => void;
-  /** A run is answering in the conversation: the send arrow becomes Stop. */
+  /** A run is answering in the conversation: the empty composer offers Stop instead of Send. */
   streaming?: boolean;
   onStop?: () => void;
 }): React.JSX.Element {
@@ -99,7 +99,16 @@ export function Composer({
    * beside it, so adding another note and sending are both one tap away.
    */
   const micVisible = onRecorded !== undefined && empty;
-  const sendVisible = !micVisible || staged > 0;
+  /**
+   * Mid-run the corner belongs to whatever is composed. A message sent while the agent is
+   * answering is injected into that same turn (the server's mailbox, docs/injection.md), so a
+   * Stop button sitting on top of a written message forced a choice between steering the run and
+   * killing it -- and the text had to be held until the run ended. Stop is what the corner shows
+   * when there is nothing to send, which is exactly the state you are in when interrupting is
+   * the only thing left to do.
+   */
+  const stopVisible = streaming === true && !recording && nothingToSend;
+  const sendVisible = !recording && !stopVisible && (!micVisible || staged > 0);
   const recordings = attachments?.filter(item => item.audioAsVoice) ?? [];
   const files = attachments?.filter(item => !item.audioAsVoice) ?? [];
 
@@ -268,7 +277,7 @@ export function Composer({
             onActiveChange={setRecording}
           />
         ) : null}
-        {sendVisible && !recording && !streaming ? (
+        {sendVisible ? (
           <Pressable
             style={[styles.send, hero && styles.sendHero, nothingToSend && styles.sendIdle]}
             onPress={onSend}
@@ -281,7 +290,7 @@ export function Composer({
             />
           </Pressable>
         ) : null}
-        {streaming && !recording ? (
+        {stopVisible ? (
           <Pressable
             style={[styles.send, hero && styles.sendHero, styles.sendStop]}
             onPress={onStop}

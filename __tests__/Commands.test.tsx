@@ -4,6 +4,7 @@
 
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
+import { AgentMarkdown } from '../src/components/AgentMarkdown';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
@@ -430,6 +431,12 @@ test('a compaction summary is folded under the result, and opens on tap', async 
   await pressLabel(tree, 'Summary');
   await waitFor(() => allTexts(tree).some(text => text.includes('What was built')), 60);
 
+  // A summary is structured prose written by the model (numbered sections, paths, code spans),
+  // so it is rendered as markdown, one tone under the answer rather than as a raw blob.
+  const aside = tree.root.findAllByType(AgentMarkdown).filter(node => node.props.tone === 'aside');
+  expect(aside).toHaveLength(1);
+  expect(aside[0]?.props.text).toContain('What was built');
+
   await settleAndUnmount(tree);
 });
 
@@ -503,6 +510,37 @@ test('a run keeps Stop visible across tool calls and until it ends', async () =>
     chatStore.endRun(THREAD);
   });
   await waitFor(() => !labelsOf(tree).includes('Stop generating'));
+
+  await settleAndUnmount(tree);
+});
+
+/**
+ * A message written while the agent is answering is steering, not a queued turn: the server
+ * injects it into the running turn. The corner therefore follows the composer rather than the
+ * run -- Stop only while there is nothing to send.
+ */
+test('typing during a run turns Stop back into Send, and sending steers the run', async () => {
+  const tree = await renderApp();
+  // The bridge mock is never cleared between tests, so only frames sent from here on count.
+  const before = sentFrames().length;
+  await ReactTestRenderer.act(async () => {
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1', 'u1');
+    chatStore.appendDelta(THREAD, 's1', 'working');
+  });
+  await waitFor(() => labelsOf(tree).includes('Stop generating'));
+
+  await typeInto(tree, 'Message to send', 'plutot en rust');
+  await waitFor(() => labelsOf(tree).includes('Send message'));
+  // One corner, one meaning: the two never share it.
+  expect(labelsOf(tree)).not.toContain('Stop generating');
+
+  await pressLabel(tree, 'Send message');
+  await waitFor(() => sentFrames().slice(before).some(frame => frame.includes('"type":"chat.send"') && frame.includes('plutot en rust')));
+
+  // The run was steered, not killed: nothing stopped it, and the emptied composer offers Stop again.
+  expect(sentFrames().slice(before).some(frame => frame.includes('"type":"chat.stop"'))).toBe(false);
+  await waitFor(() => labelsOf(tree).includes('Stop generating'));
 
   await settleAndUnmount(tree);
 });
