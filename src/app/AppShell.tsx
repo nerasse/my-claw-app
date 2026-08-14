@@ -75,6 +75,7 @@ import {
   encodeSessionWorkspaceSet,
   encodeSessionUnarchive,
   encodeSkillsList,
+  encodeSkillsTransfer,
   encodeToolsList,
   encodeToolsToggle,
   encodeWorkspacesList,
@@ -103,6 +104,7 @@ import {
   type SessionFileMeta,
   type SessionSummary,
   type SkillEntry,
+  type SkillTarget,
   type ToolEntry,
   type VoiceMode,
   type VoiceModeResultFrame,
@@ -540,6 +542,19 @@ export function AppShell(): React.JSX.Element {
     url: string;
     skill: SkillEntry;
   } | null>(null);
+  /** The transfer flow of one skill, one sheet per step: what to do, where to, and the replace
+   *  confirmation when the name is already taken there. The catalog answer closes it. */
+  const [skillMenu, setSkillMenu] = useState<SkillEntry | null>(null);
+  const [skillTargets, setSkillTargets] = useState<{ skill: SkillEntry; mode: 'copy' | 'move' } | null>(null);
+  const [skillReplace, setSkillReplace] = useState<{
+    skill: SkillEntry;
+    mode: 'copy' | 'move';
+    target: SkillTarget;
+    label: string;
+  } | null>(null);
+  /** What the last transfer did. Kept until the page is left: the list reorders itself, which
+   *  on its own is indistinguishable from nothing having happened. */
+  const [skillsNotice, setSkillsNotice] = useState<string | null>(null);
   const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
@@ -1423,6 +1438,12 @@ export function AppShell(): React.JSX.Element {
         setDrawerOpen(false);
         return true;
       }
+      if (skillMenu || skillTargets || skillReplace) {
+        setSkillMenu(null);
+        setSkillTargets(null);
+        setSkillReplace(null);
+        return true;
+      }
       if (skillViewer) {
         setSkillViewer(null);
         return true;
@@ -1609,6 +1630,9 @@ export function AppShell(): React.JSX.Element {
     selectThread,
     settingsOpen,
     settingsPage,
+    skillMenu,
+    skillReplace,
+    skillTargets,
     skillViewer,
     statusOpen,
     subagentAction,
@@ -2309,6 +2333,129 @@ export function AppShell(): React.JSX.Element {
       })),
     [mcpServers],
   );
+
+  /**
+   * The skill transfer flow. A skill is a folder on the server, and the tiers it can land in are
+   * the shared custom one and every workspace: the built-in tier is never a target (the release
+   * resyncs it by hash at every boot), so it is not offered at all rather than refused after the
+   * fact. Whether the name is already taken over there is read from the catalog the page already
+   * holds, so the replace question is asked before the send, not derived from a refusal.
+   */
+  const skillTargetChoices = useCallback(
+    (skill: SkillEntry): Array<{ target: SkillTarget; label: string; hint: string }> => {
+      const isHere = (target: SkillTarget): boolean =>
+        target.source === 'custom'
+          ? skill.source === 'custom'
+          : skill.source === 'workspace' &&
+            (skill.workspace ?? 'default') === (target.workspace ?? 'default');
+      return [
+        {
+          target: { source: 'custom' as const },
+          label: 'Custom',
+          hint: 'shared tier, visible from every workspace',
+        },
+        ...workspaces.map(workspace => ({
+          target: { source: 'workspace' as const, workspace: workspace.key },
+          label: `Workspace · ${workspace.key}`,
+          hint: workspace.path,
+        })),
+      ].filter(choice => !isHere(choice.target));
+    },
+    [workspaces],
+  );
+
+  const skillAt = useCallback(
+    (name: string, target: SkillTarget): boolean =>
+      skills.some(
+        entry =>
+          entry.name === name &&
+          (target.source === 'custom'
+            ? entry.source === 'custom'
+            : entry.source === 'workspace' &&
+              (entry.workspace ?? 'default') === (target.workspace ?? 'default')),
+      ),
+    [skills],
+  );
+
+  const sendSkillTransfer = useCallback(
+    (
+      skill: SkillEntry,
+      mode: 'copy' | 'move',
+      target: SkillTarget,
+      label: string,
+      overwrite?: boolean,
+    ): void => {
+      setSkillMenu(null);
+      setSkillTargets(null);
+      setSkillReplace(null);
+      setSkillsError(null);
+      setSkillsNotice(
+        `${skill.name} ${mode === 'move' ? 'moved' : 'copied'} to ${label}${overwrite ? ', replacing the previous one' : ''}`,
+      );
+      // A move changes the tier the open document is addressed by, so its URL is stale: the
+      // reader would keep showing a file that is no longer there.
+      if (mode === 'move') setSkillViewer(null);
+      connection
+        .send(encodeSkillsTransfer(mode, skill, target, overwrite))
+        .catch(() => {});
+    },
+    // connection lives outside the component: it is not a dependency, it is the transport.
+    [],
+  );
+
+  const skillMenuOptions = useMemo((): SheetEntry[] => {
+    const skill = skillMenu;
+    if (!skill) return [];
+    return [
+      {
+        label: 'Copy to…',
+        hint:
+          skill.source === 'built-in'
+            ? 'fork the shipped skill, the original keeps being synced'
+            : 'the original stays where it is',
+        onPress: () => {
+          setSkillTargets({ skill, mode: 'copy' });
+          setSkillMenu(null);
+        },
+      },
+      // Built-in is copy-from only: a delete there is undone by the next boot's resync, so the
+      // move would look like it silently came back.
+      ...(skill.source === 'built-in'
+        ? []
+        : [
+            {
+              label: 'Move to…',
+              hint: 'the original is removed once the copy landed',
+              onPress: () => {
+                setSkillTargets({ skill, mode: 'move' });
+                setSkillMenu(null);
+              },
+            },
+          ]),
+    ];
+  }, [skillMenu]);
+
+  const skillTargetOptions = useMemo((): SheetEntry[] => {
+    if (!skillTargets) return [];
+    const { skill, mode } = skillTargets;
+    return skillTargetChoices(skill).map(choice => {
+      const taken = skillAt(skill.name, choice.target);
+      return {
+        key: `${choice.target.source}:${choice.target.workspace ?? ''}`,
+        label: choice.label,
+        hint: taken ? `${choice.hint} · a skill of that name is already there` : choice.hint,
+        danger: taken,
+        onPress: () => {
+          if (taken) {
+            setSkillReplace({ skill, mode, target: choice.target, label: choice.label });
+            setSkillTargets(null);
+            return;
+          }
+          sendSkillTransfer(skill, mode, choice.target, choice.label);
+        },
+      };
+    });
+  }, [skillAt, skillTargetChoices, skillTargets, sendSkillTransfer]);
   const mcpScopeOptions = useMemo(
     () =>
       mcpServers.map(s => ({
@@ -3109,7 +3256,11 @@ export function AppShell(): React.JSX.Element {
                 skills={skills}
                 workspaces={workspaces}
                 error={skillsError ?? undefined}
-                onBack={() => setSettingsPage('index')}
+                notice={skillsNotice ?? undefined}
+                onBack={() => {
+                  setSkillsNotice(null);
+                  setSettingsPage('index');
+                }}
                 onOpenSkill={skill => {
                   if (!deviceInfo) return;
                   setSkillViewer({
@@ -3117,6 +3268,7 @@ export function AppShell(): React.JSX.Element {
                     skill,
                   });
                 }}
+                onSkillActions={setSkillMenu}
               />
             ) : settingsPage === 'workspaces' ? (
               <WorkspacesScreen
@@ -3307,6 +3459,44 @@ export function AppShell(): React.JSX.Element {
           url={skillViewer.url}
           skill={skillViewer.skill}
           onClose={() => setSkillViewer(null)}
+          onActions={() => setSkillMenu(skillViewer.skill)}
+        />
+      ) : null}
+
+      {skillMenu ? (
+        <ActionSheet
+          preview={`${skillMenu.name} · ${skillMenu.source === 'workspace' ? `workspace ${skillMenu.workspace ?? 'default'}` : skillMenu.source}`}
+          options={skillMenuOptions}
+          onClose={() => setSkillMenu(null)}
+        />
+      ) : null}
+
+      {skillTargets ? (
+        <ActionSheet
+          preview={`${skillTargets.mode === 'move' ? 'Move' : 'Copy'} ${skillTargets.skill.name} where?`}
+          options={skillTargetOptions}
+          onClose={() => setSkillTargets(null)}
+        />
+      ) : null}
+
+      {skillReplace ? (
+        <ActionSheet
+          preview={`${skillReplace.label} already has a skill named ${skillReplace.skill.name}. Replacing overwrites its whole folder, references and scripts included.`}
+          options={[
+            {
+              label: 'Replace',
+              danger: true,
+              onPress: () =>
+                sendSkillTransfer(
+                  skillReplace.skill,
+                  skillReplace.mode,
+                  skillReplace.target,
+                  skillReplace.label,
+                  true,
+                ),
+            },
+          ]}
+          onClose={() => setSkillReplace(null)}
         />
       ) : null}
 

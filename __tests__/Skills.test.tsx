@@ -71,6 +71,23 @@ function pressLabel(tree: Tree, label: string): Promise<void> {
   });
 }
 
+function longPressLabel(tree: Tree, label: string): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    const target = tree.root.findAll(
+      node => node.props.accessibilityLabel === label && typeof node.props.onLongPress === 'function',
+      { deep: true },
+    )[0]!;
+    target.props.onLongPress();
+  });
+}
+
+/** Every frame the app pushed, parsed: the transfer tests assert on what left the device. */
+function sentFrames(): Array<{ type: string } & Record<string, unknown>> {
+  return bridge.sendMessage.mock.calls.map(
+    ([frame]) => JSON.parse(String(frame)) as { type: string } & Record<string, unknown>,
+  );
+}
+
 /** The chat screen's 40ms scroll timer must fire before unmount, or the next test crashes. */
 async function settleAndUnmount(tree: Tree): Promise<void> {
   await ReactTestRenderer.act(async () => {
@@ -244,6 +261,135 @@ test('the close arrow on the viewer walks back the same way', async () => {
 
   await pressLabel(tree, 'Close skill view');
   await waitFor(() => labelsOf(tree).includes('Open skill forgejo'));
+
+  await settleAndUnmount(tree);
+});
+
+const WORKSPACES = [
+  { key: 'default', path: '/home/neras/.my-claw/workspace', default: true },
+  { key: 'sofa', path: '/home/neras/dev/SOFA', default: false },
+];
+
+/** A catalog where one name lives in two tiers at once, which is what the badges explain. */
+const SHADOWED = [
+  {
+    name: 'forgejo',
+    description: 'Forgejo repos and CI',
+    source: 'custom',
+    path: '/s/forgejo/SKILL.md',
+    overriddenIn: ['sofa'],
+  },
+  {
+    name: 'forgejo',
+    description: 'Forgejo, SOFA flavour',
+    source: 'workspace',
+    workspace: 'sofa',
+    path: '/w/sofa/skills/forgejo/SKILL.md',
+    overrides: 'custom',
+  },
+];
+
+async function openSkillsWith(tree: Tree, skills: unknown[]): Promise<void> {
+  await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
+  await openSettings(tree);
+  await openSkills(tree);
+  await emit({ type: 'skills.list.result', skills });
+  await emit({ type: 'workspaces.list.result', workspaces: WORKSPACES });
+}
+
+test('the catalog says which copy of a duplicated name wins', async () => {
+  const tree = await renderApp();
+  await openSkillsWith(tree, SHADOWED);
+  await waitFor(() => textsOf(tree).includes('forgejo'));
+
+  // Two rows, one name: without this the page shows the same skill twice and says nothing.
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['masked in sofa', 'overrides custom']));
+
+  await settleAndUnmount(tree);
+});
+
+test('a long press offers copy and move, and the target list excludes where it already is', async () => {
+  const tree = await renderApp();
+  await openSkillsWith(tree, SHADOWED);
+  await waitFor(() => labelsOf(tree).includes('Open skill forgejo'));
+
+  await longPressLabel(tree, 'Open skill forgejo');
+  await waitFor(() => labelsOf(tree).includes('Copy to…'));
+  expect(labelsOf(tree)).toContain('Move to…');
+
+  await pressLabel(tree, 'Move to…');
+  await waitFor(() => labelsOf(tree).includes('Workspace · sofa'));
+  // The custom row is the skill's own tier, so it is not offered as a destination.
+  expect(labelsOf(tree)).not.toContain('Custom');
+
+  await pressLabel(tree, 'Workspace · default');
+  await waitFor(() => sentFrames().some(frame => frame.type === 'skills.move'));
+  expect(sentFrames().find(frame => frame.type === 'skills.move')).toEqual({
+    type: 'skills.move',
+    source: 'custom',
+    name: 'forgejo',
+    target: { source: 'workspace', workspace: 'default' },
+  });
+
+  await settleAndUnmount(tree);
+});
+
+test('a name already taken in the target asks to replace before it overwrites', async () => {
+  const tree = await renderApp();
+  await openSkillsWith(tree, SHADOWED);
+  await waitFor(() => labelsOf(tree).includes('Open skill forgejo'));
+
+  await longPressLabel(tree, 'Open skill forgejo');
+  await pressLabel(tree, 'Copy to…');
+  await waitFor(() => labelsOf(tree).includes('Workspace · sofa'));
+
+  // sofa already carries a forgejo: the tap asks instead of sending.
+  await pressLabel(tree, 'Workspace · sofa');
+  await waitFor(() => labelsOf(tree).includes('Replace'));
+  expect(sentFrames().some(frame => frame.type === 'skills.copy')).toBe(false);
+
+  await pressLabel(tree, 'Replace');
+  await waitFor(() => sentFrames().some(frame => frame.type === 'skills.copy'));
+  expect(sentFrames().find(frame => frame.type === 'skills.copy')).toEqual({
+    type: 'skills.copy',
+    source: 'custom',
+    name: 'forgejo',
+    target: { source: 'workspace', workspace: 'sofa' },
+    overwrite: true,
+  });
+
+  await settleAndUnmount(tree);
+});
+
+test('a built-in skill can be forked but is never offered a move', async () => {
+  const tree = await renderApp();
+  await openSkillsWith(tree, SKILLS);
+  await waitFor(() => labelsOf(tree).includes('Open skill voice'));
+
+  await longPressLabel(tree, 'Open skill voice');
+  await waitFor(() => labelsOf(tree).includes('Copy to…'));
+  // Moving out of built-in would be undone by the next boot's resync, so it is not offered.
+  expect(labelsOf(tree)).not.toContain('Move to…');
+
+  await settleAndUnmount(tree);
+});
+
+test('a move closes the open reader, whose URL points at the tier the skill just left', async () => {
+  const tree = await renderApp();
+  await openSkillsWith(tree, SKILLS);
+  await waitFor(() => labelsOf(tree).includes('Open skill forgejo'));
+
+  await pressLabel(tree, 'Open skill forgejo');
+  await waitFor(() => labelsOf(tree).includes('Actions for skill forgejo'));
+
+  await pressLabel(tree, 'Actions for skill forgejo');
+  await waitFor(() => labelsOf(tree).includes('Move to…'));
+  await pressLabel(tree, 'Move to…');
+  await waitFor(() => labelsOf(tree).includes('Workspace · sofa'));
+  await pressLabel(tree, 'Workspace · sofa');
+
+  await waitFor(() => !labelsOf(tree).includes('Close skill view'));
+  expect(textsOf(tree).some(text => text.includes('forgejo moved to Workspace · sofa'))).toBe(true);
 
   await settleAndUnmount(tree);
 });

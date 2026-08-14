@@ -13,14 +13,23 @@ import { useDismissKeyboard } from '../core/keyboard';
  * body rendered as markdown. Same layer trick as the text viewer, no Modal, and the hardware
  * back quits through the shell's own back handling.
  */
+/** Where the skill lives, in the vocabulary of the tiers: what a transfer moves it out of. */
+function locationOf(skill: SkillEntry): string {
+  if (skill.source !== 'workspace') return skill.source;
+  return `workspace · ${skill.workspace ?? 'default'}`;
+}
+
 export function SkillViewer({
   url,
   skill,
   onClose,
+  onActions,
 }: {
   url: string;
   skill: SkillEntry;
   onClose: () => void;
+  /** Opens the transfer menu. Absent while the shell has no catalog to move the skill into. */
+  onActions?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // nothing to type into: the keyboard would cover the document.
@@ -72,10 +81,21 @@ export function SkillViewer({
             {metaName}
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {skill.source}
+            {locationOf(skill)}
             {skill.version ? ` · v${skill.version}` : ''}
           </Text>
         </View>
+        {onActions ? (
+          <Pressable
+            onPress={onActions}
+            hitSlop={8}
+            style={styles.actions}
+            accessibilityRole="button"
+            accessibilityLabel={`Actions for skill ${skill.name}`}
+          >
+            <Text style={styles.actionsGlyph}>···</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {doc ? (
@@ -87,6 +107,17 @@ export function SkillViewer({
           >
             {doc.meta.description ? (
               <Text style={styles.lede}>{doc.meta.description}</Text>
+            ) : null}
+            {skill.overrides ? (
+              <Text style={styles.shadow}>
+                This copy overrides the {skill.overrides} skill of the same name.
+              </Text>
+            ) : null}
+            {skill.overriddenIn && skill.overriddenIn.length > 0 ? (
+              <Text style={styles.shadow}>
+                Masked in {skill.overriddenIn.join(', ')}: a run there loads that
+                workspace's copy instead.
+              </Text>
             ) : null}
             <DocumentMarkdown value={doc.body} />
           </ScrollView>
@@ -126,6 +157,15 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   closeGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  actions: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  actionsGlyph: { fontSize: 20, lineHeight: 22, color: palette.text },
   titleBlock: { flex: 1, gap: 1 },
   title: {
     fontSize: font.body,
@@ -140,6 +180,11 @@ const createStyles = (palette: Palette) => ({
     fontSize: font.body,
     color: palette.textMuted,
     fontStyle: 'italic' as const,
+    marginBottom: space.md,
+  },
+  shadow: {
+    fontSize: font.small,
+    color: palette.textFaint,
     marginBottom: space.md,
   },
   error: {

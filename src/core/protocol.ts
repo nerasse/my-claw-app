@@ -363,6 +363,18 @@ export interface SkillEntry {
   path: string;
   /** Key of the workspace this skill belongs to, when it is a secondary workspace's. */
   workspace?: string;
+  /** Workspaces holding their own skill of that name, so this global entry is masked there. */
+  overriddenIn?: string[];
+  /** The global tier this workspace skill masks, absent when the name exists nowhere else. */
+  overrides?: 'custom' | 'built-in';
+}
+
+/** Where a skill transfer lands. Never built-in: the server refuses it, that tier is resynced
+ *  from the release at every boot. */
+export interface SkillTarget {
+  source: 'custom' | 'workspace';
+  /** Workspace key when the tier is `workspace`; absent means the default workspace. */
+  workspace?: string;
 }
 
 export interface SkillsListResultFrame {
@@ -1210,6 +1222,30 @@ export function encodeModelList(): string {
 
 export function encodeSkillsList(): string {
   return JSON.stringify({ type: 'skills.list' });
+}
+
+/**
+ * Moves or copies one skill directory between tiers. The server refuses a name already taken in
+ * the target unless `overwrite` is set, so the app asks before it sends that flag. Answered with
+ * a fresh `skills.list.result`.
+ */
+export function encodeSkillsTransfer(
+  mode: 'copy' | 'move',
+  skill: { source: SkillEntry['source']; name: string; workspace?: string },
+  target: SkillTarget,
+  overwrite?: boolean,
+): string {
+  return JSON.stringify({
+    type: mode === 'move' ? 'skills.move' : 'skills.copy',
+    source: skill.source,
+    name: skill.name,
+    ...(skill.workspace ? { workspace: skill.workspace } : {}),
+    target: {
+      source: target.source,
+      ...(target.workspace ? { workspace: target.workspace } : {}),
+    },
+    ...(overwrite ? { overwrite: true } : {}),
+  });
 }
 
 export function encodeToolsList(): string {

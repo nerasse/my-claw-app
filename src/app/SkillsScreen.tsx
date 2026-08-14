@@ -68,20 +68,40 @@ const keyOfRow = (row: Row): string =>
       ? `w:${row.workspace}`
       : `s:${row.skill.source}:${row.skill.workspace ?? 'default'}:${row.skill.name}`;
 
+/**
+ * What a row says about the copies of the same name elsewhere. The catalog is deliberately
+ * unresolved (it shows every tier), so without this a duplicated name reads as two unrelated
+ * skills while only one of them is ever loaded.
+ */
+function shadowLabel(skill: SkillEntry): string | null {
+  if (skill.overrides) return `overrides ${skill.overrides}`;
+  const masked = skill.overriddenIn ?? [];
+  if (masked.length === 0) return null;
+  if (masked.length <= 2) return `masked in ${masked.join(', ')}`;
+  return `masked in ${masked.length} workspaces`;
+}
+
 export function SkillsScreen({
   skills,
   workspaces,
   error,
+  notice,
   onBack,
   onOpenSkill,
+  onSkillActions,
 }: {
   skills: SkillEntry[];
   /** Key -> path of every workspace, so the page can name where each skill lives. */
   workspaces: WorkspaceEntry[];
   /** Server refused the request: distinct from an empty catalog, which is itself a fact. */
   error?: string;
+  /** What the last transfer did, kept until the page is left: a move that reorders the list
+   *  silently is indistinguishable from one that did nothing. */
+  notice?: string;
   onBack: () => void;
   onOpenSkill: (skill: SkillEntry) => void;
+  /** Long press: the same menu the skill page carries, without opening the document first. */
+  onSkillActions: (skill: SkillEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // nothing to type into on this page.
@@ -112,6 +132,8 @@ export function SkillsScreen({
         <Pressable
           style={styles.row}
           onPress={() => onOpenSkill(item.skill)}
+          onLongPress={() => onSkillActions(item.skill)}
+          delayLongPress={300}
           accessibilityRole="button"
           accessibilityLabel={`Open skill ${item.skill.name}`}
         >
@@ -130,11 +152,14 @@ export function SkillsScreen({
             <Text style={styles.description} numberOfLines={2}>
               {item.skill.description}
             </Text>
+            {shadowLabel(item.skill) ? (
+              <Text style={styles.shadow}>{shadowLabel(item.skill)}</Text>
+            ) : null}
           </View>
           <Text style={styles.linkGlyph}>›</Text>
         </Pressable>
       ),
-    [onOpenSkill, styles],
+    [onOpenSkill, onSkillActions, styles],
   );
 
   return (
@@ -161,6 +186,8 @@ export function SkillsScreen({
           {error}
         </Text>
       ) : null}
+
+      {!error && notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <View style={styles.listArea}>
         <FlatList
@@ -230,6 +257,13 @@ const createStyles = (palette: Palette) => ({
     color: palette.danger,
     padding: space.md,
   },
+  notice: {
+    textAlign: 'center' as const,
+    fontSize: font.meta,
+    color: palette.accent,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
   listArea: { flex: 1 },
   list: { flex: 1 },
   listContent: { paddingBottom: space.xl },
@@ -296,6 +330,7 @@ const createStyles = (palette: Palette) => ({
     letterSpacing: 0.3,
   },
   version: { fontSize: font.micro, color: palette.textFaint },
+  shadow: { fontSize: font.micro, color: palette.textFaint, fontStyle: 'italic' as const },
   description: {
     fontSize: font.small,
     color: palette.textMuted,
