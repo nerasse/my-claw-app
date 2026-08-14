@@ -408,6 +408,31 @@ test('a slow command shows it is running, and the result replaces that bubble', 
   await settleAndUnmount(tree);
 });
 
+test('a compaction summary is folded under the result, and opens on tap', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u4', '/compact', []);
+  });
+
+  await emit({
+    type: 'chat.command.result',
+    threadId: THREAD,
+    replyToId: 'u4',
+    text: 'Context compacted (SDK session summarized).',
+    details: '1. What the owner asked\n2. What was built',
+  });
+  await waitFor(() => allTexts(tree).some(text => text.includes('Context compacted')), 60);
+
+  // Folded: the label is there, the body is not.
+  expect(labelsOf(tree)).toContain('Summary');
+  expect(allTexts(tree).some(text => text.includes('What was built'))).toBe(false);
+
+  await pressLabel(tree, 'Summary');
+  await waitFor(() => allTexts(tree).some(text => text.includes('What was built')), 60);
+
+  await settleAndUnmount(tree);
+});
+
 test('a placeholder left by a command the server does not know goes away when the agent answers', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {

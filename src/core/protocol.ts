@@ -477,6 +477,8 @@ export interface CommandResultFrame {
   text: string;
   /** A `/status` result also travels structured, so the app draws a page instead of a bubble. */
   status?: StatusPayload;
+  /** An aside too long for the bubble (a compaction summary), folded away like reasoning. */
+  details?: string;
 }
 
 /**

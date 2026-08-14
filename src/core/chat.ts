@@ -21,6 +21,8 @@ export interface TextItem {
   reasoningTokens?: number;
   /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
   command?: boolean;
+  /** A long aside a command produced (a compaction summary), folded away under the outcome. */
+  details?: string;
   /** A statement of the system (a model fallback), drawn apart for the same reason. */
   notice?: boolean;
   ts: number;
@@ -295,14 +297,14 @@ class ChatStoreImpl {
    * Output of a command the server executed. Rendered as its own bubble so `/status` never
    * masquerades as an agent answer: the agent is not the author of it.
    */
-  addCommandResult(threadId: string, id: string, text: string, replyToId?: string): void {
+  addCommandResult(threadId: string, id: string, text: string, replyToId?: string, details?: string): void {
     const pending = this.pendingCommands.get(threadId);
     this.pendingCommands.delete(threadId);
     // In place, keeping the placeholder's position: the answer belongs where the wait was. A
     // placeholder the thread no longer holds (history replaced under it) falls through to a
     // fresh bubble rather than patching an id that is gone, which would drop the answer.
     if (pending && this.getItems(threadId).some(item => item.id === pending)) {
-      this.patch(threadId, pending, { text, streaming: false });
+      this.patch(threadId, pending, { text, streaming: false, ...(details ? { details } : {}) });
       return;
     }
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
@@ -314,6 +316,7 @@ class ChatStoreImpl {
       attachments: [],
       streaming: false,
       command: true,
+      ...(details ? { details } : {}),
       ts: parent ? parent.ts + 1 : Date.now(),
     });
   }

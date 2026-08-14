@@ -4,6 +4,7 @@ import type { TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
+import { CollapsibleAside } from './CollapsibleAside';
 import { ReasoningLine } from './ReasoningLine';
 import { LocationView } from './LocationView';
 import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -92,6 +93,17 @@ export const Bubble = React.memo(function BubbleView({
           )
         ) : item.streaming && !thinkingShown ? (
           <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(font.body) }]}>▍</Text>
+        ) : null}
+
+        {/* Below the outcome line, folded: what a command produced too much of to state inline
+            (a compaction summary). Reading it is a choice, not a wall of text in the thread. */}
+        {item.details ? (
+          <CollapsibleAside
+            label="Summary"
+            body={item.details}
+            showHint="Show what the compaction kept"
+            hideHint="Hide the summary"
+          />
         ) : null}
 
         {item.error ? (

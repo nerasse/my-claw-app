@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { font, lineHeightFor, space, useThemedStyles, type Palette } from '../theme';
+import React from 'react';
+import { Text, View } from 'react-native';
+import { CollapsibleAside } from './CollapsibleAside';
+import { font, space, useThemedStyles, type Palette } from '../theme';
 
 /** "1.2k" rather than "1234": this is a progress hint, not an accounting figure. */
 function compactCount(tokens: number): string {
@@ -27,7 +28,6 @@ export function ReasoningLine({
   streaming: boolean;
 }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
-  const [open, setOpen] = useState(false);
 
   const body = reasoning?.trim() ?? '';
   const hasBody = body.length > 0;
@@ -43,42 +43,17 @@ export function ReasoningLine({
     );
   }
 
-  const label = streaming ? 'Thinking…' : 'Reasoning';
-
   return (
-    <View>
-      <Pressable
-        style={styles.line}
-        onPress={() => setOpen(value => !value)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={label}
-        accessibilityHint={open ? "Hide the model's reasoning" : "Show the model's reasoning"}>
-        <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
-        <Text style={styles.label}>{label}</Text>
-      </Pressable>
-      {open ? (
-        <Text selectable style={styles.body}>
-          {body}
-        </Text>
-      ) : null}
-    </View>
+    <CollapsibleAside
+      label={streaming ? 'Thinking…' : 'Reasoning'}
+      body={body}
+      showHint="Show the model's reasoning"
+      hideHint="Hide the model's reasoning"
+    />
   );
 }
 
 const createStyles = (palette: Palette) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2 },
-  chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
   label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.3 },
-  // A left rule marks it as an aside rather than part of the answer.
-  body: {
-    fontSize: font.small,
-    lineHeight: lineHeightFor(font.small),
-    color: palette.textMuted,
-    borderLeftWidth: 2,
-    borderLeftColor: palette.border,
-    paddingLeft: space.sm,
-    marginTop: 2,
-    marginBottom: space.xs,
-  },
 });

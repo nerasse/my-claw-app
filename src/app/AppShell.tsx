@@ -1188,6 +1188,7 @@ export function AppShell(): React.JSX.Element {
               `cmd-${frame.replyToId ?? 'x'}-${Date.now()}`,
               frame.text,
               frame.replyToId,
+              frame.details,
             );
             noteActivity(frame.threadId, frame.text);
           }
