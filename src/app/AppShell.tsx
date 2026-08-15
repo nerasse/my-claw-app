@@ -12,6 +12,7 @@ import {
   Linking,
   Platform,
   StatusBar,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -53,6 +54,8 @@ import {
   encodeAgentFileDelete,
   encodeChatSend,
   encodeChatStop,
+  encodeSessionInstructionsGet,
+  encodeInstructionsSetNested,
   encodeStatusGet,
   encodeCommandsList,
   encodeConfigGet,
@@ -139,10 +142,12 @@ import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
 import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
+import { sessionInstructionsStore, useSessionInstructions } from '../core/sessionInstructions';
 import { WorkspaceScreen } from './WorkspaceScreen';
 import { layerOfFile } from '../core/layers';
 import { InstructionLayerScreen } from './InstructionLayerScreen';
 import { InstructionEditorScreen } from './InstructionEditorScreen';
+import { SessionInstructionsScreen } from './SessionInstructionsScreen';
 import { skillUrl } from '../core/skills';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import { deviceBridge } from '../core/nativeBridge';
@@ -596,6 +601,9 @@ export function AppShell(): React.JSX.Element {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   /** The fullscreen status page of a conversation, an absolute layer over everything else. */
   const [statusOpen, setStatusOpen] = useState(false);
+  /** The instructions page of a conversation, and whether one of its files is being edited. */
+  const [instructionsPageOpen, setInstructionsPageOpen] = useState(false);
+  const [instructionsPageEditing, setInstructionsPageEditing] = useState(false);
   /** The scheduled-tasks page, another absolute layer; the editor stacks over the list. */
   const [jobsOpen, setJobsOpen] = useState(false);
   /** The job being edited: null = the list, 'new' = a blank editor, an entry = that job. */
@@ -649,6 +657,7 @@ export function AppShell(): React.JSX.Element {
   const providersEnvState = useProvidersEnv();
   const agentsFile = useAgentsFile();
   const instructions = useInstructions();
+  const sessionInstructions = useSessionInstructions();
   const agentsConfig = agentsState.config;
   // The Stop button is pinned to the run, not to a streaming bubble: it survives tool calls
   // and model turns, and only disappears when the run itself ends.
@@ -768,6 +777,18 @@ export function AppShell(): React.JSX.Element {
     statusStore.open(threadId);
     setStatusOpen(true);
     connection.send(encodeStatusGet(threadId)).catch(() => {});
+  }, []);
+
+  /**
+   * What this conversation is loaded with. Asked on every opening like the status page: the
+   * report is composed on demand server side, so a cached one would age into a lie the moment a
+   * file is edited from anywhere.
+   */
+  const openSessionInstructions = useCallback((threadId: string) => {
+    sessionInstructionsStore.open(threadId);
+    setInstructionsPageEditing(false);
+    setInstructionsPageOpen(true);
+    connection.send(encodeSessionInstructionsGet(threadId)).catch(() => {});
   }, []);
 
   /** The jobs page asks on every opening: the listing is a snapshot, and cheap to refresh. */
@@ -1207,6 +1228,9 @@ export function AppShell(): React.JSX.Element {
           // while a request is in flight.
           if (statusStore.getSnapshot().fetch === 'loading') statusStore.receive(frame);
           break;
+        case 'session.instructions.result':
+          if (sessionInstructionsStore.getSnapshot().fetch === 'loading') sessionInstructionsStore.receive(frame);
+          break;
         case 'jobs.list.result':
           // The fresh listing is also the answer to a save or a delete: a pending one closes
           // the editor on arrival, and a refused one lands as a jobs-scoped error instead.
@@ -1291,6 +1315,11 @@ export function AppShell(): React.JSX.Element {
               agentsFileStore.fail(frame.message);
             } else if (frame.scope === 'instructions') {
               instructionsStore.fail(frame.message);
+              // The same scope carries the session page's refusals: it asks for instructions too,
+              // and a page left spinning is how an old server used to look like a dead button.
+              if (sessionInstructionsStore.getSnapshot().fetch === 'loading') {
+                sessionInstructionsStore.fail(frame.message);
+              }
             } else if (frame.scope === 'tags') {
               tagsStore.fail(frame.message);
             } else if (frame.scope === 'providers') {
@@ -1373,6 +1402,17 @@ export function AppShell(): React.JSX.Element {
         // always close it before anything underneath can see the press.
         statusStore.close();
         setStatusOpen(false);
+        return true;
+      }
+      if (instructionsPageOpen) {
+        // The editor stacks over the report: back leaves the editor first, the page second.
+        if (instructionsPageEditing) {
+          instructionsStore.closeEditor();
+          setInstructionsPageEditing(false);
+          return true;
+        }
+        sessionInstructionsStore.close();
+        setInstructionsPageOpen(false);
         return true;
       }
       if (jobsOpen) {
@@ -1633,6 +1673,8 @@ export function AppShell(): React.JSX.Element {
     fileToDelete,
     filesOpen,
     imageViewer,
+    instructionsPageEditing,
+    instructionsPageOpen,
     workspaceFrom,
     layerTarget,
     jobSessions,
@@ -2135,6 +2177,14 @@ export function AppShell(): React.JSX.Element {
           openStatus(target.threadId);
         },
       },
+      {
+        label: 'Instructions',
+        hint: 'every layer it loads, nested files included',
+        onPress: () => {
+          close();
+          openSessionInstructions(target.threadId);
+        },
+      },
       target.archived
         ? {
             label: 'Unarchive',
@@ -2162,7 +2212,7 @@ export function AppShell(): React.JSX.Element {
         },
       },
     ],
-    [openStatus, setThreadArchived, openFilesFor, workspaceOf, pinnedOrder],
+    [openStatus, openSessionInstructions, setThreadArchived, openFilesFor, workspaceOf, pinnedOrder],
   );
 
   const threadActions: SheetEntry[] = threadMenu
@@ -2234,11 +2284,20 @@ export function AppShell(): React.JSX.Element {
             return true;
           }
           return false;
+        case 'instructions':
+          // The typed command answers with the whole prompt inline; the page is the same content
+          // laid out, editable, and it never lands in the conversation.
+          if (threadId) {
+            setCommandMenuOpen(false);
+            openSessionInstructions(threadId);
+            return true;
+          }
+          return false;
         default:
           return false;
       }
     },
-    [newThread, openModel, openStatus, sessions],
+    [newThread, openModel, openStatus, openSessionInstructions, sessions],
   );
 
   const currentModelLabel = threadModel
@@ -3830,6 +3889,77 @@ export function AppShell(): React.JSX.Element {
             setStatusOpen(false);
           }}
         />
+      ) : null}
+
+      {instructionsPageOpen ? (
+        <>
+          <SessionInstructionsScreen
+            onClose={() => {
+              sessionInstructionsStore.close();
+              setInstructionsPageOpen(false);
+            }}
+            onEditLayer={(workspace, file) => {
+              instructionsStore.openEditor(workspace, file);
+              setInstructionsPageEditing(true);
+              connection.send(encodeInstructionsGet(workspace, file)).catch(() => {});
+            }}
+            onEditNested={item => {
+              const threadId = sessionInstructions.threadId ?? undefined;
+              const workspace = sessionInstructions.payload?.workspace ?? 'default';
+              // The editor is addressed by the path the report listed, absolute included: the
+              // server checks it against what this very conversation read.
+              instructionsStore.openEditor(workspace, item.path);
+              setInstructionsPageEditing(true);
+              connection.send(encodeInstructionsGetNested(workspace, item.path, threadId)).catch(() => {});
+            }}
+          />
+          {instructionsPageEditing && instructions.editor ? (
+            <View style={StyleSheet.absoluteFill}>
+              <InstructionEditorScreen
+                editor={instructions.editor}
+                maxBytes={instructions.maxBytes}
+                onBack={() => {
+                  instructionsStore.closeEditor();
+                  setInstructionsPageEditing(false);
+                  // The report is stale the moment a file is saved: ask again rather than show
+                  // sizes and origins that the edit just invalidated.
+                  const threadId = sessionInstructions.threadId;
+                  if (threadId) {
+                    sessionInstructionsStore.open(threadId);
+                    connection.send(encodeSessionInstructionsGet(threadId)).catch(() => {});
+                  }
+                }}
+                onChange={draft => instructionsStore.edit(draft)}
+                onSave={() => {
+                  const editor = instructions.editor;
+                  if (!editor) return;
+                  instructionsStore.markSaving();
+                  const threadId = sessionInstructions.threadId ?? undefined;
+                  connection
+                    .send(
+                      editor.origin === 'nested'
+                        ? encodeInstructionsSetNested(editor.workspace, editor.file, editor.draft, editor.sha ?? '', threadId)
+                        : encodeInstructionsSet(editor.workspace, editor.file, editor.draft, editor.sha),
+                    )
+                    .catch(() => {});
+                }}
+                onReload={() => {
+                  const editor = instructions.editor;
+                  if (!editor) return;
+                  const nested = editor.origin === 'nested';
+                  instructionsStore.openEditor(editor.workspace, editor.file);
+                  connection
+                    .send(
+                      nested
+                        ? encodeInstructionsGetNested(editor.workspace, editor.file, sessionInstructions.threadId ?? undefined)
+                        : encodeInstructionsGet(editor.workspace, editor.file),
+                    )
+                    .catch(() => {});
+                }}
+              />
+            </View>
+          ) : null}
+        </>
       ) : null}
 
       {jobsOpen ? (

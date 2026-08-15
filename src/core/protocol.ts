@@ -601,6 +601,62 @@ export interface StatusResultFrame {
   status: StatusPayload;
 }
 
+/**
+ * One layer of the system prompt a conversation runs on, as the server composes it. The four
+ * prompt files carry an origin and an `edit` target; the derived layers carry neither.
+ */
+export interface SessionInstructionLayer {
+  /** CORE, SOUL, AGENTS, USER, agent, skills, tools, platform, runtime, suggested. */
+  id: string;
+  label: string;
+  bytes: number;
+  text: string;
+  origin?: InstructionOrigin;
+  /** Workspace the content comes from, empty for a shipped template. */
+  from?: string;
+  /** Present when the layer is editable: what to open the instructions editor on. */
+  edit?: { workspace: string; file: string };
+}
+
+/** A nested AGENTS.md this conversation's runs injected. Addressed back by its absolute path. */
+export interface SessionInstructionNested {
+  path: string;
+  /** Relative to the workspace when it sits inside it, absolute otherwise. */
+  label: string;
+  bytes: number;
+  /** Runs that injected it: the collector dedups per run, not per session. */
+  count: number;
+  firstAt: string;
+  lastAt: string;
+  missing: boolean;
+}
+
+export interface SessionInstructionsPayload {
+  agent: string;
+  workspace: string;
+  workspaceDir: string;
+  model: string;
+  backend: string;
+  platform: string;
+  totalBytes: number;
+  layers: SessionInstructionLayer[];
+  nested: SessionInstructionNested[];
+  /** What the report cannot show, stated by the server rather than guessed here. */
+  notes: string[];
+}
+
+/** What one conversation is loaded with. See docs/session-instructions.md on the server. */
+export interface SessionInstructionsGetFrame {
+  type: 'session.instructions.get';
+  threadId: string;
+}
+
+export interface SessionInstructionsResultFrame {
+  type: 'session.instructions.result';
+  threadId: string;
+  instructions: SessionInstructionsPayload;
+}
+
 /** The thread's history is gone server-side; the app drops its copy. */
 export interface ChatClearedFrame {
   type: 'chat.cleared';
@@ -1047,6 +1103,7 @@ export type ServerFrame =
   | ConfigResultFrame
   | ConfigSavedFrame
   | StatusResultFrame
+  | SessionInstructionsResultFrame
   | JobsListResultFrame
   | JobsRunsResultFrame
   | SubAgentsListResultFrame
@@ -1098,6 +1155,7 @@ const FRAME_TYPES = new Set([
   'config.result',
   'config.saved',
   'status.result',
+  'session.instructions.result',
   'jobs.list.result',
   'jobs.runs.result',
   'subagents.list.result',
@@ -1398,8 +1456,40 @@ export function encodeInstructionsGet(workspace: string, file: string): string {
   return JSON.stringify({ type: 'instructions.get', workspace, file });
 }
 
-export function encodeInstructionsGetNested(workspace: string, nested: string): string {
-  return JSON.stringify({ type: 'instructions.get', workspace, nested });
+/**
+ * A nested AGENTS.md. `threadId` is what authorises an absolute path: the server only accepts one
+ * that the named conversation actually read, so the session's trace is the allowlist. A relative
+ * path stays fenced by the workspace root and needs no thread.
+ */
+export function encodeInstructionsGetNested(workspace: string, nested: string, threadId?: string): string {
+  return JSON.stringify(
+    threadId === undefined
+      ? { type: 'instructions.get', workspace, nested }
+      : { type: 'instructions.get', workspace, nested, threadId },
+  );
+}
+
+/** Same addressing as the read, and the sha is never omitted: a nested file is edited, not created. */
+export function encodeInstructionsSetNested(
+  workspace: string,
+  nested: string,
+  content: string,
+  sha: string,
+  threadId?: string,
+): string {
+  return JSON.stringify({
+    type: 'instructions.set',
+    workspace,
+    file: '',
+    nested,
+    content,
+    sha,
+    ...(threadId === undefined ? {} : { threadId }),
+  });
+}
+
+export function encodeSessionInstructionsGet(threadId: string): string {
+  return JSON.stringify({ type: 'session.instructions.get', threadId });
 }
 
 /**

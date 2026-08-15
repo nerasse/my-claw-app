@@ -4,6 +4,8 @@ import {
   encodeAgentsModelSet,
   encodeAgentsFallbackSet,
   encodeChatSend,
+  encodeInstructionsGetNested,
+  encodeInstructionsSetNested,
   encodeJobsSave,
   encodeModelEffortSet,
   encodeCommandsList,
@@ -12,6 +14,7 @@ import {
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
+  encodeSessionInstructionsGet,
   encodeSessionList,
   parseServerFrame,
 } from '../protocol';
@@ -33,6 +36,22 @@ describe('parseServerFrame', () => {
       { type: 'files.list.result', threadId: 't', files: [{ id: 'f1', filename: 'a.pdf', type: 'file', mimeType: 'application/pdf', sizeBytes: 4, ts: 'iso' }], totalBytes: 4 },
       { type: 'approval.request', id: 'a', threadId: 't', toolName: 'bash', args: {}, expiresAt: 1 },
       { type: 'agents.config.result', defaultModel: 'm', defaultEffort: '', effortLevels: [], providers: [], agents: [] },
+      {
+        type: 'session.instructions.result',
+        threadId: 't',
+        instructions: {
+          agent: 'orchestrator',
+          workspace: 'default',
+          workspaceDir: '/ws',
+          model: 'm',
+          backend: 'openai',
+          platform: 'my-claw-app',
+          totalBytes: 0,
+          layers: [],
+          nested: [],
+          notes: [],
+        },
+      },
       { type: 'error', message: 'x' },
     ];
     for (const frame of frames) {
@@ -111,5 +130,33 @@ describe('encoders', () => {
     expect(JSON.parse(encodeAgentsFallbackSet(''))).toEqual({ type: 'agents.fallback.set', model: '' });
     expect(JSON.parse(encodeModelEffortSet('t', ''))).toEqual({ type: 'model.effort.set', threadId: 't', level: '' });
     expect(JSON.parse(encodeJobsSave({ name: 'j', prompt: 'p', schedule: 'every 1h', enabled: true, silent: false, effort: '', skills: { mode: 'inherit' }, mcp: { mode: 'inherit' }, tools: { mode: 'inherit' } }))).toMatchObject({ type: 'jobs.save', effort: '' });
+    expect(JSON.parse(encodeSessionInstructionsGet('t'))).toEqual({ type: 'session.instructions.get', threadId: 't' });
+  });
+
+  test('a nested AGENTS.md carries the thread that authorises its path', () => {
+    // A relative path is fenced by the workspace root, so it needs no thread.
+    expect(JSON.parse(encodeInstructionsGetNested('default', 'svc/AGENTS.md'))).toEqual({
+      type: 'instructions.get',
+      workspace: 'default',
+      nested: 'svc/AGENTS.md',
+    });
+    // An absolute one is only accepted against the session that recorded reading it.
+    expect(JSON.parse(encodeInstructionsGetNested('default', '/home/me/dev/repo/AGENTS.md', 't9'))).toEqual({
+      type: 'instructions.get',
+      workspace: 'default',
+      nested: '/home/me/dev/repo/AGENTS.md',
+      threadId: 't9',
+    });
+    // The sha is never omitted on a nested write: an absent one means "create", which the server
+    // refuses for a nested file.
+    expect(JSON.parse(encodeInstructionsSetNested('default', '/repo/AGENTS.md', 'body', 'abc123abc123', 't9'))).toEqual({
+      type: 'instructions.set',
+      workspace: 'default',
+      file: '',
+      nested: '/repo/AGENTS.md',
+      content: 'body',
+      sha: 'abc123abc123',
+      threadId: 't9',
+    });
   });
 });

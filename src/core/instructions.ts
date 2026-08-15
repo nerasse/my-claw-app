@@ -201,8 +201,10 @@ class InstructionsStoreImpl {
         loaded: frame.content,
         // An inherited or fallback copy has no file to overwrite: saving it creates the override,
         // which is why the sha is dropped rather than echoed back. An off file with an own copy
-        // keeps the sha: the user is editing the file itself, not creating an override.
-        sha: frame.origin === 'own' || frame.origin === 'off' ? frame.sha : undefined,
+        // keeps the sha: the user is editing the file itself, not creating an override. A nested
+        // AGENTS.md always exists (it was read from disk), and creating one is refused server
+        // side, so dropping its sha would turn every nested save into a refused creation.
+        sha: frame.origin === 'inherited' || frame.origin === 'fallback' ? undefined : frame.sha,
         origin: frame.origin,
         from: frame.from,
         editable: frame.editable,
@@ -230,7 +232,17 @@ class InstructionsStoreImpl {
     if (frame.ok) {
       this.state = {
         ...this.state,
-        editor: { ...open, status: 'ready', loaded: open.draft, sha: frame.sha, origin: 'own', from: frame.workspace, error: null },
+        editor: {
+          ...open,
+          status: 'ready',
+          loaded: open.draft,
+          sha: frame.sha,
+          // A saved override is now this workspace's own file. A nested file stays nested: it was
+          // never an override, and calling it "own" would offer it the layer controls.
+          origin: open.origin === 'nested' ? 'nested' : 'own',
+          from: frame.workspace,
+          error: null,
+        },
       };
     } else {
       this.state = {

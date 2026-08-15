@@ -6,6 +6,9 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /** The one-line explanation of what saving will do, which differs per origin. */
 export function saveHint(editor: EditorState): string {
+  // A nested file is named by its own path, and it is never part of the system prompt: saying
+  // which workspace it belongs to would place it on a layer it does not sit on.
+  if (editor.origin === 'nested') return `saving edits ${editor.file} · reaches tool results, not the prompt`;
   if (editor.origin === 'own') return `saving edits ${editor.workspace}/${editor.file}`;
   if (editor.origin === 'off') {
     return `this layer is off · saving edits ${editor.workspace}/${editor.file} for when you turn it back on`;
@@ -19,7 +22,8 @@ export function saveHint(editor: EditorState): string {
 /**
  * One prompt file, editable. An inherited copy opens pre-filled with the content that already
  * applies, so saving it changes nothing for the agent: it only turns a resolution into a file
- * this workspace owns and the user can edit. A nested AGENTS.md opens read-only.
+ * this workspace owns and the user can edit. A nested AGENTS.md is editable too, but never
+ * creatable: it is always opened from a file that already exists on disk.
  */
 export function InstructionEditorScreen({
   editor,
