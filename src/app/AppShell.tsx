@@ -12,7 +12,6 @@ import {
   Linking,
   Platform,
   StatusBar,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -197,6 +196,7 @@ import { JobSessionsScreen } from './JobSessionsScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
+import { ScreenLayer } from '../components/ScreenLayer';
 import { ModelPickerPage, ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
@@ -3967,7 +3967,9 @@ export function AppShell(): React.JSX.Element {
             }}
           />
           {instructionsPageEditing && instructions.editor ? (
-            <View style={StyleSheet.absoluteFill}>
+            // The editor is written for the settings stack, where the shell's container paints
+            // and pads it; over this page it is a layer and has to carry its own stage.
+            <ScreenLayer>
               <InstructionEditorScreen
                 editor={instructions.editor}
                 maxBytes={instructions.maxBytes}
@@ -4010,7 +4012,7 @@ export function AppShell(): React.JSX.Element {
                     .catch(() => {});
                 }}
               />
-            </View>
+            </ScreenLayer>
           ) : null}
         </>
       ) : null}
