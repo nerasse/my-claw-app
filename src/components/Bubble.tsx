@@ -109,6 +109,16 @@ export const Bubble = React.memo(function BubbleView({
           />
         ) : null}
 
+        {/* Held by the server: a compaction is rewriting the history this message's run would
+            resume, so nothing starts until it ends. Counted, because a still line during a
+            two-minute wait reads as a message that never left. */}
+        {item.queuedSince ? (
+          <Text style={[styles.queued, agent ? null : styles.queuedUser]}>
+            waiting for the compaction
+            <CommandElapsed since={item.queuedSince} onAccent={!agent} />
+          </Text>
+        ) : null}
+
         {item.error ? (
           <Text selectable style={styles.error}>
             {item.error}
@@ -162,6 +172,8 @@ const createStyles = (palette: Palette) => ({
   textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: font.small },
   textNotice: { color: palette.text, fontSize: font.small },
   error: { fontSize: font.small, color: palette.danger, marginTop: 2 },
+  queued: { fontSize: font.small, color: palette.textFaint, marginTop: 2 },
+  queuedUser: { color: palette.accentText, opacity: 0.7 },
   time: { fontSize: font.micro, alignSelf: 'flex-end' as const, marginTop: 1 },
   timeAgent: { color: palette.textFaint },
   timeUser: { color: palette.accentText, opacity: 0.7 },

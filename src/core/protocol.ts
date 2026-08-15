@@ -482,6 +482,19 @@ export interface CommandResultFrame {
 }
 
 /**
+ * The send is parked: a compaction is rewriting the history its run would resume, and the server
+ * holds it until that finishes (a minute or two). Without this the bubble sits there with nothing
+ * behind it and the app looks dropped. The stream that follows, or the run's end, lifts it.
+ */
+export interface SendQueuedFrame {
+  type: 'chat.send.queued';
+  threadId: string;
+  /** The chat.send id being held: the mark belongs to that bubble, not to the thread. */
+  replyToId: string;
+  reason: 'compaction';
+}
+
+/**
  * Structured `/status` report for the fullscreen diagnostics page. The text form stays the
  * canonical rendering on the chat channels; this is the same report shaped as fields.
  */
@@ -1014,6 +1027,7 @@ export type ServerFrame =
   | ModelResultFrame
   | CommandPendingFrame
   | CommandResultFrame
+  | SendQueuedFrame
   | ChatClearedFrame
   | TranscriptFrame
   | ApprovalRequestFrame
@@ -1053,6 +1067,7 @@ const FRAME_TYPES = new Set([
   'chat.history',
   'chat.command.pending',
   'chat.command.result',
+  'chat.send.queued',
   'chat.cleared',
   'session.list.result',
   'session.workspace.set.result',

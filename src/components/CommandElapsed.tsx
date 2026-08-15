@@ -15,16 +15,20 @@ export function formatElapsed(ms: number): string {
  * sit on the same words for the whole operation, which reads as a frozen app. The state lives
  * here so the tick redraws this line alone and not the thread around it.
  */
-export function CommandElapsed({ since }: { since: number }): React.JSX.Element {
+export function CommandElapsed({ since, onAccent = false }: { since: number; onAccent?: boolean }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
-  return <Text style={styles.elapsed}>{` ${formatElapsed(now - since)}`}</Text>;
+  return (
+    <Text style={[styles.elapsed, onAccent ? styles.elapsedAccent : null]}>{` ${formatElapsed(now - since)}`}</Text>
+  );
 }
 
 const createStyles = (palette: Palette) => ({
   elapsed: { fontSize: font.small, color: palette.textFaint },
+  /** On the owner's own bubble, whose background is the accent: the faint grey vanishes there. */
+  elapsedAccent: { color: palette.accentText, opacity: 0.7 },
 });

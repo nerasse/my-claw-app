@@ -960,6 +960,7 @@ export function AppShell(): React.JSX.Element {
           locationPreview.receive(frame.id, frame.location);
           break;
         case 'chat.message':
+          chatStore.clearQueued(frame.threadId);
           chatStore.addAgentMessage(
             frame.threadId,
             frame.id,
@@ -975,6 +976,7 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'chat.run.end': {
           chatStore.endRun(frame.threadId);
+          chatStore.clearQueued(frame.threadId);
           // A run may have spawned sub-agents; the roster is refetched at its end rather than
           // pushed, which keeps the counter honest without a live push path.
           const parent = subagentRef.current?.parentThreadId ?? activeThreadRef.current;
@@ -988,6 +990,8 @@ export function AppShell(): React.JSX.Element {
           // The agent is answering, so no command result is coming: a placeholder left by a
           // command this server does not know would sit there forever.
           chatStore.clearCommandPending(frame.threadId);
+          // Whatever it was waiting for is over: the run is writing.
+          chatStore.clearQueued(frame.threadId);
           chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
           noteActivity(frame.threadId, '');
           break;
@@ -1166,6 +1170,11 @@ export function AppShell(): React.JSX.Element {
           break;
         case 'instructions.saved':
           instructionsStore.receiveSaved(frame);
+          break;
+        case 'chat.send.queued':
+          // Held behind a compaction: the message left, its run has not started. Said on the
+          // bubble itself, because a silent send during a two-minute hold reads as a drop.
+          chatStore.markQueued(frame.threadId, frame.replyToId);
           break;
         case 'chat.command.pending':
           chatStore.addCommandPending(frame.threadId, frame.replyToId, frame.text);

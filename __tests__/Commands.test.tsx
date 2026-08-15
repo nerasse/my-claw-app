@@ -446,6 +446,47 @@ test('a compaction summary is folded under the result, and opens on tap', async 
   await settleAndUnmount(tree);
 });
 
+/**
+ * Observed on 2026-08-15: a /compact ran for 110s, the message sent 62s into it was held to its
+ * end by the session hold, and the app showed nothing for either. The hold is correct; the
+ * silence around it was not.
+ */
+test('a message held behind a compaction says so, and stops saying it when the run starts', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u5', 'and this?', []);
+  });
+  await waitFor(() => allTexts(tree).includes('and this?'), 60);
+
+  await emit({ type: 'chat.send.queued', threadId: THREAD, replyToId: 'u5', reason: 'compaction' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('waiting for the compaction')), 60);
+  // The wait is counted, like the command bubble's own: a still line reads as a dropped message.
+  expect(tree.root.findAllByType(CommandElapsed)).toHaveLength(1);
+
+  await emit({ type: 'chat.stream.start', threadId: THREAD, id: 's2', replyToId: 'u5' });
+  await emit({ type: 'chat.stream.delta', threadId: THREAD, id: 's2', text: 'answering now' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('answering now')), 60);
+  expect(allTexts(tree).some(text => text.includes('waiting for the compaction'))).toBe(false);
+  expect(tree.root.findAllByType(CommandElapsed)).toHaveLength(0);
+
+  await settleAndUnmount(tree);
+});
+
+/** A run that dies without ever streaming must not strand the mark on the bubble. */
+test('a held message stops waiting when the run ends without an answer', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u6', 'and this one?', []);
+  });
+  await emit({ type: 'chat.send.queued', threadId: THREAD, replyToId: 'u6', reason: 'compaction' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('waiting for the compaction')), 60);
+
+  await emit({ type: 'chat.run.end', threadId: THREAD, reason: 'aborted' });
+  await waitFor(() => !allTexts(tree).some(text => text.includes('waiting for the compaction')), 60);
+
+  await settleAndUnmount(tree);
+});
+
 test('a placeholder left by a command the server does not know goes away when the agent answers', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {

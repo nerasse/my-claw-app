@@ -21,6 +21,12 @@ export interface TextItem {
   reasoningTokens?: number;
   /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
   command?: boolean;
+  /**
+   * The server is holding this send behind a compaction, since this instant. Its run starts when
+   * the history stops being rewritten, which takes a minute or two, and nothing else travels in
+   * the meantime.
+   */
+  queuedSince?: number;
   /** A long aside a command produced (a compaction summary), folded away under the outcome. */
   details?: string;
   /** A statement of the system (a model fallback), drawn apart for the same reason. */
@@ -104,6 +110,8 @@ class ChatStoreImpl {
   private activeRuns = new Set<string>();
   /** Placeholder bubble per thread while a slow command runs, keyed by thread -> bubble id. */
   private pendingCommands = new Map<string, string>();
+  /** The send each thread is holding behind a compaction, keyed by thread -> bubble id. */
+  private queuedSends = new Map<string, string>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
@@ -291,6 +299,40 @@ class ChatStoreImpl {
     if (!id) return;
     this.pendingCommands.delete(threadId);
     this.removeItem(threadId, id);
+  }
+
+  /**
+   * The server parked this send: a compaction is rewriting the history its run would resume. The
+   * mark goes on the bubble the owner already sees rather than on a new one, because nothing new
+   * happened, the message simply has not started yet.
+   */
+  markQueued(threadId: string, id: string): void {
+    const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id);
+    if (!item || item.kind !== 'text' || item.queuedSince) return;
+    this.queuedSends.set(threadId, id);
+    this.patch(threadId, id, { queuedSince: Date.now() });
+  }
+
+  /**
+   * The wait is over, whatever ended it: the run streams, answers, or dies. Called on all three
+   * rather than on a dedicated frame, so a lost one cannot strand the mark on the bubble.
+   */
+  clearQueued(threadId: string): void {
+    const id = this.queuedSends.get(threadId);
+    if (!id) return;
+    this.queuedSends.delete(threadId);
+    const items = this.threads.get(threadId);
+    if (!items) return;
+    this.threads.set(
+      threadId,
+      items.map(item => {
+        if (item.id !== id || item.kind !== 'text') return item;
+        const rest = { ...item };
+        delete rest.queuedSince;
+        return rest;
+      }),
+    );
+    this.emit();
   }
 
   /**
