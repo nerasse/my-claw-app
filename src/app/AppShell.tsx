@@ -3546,6 +3546,30 @@ export function AppShell(): React.JSX.Element {
                 setBubbleMenu(null);
               },
             },
+            // The asides carry their own copy button, but only once unfolded. Offering them here
+            // too is the difference between copying a reasoning trace and reading it first.
+            ...(bubbleMenu.reasoning?.trim()
+              ? [
+                  {
+                    label: 'Copy reasoning',
+                    onPress: () => {
+                      Clipboard.setString(bubbleMenu.reasoning ?? '');
+                      setBubbleMenu(null);
+                    },
+                  },
+                ]
+              : []),
+            ...(bubbleMenu.details?.trim()
+              ? [
+                  {
+                    label: 'Copy summary',
+                    onPress: () => {
+                      Clipboard.setString(bubbleMenu.details ?? '');
+                      setBubbleMenu(null);
+                    },
+                  },
+                ]
+              : []),
           ]}
           onClose={() => setBubbleMenu(null)}
         />

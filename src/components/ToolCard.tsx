@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Clipboard from '@react-native-clipboard/clipboard';
 import type { ToolItem } from '../core/chat';
+import { CopyButton } from './CopyButton';
 import { formatDuration, summarizeArgs } from '../core/utils';
 import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -61,9 +61,7 @@ export const ToolCard = React.memo(function ToolCardView({
           </Text>
           <View style={styles.outputHead}>
             <Text style={styles.label}>output{item.truncated ? ' · truncated' : ''}</Text>
-            <Text style={styles.copy} onPress={() => Clipboard.setString(item.output)} accessibilityRole="button">
-              copy
-            </Text>
+            <CopyButton value={item.output} accessibilityLabel="Copy the tool output" />
           </View>
           <Text selectable style={styles.code}>
             {item.output.trim() || '(empty)'}
@@ -111,7 +109,6 @@ const createStyles = (palette: Palette) => ({
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
   label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginTop: 2 },
-  copy: { fontSize: font.micro, color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
   door: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

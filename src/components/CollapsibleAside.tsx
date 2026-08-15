@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
+import { CopyButton } from './CopyButton';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -15,6 +16,10 @@ import { font, space, useThemedStyles, type Palette } from '../theme';
  * It is parsed only while open. A folded aside costs nothing, which matters for reasoning: its
  * body grows with every streamed delta, and parsing markdown on each one would be paid for a
  * block nobody is looking at.
+ *
+ * Open, it carries a copy button. Markdown renders as one Text node per block and React Native
+ * stops a selection at the node it began in, so a drag over a long trace grabs one paragraph and
+ * refuses the rest; the button hands over the raw source, whole. See CopyButton.
  */
 export function CollapsibleAside({
   label,
@@ -32,16 +37,21 @@ export function CollapsibleAside({
 
   return (
     <View>
-      <Pressable
-        style={styles.line}
-        onPress={() => setOpen(value => !value)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={label}
-        accessibilityHint={open ? hideHint : showHint}>
-        <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
-        <Text style={styles.label}>{label}</Text>
-      </Pressable>
+      {/* The copy button sits beside the toggle rather than inside it: one tap must not both
+          fold the block away and fill the clipboard. */}
+      <View style={styles.head}>
+        <Pressable
+          style={styles.line}
+          onPress={() => setOpen(value => !value)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          accessibilityLabel={label}
+          accessibilityHint={open ? hideHint : showHint}>
+          <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+          <Text style={styles.label}>{label}</Text>
+        </Pressable>
+        {open ? <CopyButton value={body} accessibilityLabel={`Copy ${label.toLowerCase()}`} /> : null}
+      </View>
       {open ? (
         <View style={styles.body}>
           <AgentMarkdown text={body} tone="aside" />
@@ -52,7 +62,9 @@ export function CollapsibleAside({
 }
 
 const createStyles = (palette: Palette) => ({
-  line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2 },
+  head: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: space.sm },
+  // The toggle takes the row and yields it: a long label must not push the copy button out.
+  line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1 },
   chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
   label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.3 },
   // A left rule marks it as an aside rather than part of the answer.
