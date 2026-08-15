@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
-import { CopyButton } from './CopyButton';
+import { BlockActions } from './BlockActions';
 import { formatDuration, summarizeArgs } from '../core/utils';
 import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -29,6 +29,9 @@ export const ToolCard = React.memo(function ToolCardView({
   const [open, setOpen] = useState(false);
   const duration = formatDuration(item.durationMs);
   const preview = summarizeArgs(item.args);
+  // Only once unfolded: a thread full of collapsed cards must not stringify every argument list
+  // on every streaming delta.
+  const args = open ? JSON.stringify(item.args, null, 2) : '';
 
   return (
     <View style={[styles.card, !item.ok && styles.cardError, open && styles.cardOpen]}>
@@ -55,17 +58,19 @@ export const ToolCard = React.memo(function ToolCardView({
 
       {open ? (
         <View style={styles.body}>
-          <Text style={styles.label}>arguments</Text>
-          <Text selectable style={styles.code}>
-            {JSON.stringify(item.args, null, 2)}
-          </Text>
+          {/* Neither block is selectable in place: a selection inside the chat list focuses its
+              text view and Android scrolls the inverted thread to it. Both carry the buttons
+              instead. See docs/text-selection.md. */}
+          <View style={styles.outputHead}>
+            <Text style={styles.label}>arguments</Text>
+            <BlockActions title={`${item.name} arguments`} value={args} />
+          </View>
+          <Text style={styles.code}>{args}</Text>
           <View style={styles.outputHead}>
             <Text style={styles.label}>output{item.truncated ? ' · truncated' : ''}</Text>
-            <CopyButton value={item.output} accessibilityLabel="Copy the tool output" />
+            <BlockActions title={`${item.name} output`} value={item.output} />
           </View>
-          <Text selectable style={styles.code}>
-            {item.output.trim() || '(empty)'}
-          </Text>
+          <Text style={styles.code}>{item.output.trim() || '(empty)'}</Text>
           {subagent && onOpenSubAgent ? (
             <Pressable
               style={styles.door}

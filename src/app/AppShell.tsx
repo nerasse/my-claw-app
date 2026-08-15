@@ -183,6 +183,7 @@ import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
 import { FilesScreen } from './FilesScreen';
 import { ImageViewer } from './ImageViewer';
+import { SelectionViewer } from './SelectionViewer';
 import { TextViewer } from './TextViewer';
 import { VideoViewer } from './VideoViewer';
 import { FileViewer } from './FileViewer';
@@ -200,6 +201,7 @@ import { ModelPickerPage, ModelSheet, pickerBack, pickerStart, type PickerState 
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
+import { messageSelectionBody, TextSelectionContext, type SelectionTarget } from '../core/textSelection';
 
 /** One page of replayed history, not a ceiling: scrolling past the oldest asks for the next. */
 const HISTORY_LIMIT = 50;
@@ -595,6 +597,10 @@ export function AppShell(): React.JSX.Element {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [autoFocusHero, setAutoFocusHero] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
+  // The block a reader asked to select from. Held by the shell rather than by whoever opened it:
+  // a tool card scrolled out of the window must not take the viewer with it.
+  const [selection, setSelection] = useState<SelectionTarget | null>(null);
+  const openSelection = useCallback((target: SelectionTarget) => setSelection(target), []);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
@@ -1389,6 +1395,11 @@ export function AppShell(): React.JSX.Element {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // The selection viewer covers everything, including whatever opened it.
+      if (selection) {
+        setSelection(null);
+        return true;
+      }
       // A confirmation is the topmost thing on screen when it is up.
       if (subagentAction) {
         setSubagentAction(null);
@@ -1697,6 +1708,7 @@ export function AppShell(): React.JSX.Element {
     providerEdit,
     providerToDelete,
     scopeEditor,
+    selection,
     selectThread,
     settingsOpen,
     settingsPage,
@@ -2987,6 +2999,9 @@ export function AppShell(): React.JSX.Element {
     ) : null;
 
   return (
+    // Every block inside the thread reaches the selection viewer through here, rather than
+    // through a callback threaded down to the tool cards. See docs/text-selection.md.
+    <TextSelectionContext.Provider value={openSelection}>
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <StatusBar
         barStyle={dark ? 'light-content' : 'dark-content'}
@@ -3632,6 +3647,17 @@ export function AppShell(): React.JSX.Element {
                 setBubbleMenu(null);
               },
             },
+            // The whole message, reasoning and summary included, as the source it was written
+            // in: the viewer is the only place a selection can cross from one block to the next.
+            {
+              label: 'Select text',
+              hint: 'opens the message where any part of it can be picked',
+              onPress: () => {
+                const target = { title: 'Message', body: messageSelectionBody(bubbleMenu) };
+                setBubbleMenu(null);
+                setSelection(target);
+              },
+            },
             // The asides carry their own copy button, but only once unfolded. Offering them here
             // too is the difference between copying a reasoning trace and reading it first.
             ...(bubbleMenu.reasoning?.trim()
@@ -4056,7 +4082,11 @@ export function AppShell(): React.JSX.Element {
           onClose={() => setJobToDelete(null)}
         />
       ) : null}
+
+      {/* Last, so it covers the sheets and the viewers that can open it. */}
+      {selection ? <SelectionViewer target={selection} onClose={() => setSelection(null)} /> : null}
     </SafeAreaView>
+    </TextSelectionContext.Provider>
   );
 }
 

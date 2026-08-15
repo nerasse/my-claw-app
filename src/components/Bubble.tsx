@@ -48,7 +48,13 @@ export const Bubble = React.memo(function BubbleView({
   const thinkingShown = Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
-      <View
+      {/* Long press opens the message menu, which is where copying and selecting live now: the
+          gesture would otherwise start a selection the platform cannot finish, and would throw
+          the thread to the other end doing it. See docs/text-selection.md. A Pressable with no
+          onPress lets every control inside it (links, attachments, the tool cards) keep its own
+          touches. */}
+      <Pressable
+        onLongPress={() => onMenu(item)}
         style={[
           styles.bubble,
           agent ? styles.bubbleAgent : styles.bubbleUser,
@@ -57,7 +63,11 @@ export const Bubble = React.memo(function BubbleView({
           item.command && styles.bubbleCommand,
           // A notice is the system speaking: the agent did not write it either.
           item.notice && styles.bubbleNotice,
-        ]}>
+        ]}
+        // A Pressable is accessible by default, which would collapse the bubble into one node
+        // and hide the reasoning line, the attachments and the tool cards from a screen reader.
+        // The ⋯ button is the accessible way to the same menu.
+        accessible={false}>
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
@@ -82,7 +92,6 @@ export const Bubble = React.memo(function BubbleView({
             <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
           ) : (
             <Text
-              selectable
               style={[
                 styles.text,
                 item.command ? styles.textCommand : item.notice ? styles.textNotice : styles.textUser,
@@ -120,7 +129,7 @@ export const Bubble = React.memo(function BubbleView({
         ) : null}
 
         {item.error ? (
-          <Text selectable style={styles.error}>
+          <Text style={styles.error}>
             {item.error}
           </Text>
         ) : null}
@@ -135,7 +144,7 @@ export const Bubble = React.memo(function BubbleView({
           accessibilityLabel="Message actions">
           <Text style={styles.menuGlyph}>⋯</Text>
         </Pressable>
-      </View>
+      </Pressable>
     </View>
   );
 });

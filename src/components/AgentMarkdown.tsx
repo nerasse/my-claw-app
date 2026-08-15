@@ -37,7 +37,6 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
   // only states its emphasis inherits that base. Restate the full body so bold and italic
   // wear the bubble's ink and size, not the library's default gray.
   const bodyStyle = { fontSize: size, color, ...box };
-  const codeSize = codeSizeFor(size);
   return {
     // Inline runs sit in the row that a list item builds (bullet, then content), so they must
     // yield width there or a long item would push its own line off the bubble.
@@ -53,14 +52,22 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
     h3: { fontSize: size + 1, ...lineBoxFor(size + 1, prose), fontWeight: '600', color, marginTop: space.sm, marginBottom: 2 },
     h4: { fontSize: size, ...lineBoxFor(size, prose), fontWeight: '600', color, marginTop: space.xs, marginBottom: 2 },
     link: { ...bodyStyle, color: palette.accent, textDecorationLine: 'underline' },
+    // An inline run is measured inside the line its prose builds, and Android gives that line
+    // the metrics of whichever span states them. A codespan at its own size, with padding and
+    // `overflow: hidden` to clip a rounded box, therefore shrank the line it landed in: rows
+    // drew over each other and the grey box sat off its own glyphs. That was the compaction
+    // summary and the reasoning being unreadable, both of them dense in code spans.
+    //
+    // So an inline run wears the prose metrics, always, and marks itself with the face and the
+    // plate alone. The block form below is a node of its own and may still be smaller. The face
+    // is stated in full because the library's base draws code in italic, and a path set in
+    // italic monospace is the other half of why these blocks read as broken.
     codespan: {
+      ...bodyStyle,
       fontFamily: 'monospace',
-      fontSize: codeSize,
-      color,
+      fontStyle: 'normal',
+      fontWeight: '400',
       backgroundColor: palette.surfaceAlt,
-      borderRadius: 4,
-      paddingHorizontal: 3,
-      overflow: 'hidden',
     },
     code: { backgroundColor: palette.codeBg, borderRadius: 6, marginVertical: space.xs, padding: space.sm, flexShrink: 0 },
     blockquote: {
@@ -104,10 +111,14 @@ class WrappingRenderer extends Renderer {
     return super.html(text, styles);
   }
 
+  // Not selectable, deliberately: a selection inside the chat list focuses its native text view,
+  // and Android's ScrollView answers a focus by scrolling to it -- through the inversion, which
+  // sends the thread flying. Taking text out of a message is the selection viewer's job.
+  // See docs/text-selection.md.
   code(text: string, _language?: string, containerStyle?: ViewStyle, textStyle?: TextStyle) {
     return (
       <View key={this.getKey()} style={containerStyle}>
-        <Text selectable style={[textStyle, styles.code, this.codeStyle]}>
+        <Text style={[textStyle, styles.code, this.codeStyle]}>
           {text}
         </Text>
       </View>
@@ -137,8 +148,9 @@ export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: Ma
 }
 
 export const styles = StyleSheet.create({
-  // Size and colour come from the renderer (they follow the tone); only the face is fixed here.
-  code: { fontFamily: 'monospace' },
+  // Size and colour come from the renderer (they follow the tone); only the face is fixed here,
+  // and it is stated in full because the library's base for code is italic.
+  code: { fontFamily: 'monospace', fontStyle: 'normal' as const, fontWeight: '400' as const },
   // A bubble is a column, so flexShrink there governs height, not width. Letting the prose
   // yield meant an attachment above it (a rigid 190pt image) took the whole budget and squeezed
   // the words down to the top sliver of their first line. Prose keeps its natural height; the

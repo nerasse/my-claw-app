@@ -1,0 +1,42 @@
+import { createContext, useContext } from 'react';
+
+/**
+ * Taking text out of a conversation.
+ *
+ * Selecting in place does not work in this app and cannot be made to: see docs/text-selection.md.
+ * Every block that is worth copying therefore points at one surface -- a full-screen viewer
+ * holding the raw source in a single selectable node -- and reaches it through this context
+ * rather than through a prop threaded from the shell down to a tool card.
+ */
+export interface SelectionTarget {
+  /** What the bar says the reader is holding: "Message", "Reasoning", a tool name. */
+  title: string;
+  /** The source itself, exactly as it was written. */
+  body: string;
+}
+
+export const TextSelectionContext = createContext<(target: SelectionTarget) => void>(() => {});
+
+/** Opens the selection viewer on a block. A no-op outside the shell, never a crash. */
+export function useOpenSelection(): (target: SelectionTarget) => void {
+  return useContext(TextSelectionContext);
+}
+
+/**
+ * Everything one message holds, in the order it was written: what the model thought, what it
+ * answered, what a compaction kept. One string, because the viewer is one selectable node and
+ * the point is to be able to drag across the lot in a single gesture.
+ *
+ * Raw markdown, not rendered: the source is what a reader wants in their clipboard (a path, a
+ * command, a code fence), and rendering it would split it into nodes again.
+ */
+export function messageSelectionBody(item: { text: string; reasoning?: string; details?: string }): string {
+  const parts: string[] = [];
+  const reasoning = item.reasoning?.trim();
+  const details = item.details?.trim();
+  const text = item.text.trim();
+  if (reasoning) parts.push(`## Reasoning\n\n${reasoning}`);
+  if (text) parts.push(text);
+  if (details) parts.push(`## Summary\n\n${details}`);
+  return parts.join('\n\n');
+}

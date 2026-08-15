@@ -9,10 +9,11 @@ const ACK_MS = 1400;
 /**
  * Takes a whole block out of the app in one tap.
  *
- * Selection cannot do this job. React Native selects inside a single Text node and no further,
- * and rendered markdown is one node per block: dragging over a reasoning trace or a compaction
- * summary can only ever grab the paragraph the gesture started in. So anything long enough to be
- * worth copying gets this instead of a selection the platform will not let the reader finish.
+ * Selection cannot do this job in place. React Native selects inside a single Text node and no
+ * further, and rendered markdown is one node per block; worse, a selectable view inside the
+ * inverted chat list throws the thread to the other end when it takes focus. So a block worth
+ * copying gets this, and a block worth picking through gets the selection viewer next to it.
+ * See docs/text-selection.md.
  *
  * It acknowledges: the clipboard is invisible, and a tap with no feedback reads as a dead button.
  */

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
-import { CopyButton } from './CopyButton';
+import { BlockActions } from './BlockActions';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -17,9 +17,9 @@ import { font, space, useThemedStyles, type Palette } from '../theme';
  * body grows with every streamed delta, and parsing markdown on each one would be paid for a
  * block nobody is looking at.
  *
- * Open, it carries a copy button. Markdown renders as one Text node per block and React Native
- * stops a selection at the node it began in, so a drag over a long trace grabs one paragraph and
- * refuses the rest; the button hands over the raw source, whole. See CopyButton.
+ * Open, it carries its two ways out: copy takes the raw source whole, select opens the viewer
+ * where a piece of it can be picked. Neither is a gesture on the block itself, and that is not a
+ * choice: see docs/text-selection.md.
  */
 export function CollapsibleAside({
   label,
@@ -37,8 +37,8 @@ export function CollapsibleAside({
 
   return (
     <View>
-      {/* The copy button sits beside the toggle rather than inside it: one tap must not both
-          fold the block away and fill the clipboard. */}
+      {/* The buttons sit beside the toggle rather than inside it: one tap must not both fold
+          the block away and fill the clipboard. */}
       <View style={styles.head}>
         <Pressable
           style={styles.line}
@@ -50,7 +50,7 @@ export function CollapsibleAside({
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
           <Text style={styles.label}>{label}</Text>
         </Pressable>
-        {open ? <CopyButton value={body} accessibilityLabel={`Copy ${label.toLowerCase()}`} /> : null}
+        {open ? <BlockActions title={label} value={body} /> : null}
       </View>
       {open ? (
         <View style={styles.body}>

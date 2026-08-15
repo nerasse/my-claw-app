@@ -89,15 +89,13 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
       paddingVertical: space.xs,
       marginVertical: space.sm,
     },
+    // Prose metrics, not its own: a smaller line height on an inline span shrinks the whole
+    // line on Android and the rows around it end up drawn on top of each other. The face, the
+    // ink and the plate are the only things a code span may state. See AgentMarkdown.
     codespan: {
+      ...body,
       fontFamily: 'monospace',
-      fontSize: font.meta,
-      lineHeight: lineHeightFor(font.meta),
-      color: palette.text,
       backgroundColor: palette.surfaceAlt,
-      borderRadius: 4,
-      paddingHorizontal: 4,
-      overflow: 'hidden',
       fontStyle: 'normal',
       fontWeight: '400',
     },
