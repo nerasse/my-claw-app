@@ -1,4 +1,5 @@
 import { deviceBridge } from './nativeBridge';
+import { DEFAULT_SERVER_URL } from './serverUrl';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -8,7 +9,7 @@ export interface Prefs {
   lastThreadId: string | null;
 }
 
-export const DEFAULT_SERVER_URL = 'ws://10.10.20.10:8080/my-claw-app';
+export { DEFAULT_SERVER_URL };
 
 const DEFAULTS: Prefs = {
   themeMode: 'system',

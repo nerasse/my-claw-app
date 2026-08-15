@@ -1,3 +1,4 @@
+import { authQuery } from './serverUrl';
 import type { AttachmentMeta } from './protocol';
 import type { DeviceInfo } from './device';
 import { deviceBridge, onTransferProgress } from './nativeBridge';
@@ -45,7 +46,8 @@ export async function uploadMedia(
   attachment: PendingAttachment,
   onProgress?: (bytes: number, total: number) => void,
 ): Promise<UploadedAttachment> {
-  const url = `${mediaBase}/media?device=${encodeURIComponent(deviceInfo.deviceId)}&token=${encodeURIComponent(deviceInfo.token)}`;
+  const query = authQuery(deviceInfo);
+  const url = `${mediaBase}/media${query ? `?${query}` : ''}`;
   const transferId = `upload-${attachment.id}`;
   let unsubscribe: (() => void) | undefined;
   if (onProgress) {

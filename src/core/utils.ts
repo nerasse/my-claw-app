@@ -1,3 +1,4 @@
+import { DEFAULT_HTTP_ORIGIN } from './serverUrl';
 export function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.floor(Math.random() * 16);
@@ -12,7 +13,7 @@ export function uuid(): string {
  * device (and correct under Node in tests): that silently produced 'http:///media', which
  * OkHttp parses as the host "media". No URL here, same result everywhere.
  */
-export function httpOrigin(wsUrl: string, fallback = 'http://10.10.20.10:8080'): string {
+export function httpOrigin(wsUrl: string, fallback = DEFAULT_HTTP_ORIGIN): string {
   const match = /^(wss|ws|https|http):\/\/([^/?#]+)/i.exec(wsUrl.trim());
   if (!match) return fallback;
   const secure = match[1].toLowerCase() === 'wss' || match[1].toLowerCase() === 'https';

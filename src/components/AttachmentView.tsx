@@ -1,3 +1,4 @@
+import { authQuery } from '../core/serverUrl';
 import React from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import type { AttachmentMeta } from '../core/protocol';
@@ -30,7 +31,7 @@ export function AttachmentView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const remote = deviceInfo
-    ? `${mediaBase}/media/${att.id}?device=${deviceInfo.deviceId}&token=${deviceInfo.token}`
+    ? `${mediaBase}/media/${att.id}${authQuery(deviceInfo) ? `?${authQuery(deviceInfo)}` : ''}`
     : '';
   const uri = att.uri ?? remote;
   // The server generates a preview frame for videos; without one the stage would stay black

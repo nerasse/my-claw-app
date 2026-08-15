@@ -1,3 +1,4 @@
+import { authQuery } from '../core/serverUrl';
 import React, { useCallback, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import type { SessionFileMeta } from '../core/protocol';
@@ -22,7 +23,7 @@ function mediaUrl(
   id: string,
 ): string {
   return deviceInfo
-    ? `${mediaBase}/media/${id}?device=${deviceInfo.deviceId}&token=${deviceInfo.token}`
+    ? `${mediaBase}/media/${id}${authQuery(deviceInfo) ? `?${authQuery(deviceInfo)}` : ''}`
     : '';
 }
 
