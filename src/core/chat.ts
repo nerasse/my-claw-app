@@ -209,6 +209,11 @@ class ChatStoreImpl {
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     if (existing.some(item => item.kind === 'text' && item.streaming)) return;
     if (entries.length === 0) return;
+    // A running turn reaches the server's file on a timer, so a page can be a couple of seconds
+    // behind the frames already delivered. What is on screen is then the fresher view, and
+    // replacing it would drop the newest cards. An empty thread still takes the page: that is
+    // an app that reconnected mid-run and has nothing of its own.
+    if (this.activeRuns.has(threadId) && existing.length > 0) return;
 
     this.threads.set(threadId, itemsOf(entries));
     this.emit();

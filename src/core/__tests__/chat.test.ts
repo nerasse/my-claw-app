@@ -124,6 +124,22 @@ describe('chatStore.seedHistory', () => {
     expect(chatStore.getItems(THREAD)).toHaveLength(1);
   });
 
+  test('a run in flight keeps the thread it already shows, page or no page', () => {
+    chatStore.seedRuns([THREAD]);
+    chatStore.addUserMessage(THREAD, 'u1', 'la question');
+    chatStore.addToolCall(THREAD, { ...toolEntry, id: 'live-tool' });
+    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'tour precedent', ts: '2026-01-01T00:00:01.000Z' }]);
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['u1', 'live-tool']);
+    chatStore.seedRuns([]);
+  });
+
+  test('a run in flight still seeds a thread the app has nothing of', () => {
+    chatStore.seedRuns([THREAD]);
+    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'reconnecte', ts: '2026-01-01T00:00:01.000Z' }]);
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
+    chatStore.seedRuns([]);
+  });
+
   test('tool entries keep their arguments, duration and output', () => {
     chatStore.seedHistory(THREAD, [toolEntry]);
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({
