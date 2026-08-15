@@ -2135,10 +2135,12 @@ export function AppShell(): React.JSX.Element {
    * one carried Status, the labels disagreed, and the drawer deleted without asking while the
    * header confirmed. The subject is a conversation in both places, so no label says so.
    */
-  const conversationActions = useCallback(
-    (target: SessionSummary, close: () => void): SheetEntry[] => [
-      // Pinning is a drawer thing, but the drawer's own sheet is the same list; both menus
-      // answer here, so the entry lives with the rest of the conversation actions.
+  // Pinning leads both menus, on its own: it is the one action that changes nothing about the
+  // conversation and everything about finding it again, so it is the row a thumb reaches for
+  // without reading. Handed out apart from the list below because the header menu keeps Model
+  // and Stop between it and the rest.
+  const pinAction = useCallback(
+    (target: SessionSummary, close: () => void): SheetEntry =>
       pinnedOrder.includes(target.threadId)
         ? {
             label: 'Unpin',
@@ -2156,8 +2158,21 @@ export function AppShell(): React.JSX.Element {
               close();
             },
           },
-      // First and standing alone: it is the one action both menus share for any conversation,
-      // and it used to cost a whole header button.
+    [pinnedOrder],
+  );
+
+  const conversationActions = useCallback(
+    (target: SessionSummary, close: () => void): SheetEntry[] => [
+      // What the conversation reads comes before what it produced: the instructions decide every
+      // answer in it, the files are one of their outputs.
+      {
+        label: 'Instructions',
+        hint: 'every layer it loads, nested files included',
+        onPress: () => {
+          close();
+          openSessionInstructions(target.threadId);
+        },
+      },
       {
         label: 'Session files',
         onPress: () => {
@@ -2192,14 +2207,6 @@ export function AppShell(): React.JSX.Element {
           openStatus(target.threadId);
         },
       },
-      {
-        label: 'Instructions',
-        hint: 'every layer it loads, nested files included',
-        onPress: () => {
-          close();
-          openSessionInstructions(target.threadId);
-        },
-      },
       target.archived
         ? {
             label: 'Unarchive',
@@ -2227,11 +2234,11 @@ export function AppShell(): React.JSX.Element {
         },
       },
     ],
-    [openStatus, openSessionInstructions, setThreadArchived, openFilesFor, workspaceOf, pinnedOrder],
+    [openStatus, openSessionInstructions, setThreadArchived, openFilesFor, workspaceOf],
   );
 
   const threadActions: SheetEntry[] = threadMenu
-    ? conversationActions(threadMenu, () => setThreadMenu(null))
+    ? [pinAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, () => setThreadMenu(null))]
     : [];
 
   /**
@@ -2328,7 +2335,20 @@ export function AppShell(): React.JSX.Element {
         ? 'global default'
         : null;
 
+  const activeSummary: SessionSummary | null = activeThread
+    ? {
+        threadId: activeThread,
+        title: sessionStore.titleOf(activeThread) ?? '',
+        messageCount: 0,
+        createdAt: '',
+        lastActiveAt: '',
+        archived: archivedSessions.some(entry => entry.threadId === activeThread),
+      }
+    : null;
+
   const commandMenuOptions: SheetEntry[] = [
+    // Same head as the drawer's sheet: one action, in the same place, whichever menu was opened.
+    ...(activeSummary ? [pinAction(activeSummary, () => setCommandMenuOpen(false))] : []),
     {
       label: 'Model…',
       hint: currentModelLabel
@@ -2351,22 +2371,10 @@ export function AppShell(): React.JSX.Element {
           } satisfies SheetEntry,
         ]
       : []),
-    // Model and Stop lead because only the conversation on screen can answer for them: the app
-    // knows the live model and the running turn of the one in front of it, not of a thread
+    // Model and Stop sit here because only the conversation on screen can answer for them: the
+    // app knows the live model and the running turn of the one in front of it, not of a thread
     // picked in the drawer. Everything below is the shared conversation list.
-    ...(activeThread
-      ? conversationActions(
-          {
-            threadId: activeThread,
-            title: sessionStore.titleOf(activeThread) ?? '',
-            messageCount: 0,
-            createdAt: '',
-            lastActiveAt: '',
-            archived: archivedSessions.some(entry => entry.threadId === activeThread),
-          },
-          () => setCommandMenuOpen(false),
-        )
-      : []),
+    ...(activeSummary ? conversationActions(activeSummary, () => setCommandMenuOpen(false)) : []),
     // New conversations live on the + in the drawer (and the /new command). Session files sit in
     // this menu too, so the header keeps only the counter and the menu.
   ];

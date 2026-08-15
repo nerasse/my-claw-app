@@ -734,17 +734,45 @@ test('a notice is drawn apart from the agent replies it arrives between', async 
 });
 
 
-test('the Commands menu leads with Session files, and it is the only row before the separator', async () => {
+test('the Commands menu leads with the pin, and reads the instructions before the files they produced', async () => {
   const tree = await renderWithHistory();
   await pressLabel(tree, 'Commands');
   await waitFor(() => labelsOf(tree).includes('Session files'));
 
-  // First in the menu, and its position is marked: the separator follows it and is not a row.
-  const commands = tree.root.findAll(node => node.props.accessibilityLabel === 'Commands' && typeof node.props.onPress === 'function', { deep: true });
-  expect(commands.length).toBeGreaterThan(0);
+  // A row is both a composite and a host node with the same label: keep one of each pair.
+  const rows = labelsOf(tree)
+    .filter(label =>
+      ['Pin to top', 'Unpin', 'Model…', 'Instructions', 'Session files', 'Status'].includes(label),
+    )
+    .filter((label, index, all) => label !== all[index - 1]);
+  // Pinning leads: same first row as the drawer's own sheet, whichever menu was opened. Model
+  // follows because only the conversation on screen can answer for it.
+  expect(rows[0]).toBe('Pin to top');
+  expect(rows[1]).toBe('Model…');
+  expect(rows.indexOf('Instructions')).toBeLessThan(rows.indexOf('Session files'));
 
   await pressLabel(tree, 'Session files');
   await waitFor(() => labelsOf(tree).includes('Back to chat'));
+  await unmount(tree);
+});
+
+test('a conversation picked in the drawer opens the same list, pin first', async () => {
+  const tree = await renderWithHistory();
+  await ReactTestRenderer.act(async () => {
+    sessionStore.replace([
+      { threadId: 'other-thread', title: 'the other one', messageCount: 1, createdAt: '2026-01-02T00:00:00.000Z', lastActiveAt: '2026-01-02T10:00:00.000Z' },
+    ]);
+  });
+
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Actions for conversation the other one');
+  await waitFor(() => labelsOf(tree).includes('Session files'));
+
+  const rows = labelsOf(tree)
+    .filter(label => ['Pin to top', 'Unpin', 'Instructions', 'Session files', 'Status'].includes(label))
+    .filter((label, index, all) => label !== all[index - 1]);
+  expect(rows[0]).toBe('Pin to top');
+  expect(rows.indexOf('Instructions')).toBeLessThan(rows.indexOf('Session files'));
   await unmount(tree);
 });
 
