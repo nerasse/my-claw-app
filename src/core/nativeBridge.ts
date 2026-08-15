@@ -107,6 +107,12 @@ export interface DeviceBridgeNative {
   }>;
   /** The running build's version name ("0.2.78"). */
   getAppVersion(): Promise<string>;
+  /**
+   * Dismisses one posted notification by the id it was posted with (docs/notifications.md).
+   * Native because the notification is rendered by a service that may have run while this JS
+   * context did not exist.
+   */
+  cancelNotification(id: number): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
   /** Copies a content:// or file:// uri into the cache and returns a readable file:// uri. */
   prepareFile(
@@ -199,6 +205,7 @@ export const deviceBridge: DeviceBridgeNative = {
   getExitInfo: () =>
     native?.getExitInfo() ?? Promise.resolve({ versionName: '', exits: [] }),
   getAppVersion: () => native?.getAppVersion() ?? Promise.resolve(''),
+  cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   prepareFile: uri =>
     native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),

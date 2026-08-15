@@ -76,13 +76,40 @@ froid : l'app était tuée et c'est le tap qui l'a lancée) et écoute l'événe
 Limite connue : le rendu natif relance l'activité avec `FLAG_ACTIVITY_CLEAR_TASK`, donc taper
 une notification alors que l'app est déjà ouverte **recharge** l'écran.
 
+## Effacement à l'ouverture
+
+Un tap efface sa propre notification (`setAutoCancel` côté lib). Arriver sur la conversation
+par un autre chemin ne l'effaçait pas : le tiroir gardait une notification qui annonçait un run
+déjà lu à l'écran.
+
+```
+ouverture d'un thread (tiroir, deep link, /new …)
+retour au premier plan sur le thread ouvert
+        │
+        ▼
+dismissThreadNotification(threadId)
+  └─ notificationIdFor("myclaw://thread/<id>")   même FNV-1a que le serveur
+  └─ deviceBridge.cancelNotification(id)        NotificationManagerCompat.cancel
+```
+
+Le push arrive le plus souvent app tuée : personne ici n'a jamais vu la notification, donc son
+id ne peut pas être mémorisé, il est **recalculé** à partir du deep link. `notificationIdFor`
+est un contrat de fil avec `notificationIdFor` dans `src/notifications/push.ts` côté serveur :
+les mêmes vecteurs sont assertés dans les deux dépôts, parce qu'une dérive ne casserait rien
+de visible, elle arrêterait juste d'effacer quoi que ce soit. En arrière-plan rien n'est
+effacé : la notification est légitime tant que personne ne la regarde.
+
+Effet de bord côté serveur, voulu : l'id étant dérivé du lien, deux runs successifs sur la même
+conversation ne s'empilent plus, le second remplace le premier.
+
 ## Fichiers
 
 | Fichier | Rôle |
 | --- | --- |
 | `src/core/notifications.ts` | permissions, distributeur, enregistrement, parsing des deep links. Tout est no-op hors Android. |
 | `src/core/protocol.ts` | frames `notifications.info` / `register` / `state` |
-| `src/app/AppShell.tsx` | enregistrement à la réception de la clé, état premier-plan, ouverture sur tap |
+| `src/app/AppShell.tsx` | enregistrement à la réception de la clé, état premier-plan, ouverture sur tap, effacement à l'ouverture |
+| `android/.../DeviceBridgeModule.kt` | `cancelNotification(id)` : le seul moyen d'atteindre une notification posée par un service sans JS |
 | `__tests__/Notifications.test.tsx` | le cycle complet, avec le distributeur et `Linking` mockés |
 
 ## Plateformes

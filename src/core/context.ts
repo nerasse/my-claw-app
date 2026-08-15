@@ -50,6 +50,22 @@ export function contextTiers(
   return tiers.length > 1 ? tiers : [];
 }
 
+/**
+ * How full the window of a conversation is, as a whole percent, or null when there is nothing
+ * honest to show (no session yet, or a server that predates the field). Never clamped down to
+ * 100: a prompt over its ceiling is exactly the moment worth seeing, and rounding it away would
+ * hide the one reading that calls for a compaction.
+ */
+export function contextPercent(
+  state: { effective?: number; used?: number } | null | undefined,
+): number | null {
+  const used = state?.used;
+  const effective = state?.effective;
+  if (used === undefined || effective === undefined) return null;
+  if (!Number.isFinite(used) || !Number.isFinite(effective) || effective <= 0 || used < 0) return null;
+  return Math.round((used / effective) * 100);
+}
+
 /** One line for a picker header: what the run may use, and the full window when they differ. */
 export function contextSummary(window: number | undefined, effective: number | undefined): string {
   if (window === undefined) return '';

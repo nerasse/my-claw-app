@@ -49,7 +49,11 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
-import { parseNotificationLink, resetPushRegistration } from '../src/core/notifications';
+import {
+  notificationIdFor,
+  parseNotificationLink,
+  resetPushRegistration,
+} from '../src/core/notifications';
 import { labelsOf, renderApp, unmount, waitFor } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -96,6 +100,51 @@ describe('parseNotificationLink', () => {
     expect(parseNotificationLink('myclaw://thread/')).toBeNull();
     expect(parseNotificationLink(null)).toBeNull();
   });
+});
+
+describe('notificationIdFor', () => {
+  test('agrees with the server on the id a link was posted with', () => {
+    // The same three vectors are asserted server-side (tests/notifications/push.test.ts). The id
+    // is never received, only recomputed, so a silent drift would stop every dismissal.
+    expect(notificationIdFor('myclaw://thread/abc')).toBe(1185530383);
+    expect(notificationIdFor('myclaw://thread/from-notif')).toBe(333754526);
+    expect(notificationIdFor('myclaw://job/job-1')).toBe(253371665);
+  });
+});
+
+test('opening a conversation clears the notification it raised', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    mockLinkHandlers.forEach(handler => handler({ url: 'myclaw://thread/from-notif' }));
+  });
+
+  await waitFor(() => bridge.cancelNotification.mock.calls.length > 0);
+  expect(bridge.cancelNotification).toHaveBeenCalledWith(
+    notificationIdFor('myclaw://thread/from-notif'),
+  );
+  await unmount(tree);
+});
+
+test('coming back to the foreground clears the notification of the open conversation', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    mockLinkHandlers.forEach(handler => handler({ url: 'myclaw://thread/from-notif' }));
+  });
+  await waitFor(() => bridge.cancelNotification.mock.calls.length > 0);
+  bridge.cancelNotification.mockClear();
+
+  await ReactTestRenderer.act(async () => {
+    mockAppStateHandlers.forEach(handler => handler('background'));
+  });
+  expect(bridge.cancelNotification).not.toHaveBeenCalled();
+
+  await ReactTestRenderer.act(async () => {
+    mockAppStateHandlers.forEach(handler => handler('active'));
+  });
+  expect(bridge.cancelNotification).toHaveBeenCalledWith(
+    notificationIdFor('myclaw://thread/from-notif'),
+  );
+  await unmount(tree);
 });
 
 test('the VAPID key from the server registers the device with its distributor', async () => {

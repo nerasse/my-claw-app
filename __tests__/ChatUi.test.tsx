@@ -770,3 +770,53 @@ test('Session files from a drawer conversation opens that conversation and its f
   expect(sent).toContain(JSON.stringify({ type: 'files.list', threadId: 'other-thread' }));
   await unmount(tree);
 });
+
+test('the header reads the share of the context window instead of announcing a healthy link', async () => {
+  const tree = await renderWithHistory();
+  // No model state yet: the line carries what it knows and claims nothing about the context.
+  // The drawer keeps its own connection dot; the header line does not repeat it.
+  expect(stringsOf(tree).some(text => text.includes('ctx '))).toBe(false);
+  expect(stringsOf(tree).some(text => text.startsWith('connected · '))).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'model.result',
+        threadId: THREAD,
+        model: 'fast-1',
+        defaultModel: 'fast-1',
+        effort: { level: '', levels: [], supported: false },
+        context: { raw: 400000, effective: 200000, used: 50000 },
+      }),
+    });
+  });
+
+  await waitFor(() => stringsOf(tree).some(text => text.includes('ctx 25%')));
+  await unmount(tree);
+});
+
+test('the end of a run reads the context back from the server: the turn that landed is what filled it', async () => {
+  const tree = await renderWithHistory();
+  bridge.sendMessage.mockClear();
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'chat.run.end', threadId: THREAD, reason: 'done' }),
+    });
+  });
+
+  const sent = bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
+  expect(sent).toContain(JSON.stringify({ type: 'model.get', threadId: THREAD }));
+
+  // A run that ended on another conversation refreshes nothing: the header shows this one.
+  bridge.sendMessage.mockClear();
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'chat.run.end', threadId: 'other-thread', reason: 'done' }),
+    });
+  });
+  expect(bridge.sendMessage.mock.calls.map(([frame]) => String(frame))).not.toContain(
+    JSON.stringify({ type: 'model.get', threadId: 'other-thread' }),
+  );
+  await unmount(tree);
+});

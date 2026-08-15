@@ -211,6 +211,7 @@ jest.mock('./src/core/nativeBridge', () => ({
     prefsGetAll: jest.fn(() => Promise.resolve({})),
     getExitInfo: jest.fn(() => Promise.resolve({ versionName: '0.0.1-test', exits: [] })),
     getAppVersion: jest.fn(() => Promise.resolve('0.0.1-test')),
+    cancelNotification: jest.fn(() => Promise.resolve()),
     prefsSet: jest.fn(() => Promise.resolve()),
     pickFile: jest.fn(() => Promise.resolve([])),
     prepareFile: jest.fn(() =>

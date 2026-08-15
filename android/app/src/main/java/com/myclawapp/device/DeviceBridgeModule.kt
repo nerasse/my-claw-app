@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
@@ -827,6 +828,22 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   @ReactMethod
   fun getAppVersion(promise: Promise) {
     promise.resolve(versionName())
+  }
+
+  /**
+   * Dismisses one notification by the id it was posted with. The push renderer runs in its own
+   * service, often with no JS context alive, so the id is derived from the deep link on both
+   * sides (docs/notifications.md) rather than remembered here. Cancelling an id that was never
+   * posted, or was already swiped away, is a no-op on the platform side.
+   */
+  @ReactMethod
+  fun cancelNotification(id: Double, promise: Promise) {
+    try {
+      NotificationManagerCompat.from(reactContext).cancel(id.toInt())
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("CANCEL_NOTIFICATION_FAILED", e.message, e)
+    }
   }
 
   @ReactMethod

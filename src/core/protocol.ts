@@ -352,6 +352,12 @@ export interface ContextState {
   cap?: number;
   /** This conversation's own choice: a ceiling, 'full', or absent when it follows policy. */
   choice?: number | 'full';
+  /**
+   * How much of `effective` the conversation already holds, in the units the provider bills.
+   * Absent on a thread with no session yet, and on a server that predates the field: the header
+   * then shows no share rather than a confident 0%.
+   */
+  used?: number;
 }
 
 export interface ModelListResultFrame {

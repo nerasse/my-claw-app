@@ -130,12 +130,14 @@ import {
   encodeProvidersUpsert,
 } from '../core/protocol';
 import {
+  dismissThreadNotification,
   parseNotificationLink,
   pushSupported,
   registerForPush,
   resetPushRegistration,
   subscribeToPushRegistration,
 } from '../core/notifications';
+import { contextPercent } from '../core/context';
 import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
@@ -695,6 +697,9 @@ export function AppShell(): React.JSX.Element {
       setAgentsOpen(false);
       subagentRef.current = null;
       setSubagentView(null);
+      // The run that raised a notification is the one now on screen: clear it, whichever way the
+      // owner arrived. A tap cancels its own notification, the drawer and the deep link did not.
+      dismissThreadNotification(threadId);
       connection.send(encodeSubAgentsList(threadId)).catch(() => {});
       connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
       // The model of a conversation is per session: refresh it when the thread changes, so
@@ -1002,6 +1007,12 @@ export function AppShell(): React.JSX.Element {
           // pushed, which keeps the counter honest without a live push path.
           const parent = subagentRef.current?.parentThreadId ?? activeThreadRef.current;
           if (parent) connection.send(encodeSubAgentsList(parent)).catch(() => {});
+          // The turn that just landed is what filled the window: the header's share of context is
+          // read back from the server here rather than guessed from the bubbles on screen. Same
+          // frame as the one the picker uses, so a run that switched model refreshes that too.
+          if (frame.threadId === activeThreadRef.current) {
+            connection.send(encodeModelGet(frame.threadId)).catch(() => {});
+          }
           break;
         }
         case 'subagents.list.result':
@@ -1861,6 +1872,10 @@ export function AppShell(): React.JSX.Element {
           }),
         )
         .catch(() => {});
+      // Coming back to a conversation that notified while the app was away: the tray must not keep
+      // announcing a run the owner is looking at. Backgrounded, the notification is legitimate and
+      // stays.
+      if (foreground && activeThreadRef.current) dismissThreadNotification(activeThreadRef.current);
     };
     report(AppState.currentState === 'active');
     const subscription = AppState.addEventListener('change', state => report(state === 'active'));
@@ -2363,8 +2378,12 @@ export function AppShell(): React.JSX.Element {
   // open must not leave a stale name on the way back.
   const parentTitleOf = (threadId: string): string => sessionStore.titleOf(threadId) ?? 'conversation';
   const offline = status.state !== 'connected';
+  // A healthy link says nothing: it is the normal case, and the space is worth more to the one
+  // number that moves on its own. How full the window is decides when the conversation has to be
+  // compacted, so it belongs where the owner already looks. Degraded states keep the word.
+  const contextShare = contextPercent(threadModel?.context);
   const subtitle = [
-    offline ? status.state : 'connected',
+    offline ? status.state : contextShare === null ? null : `ctx ${contextShare}%`,
     pending > 0 ? `${pending} pending` : null,
     items.length > 0 ? `${items.length} items` : null,
     // The model that runs here: the one fact about a conversation worth seeing at a glance.

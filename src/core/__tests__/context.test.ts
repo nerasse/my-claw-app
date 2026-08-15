@@ -1,4 +1,4 @@
-import { contextTiers, contextSummary } from '../context';
+import { contextPercent, contextTiers, contextSummary } from '../context';
 
 const labels = (tiers: ReturnType<typeof contextTiers>): string[] => tiers.map(tier => tier.label);
 
@@ -30,6 +30,22 @@ test('a window with nothing under it is not a choice at all', () => {
   expect(contextTiers(40_000, undefined, undefined)).toEqual([]);
   expect(contextTiers(undefined, undefined, undefined)).toEqual([]);
   expect(contextTiers(0, undefined, undefined)).toEqual([]);
+});
+
+test('the share of the window is a whole percent of what the run may use, not of the full one', () => {
+  expect(contextPercent({ effective: 200_000, used: 50_000 })).toBe(25);
+  expect(contextPercent({ effective: 128_000, used: 1 })).toBe(0);
+  // Over its ceiling is exactly the reading worth showing: it is not folded back to 100.
+  expect(contextPercent({ effective: 100_000, used: 130_000 })).toBe(130);
+});
+
+test('nothing to measure shows nothing rather than a confident zero', () => {
+  expect(contextPercent(null)).toBeNull();
+  expect(contextPercent(undefined)).toBeNull();
+  // A thread with no session yet, and a server that predates the field.
+  expect(contextPercent({ effective: 200_000 })).toBeNull();
+  expect(contextPercent({ used: 10 })).toBeNull();
+  expect(contextPercent({ effective: 0, used: 10 })).toBeNull();
 });
 
 test('the summary names the full window only when the effective one differs', () => {
