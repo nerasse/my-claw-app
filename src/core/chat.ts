@@ -93,6 +93,9 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.location ? { location: entry.location } : {}),
       ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
       ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
+      ...(entry.reasoningTokens ? { reasoningTokens: entry.reasoningTokens } : {}),
+      ...(entry.command ? { command: true } : {}),
+      ...(entry.details ? { details: entry.details } : {}),
       ts,
     };
   });

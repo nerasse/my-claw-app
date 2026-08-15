@@ -159,3 +159,12 @@ describe('a redacted engine', () => {
     await unmount(tree);
   });
 });
+
+test('a replayed turn from a redacted engine still says it thought', async () => {
+  const tree = await renderWith([
+    { id: 'h-0', role: 'user', text: '9.11 ou 9.8 ?', ts: '2026-01-01T10:00:00.000Z' },
+    { id: 'h-1', role: 'assistant', text: '9.11', ts: '2026-01-01T10:00:01.000Z', reasoningTokens: 12300 },
+  ]);
+  await waitFor(() => textsOf(tree).some(text => text.includes('Thought · 12.3k tokens')), 60);
+  await unmount(tree);
+});

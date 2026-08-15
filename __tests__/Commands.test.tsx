@@ -669,3 +669,26 @@ test('the model row says when the chat only inherits the model, and from where',
   expect(textsOf(tree).some(t => t.includes('from the agent config'))).toBe(true);
   await settleAndUnmount(tree);
 });
+
+test('a replayed command keeps its own bubble and its folded summary', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.seedHistory(THREAD, [
+      { id: 'c-1-in', role: 'user', text: '/compact', ts: '2026-01-01T10:00:00.000Z' },
+      {
+        id: 'c-1-out',
+        role: 'assistant',
+        text: 'Context compacted (SDK session summarized).',
+        ts: '2026-01-01T10:00:00.000Z',
+        command: true,
+        details: 'kept the release plan',
+      },
+    ]);
+  });
+
+  const item = chatStore.getItems(THREAD).find(entry => entry.id === 'c-1-out');
+  expect(item?.kind === 'text' && item.command).toBe(true);
+  await waitFor(() => allTexts(tree).some(text => text.includes('Context compacted')), 60);
+  expect(labelsOf(tree)).toContain('Summary');
+  await settleAndUnmount(tree);
+});

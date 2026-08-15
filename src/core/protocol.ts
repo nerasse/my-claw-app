@@ -195,6 +195,12 @@ export type HistoryEntry =
       transcripts?: Record<string, string>;
       /** What the model thought before this reply, replayed collapsed. */
       reasoning?: string;
+      /** How much it thought, when the engine redacts the text and only counts it. */
+      reasoningTokens?: number;
+      /** A replayed command answer: same bubble the live `chat.command.result` drew. */
+      command?: boolean;
+      /** The aside folded under that answer (a compaction summary). */
+      details?: string;
     }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 
