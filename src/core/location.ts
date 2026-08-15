@@ -1,11 +1,15 @@
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform, type Permission } from 'react-native';
 import { deviceBridge, type CurrentLocationNative } from './nativeBridge';
 import type { LocationInput } from './protocol';
 
-const ANDROID_LOCATION_PERMISSIONS = [
-  PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-  PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
-];
+// Read inside the function, not at module scope: react-native-web has no PermissionsAndroid,
+// and a top-level access throws while the module graph is still loading, before any guard runs.
+function androidLocationPermissions(): Permission[] {
+  return [
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+  ];
+}
 
 function optional(value: number | null | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -26,7 +30,7 @@ function fromNative(location: CurrentLocationNative): LocationInput {
 async function requestAndroidLocationPermission(): Promise<void> {
   const precise = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
   if (precise) return;
-  const result = await PermissionsAndroid.requestMultiple(ANDROID_LOCATION_PERMISSIONS);
+  const result = await PermissionsAndroid.requestMultiple(androidLocationPermissions());
   const granted = Object.values(result).some(value => value === PermissionsAndroid.RESULTS.GRANTED);
   if (!granted) throw new Error('Location permission denied');
 }
