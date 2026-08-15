@@ -92,8 +92,8 @@ android {
         applicationId "com.myclawapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 110
-        versionName "0.2.95"
+        versionCode 111
+        versionName "0.2.96"
     }
     signingConfigs {
         debug {
