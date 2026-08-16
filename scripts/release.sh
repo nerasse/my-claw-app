@@ -9,8 +9,8 @@ set -euo pipefail
 # Usage: scripts/release.sh <version> <apk-path> [web-tarball]
 #   scripts/release.sh v0.2.16 android/app/build/outputs/apk/release/app-release.apk dist-web.tar.gz
 
-if [[ "$#" -ne 2 ]]; then
-  echo "usage: $0 <version> <apk-path>" >&2
+if [[ "$#" -lt 2 || "$#" -gt 3 ]]; then
+  echo "usage: $0 <version> <apk-path> [web-tarball]" >&2
   exit 1
 fi
 
