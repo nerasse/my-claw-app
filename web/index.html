@@ -13,6 +13,8 @@
 </head>
 <body>
 <div id="root"></div>
-<script src="./index.js"></script>
+<!-- Absolute, not relative: the client routes on /t/<thread>, and a relative src would ask the
+     server for /t/index.js, get the shell back and try to parse HTML as JavaScript. -->
+<script src="/index.js"></script>
 </body>
 </html>

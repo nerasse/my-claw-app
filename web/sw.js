@@ -27,6 +27,12 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // A deep link (/t/<thread>) is a navigation to the shell under another name: the server
+  // answers it with index.html, and offline the cached shell is the right answer too.
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).catch(() => caches.match('/').then(hit => hit || Response.error())));
+    return;
+  }
   // Anything that is not the shell is live state: never answered from a cache.
   if (!SHELL_FILES.includes(url.pathname) && url.pathname !== '/index.html') return;
 

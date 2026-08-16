@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { prefs, type ThemeMode } from '../core/prefs';
+import { applyWebTheme } from '../core/webTheme';
 import { ThemeContext, useResolvedTheme } from './index';
 
 export interface ThemeControl {
@@ -23,6 +24,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
   useEffect(() => prefs.subscribe(next => setMode(next.themeMode)), []);
 
   const theme = useResolvedTheme(mode);
+  // The cursor, the hover states, the focus ring, the scrollbars and the selection colour live
+  // in the document, not in the tree. No-op on Android.
+  useEffect(() => {
+    applyWebTheme(theme.palette, theme.dark);
+  }, [theme]);
+
   const control = useMemo<ThemeControl>(
     () => ({ mode, setMode: next => prefs.set('themeMode', next) }),
     [mode],

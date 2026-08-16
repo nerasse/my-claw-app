@@ -212,15 +212,71 @@ All of this assumes a secure context, see above.
 
 ## Layout
 
-Phase 1 is a phone layout in a browser: a column capped at 720 px, centred, everything else
-unchanged. It is honest, it ships, and it is already useful on a second screen.
+The app was written phone-first: one screen at a time, everything else behind a drawer. That
+shape is right at 400pt and wrong at 1600, so every widening is decided in one place,
+`src/core/layout.ts`, and keyed on the **window** rather than on the platform: a tablet in
+landscape is a small desktop, and a browser dragged narrow is a phone.
 
-Phase 2 is the actual reason to want a web client: permanent drawer, thread list and conversation
-side by side, keyboard shortcuts, drag and drop onto the composer. That is UX work on top of a
-working port, not part of it.
+| Width | What changes |
+| --- | --- |
+| < 720 | The layout the app was written for: slide-over drawer, bottom sheets, one screen. |
+| >= 1080 | The conversation list is a pinned column, the hamburger disappears, menus become centred dialogs, hit targets shrink to mouse size (`pointer: fine` only). |
+| >= 1440 | A page (settings, files, archives) opens *beside* the conversation instead of over it. |
+| any | The conversation is capped at 860pt and centred: past ~90 characters a line stops being readable, whatever the window does. |
 
-`useKeyboard` is a no-op on web, `SafeAreaView` insets are zero, and `BackHandler` needs
-`popstate` so the browser's back button walks the layer stack.
+`dense` is gated on `pointer: fine`, not on width: a touchscreen laptop keeps its tap targets.
+
+### Keyboard
+
+| Key | Effect |
+| --- | --- |
+| `Enter` / `Shift+Enter` | Send / newline. react-native-web will not do this on its own: it only calls `onSubmitEditing` when the field is single-line or blurs on submit, and the composer is neither, so `editorKeys.web.ts` cancels the newline and raises the send. |
+| `Tab` | Completes the highlighted slash command. |
+| `ArrowUp` on an empty composer | Brings back the last message sent. |
+| `Escape` | Closes the topmost layer: the same `handleBack` the Android back key calls. |
+| `Ctrl/Cmd+K` | Focuses the conversation search. The list *is* the palette. |
+| `Ctrl/Cmd+N` | New conversation. |
+| `Ctrl/Cmd+,` | Settings. |
+| `Ctrl/Cmd+/` | Command menu. |
+
+Shortcuts are bound on `window` in the **capture** phase, and that is not a detail:
+react-native-web's TextInput calls `stopPropagation()` on every key event, so a bubbling listener
+never fires while the composer has focus, i.e. exactly when a shortcut is wanted.
+
+### The address bar
+
+`/t/<threadId>` is the only address with content; everything else is a layer over it, and layers
+are not addressed, they are what Back closes first (`route.web.ts`).
+
+- A reload lands on the conversation you were in, and a link to one can be sent to another window.
+- Back closes the open layer and puts the entry back; with nothing left to close it walks the
+  conversations visited, then leaves the page.
+- The first sync after boot is a `replaceState`: restoring the last conversation must not leave a
+  Back step whose only effect is to unload the app.
+- Sub-agent threads are not addressed, for the same reason they are not stored as `lastThreadId`:
+  a sub-agent is a view of its parent, so a reload lands on the parent.
+- The server answers a deep link with `index.html` already, and sends an unpaired one to
+  `/pair?next=<path>` so a link survives the pairing it triggers.
+
+### What the document does that the tree cannot
+
+`webTheme.web.ts` injects one stylesheet, rebuilt on every theme change:
+
+- cursor and hover on `[role="button"]`, which is what Pressable renders;
+- a `:focus-visible` ring in the accent colour, keyboard only;
+- scrollbars in the palette, `::selection`, and the drop outline;
+- `user-select: text` on marked regions. react-native-web ships `Text` with `user-select: none`,
+  which on a desktop means a conversation cannot be copied at all.
+
+Drag and drop and paste (`fileDrop.web.ts`) land in the same staging path as the file picker:
+`pickFile()` already returns that shape, so a drop is the picker without the dialog.
+
+`document.title` carries the conversation name and the unread count. Web Push needs a secure
+context, so behind plain HTTP the tab strip is the only place a finished run can be announced.
+
+`useKeyboard` is a no-op on web, `SafeAreaView` insets are zero, and `BackHandler` is replaced by
+`hardwareBack.web.ts` (a no-op) plus `popstate`: registering the real one only prints
+"BackHandler is not supported on web" into the console.
 
 ## Risks
 
@@ -242,7 +298,7 @@ working port, not part of it.
 | 3. Distribution | CI builds `dist-web.tar.gz`, `myclaw web install` puts it in place | done |
 | 4. Bridge | voice, transfers with progress, downloads, playback | done |
 | 5. PWA | manifest, service worker, Web Push against the existing VAPID keys | done, needs TLS to activate |
-| 6. Desktop | two-pane layout, shortcuts, drag and drop | open |
+| 6. Desktop | breakpoint ladder, pinned list, side pane, shortcuts, routing, drag and drop | done |
 
 `nativeBridge.web.ts` no longer rejects anything: every method of the native interface has a
 browser implementation. Phase 5 ships but stays dormant until a certificate is in front, because
