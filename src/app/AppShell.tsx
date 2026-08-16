@@ -1169,6 +1169,9 @@ export function AppShell(): React.JSX.Element {
         case 'model.list.result':
           modelStore.replaceCatalog(frame);
           break;
+        case 'model.endpoints.result':
+          modelStore.replaceEndpoints(frame);
+          break;
         case 'skills.list.result':
           setSkills(frame.skills);
           setSkillsError(null);

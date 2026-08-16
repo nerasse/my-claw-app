@@ -14,7 +14,8 @@ export interface ContextTier {
   selected: boolean;
 }
 
-function shortTokens(tokens: number): string {
+/** A token count as a picker spells it, shared so a window and a route read the same way. */
+export function shortTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
   if (tokens >= 10_000) return `${Math.round(tokens / 1_000)}k`;
   return String(tokens);

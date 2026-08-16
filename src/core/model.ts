@@ -1,10 +1,14 @@
-import { useCallback, useMemo, useSyncExternalStore } from 'react';
-import type {
-  ContextState,
-  EffortState,
-  ModelListResultFrame,
-  ModelOption,
-  ModelResultFrame,
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { connection } from './connection';
+import {
+  encodeModelEndpoints,
+  type ContextState,
+  type EffortState,
+  type ModelEndpoint,
+  type ModelEndpointsResultFrame,
+  type ModelListResultFrame,
+  type ModelOption,
+  type ModelResultFrame,
 } from './protocol';
 
 type Listener = () => void;
@@ -13,6 +17,31 @@ const EMPTY: ModelListResultFrame = { type: 'model.list.result', models: [], def
 Object.freeze(EMPTY);
 
 const NO_EFFORT: EffortState = { level: '', levels: [], supported: false };
+
+/** Separates an endpoint pin from the model it routes. The grammar is the server's:
+ *  docs/model-identity.md, `provider/apiId@endpoint`. */
+const PIN = '@';
+
+/** The reference without its route: what the catalogue lists, and what a label is read from. */
+export function withoutEndpoint(ref: string): string {
+  const at = ref.lastIndexOf(PIN);
+  return at > 0 ? ref.slice(0, at) : ref;
+}
+
+/** The route a reference pins, if any. */
+export function endpointOf(ref: string): string | undefined {
+  const at = ref.lastIndexOf(PIN);
+  return at > 0 ? ref.slice(at + 1) : undefined;
+}
+
+/** The routes of one model, and whether the answer is in. `pending` is what the step shows. */
+export interface EndpointState {
+  pending: boolean;
+  endpoints: ModelEndpoint[];
+}
+
+const PENDING: EndpointState = { pending: true, endpoints: [] };
+Object.freeze(PENDING);
 
 interface ThreadModel {
   /** What runs on the thread now: this chat's pick, an agent pin, or the configured default. */
@@ -35,6 +64,9 @@ class ModelStoreImpl {
   /** The catalogue keyed by id, rebuilt with it: naming a model is a lookup, not a scan. */
   private index = new Map<string, ModelOption>();
   private perThread = new Map<string, ThreadModel>();
+  /** Routes per model, kept for the life of the connection: the server caches them too, and a
+   *  picker walked back and forth would otherwise ask OpenRouter again on every visit. */
+  private endpoints = new Map<string, EndpointState>();
   private listeners = new Set<Listener>();
 
   subscribe(listener: Listener): () => void {
@@ -49,7 +81,36 @@ class ModelStoreImpl {
   }
 
   catalogModel(id: string): string {
-    return this.index.get(id)?.label ?? id;
+    const listed = this.index.get(id);
+    if (listed) return listed.label;
+    // A pinned reference is not listed: the catalogue holds the model, the pin is the route on
+    // top of it, and the label has to say both or the header would name a model nobody picked.
+    const bare = withoutEndpoint(id);
+    const route = endpointOf(id);
+    if (!route) return id;
+    return `${this.index.get(bare)?.label ?? bare} @ ${route}`;
+  }
+
+  /** The routes of a model, as far as this store knows. Pending until the server answers. */
+  endpointsOf(model: string): EndpointState {
+    return this.endpoints.get(model) ?? PENDING;
+  }
+
+  /** Asks for the routes of a model, once. Called from an effect, never while rendering. */
+  requestEndpoints(model: string): void {
+    if (this.endpoints.has(model)) return;
+    this.endpoints.set(model, PENDING);
+    connection.send(encodeModelEndpoints(model)).catch(() => {
+      // A send that never left means no answer is coming: drop the placeholder so entering the
+      // step again asks once more, rather than spinning forever after a reconnect.
+      this.endpoints.delete(model);
+      this.emit();
+    });
+  }
+
+  replaceEndpoints(frame: ModelEndpointsResultFrame): void {
+    this.endpoints.set(frame.model, { pending: false, endpoints: frame.endpoints });
+    this.emit();
   }
 
   threadModel(threadId: string | null): ThreadModel | null {
@@ -66,6 +127,9 @@ class ModelStoreImpl {
   replaceCatalog(frame: ModelListResultFrame): void {
     this.catalog = frame;
     this.index = new Map(frame.models.map(model => [model.id, model]));
+    // A fresh catalogue can have renamed or dropped a model, and a route list is only ever read
+    // against the model it belongs to: the cheapest correct answer is to ask again.
+    this.endpoints.clear();
     this.emit();
   }
 
@@ -107,6 +171,21 @@ export function useModelCatalog(): ModelListResultFrame {
  */
 export function useModelIndex(models: ModelOption[]): Map<string, ModelOption> {
   return useMemo(() => new Map(models.map(model => [model.id, model])), [models]);
+}
+
+/**
+ * The routes of a model, requested on first read. `null` asks for nothing: the step is not open,
+ * and a hook cannot be called conditionally.
+ */
+export function useModelEndpoints(model: string | null): EndpointState {
+  const snapshot = useCallback(
+    () => (model ? modelStore.endpointsOf(model) : PENDING),
+    [model],
+  );
+  useEffect(() => {
+    if (model) modelStore.requestEndpoints(model);
+  }, [model]);
+  return useSyncExternalStore(subscribeToModels, snapshot);
 }
 
 export function useThreadModel(threadId: string | null): ThreadModel | null {

@@ -328,6 +328,36 @@ export interface ModelOption {
   effort?: string;
   /** Whether the model accepts image input; the fallback picker only offers vision-capable ones. */
   vision?: boolean;
+  /**
+   * The model is served by several providers and one of them can be pinned, so the picker offers
+   * a routing step and asks `model.endpoints` for the routes. Absent means a single route.
+   */
+  routes?: boolean;
+}
+
+/** One route of a routable model: what pinning it costs, and whether it is healthy right now. */
+export interface ModelEndpoint {
+  /** The reference to select to pin this route: the model, then `@`, then the endpoint tag. */
+  id: string;
+  /** The provider behind the route, spelled the way its own catalogue spells it. */
+  label: string;
+  /** USD per million tokens. */
+  promptUsd?: number;
+  completionUsd?: number;
+  context?: number;
+  /** Degraded or down on the provider's own health flag: worth showing, not worth hiding. */
+  degraded?: boolean;
+  uptime30m?: number;
+}
+
+/**
+ * The routes of one model, cheapest first. An empty list means the model has a single route,
+ * which is every provider but OpenRouter, and the picker then skips the step.
+ */
+export interface ModelEndpointsResultFrame {
+  type: 'model.endpoints.result';
+  model: string;
+  endpoints: ModelEndpoint[];
 }
 
 export interface EffortState {
@@ -1133,6 +1163,7 @@ export type ServerFrame =
   | LogsTailResultFrame
   | VoiceModeResultFrame
   | ModelListResultFrame
+  | ModelEndpointsResultFrame
   | SkillsListResultFrame
   | ToolsListResultFrame
   | WorkspacesListResultFrame
@@ -1199,6 +1230,7 @@ const FRAME_TYPES = new Set([
   'logs.tail.result',
   'voice.mode.result',
   'model.list.result',
+  'model.endpoints.result',
   'skills.list.result',
   'tools.list.result',
   'workspaces.list.result',
@@ -1371,6 +1403,12 @@ export function encodeApprovalResponse(id: string, accepted: boolean): string {
 
 export function encodeModelList(): string {
   return JSON.stringify({ type: 'model.list' });
+}
+
+/** Asks for the routes of one model. Sent when the picker enters the routing step, never before:
+ *  the server calls OpenRouter for it, and a catalogue-wide prefetch would be hundreds of calls. */
+export function encodeModelEndpoints(model: string): string {
+  return JSON.stringify({ type: 'model.endpoints', model });
 }
 
 export function encodeSkillsList(): string {

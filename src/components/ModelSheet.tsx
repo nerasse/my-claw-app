@@ -2,8 +2,15 @@ import React, { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ActionSheet, type SheetOption } from './ActionSheet';
 import { connection } from '../core/connection';
-import { useModelCatalog, useModelIndex, useThreadModel } from '../core/model';
-import { contextSummary, contextTiers } from '../core/context';
+import {
+  endpointOf,
+  useModelCatalog,
+  useModelEndpoints,
+  useModelIndex,
+  useThreadModel,
+  withoutEndpoint,
+} from '../core/model';
+import { contextSummary, contextTiers, shortTokens } from '../core/context';
 import {
   font,
   radius,
@@ -16,6 +23,7 @@ import {
   encodeModelContextSet,
   encodeModelEffortSet,
   encodeModelSet,
+  type ModelEndpoint,
   type ModelOption,
 } from '../core/protocol';
 
@@ -58,6 +66,23 @@ function effortLabel(level: string): string {
   return level === 'none' ? 'none (no reasoning)' : level;
 }
 
+/** Price per million tokens, at the precision a route is actually compared on. */
+function usd(amount: number): string {
+  return amount >= 1 ? `$${amount.toFixed(2)}` : `$${amount.toFixed(3)}`;
+}
+
+/** What a route costs and whether it is healthy, on the one line under its provider name. */
+function endpointHint(route: ModelEndpoint): string | undefined {
+  const parts: string[] = [];
+  if (route.degraded) parts.push('degraded');
+  if (route.promptUsd !== undefined && route.completionUsd !== undefined) {
+    parts.push(`${usd(route.promptUsd)} in / ${usd(route.completionUsd)} out per Mtok`);
+  }
+  if (route.context !== undefined) parts.push(`${shortTokens(route.context)} ctx`);
+  if (route.uptime30m !== undefined) parts.push(`${route.uptime30m.toFixed(1)}% up`);
+  return parts.length > 0 ? parts.join(' · ') : undefined;
+}
+
 /** Where the model sits, so a hit found across groups still says which provider it came from. */
 function searchHint(model: ModelOption): string | undefined {
   const parts = [
@@ -67,8 +92,9 @@ function searchHint(model: ModelOption): string | undefined {
   return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
-/** Which screen of the flow is showing. The flow is always model -> [effort] -> [context] -> confirm. */
-export type PickerStage = 'model' | 'effort' | 'context' | 'confirm';
+/** Which screen of the flow is showing. The flow is always model -> [route] -> [effort] ->
+ *  [context] -> confirm. */
+export type PickerStage = 'model' | 'endpoint' | 'effort' | 'context' | 'confirm';
 
 /**
  * The whole state of one picker run, owned by the shell so the hardware back key can walk it.
@@ -83,7 +109,9 @@ export interface PickerState {
   /** Search text at the model stage. While it is set the list is flat and crosses every group:
    *  a catalog of 400 models is not browsed, it is searched. */
   query?: string;
-  /** Staged choices: nothing is sent until the confirm step. */
+  /** Staged choices: nothing is sent until the confirm step. The model carries its route pin,
+   *  because the pin is part of the reference the server is asked to run (docs/model-identity.md
+   *  server side): staging a route rewrites this string rather than adding a field. */
   model?: string;
   /** The staged effort: a level, or null for a deliberate "back to default". Absent means the
    *  effort step was not visited, which is not the same thing. */
@@ -190,12 +218,21 @@ export function useModelPickerFlow({
 } {
   const { stage, path } = state;
   const byId = useModelIndex(models);
-  const activeLabel = byId.get(activeId)?.label ?? activeId;
+  // Every catalogue lookup is on the bare reference: the route is pinned on top of a model, and
+  // the catalogue lists the model. Reading the pinned string here is what made a pinned chat
+  // show no effort levels and no window.
+  const activeBare = withoutEndpoint(activeId);
+  const activeLabel = byId.get(activeBare)?.label ?? activeBare;
   const stagedModel = state.model ?? activeId;
-  const stagedEntry = byId.get(stagedModel);
-  const stagedLabel = stagedEntry?.label ?? stagedModel;
-  const stagedIsTag = stagedModel.startsWith('tag:');
+  const stagedBare = withoutEndpoint(stagedModel);
+  const stagedRoute = endpointOf(stagedModel);
+  const stagedEntry = byId.get(stagedBare);
+  const stagedLabel = stagedEntry?.label ?? stagedBare;
+  const stagedIsTag = stagedBare.startsWith('tag:');
   const effortCurrent = effort?.current ?? '';
+  // Asked for only while the step is open: the server calls OpenRouter to answer, so the routes
+  // of a model nobody staged are a call nobody needed.
+  const routes = useModelEndpoints(stage === 'endpoint' ? stagedBare : null);
 
   // Both held: they feed the memo that builds the rows, and a fresh `[]` on every render would
   // invalidate it every time.
@@ -258,13 +295,14 @@ export function useModelPickerFlow({
     (from: PickerStage, staged: Partial<PickerState>): void => {
       const next = { ...state, ...staged, trail: [...state.trail, from] };
       const model = next.model ?? activeId;
-      const entry = byId.get(model);
+      const bare = withoutEndpoint(model);
+      const entry = byId.get(bare);
       const levels = effort ? (entry?.effortLevels ?? []) : [];
       // A subject that already pins an effort keeps the step even on a model with no levels: the
       // pin is dead weight there and must stay removable. Only the "default" row is shown then.
       const effortStep = effort && (levels.length > 0 || effortCurrent !== '');
       // Both pins belong to the tag, so neither step is offered on top of one.
-      const tagPins = skipPinsOnTag && model.startsWith('tag:');
+      const tagPins = skipPinsOnTag && bare.startsWith('tag:');
       const showEffort = Boolean(effortStep) && !tagPins;
       const ceilings =
         context && !tagPins
@@ -274,11 +312,17 @@ export function useModelPickerFlow({
               next.context ?? context.current,
             )
           : [];
-      if (from === 'model' && showEffort) {
+      // A model served by several providers gets the routing step first: the route decides the
+      // price and the window the later steps are then chosen under.
+      if (from === 'model' && entry?.routes === true) {
+        onStateChange({ ...next, stage: 'endpoint' });
+        return;
+      }
+      if ((from === 'model' || from === 'endpoint') && showEffort) {
         onStateChange({ ...next, stage: 'effort' });
         return;
       }
-      if ((from === 'model' || from === 'effort') && ceilings.length > 0) {
+      if (from !== 'context' && from !== 'confirm' && ceilings.length > 0) {
         onStateChange({ ...next, stage: 'context' });
         return;
       }
@@ -294,6 +338,13 @@ export function useModelPickerFlow({
       skipPinsOnTag,
       state,
     ],
+  );
+
+  /** Re-picking the model already in force keeps the route it is pinned to: the routing step is
+   *  then a change of route, not a silent reset to automatic. Any other model starts unpinned. */
+  const keepRoute = useCallback(
+    (id: string): string => (id === activeBare ? activeId : id),
+    [activeBare, activeId],
   );
 
   const back = useCallback((): void => {
@@ -319,8 +370,8 @@ export function useModelPickerFlow({
           key: model.id,
           label: model.label,
           hint: searchHint(model),
-          selected: model.id === activeId,
-          onPress: () => advance('model', { model: model.id }),
+          selected: model.id === activeBare,
+          onPress: () => advance('model', { model: keepRoute(model.id) }),
         });
       }
       if (matches.length === 0) {
@@ -360,11 +411,41 @@ export function useModelPickerFlow({
           key: model.id,
           label: model.label,
           hint: model.id === model.label ? undefined : model.id,
-          selected: model.id === activeId,
-          onPress: () => advance('model', { model: model.id }),
+          selected: model.id === activeBare,
+          onPress: () => advance('model', { model: keepRoute(model.id) }),
         });
       }
       if (path.length > 0) rows.push(...backRow);
+    } else if (stage === 'endpoint') {
+      head = `Route for ${stagedLabel} · current: ${stagedRoute ?? 'automatic'}`;
+      rows.push({
+        key: 'auto',
+        label: 'Automatic',
+        // What OpenRouter does when nothing is pinned: it picks, and it reroutes on a failure.
+        hint: 'let the router pick, and fall back on its own',
+        selected: stagedRoute === undefined,
+        onPress: () => advance('endpoint', { model: stagedBare }),
+      });
+      for (const route of routes.endpoints) {
+        rows.push({
+          key: route.id,
+          label: route.label,
+          hint: endpointHint(route),
+          selected: route.id === stagedModel,
+          onPress: () => advance('endpoint', { model: route.id }),
+        });
+      }
+      if (routes.pending) {
+        rows.push({ key: 'pending', label: 'loading routes...', onPress: () => {} });
+      } else if (routes.endpoints.length === 0) {
+        rows.push({
+          key: 'none',
+          label: 'no route of its own',
+          hint: 'the provider lists none for this model',
+          onPress: () => {},
+        });
+      }
+      rows.push(...backRow);
     } else if (stage === 'effort') {
       head = `Effort for ${stagedLabel} · current: ${effortCurrent ? effortLabel(effortCurrent) : 'default'}`;
       for (const level of effortLevels) {
@@ -412,6 +493,7 @@ export function useModelPickerFlow({
               : null;
       const parts = [
         `model: ${stagedLabel}`,
+        stagedRoute === undefined ? null : `route: ${stagedRoute}`,
         effortLine,
         state.context === undefined
           ? null
@@ -434,8 +516,9 @@ export function useModelPickerFlow({
 
     return { options: rows, preview: head };
   }, [
-    activeId,
+    activeBare,
     activeLabel,
+    keepRoute,
     advance,
     back,
     context,
@@ -451,6 +534,9 @@ export function useModelPickerFlow({
     path,
     query,
     rootOption,
+    routes,
+    stagedBare,
+    stagedRoute,
     skipPinsOnTag,
     stagedEntry,
     stagedIsTag,
