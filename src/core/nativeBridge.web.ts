@@ -172,11 +172,42 @@ class WebConnection {
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private wanted = false;
+  private lifecycleBound = false;
 
   connect(url: string): void {
     this.url = url;
     this.wanted = true;
+    this.watchLifecycle();
     this.open();
+  }
+
+  /**
+   * A phone browser freezes a backgrounded tab and the socket dies with it, which is why the
+   * client came back to a "disconnected" banner after switching apps. Nothing can hold that
+   * connection open (only the native app has a foreground service), so the answer is to notice
+   * the return immediately: on visibility or network coming back, the backoff is dropped and a
+   * reconnect happens now rather than up to thirty seconds later.
+   */
+  private watchLifecycle(): void {
+    if (this.lifecycleBound) return;
+    this.lifecycleBound = true;
+
+    const revive = (): void => {
+      if (!this.wanted) return;
+      if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
+      this.attempt = 0;
+      if (this.retryTimer) {
+        clearTimeout(this.retryTimer);
+        this.retryTimer = null;
+      }
+      this.open();
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') revive();
+    });
+    window.addEventListener('online', revive);
+    window.addEventListener('pageshow', revive);
   }
 
   disconnect(): void {
