@@ -755,6 +755,50 @@ export interface SubAgentEntry {
   createdAt: string;
 }
 
+/** One paired client, as the server lists them -- docs/web-pairing.md in the my-claw repo. */
+export interface DeviceRecord {
+  deviceId: string;
+  name: string;
+  kind: 'app' | 'web';
+  owner: string;
+  enabled: boolean;
+  createdAt?: string;
+  lastSeenAt?: string;
+  /** True for this device: the UI refuses to let it revoke the credential it is talking on. */
+  self?: boolean;
+}
+
+export interface DeviceListResultFrame {
+  type: 'device.list.result';
+  devices: DeviceRecord[];
+}
+
+export interface DeviceRevokeResultFrame {
+  type: 'device.revoke.result';
+  ok: boolean;
+  deviceId: string;
+  error?: string;
+}
+
+/** What a pairing code stands for, shown before the owner approves. Carries no credential. */
+export interface DevicePairInfoFrame {
+  type: 'device.pair.info';
+  code: string;
+  /** Three digits that must match what the waiting browser shows. */
+  verification: string;
+  origin?: string;
+  ip?: string;
+  userAgent?: string;
+  expiresAt: number;
+}
+
+export interface DevicePairResultFrame {
+  type: 'device.pair.result';
+  ok: boolean;
+  deviceId?: string;
+  error?: string;
+}
+
 export interface SubAgentsListResultFrame {
   type: 'subagents.list.result';
   /** The parent conversation the roster belongs to. */
@@ -1113,6 +1157,10 @@ export type ServerFrame =
   | JobsListResultFrame
   | JobsRunsResultFrame
   | SubAgentsListResultFrame
+  | DeviceListResultFrame
+  | DeviceRevokeResultFrame
+  | DevicePairInfoFrame
+  | DevicePairResultFrame
   | TagsResultFrame
   | ProvidersEnvResultFrame
   | NotificationsInfoFrame
@@ -1120,6 +1168,10 @@ export type ServerFrame =
   | ErrorFrame;
 
 const FRAME_TYPES = new Set([
+  'device.list.result',
+  'device.revoke.result',
+  'device.pair.info',
+  'device.pair.result',
   'chat.message',
   'location.capabilities',
   'chat.location',

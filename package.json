@@ -19,6 +19,7 @@
     "@react-native-community/datetimepicker": "^9.1.0",
     "cronstrue": "^3.24.0",
     "expo": "~57.0.11",
+    "expo-camera": "^57.0.3",
     "expo-modules-core": "~57.0.10",
     "expo-unified-push": "^0.6.0",
     "expo-video": "~57.0.2",

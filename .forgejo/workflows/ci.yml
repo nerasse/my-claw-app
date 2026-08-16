@@ -34,3 +34,46 @@ jobs:
 
       - name: Unit tests
         run: npm test -- --ci
+
+  web:
+    name: Web bundle
+    runs-on: debian-bookworm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node
+        run: |
+          apt-get update
+          apt-get install -y curl ca-certificates
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y nodejs
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The same Metro that builds the Android bundle, with the web config: a resolution that
+      # breaks on the web target must fail here rather than at `myclaw web install`.
+      - name: Build the web bundle
+        run: |
+          mkdir -p dist-web
+          ./node_modules/.bin/metro build index.web.js \
+            --platform web --dev false \
+            --config metro.config.web.js \
+            --out dist-web/index.js
+          cp web/index.html dist-web/index.html
+
+      # The check that matters: react-native-web must not have leaked into anything Android.
+      - name: Prove the bundles stay apart
+        run: |
+          grep -q "react-native-web" dist-web/index.js
+          test ! -f android/app/build/generated/assets/react/release/index.android.bundle
+
+      - name: Package
+        run: tar -czf dist-web.tar.gz dist-web
+
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist-web
+          path: dist-web.tar.gz

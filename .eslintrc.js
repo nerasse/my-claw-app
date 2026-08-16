@@ -3,6 +3,13 @@ module.exports = {
   extends: '@react-native',
   overrides: [
     {
+      // The service worker runs in a worker scope: `self` is its global, and it is never
+      // bundled with the app.
+      files: ['web/sw.js'],
+      env: { serviceworker: true, browser: true },
+      parserOptions: { sourceType: 'script' },
+    },
+    {
       // Jest globals live only in the test runner, not in the bundle.
       files: ['jest.setup.js', '__tests__/**/*.{js,ts,tsx}', 'src/**/__tests__/**/*.{ts,tsx}'],
       env: { jest: true },

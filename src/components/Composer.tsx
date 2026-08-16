@@ -14,6 +14,7 @@ import type { VoiceRecording } from '../core/nativeBridge';
 import type { LocationData } from '../core/protocol';
 import { StagedVoiceList } from './StagedVoiceList';
 import { VoiceRecorder } from './VoiceRecorder';
+import { micSupported } from '../core/platform';
 import type { PendingAttachment } from '../core/upload';
 import { formatBytes } from '../core/utils';
 import { font, lineHeightFor, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -98,7 +99,9 @@ export function Composer({
    * the two would compete for the same corner. Once anything is staged the send arrow appears
    * beside it, so adding another note and sending are both one tap away.
    */
-  const micVisible = onRecorded !== undefined && empty;
+  // A browser on a plain-HTTP origin has no microphone at all: no button rather than a button
+  // that fails at the moment it is held.
+  const micVisible = onRecorded !== undefined && empty && micSupported;
   /**
    * Mid-run the corner belongs to whatever is composed. A message sent while the agent is
    * answering is injected into that same turn (the server's mailbox, docs/injection.md), so a

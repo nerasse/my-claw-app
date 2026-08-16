@@ -41,9 +41,10 @@ added anywhere in the 28k lines above it.
 | `connect` / `disconnect` / `sendMessage` | `WebSocket` plus an outbox, same `claw:ws:state` / `claw:ws:message` / `claw:ws:outbox` events |
 | device id and token (Keystore) | nothing to store: the browser is authenticated by an `HttpOnly` cookie set at pairing, and the socket URL carries no credential |
 | `pickFile` | hidden `<input type="file" multiple>` |
-| voice recording plus levels | `MediaRecorder` and an `AnalyserNode`, RMS normalised to 0..1, same ~16 Hz `claw:voice:level` |
+| voice recording plus levels | `MediaRecorder` and an `AnalyserNode`, RMS normalised to 0..1, pushed at the same ~16 Hz as the native recorder so the waveform animates identically |
 | voice playback | `HTMLAudioElement`, same `claw:voice:playback` events |
-| transfers with progress | `fetch` plus a `ReadableStream` reader, same `claw:transfer:progress` payload |
+| upload with progress | `XMLHttpRequest`: `fetch` has no upload progress event, and a composer that shows nothing while a 40 MB video crawls is what the native path exists to avoid |
+| download, cache, save | `fetch` plus a `ReadableStream` reader for real progress, then an anchor click; there is no gallery in a browser, everything lands where downloads land |
 | location | already handled, `browserLocation()` |
 | capabilities | `{ accessibility: false, notificationListener: false, wssConnection: true }` |
 | notifications | Web Push, see below |
@@ -77,6 +78,10 @@ RNW untouched, and it is the visual core: test it in the first hour.
 to a non-draggable list, which degrades one screen and blocks nothing.
 
 ## Build
+
+The CI `web` job runs the same Metro with the web config on every push, so a resolution that
+breaks the browser target fails there rather than at `myclaw web install`. It also asserts the two
+bundles stay apart: `react-native-web` must be in the web bundle and nowhere near the Android one.
 
 Metro, not Vite. The Babel preset already handles the Flow syntax shipped by RN packages, and Vite
 plugins for react-native-web trip on exactly that.
@@ -158,6 +163,15 @@ What that means for this codebase:
 The Devices screen (list, last seen, revoke) does live here: `device.list` and `device.revoke` are
 plain frames, one more file under `src/app/`, shared with Android.
 
+## Capabilities, not platform guesses
+
+`src/core/platform.ts` (and its web twin) answers what this build can physically do: `micSupported`
+is `navigator.mediaDevices?.getUserMedia` being a function, which is false on an insecure origin,
+and `scannerSupported` is false on the web because a browser pairing a browser has both codes on
+one screen. The composer hides the mic when it cannot record, and the Devices screen offers Scan
+only where a camera exists. A button that fails at the moment it is pressed is worse than no
+button.
+
 ## Secure context, the hard prerequisite
 
 The deployment is private (tailnet and LAN, no public record, no SSO) but it still needs HTTPS,
@@ -183,18 +197,18 @@ Getting the certificate is a server-side question, three options ranked in
 
 All of this assumes a secure context, see above.
 
-- `manifest.json`, standalone display, maskable icon, theme colour from the active palette.
-- A service worker for the shell and for push. No offline caching of conversations in v1: the
-  session lives on the server, a stale local copy is a bug factory.
-- Push: the server already generates a VAPID key pair (`~/.my-claw/push/vapid.json`) and already
-  sends the public key in the `notifications.info` frame. Android goes through UnifiedPush, where
-  the endpoint URL is the secret and no signing is needed. A browser subscription is real Web
-  Push and requires VAPID signing, which the server can do today: `web-push` is already a
-  dependency. So `notifications.register` gains an `endpoint` with `p256dh` and `auth` keys, and
-  the sender picks signed or plain based on the subscription shape.
-- `notificationIdFor` (FNV-1a) has to be reimplemented identically in the service worker, same as
-  in `src/core/notifications.ts`, or a second run on a thread stacks a notification instead of
-  replacing it.
+- `web/manifest.webmanifest`, standalone display, maskable icon, theme colour from the palette.
+- `web/sw.js` caches the shell and nothing else. A conversation is server state and a stale local
+  copy is a bug factory; the shell is cached so restarting the agent does not turn a reload into a
+  dead page. A 401 is never cached, or a dead session would lock the client out until the cache is
+  cleared by hand.
+- Push needed no server change at all. The server already encrypts every payload with Web Push
+  and VAPID (RFC 8291), because the UnifiedPush connector on Android demands it, and a browser
+  subscription has the same shape: endpoint, `p256dh`, `auth`. `notifications.register` carries
+  it unchanged.
+- `notificationIdFor` (FNV-1a) is implemented three times now: server, app, service worker. It is
+  a wire contract, and a change in one without the others silently stops a second run from
+  replacing the notification of the first.
 
 ## Layout
 
@@ -220,15 +234,23 @@ working port, not part of it.
 
 ## Phases
 
-| Phase | Content | Effort |
+| Phase | Content | State |
 | --- | --- | --- |
-| 0. Spike | export web, minimal bridge (connect, send, events), one thread, streaming visible | 0.5 d |
-| 1. Bridge | files, images, voice, transfers, markdown, the five shims | 2 d |
-| 2. Pairing | cookie handling in the bridge, 401 to `/pair`, Devices screen (the pairing shell itself is server-side) | 0.5 d |
-| 3. Ship | CI job, `myclaw web install`, static serving in the adapter, nginx vhost, PWA manifest, service worker, Web Push | 2 d |
-| 4. Desktop | two-pane layout, shortcuts, drag and drop | separate |
+| 0. Spike | export web, minimal bridge, one thread, streaming visible | done, v0.3.0 |
+| 1. Origin | scheme and credential derived from the page, no token in a URL | done |
+| 2. Pairing | server-side shell and QR, Devices screen in the app, code approval | done |
+| 3. Distribution | CI builds `dist-web.tar.gz`, `myclaw web install` puts it in place | done |
+| 4. Bridge | voice, transfers with progress, downloads, playback | done |
+| 5. PWA | manifest, service worker, Web Push against the existing VAPID keys | done, needs TLS to activate |
+| 6. Desktop | two-pane layout, shortcuts, drag and drop | open |
 
-Phase 0 decides whether the whole approach holds. Nothing else starts before it is green.
+`nativeBridge.web.ts` no longer rejects anything: every method of the native interface has a
+browser implementation. Phase 5 ships but stays dormant until a certificate is in front, because
+the service worker and the Push API only exist in a secure context.
+
+The QR scanner is Android only, in `PairScanner.tsx` on `expo-camera`, with a `.web.tsx` twin that
+keeps the camera out of the browser bundle entirely. It costs 8 MB of APK, which is the price of
+not typing eight characters.
 
 ## Non-goals
 

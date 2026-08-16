@@ -176,7 +176,9 @@ import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
 import { locationPreview } from '../core/locationPreview';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
+import { devicesStore } from '../core/devices';
 import { SkillsScreen } from './SkillsScreen';
+import { DevicesScreen } from './DevicesScreen';
 import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
@@ -470,6 +472,7 @@ export function AppShell(): React.JSX.Element {
     | 'provider-env'
     | 'tags'
     | 'skills'
+    | 'devices'
     | 'workspaces'
     | 'workspace'
     | 'instruction'
@@ -1023,6 +1026,18 @@ export function AppShell(): React.JSX.Element {
         }
         case 'subagents.list.result':
           subAgentStore.receive(frame);
+          break;
+        case 'device.list.result':
+          devicesStore.onList(frame);
+          break;
+        case 'device.revoke.result':
+          devicesStore.onRevoked(frame);
+          break;
+        case 'device.pair.info':
+          devicesStore.onPairInfo(frame);
+          break;
+        case 'device.pair.result':
+          devicesStore.onPairResult(frame);
           break;
         case 'chat.stream.start':
           // The agent is answering, so no command result is coming: a placeholder left by a
@@ -3369,6 +3384,8 @@ export function AppShell(): React.JSX.Element {
               ) : (
                 <EmptyCategoryScreen title="Config" onBack={() => setSettingsPage('index')} />
               )
+            ) : settingsPage === 'devices' ? (
+              <DevicesScreen onBack={() => setSettingsPage('index')} />
             ) : settingsPage === 'skills' ? (
               <SkillsScreen
                 skills={skills}

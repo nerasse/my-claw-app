@@ -4,8 +4,10 @@ set -euo pipefail
 # One-command release flow: create a tagged release with the APK, then prune old APKs.
 # The attachment is named after the version (my-claw-app-<version>.apk) so a build can
 # always be told apart from the next one without looking at metadata.
-# Usage: scripts/release.sh <version> <apk-path>
-#   scripts/release.sh v0.2.16 android/app/build/outputs/apk/release/app-release.apk
+# The web bundle rides along when it is built: the server pulls it with `myclaw web install`,
+# and a release without it leaves the browser client pinned to the previous version.
+# Usage: scripts/release.sh <version> <apk-path> [web-tarball]
+#   scripts/release.sh v0.2.16 android/app/build/outputs/apk/release/app-release.apk dist-web.tar.gz
 
 if [[ "$#" -ne 2 ]]; then
   echo "usage: $0 <version> <apk-path>" >&2
@@ -14,7 +16,9 @@ fi
 
 VERSION="$1"
 APK="$2"
+WEB_TARBALL="${3:-}"
 ASSET_NAME="my-claw-app-${VERSION}.apk"
+WEB_ASSET_NAME="dist-web.tar.gz"
 
 cd "$(dirname "$0")/.."
 
@@ -33,6 +37,17 @@ elif fj release asset create "$VERSION" "$tmp/$ASSET_NAME" "$ASSET_NAME"; then
   echo "release $VERSION already existed, added $ASSET_NAME"
 else
   echo "release $VERSION already carries $ASSET_NAME, nothing to attach" >&2
+fi
+
+if [[ -n "$WEB_TARBALL" ]]; then
+  if [[ -f "$WEB_TARBALL" ]]; then
+    cp "$WEB_TARBALL" "$tmp/$WEB_ASSET_NAME"
+    fj release asset create "$VERSION" "$tmp/$WEB_ASSET_NAME" "$WEB_ASSET_NAME" \
+      || echo "release $VERSION already carries $WEB_ASSET_NAME" >&2
+  else
+    echo "web tarball not found: $WEB_TARBALL" >&2
+    exit 1
+  fi
 fi
 
 bash scripts/cleanup-apks.sh

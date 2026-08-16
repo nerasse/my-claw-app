@@ -8,6 +8,9 @@ module.exports = {
   // The gesture engine and the zoom library ship untranspiled ESM; without them in the
   // allow-list babel-jest refuses to parse the import chain of the app. marked is a direct
   // parse target of the markdown safety tests (zero-dependency ESM).
+  //
+  // expo-camera is deliberately NOT here: transforming the expo sources drags the native winter
+  // runtime into the test process and breaks every suite. It is mocked instead (__mocks__/).
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-gesture-handler|react-native-reanimated|react-native-worklets|react-native-sortables|@likashefqet/react-native-image-zoom|marked)/)',
   ],

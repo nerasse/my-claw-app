@@ -7,7 +7,7 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other';
+  key: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'mcps' | 'workspaces' | 'config' | 'other';
 }> = [
   {
     title: 'General',
@@ -55,6 +55,12 @@ const CATEGORIES: Array<{
     key: 'mcps',
   },
   {
+    title: 'Devices',
+    hint: 'paired phones and browsers, pairing approval',
+    accessibilityLabel: 'Open devices',
+    key: 'devices',
+  },
+  {
     title: 'Config',
     hint: 'the raw config.json',
     accessibilityLabel: 'Open config',
@@ -84,7 +90,7 @@ export function SettingsScreen({
   providersCount: number;
   onBack: () => void;
   onOpenCategory: (
-    category: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'mcps' | 'workspaces' | 'config' | 'other',
+    category: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'mcps' | 'workspaces' | 'config' | 'other',
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

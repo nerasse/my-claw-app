@@ -261,10 +261,6 @@ class WebConnection {
 
 const connection = new WebConnection();
 
-function unsupported(feature: string): Promise<never> {
-  return Promise.reject(new Error(`${feature} is not implemented on web yet`));
-}
-
 /** Phase 0 identity: whatever the pairing flow will later store, read from localStorage. */
 function readDeviceInfo(): DeviceInfoNative {
   return {
@@ -272,6 +268,166 @@ function readDeviceInfo(): DeviceInfoNative {
     token: localStorage.getItem('claw:token') ?? '',
   };
 }
+
+/** Emits the same progress events the native transfers do, so the UI needs no branch. */
+function emitTransfer(id: string, bytes: number, total: number): void {
+  deviceEvents.emit(TRANSFER_PROGRESS_EVENT, { id, bytes, total });
+}
+
+/**
+ * Uploads with XMLHttpRequest rather than fetch: fetch has no upload progress event, and a
+ * composer that shows nothing while a 40 MB video crawls is what the native side exists to avoid.
+ */
+function uploadWithProgress(
+  blob: Blob,
+  url: string,
+  headers: Record<string, string>,
+  transferId: string,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', url, true);
+    // Same-origin: the session cookie rides along and no credential is built by hand.
+    request.withCredentials = true;
+    for (const [name, value] of Object.entries(headers)) request.setRequestHeader(name, value);
+    request.upload.onprogress = event => emitTransfer(transferId, event.loaded, event.total || blob.size);
+    request.onload = () => {
+      emitTransfer(transferId, blob.size, blob.size);
+      resolve({ status: request.status, body: request.responseText });
+    };
+    request.onerror = () => reject(new Error('upload failed'));
+    request.onabort = () => reject(new Error('upload aborted'));
+    request.send(blob);
+  });
+}
+
+/** Streams a download so the progress bar is real, and hands back the bytes as a blob. */
+async function fetchWithProgress(url: string, transferId: string): Promise<Blob> {
+  const response = await fetch(url, { credentials: 'same-origin' });
+  if (!response.ok) throw new Error(`download failed: HTTP ${response.status}`);
+  const total = Number(response.headers.get('content-length') ?? 0);
+  if (!response.body) return response.blob();
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      received += value.byteLength;
+      emitTransfer(transferId, received, total || received);
+    }
+  }
+  emitTransfer(transferId, received, total || received);
+  return new Blob(chunks as BlobPart[], {
+    type: response.headers.get('content-type') ?? 'application/octet-stream',
+  });
+}
+
+/** The browser's own "save as": an anchor click, which is the only portable trigger. */
+function saveBlob(blob: Blob, filename: string): void {
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Revoking immediately cancels the download in Firefox; one tick is enough.
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
+}
+
+interface Recording {
+  recorder: MediaRecorder;
+  stream: MediaStream;
+  context: AudioContext;
+  chunks: BlobPart[];
+  startedAt: number;
+  levelTimer: ReturnType<typeof setInterval>;
+}
+
+let recording: Recording | null = null;
+let player: HTMLAudioElement | null = null;
+let playerUri: string | null = null;
+
+function emitPlayback(playing: boolean): void {
+  deviceEvents.emit(VOICE_PLAYBACK_EVENT, {
+    uri: playerUri,
+    playing,
+    positionMs: Math.round((player?.currentTime ?? 0) * 1000),
+    durationMs: Number.isFinite(player?.duration ?? NaN) ? Math.round((player?.duration ?? 0) * 1000) : 0,
+  });
+}
+
+async function startWebRecording(): Promise<string> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    // Not a missing permission: an insecure origin has no mediaDevices at all, and the UI hides
+    // the button rather than letting this reach a user.
+    throw new Error('NO_MIC_PERMISSION');
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {
+    throw new Error('NO_MIC_PERMISSION');
+  });
+
+  const context = new AudioContext();
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  context.createMediaStreamSource(stream).connect(analyser);
+  const samples = new Uint8Array(analyser.fftSize);
+
+  const recorder = new MediaRecorder(stream);
+  const chunks: BlobPart[] = [];
+  recorder.ondataavailable = event => {
+    if (event.data.size > 0) chunks.push(event.data);
+  };
+  recorder.start();
+
+  const startedAt = Date.now();
+  // ~16 Hz, the rate the native recorder pushes, so the waveform animates identically.
+  const levelTimer = setInterval(() => {
+    analyser.getByteTimeDomainData(samples);
+    let sum = 0;
+    for (const sample of samples) {
+      const centred = (sample - 128) / 128;
+      sum += centred * centred;
+    }
+    const rms = Math.sqrt(sum / samples.length);
+    deviceEvents.emit(VOICE_LEVEL_EVENT, {
+      level: Math.min(1, rms * 3),
+      elapsedMs: Date.now() - startedAt,
+    });
+  }, 62);
+
+  recording = { recorder, stream, context, chunks, startedAt, levelTimer };
+  return 'recording';
+}
+
+function stopTracks(current: Recording): void {
+  clearInterval(current.levelTimer);
+  current.stream.getTracks().forEach(track => track.stop());
+  current.context.close().catch(() => {});
+}
+
+async function stopWebRecording(): Promise<VoiceRecording | null> {
+  const current = recording;
+  recording = null;
+  if (!current) return null;
+
+  const blob = await new Promise<Blob>(resolve => {
+    current.recorder.onstop = () =>
+      resolve(new Blob(current.chunks, { type: current.recorder.mimeType || 'audio/webm' }));
+    current.recorder.stop();
+  });
+  stopTracks(current);
+
+  const durationMs = Date.now() - current.startedAt;
+  // The native side returns null for a tap rather than a hold, and the composer relies on it.
+  if (durationMs < 400 || blob.size === 0) return null;
+  return { uri: URL.createObjectURL(blob), durationMs, sizeBytes: blob.size };
+}
+
 
 export const deviceBridge: DeviceBridgeNative = {
   connect: url => connection.connect(url),
@@ -348,16 +504,78 @@ export const deviceBridge: DeviceBridgeNative = {
       input.oncancel = () => resolve([]);
       input.click();
     }),
-  prepareFile: uri => Promise.resolve({ uri, name: 'file', size: 0 }),
-  uploadFile: () => unsupported('uploadFile'),
-  downloadFile: () => unsupported('downloadFile'),
-  cacheFile: () => unsupported('cacheFile'),
-  saveFile: () => unsupported('saveFile'),
-  startRecording: () => unsupported('startRecording'),
-  stopRecording: () => Promise.resolve(null),
-  cancelRecording: () => Promise.resolve(),
-  playAudio: () => unsupported('playAudio'),
-  pausePlayback: () => Promise.resolve(),
-  seekPlayback: () => Promise.resolve(),
-  stopPlayback: () => Promise.resolve(),
+  // A blob URL is already local and readable: there is nothing to copy anywhere.
+  prepareFile: async uri => {
+    const blob = await fetch(uri).then(response => response.blob());
+    return { uri, name: 'file', size: blob.size };
+  },
+  uploadFile: async (uri, url, filename, type, threadId, transferId) => {
+    const blob = await fetch(uri).then(response => response.blob());
+    return uploadWithProgress(
+      blob,
+      url,
+      {
+        'Content-Type': type || 'application/octet-stream',
+        'X-Filename': encodeURIComponent(filename),
+        'X-Thread-Id': threadId,
+      },
+      transferId,
+    );
+  },
+  downloadFile: async (url, filename, _toGallery, transferId) => {
+    // There is no gallery in a browser: everything lands wherever downloads land.
+    const blob = await fetchWithProgress(url, transferId);
+    saveBlob(blob, filename);
+    return { path: filename };
+  },
+  cacheFile: async (url, filename, transferId) => {
+    const blob = await fetchWithProgress(url, transferId);
+    return { uri: URL.createObjectURL(blob), name: filename, size: blob.size };
+  },
+  saveFile: async (url, filename, transferId) => {
+    const blob = await fetchWithProgress(url, transferId);
+    saveBlob(blob, filename);
+    return { path: filename };
+  },
+  startRecording: () => startWebRecording(),
+  stopRecording: () => stopWebRecording(),
+  cancelRecording: () => {
+    const current = recording;
+    recording = null;
+    if (!current) return Promise.resolve();
+    current.recorder.stop();
+    stopTracks(current);
+    return Promise.resolve();
+  },
+  playAudio: uri => {
+    if (player && playerUri === uri) {
+      return player.play().then(() => emitPlayback(true));
+    }
+    player?.pause();
+    player = new Audio(uri);
+    playerUri = uri;
+    player.ontimeupdate = () => emitPlayback(true);
+    player.onended = () => {
+      emitPlayback(false);
+      playerUri = null;
+    };
+    return player.play().then(() => emitPlayback(true));
+  },
+  pausePlayback: () => {
+    player?.pause();
+    emitPlayback(false);
+    return Promise.resolve();
+  },
+  seekPlayback: positionMs => {
+    if (player) player.currentTime = positionMs / 1000;
+    emitPlayback(!player?.paused);
+    return Promise.resolve();
+  },
+  stopPlayback: () => {
+    player?.pause();
+    if (player) player.currentTime = 0;
+    playerUri = null;
+    emitPlayback(false);
+    return Promise.resolve();
+  },
 };
