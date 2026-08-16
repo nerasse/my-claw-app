@@ -11,3 +11,9 @@ export const micSupported =
 export const locationSupported = typeof navigator !== 'undefined' && 'geolocation' in navigator && secureContext;
 
 export const scannerSupported = false;
+
+/** Asked of the device, not of the window: a touchscreen laptop reports both, and coarse wins. */
+export const pointerFine =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(pointer: fine)').matches
+    : false;

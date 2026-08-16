@@ -15,3 +15,9 @@ export const secureContext = true;
 
 /** The QR scanner is Android only: a browser pairing a browser has both codes on one screen. */
 export const scannerSupported = true;
+
+/**
+ * A pointing device accurate enough for hover states and small targets. A finger is not one, so
+ * the app keeps its tap-sized rows and never shows something that only appears under a cursor.
+ */
+export const pointerFine = false;

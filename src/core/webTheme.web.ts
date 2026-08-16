@@ -1,0 +1,73 @@
+/// <reference lib="dom" />
+import type { Palette } from '../theme/palettes';
+
+/**
+ * The part of a desktop UI that lives in the document, not in the React tree.
+ *
+ * react-native-web renders a Pressable as a plain div: no cursor, no hover, no focus ring, and
+ * `Text` ships `user-select: none` so a conversation cannot be copied. None of that is fixable
+ * per component without touching a hundred call sites, and all of it is four CSS rules keyed on
+ * the roles the app already sets for accessibility.
+ */
+
+const STYLE_ID = 'claw-desktop';
+
+function sheet(): HTMLStyleElement {
+  const existing = document.getElementById(STYLE_ID);
+  if (existing instanceof HTMLStyleElement) return existing;
+  const node = document.createElement('style');
+  node.id = STYLE_ID;
+  document.head.appendChild(node);
+  return node;
+}
+
+function css(palette: Palette): string {
+  return `
+html, body, #root { height: 100%; margin: 0; background: ${palette.bg}; }
+body { overscroll-behavior: none; }
+
+/* Pressable renders role="button": one rule gives the whole app a cursor and a hover state. */
+[role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="switch"] {
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  [role="button"]:hover, [role="link"]:hover, [role="tab"]:hover, [role="menuitem"]:hover { opacity: 0.75; }
+}
+[role="button"][aria-disabled="true"] { cursor: default; opacity: 1; }
+
+/* Keyboard focus has to be visible, and only for the keyboard: :focus-visible is exactly that. */
+:focus-visible { outline: 2px solid ${palette.accent}; outline-offset: 2px; border-radius: 6px; }
+input:focus, textarea:focus { outline: none; }
+
+::selection { background: ${palette.accentSoft}; color: ${palette.text}; }
+
+/* Text is unselectable by default in react-native-web. Marked regions opt back in. */
+[data-claw-select="text"], [data-claw-select="text"] * { user-select: text !important; }
+
+* { scrollbar-width: thin; scrollbar-color: ${palette.border} transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: ${palette.border}; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: ${palette.textFaint}; background-clip: content-box; }
+
+/* A file dragged over the window: the whole page answers, not a hidden rectangle. */
+body[data-claw-drop="1"]::after {
+  content: '';
+  position: fixed;
+  inset: 6px;
+  border: 2px dashed ${palette.accent};
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 9999;
+}
+`;
+}
+
+export function applyWebTheme(palette: Palette, dark: boolean): void {
+  sheet().textContent = css(palette);
+  // Tells the browser which way its own widgets (scrollbars, form controls) should be painted.
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', palette.bg);
+}
