@@ -74,3 +74,16 @@ describe('codeFromScan', () => {
     expect(codeFromScan('')).toBeNull();
   });
 });
+
+describe('pairing errors say which failure it was', () => {
+  beforeEach(() => devicesStore.reset());
+
+  test('an expired code is not reported as a code that never existed', () => {
+    devicesStore.onPairError('expired');
+    expect(devicesStore.get().error).toBe('the code expired, ask for a new one');
+    expect(devicesStore.get().busy).toBe(false);
+
+    devicesStore.onPairError('unknown');
+    expect(devicesStore.get().error).toBe('no pairing is waiting on that code');
+  });
+});

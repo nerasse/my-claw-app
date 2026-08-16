@@ -73,3 +73,7 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Web bundle build output, published as a release asset
+dist-web/
+dist-web.tar.gz

@@ -1,5 +1,7 @@
 module.exports = {
   root: true,
+  // Build output: bundled code is not source, and linting 3 MB of it says nothing.
+  ignorePatterns: ['dist-web/', 'android/', 'ios/'],
   extends: '@react-native',
   overrides: [
     {

@@ -130,6 +130,11 @@ class DevicesStoreImpl {
     });
   }
 
+  /** The lookup found nothing: the message says which of the four reasons it was. */
+  onPairError(reason: string): void {
+    this.set({ busy: false, candidate: null, error: pairError(reason) });
+  }
+
   onPairResult(frame: DevicePairResultFrame): void {
     this.set({
       busy: false,

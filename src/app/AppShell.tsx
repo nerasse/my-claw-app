@@ -1037,7 +1037,10 @@ export function AppShell(): React.JSX.Element {
           devicesStore.onPairInfo(frame);
           break;
         case 'device.pair.result':
-          devicesStore.onPairResult(frame);
+          // A lookup that found nothing answers with a result rather than an info frame; the
+          // screen has to leave its spinner and say why.
+          if (!frame.ok && !frame.deviceId) devicesStore.onPairError(frame.error ?? 'unknown');
+          else devicesStore.onPairResult(frame);
           break;
         case 'chat.stream.start':
           // The agent is answering, so no command result is coming: a placeholder left by a

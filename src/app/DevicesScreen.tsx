@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { devicesStore, useDevices } from '../core/devices';
 import type { DeviceRecord } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { ActionSheet } from '../components/ActionSheet';
 import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
 
@@ -54,7 +55,9 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
         <Text style={styles.title}>Devices</Text>
       </View>
 
-      <ScrollView {...scrollProps} contentContainerStyle={styles.content}>
+      {/* Without this the first tap on Check only dismisses the keyboard: the scroll view eats
+          it as a blur and the owner has to press twice. */}
+      <ScrollView {...scrollProps} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
         {state.notice ? <Text style={styles.notice}>{state.notice}</Text> : null}
 
@@ -96,7 +99,7 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
                 <Text style={styles.buttonText}>Refuse</Text>
               </Pressable>
               <Pressable
-                style={[styles.button, styles.approve]}
+                style={[styles.button, styles.approve, state.busy && styles.busy]}
                 onPress={() => {
                   devicesStore.approve(name.trim() || 'browser');
                   setName('');
@@ -105,7 +108,11 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
                 accessibilityRole="button"
                 accessibilityLabel="Approve this pairing"
               >
-                <Text style={styles.buttonText}>Approve</Text>
+                {state.busy ? (
+                  <ActivityIndicator size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Approve</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -147,13 +154,17 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
                 returnKeyType="go"
               />
               <Pressable
-                style={[styles.button, styles.approve]}
+                style={[styles.button, styles.approve, state.busy && styles.busy]}
                 onPress={submitCode}
                 disabled={state.busy || code.trim().length === 0}
                 accessibilityRole="button"
                 accessibilityLabel="Look up this pairing code"
               >
-                <Text style={styles.buttonText}>Check</Text>
+                {state.busy ? (
+                  <ActivityIndicator size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Check</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -181,31 +192,9 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
                 {device.deviceId} · {since(device.lastSeenAt)}
               </Text>
             </View>
-            {device.self ? null : confirming?.deviceId === device.deviceId ? (
-              <View style={styles.row}>
-                <Pressable
-                  style={[styles.button, styles.deny]}
-                  onPress={() => {
-                    devicesStore.revoke(device.deviceId);
-                    setConfirming(null);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Confirm revoking ${device.name}`}
-                >
-                  <Text style={styles.buttonText}>Confirm</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.button}
-                  onPress={() => setConfirming(null)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                >
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </Pressable>
-              </View>
-            ) : (
+            {device.self ? null : (
               <Pressable
-                style={styles.button}
+                style={[styles.button, styles.revoke]}
                 onPress={() => setConfirming(device)}
                 accessibilityRole="button"
                 accessibilityLabel={`Revoke ${device.name}`}
@@ -217,6 +206,23 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
         ))}
       </ScrollView>
       {indicator}
+
+      {confirming ? (
+        <ActionSheet
+          preview={`Revoke "${confirming.name}"? Its sockets close at once, its browser sessions are dropped, and it has to be paired again to come back.`}
+          options={[
+            {
+              label: 'Revoke',
+              danger: true,
+              onPress: () => {
+                devicesStore.revoke(confirming.deviceId);
+                setConfirming(null);
+              },
+            },
+          ]}
+          onClose={() => setConfirming(null)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -290,6 +296,8 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.border,
   },
   approve: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
+  busy: { opacity: 0.7 },
+  revoke: { flex: 0, paddingHorizontal: space.md },
   deny: { borderColor: palette.danger },
   buttonText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   sectionLabel: {
