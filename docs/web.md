@@ -278,6 +278,12 @@ context, so behind plain HTTP the tab strip is the only place a finished run can
 `hardwareBack.web.ts` (a no-op) plus `popstate`: registering the real one only prints
 "BackHandler is not supported on web" into the console.
 
+Crash reporting works on both now. `installDiagnostics` used to hook `ErrorUtils`, which React
+Native installs in InitializeCore and react-native-web never runs: the hook found nothing and
+returned, so a crash in the tab reached the devtools console and nobody else, while every Android
+crash was shipped over the socket. `errorHooks.web.ts` listens to `error` and
+`unhandledrejection` instead and feeds the same `diag.report` pipeline.
+
 ## Risks
 
 | Risk | Mitigation |

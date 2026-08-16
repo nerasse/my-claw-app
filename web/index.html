@@ -9,7 +9,13 @@
 <link rel="manifest" href="/manifest.webmanifest" />
 <link rel="icon" href="/icons/icon-192.png" />
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-<style>html,body,#root{height:100%;margin:0;background:#0b0d10}#root{display:flex}</style>
+<!-- The first paint, before the bundle has a theme: follow the system so a light desktop does
+     not flash a dark rectangle on every load. -->
+<style>
+html,body,#root{height:100%;margin:0;background:#ffffff}
+#root{display:flex}
+@media (prefers-color-scheme: dark){html,body,#root{background:#0b0d10}}
+</style>
 </head>
 <body>
 <div id="root"></div>

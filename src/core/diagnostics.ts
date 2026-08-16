@@ -1,6 +1,7 @@
 import { connection } from './connection';
 import { deviceBridge } from './nativeBridge';
 import { encodeDiagReport, type DiagReport } from './protocol';
+import { installGlobalErrorHooks } from './errorHooks';
 
 /**
  * Crash reporting without a third-party SDK and without adb.
@@ -30,12 +31,6 @@ const ABNORMAL_EXITS = new Set([
   'EXCESSIVE_RESOURCE_USAGE',
   'SIGNALED',
 ]);
-
-/** RN installs this on the global object; it is not in the typings. */
-interface GlobalErrorUtils {
-  getGlobalHandler?: () => ((error: Error, isFatal?: boolean) => void) | undefined;
-  setGlobalHandler?: (handler: (error: Error, isFatal?: boolean) => void) => void;
-}
 
 let pending: DiagReport[] = [];
 let loaded = false;
@@ -121,21 +116,17 @@ export function acknowledgeDiagnostics(accepted: number): void {
 }
 
 /**
- * Chains rather than replaces: RN's own handler is what shows the red box in debug, and losing
- * it would make a fatal error harder to see, not easier.
+ * Installs the platform's last-resort error hook. What that hook is differs (RN's `ErrorUtils`,
+ * the browser's error and unhandledrejection events), which is why it lives in `errorHooks`.
  */
 export function installDiagnostics(): void {
-  const utils = (globalThis as unknown as { ErrorUtils?: GlobalErrorUtils }).ErrorUtils;
-  if (!utils?.setGlobalHandler) return;
-  const previous = utils.getGlobalHandler?.();
-  utils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+  installGlobalErrorHooks(crash => {
     recordDiag({
       kind: 'js',
       at: Date.now(),
-      message: `${isFatal ? 'fatal: ' : ''}${error?.message ?? String(error)}`,
-      ...(error?.stack ? { stack: error.stack } : {}),
+      message: crash.message,
+      ...(crash.stack ? { stack: crash.stack } : {}),
     });
-    previous?.(error, isFatal);
   });
 }
 
