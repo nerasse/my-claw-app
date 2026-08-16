@@ -2,6 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
+import { useLayout } from '../core/layout';
+import { contextMenuProps } from '../core/webProps';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -32,6 +34,8 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   onMenu: (thread: SessionSummary) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // A 44pt tap target is wasted on a mouse, and it costs a third of the rows on screen.
+  const { dense } = useLayout();
   const menuButton = (
     <Pressable
       hitSlop={6}
@@ -43,9 +47,12 @@ export const ThreadRow = React.memo(function ThreadRowRow({
     </Pressable>
   );
   return (
-    <View style={[styles.row, pinned && styles.rowPinned, active && styles.rowActive]}>
+    // Right-click is the desktop form of the long press the ⋯ button stands in for.
+    <View
+      style={[styles.row, pinned && styles.rowPinned, active && styles.rowActive]}
+      {...contextMenuProps(() => onMenu(item))}>
       <Pressable
-        style={styles.main}
+        style={[styles.main, dense && styles.mainDense]}
         onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
@@ -79,6 +86,7 @@ const createStyles = (palette: Palette) => ({
   },
   rowActive: { backgroundColor: palette.accentSoft },
   main: { flex: 1, paddingVertical: space.sm, paddingHorizontal: space.sm, gap: 1 },
+  mainDense: { paddingVertical: space.xs },
   titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent },
   title: { flex: 1, fontSize: font.body, color: palette.text },

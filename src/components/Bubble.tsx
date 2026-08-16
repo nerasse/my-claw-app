@@ -8,6 +8,7 @@ import { CollapsibleAside } from './CollapsibleAside';
 import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine } from './ReasoningLine';
 import { LocationView } from './LocationView';
+import { contextMenuProps } from '../core/webProps';
 import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
 function clock(ts: number): string {
@@ -55,6 +56,7 @@ export const Bubble = React.memo(function BubbleView({
           touches. */}
       <Pressable
         onLongPress={() => onMenu(item)}
+        {...contextMenuProps(() => onMenu(item))}
         style={[
           styles.bubble,
           agent ? styles.bubbleAgent : styles.bubbleUser,

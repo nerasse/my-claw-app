@@ -7,7 +7,6 @@ import React, {
 } from 'react';
 import {
   AppState,
-  BackHandler,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -204,6 +203,11 @@ import { font, radius, space, useTheme, useThemedStyles, type Palette } from '..
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
 import { messageSelectionBody, TextSelectionContext, type SelectionTarget } from '../core/textSelection';
+import { useLayout } from '../core/layout';
+import { useHardwareBack } from '../core/hardwareBack';
+import { useHotkeys } from '../core/hotkeys';
+import { initialRoute, showThread, watchBack } from '../core/route';
+import { setPageTitle } from '../core/pageTitle';
 
 /** One page of replayed history, not a ceiling: scrolling past the oldest asks for the next. */
 const HISTORY_LIMIT = 50;
@@ -450,6 +454,8 @@ export function AppShell(): React.JSX.Element {
 
   const [url, setUrl] = useState(prefs.get().serverUrl);
   const [status, setStatus] = useState<WsStatusPayload>({ state: 'idle' });
+  // Every widening of the layout is decided from here: pinned list, dialogs, side panes.
+  const layout = useLayout();
   /** The version the connected server announced (`hello` frame); null until it speaks. */
   const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
@@ -458,6 +464,8 @@ export function AppShell(): React.JSX.Element {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Bumped by Ctrl+K; the drawer's search field reads it and takes the caret. */
+  const [searchFocus, setSearchFocus] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
@@ -685,6 +693,8 @@ export function AppShell(): React.JSX.Element {
   const subagentRef = useRef<typeof subagentView>(null);
   // A run opened from the job's runs page goes back there, like the archives flow.
   const fromJobSessionsRef = useRef(false);
+  /** The address bar has not been written to yet: the first write replaces, it does not push. */
+  const firstRouteRef = useRef(true);
   // Where the thread on screen came from: the hardware back press sends a conversation
   // opened from the archived list back to that list, instead of exiting the app.
   const fromArchivesRef = useRef(false);
@@ -692,7 +702,15 @@ export function AppShell(): React.JSX.Element {
     activeThreadRef.current = threadId;
     setActiveThread(threadId);
     // Keep the last conversation: reopening the app must land on it, not inside a sub-agent.
-    if (threadId === null || !isSubAgentThread(threadId)) prefs.set('lastThreadId', threadId);
+    // Same rule for the address bar, and for the same reason: a sub-agent is a view of its
+    // parent, so a reload lands on the parent rather than on a chat with no way back.
+    if (threadId === null || !isSubAgentThread(threadId)) {
+      prefs.set('lastThreadId', threadId);
+      // The first sync is a replace: restoring the last conversation at boot must not leave a
+      // Back step whose only effect is to unload it.
+      showThread(threadId, firstRouteRef.current);
+      firstRouteRef.current = false;
+    }
   }, []);
 
   const openThread = useCallback(
@@ -1376,7 +1394,10 @@ export function AppShell(): React.JSX.Element {
     // what the user sees on the first frame.
     prefs.hydrate().then(stored => {
       setUrl(stored.serverUrl);
-      if (stored.lastThreadId) openThread(stored.lastThreadId);
+      // A link wins over the last conversation: the address is what the owner asked for, the
+      // preference is only what they were doing last time. Always null on Android.
+      const target = initialRoute().threadId ?? stored.lastThreadId;
+      if (target) openThread(target);
       return connection.getState().then(state => {
         setStatus({ state });
         if (state !== 'connected' && state !== 'connecting')
@@ -1411,295 +1432,300 @@ export function AppShell(): React.JSX.Element {
     };
   }, [openThread, selectThread]);
 
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      // The selection viewer covers everything, including whatever opened it.
-      if (selection) {
-        setSelection(null);
+  /**
+   * Closes the topmost layer, and says whether there was one.
+   *
+   * Written once, read by three inputs that all mean the same thing: Android's back key, the
+   * browser's Back button and the Escape key. `false` is "nothing left to close", which is what
+   * lets the platform do its own thing (leave the app, leave the page).
+   */
+  const handleBack = useCallback((): boolean => {
+    // The selection viewer covers everything, including whatever opened it.
+    if (selection) {
+      setSelection(null);
+      return true;
+    }
+    // A confirmation is the topmost thing on screen when it is up.
+    if (subagentAction) {
+      setSubagentAction(null);
+      return true;
+    }
+    if (subagentMenuOpen) {
+      setSubagentMenuOpen(false);
+      return true;
+    }
+    // The roster is an absolute layer like the status page, so it closes before anything under it.
+    if (agentsOpen) {
+      setAgentsOpen(false);
+      return true;
+    }
+    if (agentsGlobalOpen) {
+      setAgentsGlobalOpen(false);
+      return true;
+    }
+    // Topmost layer first: the image covers everything else.
+    if (statusOpen) {
+      // The status page is an absolute layer over the whole shell, so the back key must
+      // always close it before anything underneath can see the press.
+      statusStore.close();
+      setStatusOpen(false);
+      return true;
+    }
+    if (instructionsPageOpen) {
+      // The editor stacks over the report: back leaves the editor first, the page second.
+      if (instructionsPageEditing) {
+        instructionsStore.closeEditor();
+        setInstructionsPageEditing(false);
         return true;
       }
-      // A confirmation is the topmost thing on screen when it is up.
-      if (subagentAction) {
-        setSubagentAction(null);
+      sessionInstructionsStore.close();
+      setInstructionsPageOpen(false);
+      return true;
+    }
+    if (jobsOpen) {
+      // The runs page and the editor stack over the jobs list: back leaves them first.
+      if (jobsEditor) {
+        setJobsEditor(null);
         return true;
       }
-      if (subagentMenuOpen) {
-        setSubagentMenuOpen(false);
+      if (jobSessions) {
+        setJobSessions(null);
+        jobSessionsRef.current = null;
+        setJobRuns(null);
         return true;
       }
-      // The roster is an absolute layer like the status page, so it closes before anything under it.
-      if (agentsOpen) {
-        setAgentsOpen(false);
+      setJobsOpen(false);
+      return true;
+    }
+    if (imageViewer) {
+      setImageViewer(null);
+      return true;
+    }
+    if (textViewer) {
+      setTextViewer(null);
+      return true;
+    }
+    if (videoViewer) {
+      setVideoViewer(null);
+      return true;
+    }
+    if (fileViewer) {
+      setFileViewer(null);
+      return true;
+    }
+    if (approvals.length > 0) {
+      setApprovals(current => current.slice(1));
+      return true;
+    }
+    if (fileToDelete) {
+      setFileToDelete(null);
+      return true;
+    }
+    // Innermost first: the rename sheet sits over the menu that opened it.
+    if (threadToRename) {
+      setThreadToRename(null);
+      return true;
+    }
+    if (modelOpen) {
+      // The picker is a flow of its own: back walks out of a group, then one step back through
+      // the model/effort/context screens, and only then closes the sheet.
+      const previous = pickerBack(modelPicker);
+      if (previous) {
+        setModelPicker(previous);
         return true;
       }
-      if (agentsGlobalOpen) {
-        setAgentsGlobalOpen(false);
+      setModelOpen(false);
+      return true;
+    }
+    if (newTagPrompt) {
+      setNewTagPrompt(false);
+      return true;
+    }
+    if (tagToDelete) {
+      setTagToDelete(null);
+      return true;
+    }
+    if (providerToDelete) {
+      setProviderToDelete(null);
+      return true;
+    }
+    if (commandMenuOpen) {
+      setCommandMenuOpen(false);
+      return true;
+    }
+    if (bubbleMenu || threadMenu) {
+      setBubbleMenu(null);
+      setThreadMenu(null);
+      return true;
+    }
+    // A pinned list is not a layer: closing it would eat the press and change nothing on screen.
+    if (drawerOpen && !layout.pinnedDrawer) {
+      setDrawerOpen(false);
+      return true;
+    }
+    if (skillMenu || skillTargets || skillReplace) {
+      setSkillMenu(null);
+      setSkillTargets(null);
+      setSkillReplace(null);
+      return true;
+    }
+    if (skillViewer) {
+      setSkillViewer(null);
+      return true;
+    }
+    if (settingsOpen) {
+      // Innermost page first: the back key walks the settings stack one level at a time,
+      // so a habit press from a subpage can never fall through to the launcher.
+      if (settingsPage === 'index') {
+        setSettingsOpen(false);
         return true;
       }
-      // Topmost layer first: the image covers everything else.
-      if (statusOpen) {
-        // The status page is an absolute layer over the whole shell, so the back key must
-        // always close it before anything underneath can see the press.
-        statusStore.close();
-        setStatusOpen(false);
-        return true;
-      }
-      if (instructionsPageOpen) {
-        // The editor stacks over the report: back leaves the editor first, the page second.
-        if (instructionsPageEditing) {
-          instructionsStore.closeEditor();
-          setInstructionsPageEditing(false);
-          return true;
-        }
-        sessionInstructionsStore.close();
-        setInstructionsPageOpen(false);
-        return true;
-      }
-      if (jobsOpen) {
-        // The runs page and the editor stack over the jobs list: back leaves them first.
-        if (jobsEditor) {
-          setJobsEditor(null);
-          return true;
-        }
-        if (jobSessions) {
-          setJobSessions(null);
-          jobSessionsRef.current = null;
-          setJobRuns(null);
-          return true;
-        }
-        setJobsOpen(false);
-        return true;
-      }
-      if (imageViewer) {
-        setImageViewer(null);
-        return true;
-      }
-      if (textViewer) {
-        setTextViewer(null);
-        return true;
-      }
-      if (videoViewer) {
-        setVideoViewer(null);
-        return true;
-      }
-      if (fileViewer) {
-        setFileViewer(null);
-        return true;
-      }
-      if (approvals.length > 0) {
-        setApprovals(current => current.slice(1));
-        return true;
-      }
-      if (fileToDelete) {
-        setFileToDelete(null);
-        return true;
-      }
-      // Innermost first: the rename sheet sits over the menu that opened it.
-      if (threadToRename) {
-        setThreadToRename(null);
-        return true;
-      }
-      if (modelOpen) {
-        // The picker is a flow of its own: back walks out of a group, then one step back through
-        // the model/effort/context screens, and only then closes the sheet.
-        const previous = pickerBack(modelPicker);
+      // The picker pages are flows of their own: back walks out of a group, then one step
+      // back through the model/effort/context screens, and only then leaves the page. The
+      // model picker returns where it was opened from: the agents list for "global" and
+      // "fallback", the agent page for an agent key.
+      if (settingsPage === 'model-picker') {
+        const previous = pickerBack(agentPicker);
         if (previous) {
-          setModelPicker(previous);
+          setAgentPicker(previous);
           return true;
         }
-        setModelOpen(false);
+        const from = agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent';
+        setAgentModelFor(null);
+        setSettingsPage(from);
         return true;
       }
-      if (newTagPrompt) {
-        setNewTagPrompt(false);
+      if (settingsPage === 'tag-editor') {
+        const previous = pickerBack(tagEditor?.picker ?? pickerStart);
+        if (previous && tagEditor) {
+          setTagEditor({ ...tagEditor, picker: previous });
+          return true;
+        }
+        setTagEditor(null);
+        setSettingsPage('tags');
         return true;
       }
-      if (tagToDelete) {
-        setTagToDelete(null);
+      if (settingsPage === 'agent') {
+        setSettingsPage('agents');
         return true;
       }
-      if (providerToDelete) {
-        setProviderToDelete(null);
+      if (settingsPage === 'provider') {
+        if (providerSearch.current.query) {
+          providerSearch.current.clear();
+          return true;
+        }
+        setSettingsPage('providers');
         return true;
       }
-      if (commandMenuOpen) {
-        setCommandMenuOpen(false);
+      if (settingsPage === 'provider-env') {
+        setSettingsPage('provider-edit');
         return true;
       }
-      if (bubbleMenu || threadMenu) {
-        setBubbleMenu(null);
-        setThreadMenu(null);
+      if (settingsPage === 'provider-edit') {
+        if (providerEdit?.mode === 'create') setSettingsPage('providers');
+        else setSettingsPage('provider');
+        setProviderEdit(null);
         return true;
       }
-      if (drawerOpen) {
-        setDrawerOpen(false);
-        return true;
-      }
-      if (skillMenu || skillTargets || skillReplace) {
-        setSkillMenu(null);
-        setSkillTargets(null);
-        setSkillReplace(null);
-        return true;
-      }
-      if (skillViewer) {
-        setSkillViewer(null);
-        return true;
-      }
-      if (settingsOpen) {
-        // Innermost page first: the back key walks the settings stack one level at a time,
-        // so a habit press from a subpage can never fall through to the launcher.
-        if (settingsPage === 'index') {
-          setSettingsOpen(false);
-          return true;
-        }
-        // The picker pages are flows of their own: back walks out of a group, then one step
-        // back through the model/effort/context screens, and only then leaves the page. The
-        // model picker returns where it was opened from: the agents list for "global" and
-        // "fallback", the agent page for an agent key.
-        if (settingsPage === 'model-picker') {
-          const previous = pickerBack(agentPicker);
-          if (previous) {
-            setAgentPicker(previous);
-            return true;
-          }
-          const from = agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent';
-          setAgentModelFor(null);
-          setSettingsPage(from);
-          return true;
-        }
-        if (settingsPage === 'tag-editor') {
-          const previous = pickerBack(tagEditor?.picker ?? pickerStart);
-          if (previous && tagEditor) {
-            setTagEditor({ ...tagEditor, picker: previous });
-            return true;
-          }
-          setTagEditor(null);
-          setSettingsPage('tags');
-          return true;
-        }
-        if (settingsPage === 'agent') {
-          setSettingsPage('agents');
-          return true;
-        }
-        if (settingsPage === 'provider') {
-          if (providerSearch.current.query) {
-            providerSearch.current.clear();
-            return true;
-          }
-          setSettingsPage('providers');
-          return true;
-        }
-        if (settingsPage === 'provider-env') {
-          setSettingsPage('provider-edit');
-          return true;
-        }
-        if (settingsPage === 'provider-edit') {
-          if (providerEdit?.mode === 'create') setSettingsPage('providers');
-          else setSettingsPage('provider');
-          setProviderEdit(null);
-          return true;
-        }
-        if (settingsPage === 'providers') {
-          setSettingsPage('index');
-          return true;
-        }
-        if (settingsPage === 'tags') {
-          setSettingsPage('providers');
-          return true;
-        }
-        if (settingsPage === 'agents') {
-          setSettingsPage('index');
-          return true;
-        }
-        if (settingsPage === 'scope') {
-          setSettingsPage(scopeEditor?.target === 'file' ? 'file' : 'agent');
-          setScopeEditor(null);
-          return true;
-        }
-        if (settingsPage === 'workspace-picker' || settingsPage === 'number') {
-          setSettingsPage(tagContextEditor ? 'tags' : 'agent');
-          return true;
-        }
-        if (settingsPage === 'file') {
-          agentsFileStore.close();
-          setSettingsPage('agent');
-          return true;
-        }
-        if (settingsPage === 'newagent') {
-          setSettingsPage('agents');
-          return true;
-        }
-        if (settingsPage === 'mcps' || settingsPage === 'config') {
-          setSettingsPage('index');
-          return true;
-        }
-        if (settingsPage === 'instruction-layer') {
-          setLayerTarget(null);
-          instructionsStore.closeLayer();
-          setSettingsPage('workspace');
-          return true;
-        }
-        if (settingsPage === 'instruction') {
-          instructionsStore.closeEditor();
-          setSettingsPage('workspace');
-          return true;
-        }
-        // The workspace page is reached from the list, or straight from an agent pinned to it.
-        if (settingsPage === 'workspace') {
-          setSettingsPage(workspaceFrom === 'agent' ? 'agent' : 'workspaces');
-          return true;
-        }
-        // Workspaces is its own index entry; diagnostics lives under Other. Back lands where
-        // they came from.
-        if (settingsPage === 'workspaces') {
-          setSettingsPage('index');
-          return true;
-        }
-        if (settingsPage === 'diagnostics') {
-          setSettingsPage('other');
-          return true;
-        }
+      if (settingsPage === 'providers') {
         setSettingsPage('index');
         return true;
       }
-      if (archivesOpen) {
-        setArchivesOpen(false);
+      if (settingsPage === 'tags') {
+        setSettingsPage('providers');
         return true;
       }
-      if (filesOpen) {
-        setFilesOpen(false);
+      if (settingsPage === 'agents') {
+        setSettingsPage('index');
         return true;
       }
-      // A conversation opened from the archived list goes back there: backing out of it
-      // would otherwise fall through and close the app.
-      // A sub-agent chat backs out to the conversation that reached it, which is exactly what its
-      // header says it will do.
-      if (subagentRef.current) {
-        leaveSubAgent();
+      if (settingsPage === 'scope') {
+        setSettingsPage(scopeEditor?.target === 'file' ? 'file' : 'agent');
+        setScopeEditor(null);
         return true;
       }
-      if (fromArchivesRef.current) {
-        fromArchivesRef.current = false;
-        selectThread(null);
-        setArchivesOpen(true);
+      if (settingsPage === 'workspace-picker' || settingsPage === 'number') {
+        setSettingsPage(tagContextEditor ? 'tags' : 'agent');
         return true;
       }
-      // A run opened from a job's runs page goes back to that page, then on to the jobs list.
-      if (fromJobSessionsRef.current) {
-        fromJobSessionsRef.current = false;
-        selectThread(null);
-        setJobsOpen(true);
-        const page = jobSessionsRef.current;
-        if (page) {
-          setJobSessions(page);
-          // The runs are still in state from the page that opened the run; no refetch needed.
-          setJobRuns(current => current);
-        }
+      if (settingsPage === 'file') {
+        agentsFileStore.close();
+        setSettingsPage('agent');
         return true;
       }
-      return false;
-    });
-    return () => sub.remove();
+      if (settingsPage === 'newagent') {
+        setSettingsPage('agents');
+        return true;
+      }
+      if (settingsPage === 'mcps' || settingsPage === 'config') {
+        setSettingsPage('index');
+        return true;
+      }
+      if (settingsPage === 'instruction-layer') {
+        setLayerTarget(null);
+        instructionsStore.closeLayer();
+        setSettingsPage('workspace');
+        return true;
+      }
+      if (settingsPage === 'instruction') {
+        instructionsStore.closeEditor();
+        setSettingsPage('workspace');
+        return true;
+      }
+      // The workspace page is reached from the list, or straight from an agent pinned to it.
+      if (settingsPage === 'workspace') {
+        setSettingsPage(workspaceFrom === 'agent' ? 'agent' : 'workspaces');
+        return true;
+      }
+      // Workspaces is its own index entry; diagnostics lives under Other. Back lands where
+      // they came from.
+      if (settingsPage === 'workspaces') {
+        setSettingsPage('index');
+        return true;
+      }
+      if (settingsPage === 'diagnostics') {
+        setSettingsPage('other');
+        return true;
+      }
+      setSettingsPage('index');
+      return true;
+    }
+    if (archivesOpen) {
+      setArchivesOpen(false);
+      return true;
+    }
+    if (filesOpen) {
+      setFilesOpen(false);
+      return true;
+    }
+    // A conversation opened from the archived list goes back there: backing out of it
+    // would otherwise fall through and close the app.
+    // A sub-agent chat backs out to the conversation that reached it, which is exactly what its
+    // header says it will do.
+    if (subagentRef.current) {
+      leaveSubAgent();
+      return true;
+    }
+    if (fromArchivesRef.current) {
+      fromArchivesRef.current = false;
+      selectThread(null);
+      setArchivesOpen(true);
+      return true;
+    }
+    // A run opened from a job's runs page goes back to that page, then on to the jobs list.
+    if (fromJobSessionsRef.current) {
+      fromJobSessionsRef.current = false;
+      selectThread(null);
+      setJobsOpen(true);
+      const page = jobSessionsRef.current;
+      if (page) {
+        setJobSessions(page);
+        // The runs are still in state from the page that opened the run; no refetch needed.
+        setJobRuns(current => current);
+      }
+      return true;
+    }
+    return false;
   }, [
     approvals.length,
     agentModelFor,
@@ -1716,7 +1742,6 @@ export function AppShell(): React.JSX.Element {
     instructionsPageEditing,
     instructionsPageOpen,
     workspaceFrom,
-    layerTarget,
     jobSessions,
     jobsEditor,
     jobsOpen,
@@ -1746,7 +1771,41 @@ export function AppShell(): React.JSX.Element {
     threadToRename,
     videoViewer,
     fileViewer,
+    layout.pinnedDrawer,
   ]);
+
+  useHardwareBack(handleBack);
+
+  /**
+   * The browser's Back button, which until now walked straight out of the app: a layer is closed
+   * first, exactly like the hardware key, and only an empty stack lets the address bar win.
+   * No-op on Android.
+   */
+  useEffect(
+    () =>
+      watchBack({
+        closeTopLayer: handleBack,
+        showRoute: route => {
+          if (route.threadId) openThread(route.threadId);
+          else selectThread(null);
+        },
+      }),
+    [handleBack, openThread, selectThread],
+  );
+
+  useHotkeys({
+    escape: () => {
+      handleBack();
+    },
+    // The conversation list is the palette: it searches, and on a desktop it is already there.
+    'mod+k': () => {
+      if (!layout.pinnedDrawer) setDrawerOpen(true);
+      setSearchFocus(count => count + 1);
+    },
+    'mod+n': () => newThread(),
+    'mod+,': () => openSettings(),
+    'mod+/': () => setCommandMenuOpen(true),
+  });
 
   // The roster of the conversation in play: while inside a sub-agent that is still the parent's,
   // because that is the scope the server answered for.
@@ -2434,6 +2493,12 @@ export function AppShell(): React.JSX.Element {
       ? `offline · ${pending} message(s) will send on reconnect`
       : 'offline · message will send on reconnect'
     : undefined;
+
+  // The window title. On a phone the launcher owns the label and this does nothing; in a browser
+  // it is the tab strip, and the count is the only notification a plain-HTTP page can raise.
+  useEffect(() => {
+    setPageTitle(title, unread.length);
+  }, [title, unread.length]);
   const selectedAgentInfo = agentsConfig?.agents.find(agent => agent.key === selectedAgent) ?? null;
   const selectedProviderInfo =
     agentsConfig?.providers.find(provider => provider.key === selectedProvider) ?? null;
@@ -3016,6 +3081,63 @@ export function AppShell(): React.JSX.Element {
           : null
     ) : null;
 
+  /**
+   * The conversation, held as a value rather than written at the end of the page chain: on a
+   * wide window it is drawn beside a page instead of being replaced by it, so it has to be
+   * placeable in two spots.
+   */
+  const chatScreen = (
+          <ChatScreen
+            threadId={activeThread ?? ''}
+            title={title}
+            subtitle={subtitle}
+            connectionState={status.state}
+            locationEnabled={locationEnabled}
+            items={items}
+            mediaBase={mediaBase}
+            deviceInfo={deviceInfo}
+            hint={hint}
+            autoFocusHero={autoFocusHero}
+            onOpenDrawer={subagentView ? leaveSubAgent : () => setDrawerOpen(true)}
+            onStatusPress={openSettings}
+            onSend={sendChat}
+            subagentCount={subagentCount}
+            onAgentsPress={() => setAgentsOpen(true)}
+            subagentDoors={subagentDoors}
+            onOpenSubAgent={openSubAgentFromCard}
+            {...(subagentView
+              ? {
+                  subagent: {
+                    id: subagentView.id,
+                    type: subagentView.type,
+                    status: streaming ? ('running' as const) : subagentView.status,
+                    messageCount: subagentView.messageCount,
+                    parentTitle: parentTitleOf(subagentView.parentThreadId),
+                  },
+                  onSubAgentMenu: () => setSubagentMenuOpen(true),
+                }
+              : {})}
+            onBubbleMenu={setBubbleMenu}
+            onOpenImage={setImageViewer}
+            onOpenText={setTextViewer}
+            onOpenVideo={setVideoViewer}
+            onOpenFile={setFileViewer}
+            onOpenMenu={() => setCommandMenuOpen(true)}
+            onCommandEntered={dispatchCommand}
+            onTagCommand={dispatchTagCommand}
+            streaming={streaming}
+            onStop={() => {
+              if (activeThread) connection.send(encodeChatStop(activeThread));
+            }}
+            onNewThread={newThread}
+            onLoadOlder={loadOlderHistory}
+            loadingOlder={historyPage.loading}
+          />
+  );
+
+  /** Something other than the conversation is showing: settings, the archives, the files. */
+  const pageOpen = settingsOpen || archivesOpen || filesOpen;
+
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
     // through a callback threaded down to the tool cards. See docs/text-selection.md.
@@ -3029,7 +3151,37 @@ export function AppShell(): React.JSX.Element {
         style={styles.safe}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.container}>
+        {/* A row with one child on a phone, two on a desktop: the conversation list stops being
+            an overlay and becomes a column, and the pages beside it lose nothing. */}
+        <View style={styles.shell}>
+        {layout.pinnedDrawer ? (
+          <Drawer
+            pinned
+            open
+            focusSearch={searchFocus}
+            sessions={sessions}
+            unread={unread}
+            activeThread={activeThread}
+            connectionState={status.state}
+            pending={pending}
+            onClose={() => {}}
+            onOpenThread={openThreadFromDrawer}
+            subagentCount={globalAgents.length}
+            onOpenSubAgents={() => setAgentsGlobalOpen(true)}
+            onNewThread={newThread}
+            onThreadMenu={setThreadMenu}
+            onOpenSettings={openSettings}
+            onOpenJobs={openJobs}
+            archivedCount={archivedSessions.length}
+            onOpenArchives={() => setArchivesOpen(true)}
+          />
+        ) : null}
+        <View style={[styles.container, layout.sidePane && styles.containerSplit]}>
+        {/* Wide enough for both: a page opens beside the conversation instead of over it, which
+            is the difference between reading the two and remembering one. */}
+        {layout.sidePane ? <View style={styles.chatPane}>{chatScreen}</View> : null}
+        {layout.sidePane && !pageOpen ? null : (
+        <View style={layout.sidePane ? styles.pagePane : styles.pageFull}>
           {settingsOpen ? (
             settingsPage === 'index' ? (
               <SettingsScreen
@@ -3480,58 +3632,18 @@ export function AppShell(): React.JSX.Element {
               onOpenVideo={setVideoViewer}
             />
           ) : (
-            <ChatScreen
-              threadId={activeThread ?? ''}
-              title={title}
-              subtitle={subtitle}
-              connectionState={status.state}
-              locationEnabled={locationEnabled}
-              items={items}
-              mediaBase={mediaBase}
-              deviceInfo={deviceInfo}
-              hint={hint}
-              autoFocusHero={autoFocusHero}
-              onOpenDrawer={subagentView ? leaveSubAgent : () => setDrawerOpen(true)}
-              onStatusPress={openSettings}
-              onSend={sendChat}
-              subagentCount={subagentCount}
-              onAgentsPress={() => setAgentsOpen(true)}
-              subagentDoors={subagentDoors}
-              onOpenSubAgent={openSubAgentFromCard}
-              {...(subagentView
-                ? {
-                    subagent: {
-                      id: subagentView.id,
-                      type: subagentView.type,
-                      status: streaming ? ('running' as const) : subagentView.status,
-                      messageCount: subagentView.messageCount,
-                      parentTitle: parentTitleOf(subagentView.parentThreadId),
-                    },
-                    onSubAgentMenu: () => setSubagentMenuOpen(true),
-                  }
-                : {})}
-              onBubbleMenu={setBubbleMenu}
-              onOpenImage={setImageViewer}
-              onOpenText={setTextViewer}
-              onOpenVideo={setVideoViewer}
-              onOpenFile={setFileViewer}
-              onOpenMenu={() => setCommandMenuOpen(true)}
-              onCommandEntered={dispatchCommand}
-              onTagCommand={dispatchTagCommand}
-              streaming={streaming}
-              onStop={() => {
-                if (activeThread) connection.send(encodeChatStop(activeThread));
-              }}
-              onNewThread={newThread}
-              onLoadOlder={loadOlderHistory}
-              loadingOlder={historyPage.loading}
-            />
+            layout.sidePane ? null : chatScreen
           )}
+        </View>
+        )}
+        </View>
         </View>
       </KeyboardAvoidingView>
 
+      {layout.pinnedDrawer ? null : (
       <Drawer
         open={drawerOpen}
+        focusSearch={searchFocus}
         sessions={sessions}
         unread={unread}
         activeThread={activeThread}
@@ -3557,6 +3669,7 @@ export function AppShell(): React.JSX.Element {
           setArchivesOpen(true);
         }}
       />
+      )}
 
       {imageViewer ? (
         <ImageViewer
@@ -4114,11 +4227,24 @@ export function AppShell(): React.JSX.Element {
 
 const createStyles = (palette: Palette) => ({
   safe: { flex: 1, backgroundColor: palette.bg },
+  shell: { flex: 1, flexDirection: 'row' as const },
   container: {
     flex: 1,
+    // A column in a row: without this a wide conversation pushes the list off the screen.
+    minWidth: 0,
     paddingHorizontal: space.md,
     paddingTop: space.sm,
     paddingBottom: space.lg,
+  },
+  containerSplit: { flexDirection: 'row' as const },
+  chatPane: { flex: 1, minWidth: 0 },
+  pageFull: { flex: 1 },
+  pagePane: {
+    width: 460,
+    marginLeft: space.md,
+    paddingLeft: space.md,
+    borderLeftWidth: 1,
+    borderLeftColor: palette.border,
   },
   approvalArgs: {
     fontSize: font.small,

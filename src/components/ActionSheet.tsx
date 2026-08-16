@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useDismissKeyboard, useKeyboardHeight, useSheetBottomInset } from '../core/keyboard';
+import { useLayout } from '../core/layout';
 import { useScrollIndicator } from './ScrollIndicator';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
@@ -61,6 +62,9 @@ export function ActionSheet({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
+  // A sheet slides from the bottom because that is where a thumb is. A mouse is nowhere in
+  // particular, so on a desktop the same menu is a dialog in the middle of the screen.
+  const { dialogs } = useLayout();
   // The composer's keyboard goes on the way in, or it covers the lower options. The search row
   // is never autofocused, so this drops a keyboard the sheet did not ask for and never fights
   // one it did: the field only raises it once the user taps it.
@@ -95,7 +99,7 @@ export function ActionSheet({
   );
 
   return (
-    <View style={styles.backdrop}>
+    <View style={[styles.backdrop, dialogs && styles.backdropCentered]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
       <View
@@ -105,9 +109,11 @@ export function ActionSheet({
           // held at 70% the list would be squeezed to a couple of rows the moment the search
           // row is tapped, so the ceiling rises while the keyboard is up.
           keyboard > 0 ? styles.sheetOverKeyboard : styles.sheetCapped,
-          { paddingBottom: bottomInset },
+          { paddingBottom: dialogs ? space.lg : bottomInset },
+          dialogs && styles.dialog,
         ]}>
-        <View style={styles.grabber} />
+        {/* The grabber says "drag me down": a dialog is not dragged anywhere. */}
+        {dialogs ? null : <View style={styles.grabber} />}
         {preview ? (
           <Text style={styles.preview} numberOfLines={2}>
             {preview}
@@ -169,6 +175,15 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     gap: space.xs,
+  },
+  backdropCentered: { justifyContent: 'center' as const, alignItems: 'center' as const },
+  dialog: {
+    width: 460,
+    maxWidth: '92%' as const,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingTop: space.lg,
   },
   // A long option list (every model) must scroll without leaving the screen.
   sheetCapped: { maxHeight: '70%' as const },

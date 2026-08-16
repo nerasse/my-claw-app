@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSheetBottomInset } from '../core/keyboard';
+import { useLayout } from '../core/layout';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -31,6 +32,7 @@ export function PromptSheet({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
+  const { dialogs } = useLayout();
   // The field is autofocused: without this the keyboard opens straight over the sheet.
   const bottomInset = useSheetBottomInset(space.xl);
   const [value, setValue] = useState(initialValue);
@@ -48,15 +50,20 @@ export function PromptSheet({
   };
 
   return (
-    <View style={styles.backdrop}>
+    <View style={[styles.backdrop, dialogs && styles.backdropCentered]}>
       <Pressable
         style={StyleSheet.absoluteFill}
         onPress={close}
         accessibilityLabel="Close menu"
       />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
-      <View style={[styles.sheet, { paddingBottom: bottomInset }]}>
-        <View style={styles.grabber} />
+      <View
+        style={[
+          styles.sheet,
+          { paddingBottom: dialogs ? space.lg : bottomInset },
+          dialogs && styles.dialog,
+        ]}>
+        {dialogs ? null : <View style={styles.grabber} />}
         <Text style={styles.title}>{title}</Text>
 
         <TextInput
@@ -106,6 +113,7 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.overlay,
     justifyContent: 'flex-end' as const,
   },
+  backdropCentered: { justifyContent: 'center' as const, alignItems: 'center' as const },
   sheet: {
     backgroundColor: palette.surface,
     borderTopLeftRadius: radius.lg,
@@ -113,6 +121,14 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     gap: space.md,
+  },
+  dialog: {
+    width: 440,
+    maxWidth: '92%' as const,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingTop: space.lg,
   },
   grabber: {
     alignSelf: 'center' as const,

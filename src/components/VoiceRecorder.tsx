@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, PanResponder, Pressable, Text, Vibration, View } from 'react-native';
+import { Animated, PanResponder, Platform, Pressable, Text, Vibration, View } from 'react-native';
 import { MicIcon, TrashIcon } from './icons';
 import {
   deviceBridge,
@@ -95,7 +95,8 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     setPhaseBoth('idle');
     Animated.spring(slide, {
       toValue: 0,
-      useNativeDriver: true,
+      // No native animation module in a browser: asking for one only prints a warning.
+      useNativeDriver: Platform.OS !== 'web',
       speed: 20,
       bounciness: 4,
     }).start();

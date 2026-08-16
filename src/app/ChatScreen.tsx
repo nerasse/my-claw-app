@@ -21,6 +21,9 @@ import { LocationEditor } from '../components/LocationEditor';
 import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { useLayout } from '../core/layout';
+import { watchFileDrop } from '../core/fileDrop';
+import { selectableProps } from '../core/webProps';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 const GROUP_WINDOW_MS = 120_000;
@@ -130,6 +133,10 @@ export function ChatScreen({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
+  const layout = useLayout();
+  // A conversation is prose: past ~90 characters a line stops being readable, however wide the
+  // window is. The column is centred inside the pane rather than stretched across it.
+  const column = { maxWidth: layout.readingWidth, width: '100%' as const, alignSelf: 'center' as const };
   const listRef = useRef<FlatList<ChatItem>>(null);
   const [draft, setDraft] = useState('');
   const [atBottom, setAtBottom] = useState(true);
@@ -252,6 +259,25 @@ export function ChatScreen({
     setLocationSheet(false);
   }, []);
 
+  /**
+   * A file dragged onto the window, or pasted into it, is staged exactly like a picked one.
+   * No-op on Android.
+   */
+  useEffect(
+    () =>
+      watchFileDrop(files => {
+        addAssets(
+          files.map(file => ({
+            uri: file.uri,
+            fileName: file.name,
+            type: file.type,
+            fileSize: file.size || undefined,
+          })),
+        );
+      }),
+    [addAssets],
+  );
+
   const pickFiles = useCallback(() => {
     setAttachOpen(false);
     deviceBridge
@@ -364,6 +390,17 @@ export function ChatScreen({
     setDraft('');
   }, [attachments, deviceInfo, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 
+  /** Up arrow on an empty composer: the last thing sent, back in the field. */
+  const recallLast = useCallback(() => {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (item?.kind === 'text' && item.role === 'user' && item.text.trim()) {
+        setDraft(item.text);
+        return;
+      }
+    }
+  }, [items]);
+
   const empty = items.length === 0;
 
   // `grouped[i]` says row i continues the previous author's block. Computed once per items change
@@ -428,7 +465,7 @@ export function ChatScreen({
   return (
     <View style={styles.screen}>
       {subagent ? (
-        <View style={styles.subHeader}>
+        <View style={[styles.subHeader, column]}>
           {/* Names the parent rather than saying "back": the way out must be legible without
               remembering how you got in. */}
           <Pressable
@@ -465,14 +502,17 @@ export function ChatScreen({
           <View style={styles.subRule} />
         </View>
       ) : (
-      <View style={styles.header}>
-        <Pressable
-          onPress={onOpenDrawer}
-          style={styles.menuButton}
-          accessibilityRole="button"
-          accessibilityLabel="Open conversations">
-          <Text style={styles.menuGlyph}>☰</Text>
-        </Pressable>
+      <View style={[styles.header, column]}>
+        {/* The list is a column of its own on a desktop, so the hamburger goes with it. */}
+        {layout.pinnedDrawer ? null : (
+          <Pressable
+            onPress={onOpenDrawer}
+            style={styles.menuButton}
+            accessibilityRole="button"
+            accessibilityLabel="Open conversations">
+            <Text style={styles.menuGlyph}>☰</Text>
+          </Pressable>
+        )}
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={1}>
             {title}
@@ -512,7 +552,7 @@ export function ChatScreen({
         ) : null}
         <Pressable
           onPress={onOpenMenu}
-          style={styles.menuButton}
+          style={[styles.menuButton, layout.dense && styles.menuButtonDense]}
           accessibilityRole="button"
           accessibilityLabel="Commands">
           <Text style={styles.menuGlyph}>⋮</Text>
@@ -523,7 +563,7 @@ export function ChatScreen({
       {empty ? (
         // New conversation: the composer itself is the screen. Keyed by thread so switching
         // straight from one empty thread to another re-focuses the field.
-        <View style={styles.hero}>
+        <View style={[styles.hero, column]}>
           <Composer
             key={threadId}
             hero
@@ -549,11 +589,12 @@ export function ChatScreen({
             uploadProgress={uploadProgress}
             streaming={streaming}
             onStop={onStop}
+            onRecallLast={recallLast}
           />
         </View>
       ) : (
         <>
-          <View style={styles.listWrap}>
+          <View style={[styles.listWrap, column]} {...selectableProps()}>
             {/* Inverted: the newest message is index 0 and sits at offset 0, so opening a
                 conversation lands on it with no scrolling at all. scrollToEnd on a list of
                 unmeasured rows aims at an estimated content height and stops short of the last
@@ -604,6 +645,7 @@ export function ChatScreen({
         ) : null}
         </View>
 
+        <View style={column}>
         <Composer
           value={draft}
           onChange={setDraft}
@@ -625,7 +667,9 @@ export function ChatScreen({
           uploadError={uploadError}
           streaming={streaming}
           onStop={onStop}
+          onRecallLast={recallLast}
         />
+        </View>
         </>
       )}
 
@@ -726,6 +770,7 @@ const createStyles = (palette: Palette) => ({
     color: palette.accent,
     fontSize: font.micro,
   },
+  menuButtonDense: { width: 32, height: 32 },
   menuButton: {
     width: 40,
     height: 40,

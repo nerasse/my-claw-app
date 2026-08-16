@@ -26,11 +26,18 @@ function Separator(): React.JSX.Element {
 const keyOfThread = (item: SessionSummary): string => item.threadId;
 
 /**
- * Left slide-over: conversations first, pinned entries (Sub-Agents, Archived, Jobs, Settings) at
- * the bottom. Stays mounted so the panel animates both ways and swallows no touches while closed.
+ * The conversation list: conversations first, fixed entries (Sub-Agents, Archived, Jobs,
+ * Settings) at the bottom.
+ *
+ * Two shapes, same panel. On a phone it is a slide-over that stays mounted, so it animates both
+ * ways and swallows no touches while closed. Wide enough and it is `pinned` instead: a column of
+ * the layout, always there, no backdrop and no swipe, because hiding the list behind a button is
+ * a concession to a 400pt screen and nothing else.
  */
 export function Drawer({
   open,
+  pinned = false,
+  focusSearch = 0,
   sessions,
   unread,
   activeThread,
@@ -48,6 +55,10 @@ export function Drawer({
   onOpenArchives,
 }: {
   open: boolean;
+  /** Standing column instead of a slide-over. `open` and `onClose` are then meaningless. */
+  pinned?: boolean;
+  /** Bumped by the Ctrl+K shortcut: the search field takes the caret. */
+  focusSearch?: number;
   sessions: SessionSummary[];
   unread: string[];
   activeThread: string | null;
@@ -69,11 +80,13 @@ export function Drawer({
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
+  const searchRef = useRef<TextInput>(null);
   const [query, setQuery] = useState('');
   const { scrollProps, indicator } = useScrollIndicator();
   // The panel stays mounted, so opening it is a prop change, not a mount. Its search field is
   // never focused on the way in: whatever keyboard is up belongs to the composer behind it.
-  useDismissKeyboard(open);
+  // A pinned panel never "opens", so it never takes the keyboard away from the composer.
+  useDismissKeyboard(pinned ? false : open);
 
   const threadsById = useMemo(() => new Map(sessions.map(session => [session.threadId, session])), [sessions]);
   // Membership as a Set, not `unread.includes` per row: that scan ran once per visible row on
@@ -88,17 +101,22 @@ export function Drawer({
     const needle = query.trim().toLowerCase();
     const match = (session: SessionSummary) =>
       !needle || session.title.toLowerCase().includes(needle);
-    const pinned: SessionSummary[] = [];
+    const pinnedMatches: SessionSummary[] = [];
     for (const threadId of pinnedOrder) {
       const session = threadsById.get(threadId);
-      if (session && match(session)) pinned.push(session);
+      if (session && match(session)) pinnedMatches.push(session);
     }
     const rest = sessions.filter(session => match(session) && !pinnedIds.has(session.threadId));
     const pinnedCount = sessions.reduce(
       (count, session) => count + (pinnedIds.has(session.threadId) ? 1 : 0),
       0,
     );
-    return { pinnedRows: pinned, restRows: rest, pinnedTotal: pinnedCount, restTotal: sessions.length - pinnedCount };
+    return {
+      pinnedRows: pinnedMatches,
+      restRows: rest,
+      pinnedTotal: pinnedCount,
+      restTotal: sessions.length - pinnedCount,
+    };
   }, [sessions, threadsById, pinnedOrder, pinnedIds, query]);
 
   // Sessions that vanished (deleted, archived) leave a stale id behind; prune once the server
@@ -147,8 +165,21 @@ export function Drawer({
   );
 
   useEffect(() => {
-    Animated.timing(progress, { toValue: open ? 1 : 0, duration: 200, useNativeDriver: true }).start();
-  }, [open, progress]);
+    if (pinned) return;
+    Animated.timing(progress, {
+      toValue: open ? 1 : 0,
+      duration: 200,
+      // There is no native animation module in a browser: asking for one is a console warning
+      // on every open, and the fallback it then takes is the JS driver anyway.
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [open, pinned, progress]);
+
+  // Counter, not a boolean: pressing the shortcut twice must focus twice, and there is no state
+  // to reset in between.
+  useEffect(() => {
+    if (focusSearch > 0) searchRef.current?.focus();
+  }, [focusSearch]);
 
   // Horizontal drag closes the panel; vertical drags stay with the conversation list.
   const panResponder = useMemo(
@@ -165,20 +196,8 @@ export function Drawer({
 
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-DRAWER_WIDTH, 0] });
 
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'auto' : 'none'}>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: progress }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
-      </Animated.View>
-
-      <Animated.View
-        style={[
-          styles.panel,
-          // The panel is absolutely positioned, so the shell's safe-area padding does not
-          // apply to it: the phone's status bar and gesture bar have to be padded here.
-          { paddingTop: insets.top + space.sm, transform: [{ translateX }] },
-        ]}
-        {...panResponder.panHandlers}>
+  const content = (
+    <>
         <View style={styles.head}>
           <Text style={styles.brand}>MyClaw</Text>
           <Pressable
@@ -192,6 +211,7 @@ export function Drawer({
         </View>
 
         <TextInput
+          ref={searchRef}
           style={styles.search}
           value={query}
           onChangeText={setQuery}
@@ -320,6 +340,31 @@ export function Drawer({
             <Text style={styles.footerGlyph}>›</Text>
           </Pressable>
         </View>
+    </>
+  );
+
+  // Pinned: part of the layout, laid out by the row it sits in. The safe-area padding is the
+  // shell's job there, which is why only the slide-over pays the status bar itself.
+  if (pinned) {
+    return <View style={[styles.panel, styles.panelPinned]}>{content}</View>;
+  }
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'auto' : 'none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: progress }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.panel,
+          styles.panelFloating,
+          // The panel is absolutely positioned, so the shell's safe-area padding does not
+          // apply to it: the phone's status bar and gesture bar have to be padded here.
+          { paddingTop: insets.top + space.sm, transform: [{ translateX }] },
+        ]}
+        {...panResponder.panHandlers}>
+        {content}
       </Animated.View>
     </View>
   );
@@ -328,15 +373,18 @@ export function Drawer({
 const createStyles = (palette: Palette) => ({
   backdrop: { backgroundColor: palette.overlay },
   panel: {
-    position: 'absolute' as const,
-    top: 0,
-    bottom: 0,
-    left: 0,
     width: DRAWER_WIDTH,
     backgroundColor: palette.surface,
     borderRightWidth: 1,
     borderRightColor: palette.border,
   },
+  panelFloating: {
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    left: 0,
+  },
+  panelPinned: { paddingTop: space.sm },
   head: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

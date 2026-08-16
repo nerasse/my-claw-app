@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,6 +10,9 @@ import {
 } from 'react-native';
 import { PlusIcon, SendIcon } from './icons';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
+import { editorIntent } from '../core/editorKeys';
+import { useLayout } from '../core/layout';
+import { autoGrow } from '../core/webProps';
 import type { VoiceRecording } from '../core/nativeBridge';
 import type { LocationData } from '../core/protocol';
 import { StagedVoiceList } from './StagedVoiceList';
@@ -43,6 +46,7 @@ export function Composer({
   onRecordingError,
   streaming,
   onStop,
+  onRecallLast,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -84,9 +88,16 @@ export function Composer({
   /** A run is answering in the conversation: the empty composer offers Stop instead of Send. */
   streaming?: boolean;
   onStop?: () => void;
+  /**
+   * Up arrow on an empty field: bring back the last message sent, to fix a typo and send it
+   * again. A desktop habit, and there is no arrow key to press on a phone.
+   */
+  onRecallLast?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
+  // Pill buttons sized for a thumb look like toys under a cursor, and eat the field's height.
+  const { dense } = useLayout();
   const empty = value.trim().length === 0;
   const staged = (attachments?.length ?? 0) + (location ? 1 : 0);
   // An attachment on its own is a message. Gating on text alone made the button dead for a
@@ -146,15 +157,37 @@ export function Composer({
 
   const onKeyPress = useCallback(
     (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
-      if (!menu || menu.length === 0) return;
-      if (event.nativeEvent.key === 'ArrowDown') {
-        setSelected(index => (index + 1) % menu.length);
-      } else if (event.nativeEvent.key === 'ArrowUp') {
-        setSelected(index => (index - 1 + menu.length) % menu.length);
+      const menuOpen = (menu?.length ?? 0) > 0;
+      switch (editorIntent(event, { menuOpen, empty: value.length === 0 })) {
+        case 'submit':
+          submitOrSelect();
+          return;
+        case 'complete':
+          if (menu && menu.length > 0) insert(menu[Math.min(selected, menu.length - 1)]!.name);
+          return;
+        case 'menu-down':
+          if (menu) setSelected(index => (index + 1) % menu.length);
+          return;
+        case 'menu-up':
+          if (menu) setSelected(index => (index - 1 + menu.length) % menu.length);
+          return;
+        case 'recall':
+          onRecallLast?.();
+          return;
+        default:
       }
     },
-    [menu],
+    [insert, menu, onRecallLast, selected, submitOrSelect, value.length],
   );
+
+  /**
+   * A textarea has one height in a browser, so the field is resized to its content on every
+   * change. No-op on Android, where the multiline TextInput grows by itself.
+   */
+  const inputRef = useRef<TextInput>(null);
+  useEffect(() => {
+    autoGrow(inputRef.current, hero ? 240 : 180);
+  }, [value, hero]);
 
   return (
     <View style={[styles.wrap, hero && styles.wrapHero]}>
@@ -245,7 +278,7 @@ export function Composer({
       <View style={styles.row}>
         {onPickAttachment && !recording ? (
           <Pressable
-            style={[styles.attach, hero && styles.sendHero]}
+            style={[styles.attach, hero && styles.sendHero, dense && !hero && styles.buttonDense]}
             onPress={onPickAttachment}
             disabled={uploading || locationBusy}
             accessibilityRole="button"
@@ -259,7 +292,8 @@ export function Composer({
         ) : null}
         {recording ? null : (
         <TextInput
-          style={[styles.input, hero && styles.inputHero]}
+          ref={inputRef}
+          style={[styles.input, hero && styles.inputHero, dense && !hero && styles.inputDense]}
           value={value}
           onChangeText={onChange}
           onSubmitEditing={submitOrSelect}
@@ -282,7 +316,12 @@ export function Composer({
         ) : null}
         {sendVisible ? (
           <Pressable
-            style={[styles.send, hero && styles.sendHero, nothingToSend && styles.sendIdle]}
+            style={[
+              styles.send,
+              hero && styles.sendHero,
+              dense && !hero && styles.buttonDense,
+              nothingToSend && styles.sendIdle,
+            ]}
             onPress={onSend}
             disabled={nothingToSend}
             accessibilityRole="button"
@@ -413,6 +452,9 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   sendHero: { width: 50, height: 50 },
+  buttonDense: { width: 36, height: 36 },
+  // A mouse can scroll a tall field and a desktop has the room: four lines is a phone's ceiling.
+  inputDense: { minHeight: 36, paddingVertical: 6, maxHeight: 200 },
   sendIdle: { backgroundColor: palette.surfaceAlt, borderWidth: 1, borderColor: palette.border },
   sendStop: { backgroundColor: palette.danger },
   stopGlyph: { fontSize: 16, lineHeight: 18, color: palette.accentText },
