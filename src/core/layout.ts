@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { pointerFine } from './platform';
+import { DRAWER_WIDTH } from '../theme/palettes';
 
 /**
  * How much room the window gives, expressed as decisions rather than pixels.
@@ -28,6 +29,13 @@ const WIDE_MIN = 1440;
  */
 export const READING_WIDTH = 860;
 
+/**
+ * Cap for a page of controls (settings, files, jobs). Wider than prose, because a row here is a
+ * label and a value at opposite ends rather than a sentence, and narrower than the window,
+ * because a 1600pt row makes the two ends unrelatable.
+ */
+export const PAGE_WIDTH = 980;
+
 export interface Layout {
   width: number;
   height: number;
@@ -42,6 +50,19 @@ export interface Layout {
   dense: boolean;
   /** Cap for a column of prose. */
   readingWidth: number;
+  /** Cap for a page of controls. */
+  pageWidth: number;
+}
+
+/**
+ * Where a full-screen layer (jobs, the agent roster, a report) starts.
+ *
+ * Those pages cover the window, which on a desktop means covering the conversation list too: a
+ * column of the layout, not something to paint over. They begin where it ends instead.
+ */
+export function useLayerFrame(): { left: number } {
+  const { pinnedDrawer } = useLayout();
+  return useMemo(() => ({ left: pinnedDrawer ? DRAWER_WIDTH : 0 }), [pinnedDrawer]);
 }
 
 export function useLayout(): Layout {
@@ -59,6 +80,7 @@ export function useLayout(): Layout {
       sidePane: width >= WIDE_MIN,
       dense: desktop && pointerFine,
       readingWidth: READING_WIDTH,
+      pageWidth: PAGE_WIDTH,
     };
   }, [width, height]);
 }

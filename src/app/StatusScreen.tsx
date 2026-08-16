@@ -5,6 +5,7 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useStatus } from '../core/status';
 import type { StatusPayload } from '../core/protocol';
+import { useLayerFrame } from '../core/layout';
 
 /**
  * Fullscreen status page, drawn from the structured `/status` report. It lives outside the
@@ -50,13 +51,14 @@ function duration(ms: number): string {
 
 export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const layerFrame = useLayerFrame();
   const insets = useSafeAreaInsets();
   const status = useStatus();
   useDismissKeyboard();
   const payload = status.payload;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage]}>
+    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}

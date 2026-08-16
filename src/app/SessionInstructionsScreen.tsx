@@ -6,6 +6,7 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { useSessionInstructions } from '../core/sessionInstructions';
 import { CopyButton } from '../components/CopyButton';
 import type { SessionInstructionLayer, SessionInstructionNested } from '../core/protocol';
+import { useLayerFrame } from '../core/layout';
 
 /**
  * What this conversation is actually loaded with: every layer of the system prompt as the server
@@ -53,13 +54,14 @@ export function SessionInstructionsScreen({
   onEditNested: (item: SessionInstructionNested) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const layerFrame = useLayerFrame();
   const insets = useSafeAreaInsets();
   const state = useSessionInstructions();
   useDismissKeyboard();
   const payload = state.payload;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage]}>
+    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}

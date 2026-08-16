@@ -5,6 +5,7 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useJobs } from '../core/jobs';
 import type { JobEntry } from '../core/protocol';
+import { useLayerFrame } from '../core/layout';
 
 // Built once: a card shows two of these, and a rebuilt Intl.DateTimeFormat per call was the
 // most expensive thing on the screen.
@@ -35,12 +36,13 @@ export function JobsScreen({
   onSessions: (job: JobEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const layerFrame = useLayerFrame();
   const insets = useSafeAreaInsets();
   const jobs = useJobs();
   useDismissKeyboard();
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage]}>
+    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}

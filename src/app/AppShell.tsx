@@ -3181,7 +3181,12 @@ export function AppShell(): React.JSX.Element {
             is the difference between reading the two and remembering one. */}
         {layout.sidePane ? <View style={styles.chatPane}>{chatScreen}</View> : null}
         {layout.sidePane && !pageOpen ? null : (
-        <View style={layout.sidePane ? styles.pagePane : styles.pageFull}>
+        <View
+          style={
+            layout.sidePane
+              ? styles.pagePane
+              : [styles.pageFull, layout.pinnedDrawer && { maxWidth: layout.pageWidth, alignSelf: 'center' as const, width: '100%' as const }]
+          }>
           {settingsOpen ? (
             settingsPage === 'index' ? (
               <SettingsScreen

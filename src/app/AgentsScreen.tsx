@@ -6,6 +6,7 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import type { RosterGroup, RosterRow, SubAgentsStatus } from '../core/subagents';
 import type { SubAgentEntry } from '../core/protocol';
+import { useLayerFrame } from '../core/layout';
 
 /**
  * A group as the list consumes it. `showMajor` is decided once, here, rather than by having every
@@ -80,6 +81,7 @@ export function AgentsScreen({
   onOpenAgent: (entry: SubAgentEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const layerFrame = useLayerFrame();
   const insets = useSafeAreaInsets();
   const { scrollProps, indicator } = useScrollIndicator();
   useDismissKeyboard();
@@ -118,7 +120,7 @@ export function AgentsScreen({
   );
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage]}>
+    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}

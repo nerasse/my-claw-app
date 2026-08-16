@@ -10,6 +10,7 @@ import { ModelPickerSheet, pickerBack, pickerStart, type PickerState } from '../
 import { ScheduleEditor } from '../components/ScheduleEditor';
 import { scheduleInvalid } from '../core/cron';
 import type { JobEntry, JobScope, JobScopeMode, SkillEntry, ToolEntry, McpEntry, WorkspaceEntry, JobFieldsOut } from '../core/protocol';
+import { useLayerFrame } from '../core/layout';
 
 export interface JobDraft {
   name: string;
@@ -94,6 +95,7 @@ export function JobsEditorScreen({
   onDelete: (job: JobEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const layerFrame = useLayerFrame();
   const insets = useSafeAreaInsets();
   useDismissKeyboard();
   const catalog = useModelCatalog();
@@ -268,7 +270,7 @@ export function JobsEditorScreen({
   };
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.screen]}>
+    <View style={[StyleSheet.absoluteFill, styles.screen, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onBack}

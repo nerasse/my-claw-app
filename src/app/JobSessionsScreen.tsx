@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import type { JobRunEntry } from '../core/protocol';
+import { useLayerFrame } from '../core/layout';
 
 // Built once, not per row: a job on a five-minute cron writes ~288 runs a day and this list is
 // never pruned, so a per-call Intl.DateTimeFormat was thousands of constructions in one pass.
@@ -77,6 +78,7 @@ export function JobSessionsScreen({
   onOpenRun: (threadId: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const layerFrame = useLayerFrame();
   const insets = useSafeAreaInsets();
   useDismissKeyboard();
 
@@ -86,7 +88,7 @@ export function JobSessionsScreen({
   );
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage]}>
+    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}

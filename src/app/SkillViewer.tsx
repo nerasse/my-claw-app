@@ -7,6 +7,7 @@ import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
+import { useLayerFrame } from '../core/layout';
 
 /**
  * Full-screen reader for one skill's SKILL.md: frontmatter stripped into a meta header, the
@@ -32,6 +33,7 @@ export function SkillViewer({
   onActions?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const layerFrame = useLayerFrame();
   // nothing to type into: the keyboard would cover the document.
   useDismissKeyboard();
   const { palette } = useTheme();
@@ -65,7 +67,7 @@ export function SkillViewer({
   const metaName = doc?.meta.name ?? skill.name;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}>
+    <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }, layerFrame]}>
       <View style={styles.topBar}>
         <Pressable
           onPress={onClose}
