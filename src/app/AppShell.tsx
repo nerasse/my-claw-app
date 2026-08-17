@@ -19,18 +19,19 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { connection } from '../core/connection';
 import {
   chatStore,
-  useChatItems,
+  useChatItemCount,
+  useSpawnCards,
   useActiveRun,
   useHistoryPage,
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
-import { subAgentStore, groupRoster, useSubAgents } from '../core/subagents';
+import { groupRoster, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { pinnedStore, usePinnedOrder } from '../core/pinned';
-import { commandStore, parseTagCommand } from '../core/commands';
+import { parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
-import { acknowledgeDiagnostics, flushDiagnostics, loadDiagnostics } from '../core/diagnostics';
+import { flushDiagnostics, loadDiagnostics } from '../core/diagnostics';
 import {
   encodeApprovalResponse,
   encodeAgentsConfigGet,
@@ -39,9 +40,7 @@ import {
   encodeInstructionsLayerSet,
   encodeInstructionsList,
   encodeInstructionsSet,
-  encodeAgentsModelClear,
   encodeAgentsModelSet,
-  encodeAgentsFallbackSet,
   encodeAgentsScopeSet,
   encodeAgentsWorkspaceSet,
   encodeAgentsIterationsSet,
@@ -93,7 +92,6 @@ import {
   MAX_TITLE_LENGTH,
   type AgentFileFieldsOut,
   type ApprovalRequestFrame,
-  type AgentsConfigResultFrame,
   type FileScopeMode,
   type JobEntry,
   type SubAgentEntry,
@@ -131,7 +129,6 @@ import {
   dismissThreadNotification,
   parseNotificationLink,
   pushSupported,
-  registerForPush,
   resetPushRegistration,
   subscribeToPushRegistration,
 } from '../core/notifications';
@@ -173,9 +170,7 @@ import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ProviderEditScreen } from './ProviderEditScreen';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
-import { locationPreview } from '../core/locationPreview';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
-import { devicesStore } from '../core/devices';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
 import { ToolsScreen } from './ToolsScreen';
@@ -198,7 +193,7 @@ import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ScreenLayer } from '../components/ScreenLayer';
-import { ModelPickerPage, ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
+import { ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
@@ -207,6 +202,14 @@ import { useLayout } from '../core/layout';
 import { useHardwareBack } from '../core/hardwareBack';
 import { useHotkeys } from '../core/hotkeys';
 import { initialRoute, showThread, watchBack } from '../core/route';
+import { isSubAgentThread, routeServerFrame, type ServerFrameHandlers } from '../core/frameRouter';
+import {
+  readsAgentsConfig,
+  PAGE_REQUESTS,
+  READS_INSTRUCTIONS_PAGES,
+} from './settingsPages';
+import { AgentModelPickerPage } from './AgentModelPickerPage';
+import { TagEditorPage } from './TagEditorPage';
 import { setPageTitle } from '../core/pageTitle';
 
 /** One page of replayed history, not a ceiling: scrolling past the oldest asks for the next. */
@@ -234,217 +237,6 @@ function scopeModeOfFile(mode: FileScopeMode): ScopeMode {
 function unknownOfList(names: string[], catalog: Array<{ name: string }>): string[] {
   const known = new Set(catalog.map(item => item.name));
   return names.filter(name => !known.has(name));
-}
-
-/**
- * The pages that call a configured name "removed" when it is missing from the skills or MCP
- * catalog. Naming them once is the point: an unfetched catalog is not evidence that a name is
- * gone, so a page that paints that verdict red has to be a page that asks for the list.
- */
-const CATALOG_JUDGING_PAGES: readonly string[] = ['agents', 'agent', 'file', 'scope'];
-
-function judgesCatalogNames(page: string): boolean {
-  return CATALOG_JUDGING_PAGES.includes(page);
-}
-
-/**
- * The pages fed by `agents.config.result`: the agents stack, the provider stack, and the index,
- * whose rows carry live counts from the same snapshot. Naming them once is the point -- the
- * request used to live on the Agents page alone, so reaching Providers straight from the index
- * (its own category since it left the Agents page) showed an empty list and a count of zero.
- */
-const AGENTS_CONFIG_PAGES: readonly string[] = [
-  'index',
-  'agents',
-  'agent',
-  'providers',
-  'provider',
-  'provider-edit',
-  'provider-env',
-];
-
-function readsAgentsConfig(page: string): boolean {
-  return AGENTS_CONFIG_PAGES.includes(page);
-}
-
-/**
- * The pages fed by `instructions.list.result`. The workspaces list needs it for the per-row
- * prompt summary, the workspace page for its file rows, and the layer screen for the ladder it
- * resolves against -- a page that shows the listing without asking for it shows an empty one,
- * which is how Providers ended up reading "0 providers" when it was reached from the index.
- */
-const READS_INSTRUCTIONS_PAGES: ReadonlySet<string> = new Set(['workspaces', 'workspace', 'instruction-layer']);
-
-/**
- * The model picker pointed at the server config instead of a session: "global" edits
- * llm.defaultModel, "fallback" edits llm.visionFallback, an agent key edits agents.<key>.llm.
- * The root option hands an agent back to its inheritance (clear), which is the "Use default"
- * of the chat picker in reverse.
- *
- * An agent pins its effort next to its model, and a window too, so the flow is model then
- * effort then window then confirm. Both steps are skipped when the staged model is a tag: the
- * tag pins the effort and the ceiling itself, so either one set here would be dead config, and
- * the confirmation names the tag's pin instead. Picking the full window removes the agent's own
- * cap, which is how it returns to the standing policy.
- *
- * The fallback target is the reverse of the default: it exists so image runs have somewhere
- * to go when the resolved model cannot take images, so only vision-capable models are on
- * offer, and the root option removes the pin (image runs then stay on the resolved model).
- *
- * Rendered as a full settings page: the picker replaces the agents list entirely, and its own
- * back entry walks the flow before leaving the page, so no config ever peeks over the list.
- */
-function AgentModelPickerPage({
-  target,
-  config,
-  state,
-  onStateChange,
-  onBack,
-}: {
-  /** "global", "fallback" or an agent key. */
-  target: string;
-  config: AgentsConfigResultFrame | null;
-  state: PickerState;
-  onStateChange: (state: PickerState) => void;
-  /** Leaves the page; the flow's own back entry walks the steps first. */
-  onBack: () => void;
-}): React.JSX.Element {
-  const catalog = useModelCatalog();
-  const isFallback = target === 'fallback';
-  const agent = !isFallback && target !== 'global' ? (config?.agents.find(entry => entry.key === target) ?? null) : null;
-  const activeId = agent ? agent.model : isFallback ? config?.fallback ?? '' : config?.defaultModel ?? '';
-  const defaultLabel =
-    catalog.models.find(model => model.id === config?.defaultModel)?.label ??
-    config?.defaultModel ??
-    'global default';
-  const orchestratorLabel =
-    config?.agents.find(entry => entry.key === 'orchestrator')?.model ?? defaultLabel;
-
-  return (
-    <ModelPickerPage
-      title={agent ? `Model for ${agent.label}` : isFallback ? 'Fallback model' : 'Default model'}
-      backLabel={agent ? 'Back to the agent' : 'Back to the agents list'}
-      models={isFallback ? catalog.models.filter(model => model.vision === true) : catalog.models}
-      activeId={activeId}
-      state={state}
-      onStateChange={onStateChange}
-      onClose={onBack}
-      onCommit={choice => {
-        if (isFallback) {
-          connection.send(encodeAgentsFallbackSet(choice.model)).catch(() => {});
-          return;
-        }
-        // undefined keeps the target's effort, null clears it, a level pins it.
-        const effort = choice.effort === undefined ? undefined : choice.effort ?? '';
-        connection.send(encodeAgentsModelSet(target, choice.model, effort)).catch(() => {});
-        if (agent && choice.context !== undefined) {
-          connection
-            .send(encodeAgentsContextCapSet(agent.key, choice.context === 'full' ? null : choice.context))
-            .catch(() => {});
-        }
-      }}
-      skipPinsOnTag
-      rootOption={
-        agent
-          ? {
-              label:
-                agent.inheritsFrom === 'orchestrator'
-                  ? `Inherit orchestrator (${orchestratorLabel})`
-                  : `Follow global default (${defaultLabel})`,
-              selected: !agent.pinned,
-              onPress: () => {
-                connection.send(encodeAgentsModelClear(agent.key)).catch(() => {});
-                onBack();
-              },
-            }
-          : isFallback
-            ? {
-                label: 'No fallback',
-                selected: !config?.fallback,
-                onPress: () => {
-                  connection.send(encodeAgentsFallbackSet('')).catch(() => {});
-                  onBack();
-                },
-              }
-            : null
-      }
-      effort={isFallback ? null : { current: agent ? agent.effort ?? '' : config?.defaultEffort ?? '' }}
-      context={
-        agent
-          ? {
-              ...(agent.contextCap === null || agent.contextCap === undefined || agent.contextCap === 0
-                ? {}
-                : { current: agent.contextCap }),
-            }
-          : null
-      }
-    />
-  );
-}
-
-/**
- * The tag editor page: one pass over the three things a tag pins (model, effort, context
- * ceiling), applied as a single upsert on the confirmation step. Leaving the flow early
- * changes nothing, and the cap row on the tags page stays for a value the graduations do
- * not offer. Like the agent picker, it is a full page: the tags list is replaced entirely.
- */
-function TagEditorPage({
-  name,
-  state,
-  onStateChange,
-  onBack,
-}: {
-  name: string;
-  state: PickerState;
-  onStateChange: (state: PickerState) => void;
-  /** Leaves the page; the flow's own back entry walks the steps first. */
-  onBack: () => void;
-}): React.JSX.Element {
-  const catalog = useModelCatalog();
-  const { tags } = useTags();
-  const tag = tags?.find(entry => entry.name === name) ?? null;
-
-  return (
-    <ModelPickerPage
-      title={`Tag ${name}`}
-      backLabel="Back to the tags list"
-      // No tag entries: a tag pinning a tag reference is how cycles are born (self-pins crash
-      // the server's resolver). Real provider models only; agents may still pin tags elsewhere.
-      models={catalog.models.filter(model => !model.id.startsWith('tag:'))}
-      activeId={tag?.model ?? ''}
-      state={state}
-      onStateChange={onStateChange}
-      onClose={onBack}
-      onCommit={choice => {
-        // undefined keeps the tag's own pin, null clears it, a level pins it. The upsert
-        // replaces the whole entry, so an omitted effort key is how a tag returns to "default".
-        const effort = choice.effort === undefined ? tag?.effort : (choice.effort ?? undefined);
-        // "full" means the tag pins no ceiling of its own, which is an absent contextCap.
-        const cap =
-          choice.context === undefined
-            ? tag?.contextCap
-            : choice.context === 'full'
-              ? undefined
-              : choice.context;
-        connection.send(encodeTagsUpsert(name, choice.model, effort, cap)).catch(() => {});
-        // The Tags group of the picker catalog and the provider-list row follow the server state.
-        connection.send(encodeModelList()).catch(() => {});
-        connection.send(encodeAgentsConfigGet()).catch(() => {});
-      }}
-      skipPinsOnTag
-      effort={{ current: tag?.effort ?? '' }}
-      context={{ ...(tag?.contextCap === undefined ? {} : { current: tag.contextCap }) }}
-    />
-  );
-}
-
-/**
- * A sub-agent handle is a thread id, but it is not a conversation: it must never be listed in the
- * drawer nor restored at boot, because reached that way it would open as a plain chat -- no parent
- * to go back to, and a send with no `parentThreadId`, which a private sub-agent refuses outright.
- */
-function isSubAgentThread(threadId: string): boolean {
-  return /^sub-[0-9a-f]{16}$/.test(threadId);
 }
 
 export function AppShell(): React.JSX.Element {
@@ -662,7 +454,7 @@ export function AppShell(): React.JSX.Element {
   // A run can ask several times in a row; each answer clears one, in order.
   const [approvals, setApprovals] = useState<ApprovalRequestFrame[]>([]);
 
-  const items = useChatItems(activeThread);
+  const itemCount = useChatItemCount(activeThread);
   const historyPage = useHistoryPage(activeThread);
   const sessions = useSessions();
   const archivedSessions = useArchivedSessions();
@@ -845,9 +637,13 @@ export function AppShell(): React.JSX.Element {
     const page = chatStore.getPage(threadId);
     if (!page.hasMore || page.loading) return;
     chatStore.setPageLoading(threadId, true);
+    // Resolved false, never rejected: a `.catch` here never ran, and the pagination stayed
+    // locked on a spinner that nothing could clear.
     connection
       .send(encodeSessionHistory(threadId, HISTORY_LIMIT, page.nextBefore))
-      .catch(() => chatStore.setPageLoading(threadId, false));
+      .then((delivered) => {
+        if (!delivered) chatStore.setPageLoading(threadId, false);
+      });
   }, []);
 
   const setGlobalDefaultModel = useCallback((modelId: string) => {
@@ -969,13 +765,6 @@ export function AppShell(): React.JSX.Element {
   );
 
   useEffect(() => {
-    /** Activity in a thread the user is not reading: badge it and make sure it is listed. */
-    const noteActivity = (threadId: string, text: string): void => {
-      if (threadId === activeThreadRef.current) return;
-      chatStore.markUnread(threadId);
-      if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text);
-    };
-
     const offState = connection.onState(next => {
       setStatus(next);
       if (next.state !== 'connected') {
@@ -993,405 +782,87 @@ export function AppShell(): React.JSX.Element {
     });
     const offPending = connection.onPending(setPending);
 
-    const offFrame = connection.onFrame(frame => {
-      // The run id rides on the reply: keeping the last one is what makes "logs for this run"
-      // possible without asking the user to read anything off a screen.
-      if (
-        (frame.type === 'chat.message' || frame.type === 'chat.stream.start') &&
-        frame.run
-      ) {
-        setLastRun(frame.run);
-      }
-      switch (frame.type) {
-        case 'location.capabilities':
-          setLocationEnabled(frame.enabled === true);
-          break;
-        case 'chat.location':
-          chatStore.setLocation(frame.threadId, frame.replyToId, frame.location);
-          break;
-        case 'location.preview.result':
-          locationPreview.receive(frame.id, frame.location);
-          break;
-        case 'chat.message':
-          chatStore.clearQueued(frame.threadId);
-          chatStore.addAgentMessage(
-            frame.threadId,
-            frame.id,
-            frame.text,
-            frame.attachments,
-            frame.replyToId,
-            frame.notice,
-          );
-          noteActivity(frame.threadId, frame.text);
-          break;
-        case 'chat.run.start':
-          chatStore.startRun(frame.threadId);
-          break;
-        case 'chat.run.end': {
-          chatStore.endRun(frame.threadId);
-          chatStore.clearQueued(frame.threadId);
-          // A run may have spawned sub-agents; the roster is refetched at its end rather than
-          // pushed, which keeps the counter honest without a live push path.
-          const parent = subagentRef.current?.parentThreadId ?? activeThreadRef.current;
-          if (parent) connection.send(encodeSubAgentsList(parent)).catch(() => {});
-          // The turn that just landed is what filled the window: the header's share of context is
-          // read back from the server here rather than guessed from the bubbles on screen. Same
-          // frame as the one the picker uses, so a run that switched model refreshes that too.
-          if (frame.threadId === activeThreadRef.current) {
-            connection.send(encodeModelGet(frame.threadId)).catch(() => {});
+    const frameHandlers: ServerFrameHandlers = {
+      activeThreadId: () => activeThreadRef.current,
+      subagentParent: () => subagentRef.current?.parentThreadId ?? null,
+      jobSessionsPage: () => jobSessionsRef.current,
+      jobsSaving: () => jobsSavingRef.current,
+      markJobsSaving: value => {
+        jobsSavingRef.current = value;
+      },
+      pendingWorkspace: pendingWorkspaceRef.current,
+      setRunTitles: titles => {
+        runTitlesRef.current = titles;
+      },
+      setVapidKey: key => {
+        vapidRef.current = key;
+      },
+      openThread,
+      selectThread,
+      setLastRun,
+      setLocationEnabled,
+      setServerVersion,
+      setDiagSnapshot,
+      setDiagLogs,
+      setDiagBusy,
+      setSessionFiles,
+      setFilesTotal,
+      setFilesError,
+      setVoice,
+      setSkills,
+      setSkillsError,
+      setTools,
+      setToolsMissing,
+      setToolsError,
+      setToolsSaving,
+      setMcpServers,
+      setMcpError,
+      setMcpBusy,
+      setWorkspaces,
+      setWorkspacesError,
+      setWorkspacesBusy,
+      setProviderBusy,
+      setStatusOpen,
+      setModelOpen,
+      setJobsEditor,
+      setJobsSaving,
+      setJobsError,
+      setJobRuns,
+      setRunsError,
+      setApprovals,
+      onConfigResult: frame => {
+        setConfigEditor({
+          status: 'ready',
+          draft: frame.content,
+          loaded: frame.content,
+          sha: frame.sha,
+          maxBytes: frame.maxBytes,
+          error: null,
+          changed: [],
+          rebootRequired: [],
+        });
+      },
+      onConfigSaved: frame => {
+        setConfigEditor(current => {
+          if (!current) return current;
+          if (frame.ok) {
+            return { ...current, status: 'ready', loaded: current.draft, sha: frame.sha, error: null, changed: frame.changed, rebootRequired: frame.rebootRequired };
           }
-          break;
-        }
-        case 'subagents.list.result':
-          subAgentStore.receive(frame);
-          break;
-        case 'device.list.result':
-          devicesStore.onList(frame);
-          break;
-        case 'device.revoke.result':
-          devicesStore.onRevoked(frame);
-          break;
-        case 'device.pair.info':
-          devicesStore.onPairInfo(frame);
-          break;
-        case 'device.pair.result':
-          // A lookup that found nothing answers with a result rather than an info frame; the
-          // screen has to leave its spinner and say why.
-          if (!frame.ok && !frame.deviceId) devicesStore.onPairError(frame.error ?? 'unknown');
-          else devicesStore.onPairResult(frame);
-          break;
-        case 'chat.stream.start':
-          // The agent is answering, so no command result is coming: a placeholder left by a
-          // command this server does not know would sit there forever.
-          chatStore.clearCommandPending(frame.threadId);
-          // Whatever it was waiting for is over: the run is writing.
-          chatStore.clearQueued(frame.threadId);
-          chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
-          noteActivity(frame.threadId, '');
-          break;
-        case 'chat.stream.delta':
-          chatStore.appendDelta(frame.threadId, frame.id, frame.text);
-          break;
-        case 'chat.reasoning.delta':
-          chatStore.appendReasoning(frame.threadId, frame.id, frame.text);
-          break;
-        case 'chat.reasoning.tokens':
-          chatStore.setReasoningTokens(frame.threadId, frame.id, frame.tokens);
-          break;
-        case 'chat.stream.done':
-          chatStore.endStream(frame.threadId, frame.id);
-          break;
-        case 'chat.stream.abort':
-          chatStore.abortStream(frame.threadId, frame.id, frame.error);
-          break;
-        case 'chat.tool':
-          chatStore.addToolCall(frame.threadId, {
-            id: frame.id,
-            name: frame.name,
-            args: frame.args,
-            durationMs: frame.durationMs,
-            ok: frame.ok,
-            output: frame.output,
-            truncated: frame.truncated,
-          });
-          break;
-        case 'session.list.result':
-          sessionStore.replace(frame.sessions);
-          // The server now owns these conversations: their optimistic workspace values are
-          // superseded by the listing's own (authoritative) field.
-          for (const threadId of pendingWorkspaceRef.current.keys()) {
-            if (sessionStore.has(threadId)) pendingWorkspaceRef.current.delete(threadId);
-          }
-          // The server's run view survives a reconnect mid-run: flags it missed (or lost)
-          // come back through the list, so the Stop button reappears without a new token.
-          chatStore.seedRuns(frame.sessions.filter(session => session.activeRun).map(session => session.threadId));
-          // Land straight in a conversation instead of an empty screen, but never in one the
-          // owner filed away: those are only reached from the archived list.
-          if (!activeThreadRef.current) {
-            const first = frame.sessions.find(summary => !summary.archived);
-            if (first) openThread(first.threadId);
-            else {
-              const threadId = uuid();
-              selectThread(threadId);
-              // The drawer's agents section reads this roster: an app that boots with no
-              // conversation at all must still list the shared agents.
-              connection.send(encodeSubAgentsList(threadId)).catch(() => {});
-            }
-          }
-          break;
-        case 'session.workspace.set.result':
-          if (sessionStore.has(frame.threadId)) {
-            // The server stored the key and the conversation is listed: the stored value
-            // supersedes the optimistic one.
-            pendingWorkspaceRef.current.delete(frame.threadId);
-            sessionStore.setWorkspace(frame.threadId, frame.workspace);
-          } else {
-            // A fresh conversation the listing has not carried yet: keep the pending value
-            // until the next session.list.result brings the stored one.
-            pendingWorkspaceRef.current.set(frame.threadId, frame.workspace);
-          }
-          break;
-        case 'commands.list.result':
-          commandStore.replace(frame.commands);
-          break;
-        case 'diag.snapshot.result':
-          setDiagSnapshot(frame.text);
-          setDiagBusy(false);
-          break;
-        case 'diag.report.result':
-          acknowledgeDiagnostics(frame.accepted);
-          break;
-        case 'logs.tail.result':
-          setDiagLogs(frame.lines > 0 ? frame.text : 'no matching lines');
-          setDiagBusy(false);
-          break;
-        case 'files.list.result':
-          setSessionFiles(frame.files);
-          setFilesTotal(frame.totalBytes);
-          setFilesError(null);
-          break;
-        case 'chat.history':
-          // The same frame carries both the newest page, which replaces the thread, and an
-          // older one, which goes in front of it. `before` is what tells them apart.
-          if (frame.before) chatStore.prependHistory(frame.threadId, frame.messages);
-          else chatStore.seedHistory(frame.threadId, frame.messages);
-          chatStore.setPage(frame.threadId, {
-            // An old server answers neither field: no cursor means no older page to ask for,
-            // which is exactly the behaviour before this existed.
-            nextBefore: frame.nextBefore ?? 0,
-            hasMore: frame.hasMore === true && frame.nextBefore !== undefined,
-          });
-          if (!frame.before) chatStore.markRead(frame.threadId);
-          break;
-        case 'voice.mode.result':
-          setVoice(frame);
-          break;
-        case 'model.list.result':
-          modelStore.replaceCatalog(frame);
-          break;
-        case 'model.endpoints.result':
-          modelStore.replaceEndpoints(frame);
-          break;
-        case 'skills.list.result':
-          setSkills(frame.skills);
-          setSkillsError(null);
-          break;
-        case 'tools.list.result':
-          setTools(frame.tools);
-          setToolsMissing(frame.missing ?? []);
-          setToolsError(null);
-          setToolsSaving(false);
-          break;
-        case 'mcp.list.result':
-          setMcpServers(frame.servers);
-          setMcpError(null);
-          setMcpBusy(false);
-          break;
-        case 'workspaces.list.result':
-          setWorkspaces(frame.workspaces);
-          setWorkspacesError(null);
-          setWorkspacesBusy(false);
-          break;
-        case 'model.result':
-          modelStore.replaceThread(frame);
-          break;
-        case 'agents.config.result':
-          agentsStore.receive(frame);
-          break;
-        case 'tags.result':
-          tagsStore.receive(frame.tags);
-          break;
-        case 'providers.env.result':
-          providersEnvStore.receive(frame);
-          setProviderBusy(false);
-          break;
-        case 'agents.file.result':
-          agentsFileStore.receive(frame);
-          break;
-        case 'agents.file.saved':
-          agentsFileStore.receiveSaved(frame);
-          // The catalog changed (created/deleted agent): ask for a fresh snapshot instead of
-          // guessing what the registry now holds.
-          connection.send(encodeAgentsConfigGet()).catch(() => {});
-          break;
-        case 'config.result':
-          setConfigEditor({
-            status: 'ready',
-            draft: frame.content,
-            loaded: frame.content,
-            sha: frame.sha,
-            maxBytes: frame.maxBytes,
-            error: null,
-            changed: [],
-            rebootRequired: [],
-          });
-          break;
-        case 'config.saved':
-          setConfigEditor(current => {
-            if (!current) return current;
-            if (frame.ok) {
-              return { ...current, status: 'ready', loaded: current.draft, sha: frame.sha, error: null, changed: frame.changed, rebootRequired: frame.rebootRequired };
-            }
-            return {
-              ...current,
-              status: frame.conflict ? 'conflict' : 'ready',
-              error: frame.error ?? 'save refused',
-            };
-          });
-          break;
-        case 'instructions.list.result':
-          instructionsStore.receive(frame);
-          break;
-        case 'instructions.file':
-          instructionsStore.receiveFile(frame);
-          break;
-        case 'instructions.saved':
-          instructionsStore.receiveSaved(frame);
-          break;
-        case 'chat.send.queued':
-          // Held behind a compaction: the message left, its run has not started. Said on the
-          // bubble itself, because a silent send during a two-minute hold reads as a drop.
-          chatStore.markQueued(frame.threadId, frame.replyToId);
-          break;
-        case 'chat.command.pending':
-          chatStore.addCommandPending(frame.threadId, frame.replyToId, frame.text);
-          break;
-        case 'chat.command.result':
-          if (frame.status) {
-            // A /status answered by the server: the page replaces the bubble, so the report
-            // never takes space in the conversation. Its placeholder goes with it.
-            chatStore.clearCommandPending(frame.threadId);
-            statusStore.receive({
-              type: 'status.result',
-              threadId: frame.threadId,
-              text: frame.text,
-              status: frame.status,
-            });
-            setStatusOpen(true);
-          } else {
-            chatStore.addCommandResult(
-              frame.threadId,
-              `cmd-${frame.replyToId ?? 'x'}-${Date.now()}`,
-              frame.text,
-              frame.replyToId,
-              frame.details,
-            );
-            noteActivity(frame.threadId, frame.text);
-          }
-          break;
-        case 'status.result':
-          // A late answer to a page that was already closed must not reopen it: only accept
-          // while a request is in flight.
-          if (statusStore.getSnapshot().fetch === 'loading') statusStore.receive(frame);
-          break;
-        case 'session.instructions.result':
-          if (sessionInstructionsStore.getSnapshot().fetch === 'loading') sessionInstructionsStore.receive(frame);
-          break;
-        case 'jobs.list.result':
-          // The fresh listing is also the answer to a save or a delete: a pending one closes
-          // the editor on arrival, and a refused one lands as a jobs-scoped error instead.
-          jobsStore.replace(frame);
-          setJobsError(null);
-          if (jobsSavingRef.current) {
-            jobsSavingRef.current = false;
-            setJobsSaving(false);
-            setJobsEditor(null);
-          }
-          break;
-        case 'jobs.runs.result': {
-          // The answer to the runs page that asked for it: only accepted while it is open, so
-          // a late answer does not resurrect a closed page.
-          if (!jobSessionsRef.current || jobSessionsRef.current.jobId !== frame.jobId) break;
-          const titles: Record<string, string> = {};
-          for (const run of frame.runs) titles[run.threadId] = run.title;
-          runTitlesRef.current = titles;
-          setJobRuns(frame.runs);
-          setRunsError(null);
-          break;
-        }
-        case 'notifications.info':
-          // The server hands its VAPID key on every connection; registering again is how the
-          // library verifies the distributor link is still alive (and picks up a rotation).
-          vapidRef.current = frame.vapidPublicKey;
-          registerForPush(frame.vapidPublicKey).catch(() => {});
-          break;
-        case 'hello':
-          // The server names itself on connect: the settings page labels "connected" with it.
-          setServerVersion(frame.version);
-          break;
-        case 'chat.cleared':
-          chatStore.clearThread(frame.threadId);
-          break;
-        case 'chat.transcript':
-          chatStore.setTranscripts(frame.threadId, frame.replyToId, frame.items);
-          break;
-        case 'approval.request':
-          setApprovals(current =>
-            current.some(entry => entry.id === frame.id)
-              ? current
-              : [...current, frame],
-          );
-          break;
-          case 'error':
-            // Where the user asked is where the refusal belongs: a rejected delete used to be
-            // invisible under the files screen, and then loud in a conversation it has nothing
-            // to do with.
-            if (frame.scope === 'files') {
-              setFilesError(frame.message);
-            } else if (frame.scope === 'model') {
-              // A stale picker answered by a server that dropped the model: close the sheet,
-              // the next model.list will carry the truth.
-              setModelOpen(false);
-            } else if (frame.scope === 'skills') {
-              // An old server has no skill catalog: the skills page must not spin forever.
-              setSkillsError(frame.message);
-            } else if (frame.scope === 'tools') {
-              setToolsError(frame.message);
-              setToolsSaving(false);
-            } else if (frame.scope === 'mcp') {
-              setMcpError(frame.message);
-              setMcpBusy(false);
-            } else if (frame.scope === 'config') {
-              setConfigEditor(current =>
-                current ? { ...current, status: 'ready', error: frame.message } : current,
-              );
-            } else if (frame.scope === 'workspaces') {
-              setWorkspacesError(frame.message);
-              setWorkspacesBusy(false);
-            } else if (frame.scope === 'jobs') {
-              jobsSavingRef.current = false;
-              setJobsSaving(false);
-              setJobsError(frame.message);
-            } else if (frame.scope === 'status') {
-              statusStore.fail(frame.message);
-            } else if (frame.scope === 'agents') {
-              agentsStore.fail(frame.message);
-              // A file edit can fail while the file page is open: the editor shows it where it
-              // was asked for, and a no-op for the list page.
-              agentsFileStore.fail(frame.message);
-            } else if (frame.scope === 'instructions') {
-              instructionsStore.fail(frame.message);
-              // The same scope carries the session page's refusals: it asks for instructions too,
-              // and a page left spinning is how an old server used to look like a dead button.
-              if (sessionInstructionsStore.getSnapshot().fetch === 'loading') {
-                sessionInstructionsStore.fail(frame.message);
-              }
-            } else if (frame.scope === 'tags') {
-              tagsStore.fail(frame.message);
-            } else if (frame.scope === 'providers') {
-              providersEnvStore.fail(frame.message);
-              setProviderBusy(false);
-            } else if (activeThreadRef.current) {
-              chatStore.addAgentMessage(
-                activeThreadRef.current,
-                `err-${Date.now()}`,
-                `error: ${frame.message}`,
-                [],
-              );
-            }
-            break;
-      }
-    });
+          return {
+            ...current,
+            status: frame.conflict ? 'conflict' : 'ready',
+            error: frame.error ?? 'save refused',
+          };
+        });
+      },
+      onConfigError: message => {
+        setConfigEditor(current =>
+          current ? { ...current, status: 'ready', error: message } : current,
+        );
+      },
+    };
+
+    const offFrame = connection.onFrame(frame => routeServerFrame(frame, frameHandlers));
 
     // Settings first: the stored server address and last thread decide what we connect to and
     // what the user sees on the first frame.
@@ -1814,15 +1285,7 @@ export function AppShell(): React.JSX.Element {
   // because that is the scope the server answered for.
   const rosterThread = subagentView?.parentThreadId ?? activeThread;
   const roster = useSubAgents(rosterThread);
-  const spawnCards = useMemo(
-    () =>
-      items.flatMap(item =>
-        item.kind === 'tool' && item.name === 'spawn'
-          ? [{ id: item.id, name: item.name, args: item.args, ok: item.ok, durationMs: item.durationMs }]
-          : [],
-      ),
-    [items],
-  );
+  const spawnCards = useSpawnCards(activeThread);
   const rosterGroups = useMemo(() => groupRoster(roster.agents), [roster.agents]);
   const globalAgents = useMemo(
     () =>
@@ -1997,13 +1460,12 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeVoiceModeGet()).catch(() => {});
   }, [settingsOpen]);
 
-  // The skill catalog and the workspace list are asked for when their pages open: they are the
-  // only surfaces that show them, and a stale list from another day would name skills or paths
-  // that moved or disappeared.
   useEffect(() => {
-    if (!settingsOpen || settingsPage !== 'skills') return;
-    connection.send(encodeSkillsList()).catch(() => {});
-    connection.send(encodeWorkspacesList()).catch(() => {});
+    if (!settingsOpen) return;
+    for (const rule of PAGE_REQUESTS) {
+      if (!rule.match(settingsPage)) continue;
+      for (const request of rule.requests) connection.send(request()).catch(() => {});
+    }
   }, [settingsOpen, settingsPage]);
 
   // The jobs editor's pickers (model, workspace, skills, MCP, tools) are fed by the same live
@@ -2018,47 +1480,6 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeWorkspacesList()).catch(() => {});
     connection.send(encodeModelList()).catch(() => {});
   }, [jobsOpen]);
-
-  // The index shows the skills/tools counts on its rows: asking for the catalogs when it opens
-  // is what makes those numbers real without a first visit to either page. The pages still
-  // refresh their own list on entry, so a hot-reload or an edit made elsewhere lands on the
-  // next visit.
-  useEffect(() => {
-    if (!settingsOpen || settingsPage !== 'index') return;
-    connection.send(encodeSkillsList()).catch(() => {});
-    connection.send(encodeToolsList()).catch(() => {});
-  }, [settingsOpen, settingsPage]);
-
-  // The workspaces list owns the CRUD: asked for on every visit, like the other lists, because
-  // config.workspaces hot-reloads under it. The list also carries the per-row prompt summary,
-  // which is the instruction listing, so it asks for both -- see the instructions effect below.
-  useEffect(() => {
-    if (!settingsOpen || settingsPage !== 'workspaces') return;
-    connection.send(encodeWorkspacesList()).catch(() => {});
-  }, [settingsOpen, settingsPage]);
-
-  // Same for the tools page: it is the only surface that shows the catalog, and plugins and
-  // disabled tools change under hot-reload, so a list from earlier can already be wrong.
-  useEffect(() => {
-    if (!settingsOpen || settingsPage !== 'tools') return;
-    connection.send(encodeToolsList()).catch(() => {});
-  }, [settingsOpen, settingsPage]);
-
-  // The MCP list is the wire version of /mcp: asked for on the MCPs page, and on every page that
-  // judges names against it.
-  useEffect(() => {
-    if (!settingsOpen) return;
-    if (settingsPage !== 'mcps' && !judgesCatalogNames(settingsPage)) return;
-    connection.send(encodeMcpList()).catch(() => {});
-  }, [settingsOpen, settingsPage]);
-
-  // Same catalog, same rule, for the skills: the pages that call a name "removed" need the list
-  // that decides it. The two used to be fetched by effects with different page sets, which is how
-  // the file editor ended up checking MCP names it had against skill names it did not.
-  useEffect(() => {
-    if (!settingsOpen || !judgesCatalogNames(settingsPage)) return;
-    connection.send(encodeSkillsList()).catch(() => {});
-  }, [settingsOpen, settingsPage]);
 
   // The agent defaults are asked for by every page that renders them: the agents stack, the
   // provider stack, and the index (its rows carry the counts). A server that predates the
@@ -2485,7 +1906,7 @@ export function AppShell(): React.JSX.Element {
   const subtitle = [
     offline ? status.state : contextShare === null ? null : `ctx ${contextShare}%`,
     pending > 0 ? `${pending} pending` : null,
-    items.length > 0 ? `${items.length} items` : null,
+    itemCount > 0 ? `${itemCount} items` : null,
     // The model that runs here: the one fact about a conversation worth seeing at a glance.
     currentModelLabel ? `model: ${currentModelLabel}` : null,
   ]
@@ -3096,7 +2517,6 @@ export function AppShell(): React.JSX.Element {
             subtitle={subtitle}
             connectionState={status.state}
             locationEnabled={locationEnabled}
-            items={items}
             mediaBase={mediaBase}
             deviceInfo={deviceInfo}
             hint={hint}
@@ -3260,7 +2680,10 @@ export function AppShell(): React.JSX.Element {
                 tagsPage
               )
             ) : settingsPage === 'instruction-layer' ? (
-              layerTarget && instructions.layer ? (
+              // The entry has to exist: a list that came back empty (a workspace removed server
+              // side while the page was open) used to hand `undefined` to a screen that reads it
+              // straight away, and the render error replaced the whole app with the red screen.
+              layerTarget && instructions.layer && instructions.entries.length > 0 ? (
                 <InstructionLayerScreen
                   layer={instructions.layer}
                   entry={instructions.entries.find(

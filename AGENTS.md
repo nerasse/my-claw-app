@@ -65,7 +65,8 @@ adb shell am kill com.myclawapp                             # simulates a system
 
 - The foreground service notification carries **static** text: it reads "Agent connection active"
   even while the state is `disconnected`. Do not trust it, read `claw:ws:state`.
-- The outbox (`ClawConnectionService`) is in memory: queued frames die with the process, after
-  `send()` already returned `true`.
+- The outbox (`ClawConnectionService`) is mirrored to SharedPreferences under `claw_connection`,
+  and to `localStorage` on web, because the process death is exactly what it exists for. It is
+  still capped at 200 frames: past that `send()` returns false and the bubble is marked failed.
 - Errors are swallowed in several places (`.catch(() => {})`). The global handler is a last
   resort, it does not catch those.

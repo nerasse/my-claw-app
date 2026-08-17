@@ -41,11 +41,24 @@ export interface ToolItem extends ToolCallPayload {
 
 export type ChatItem = TextItem | ToolItem;
 
+/** A `spawn` tool call, reduced to what the shell needs to offer a door to the sub-agent. */
+export interface SpawnCard {
+  id: string;
+  name: string;
+  args: ToolItem['args'];
+  ok: ToolItem['ok'];
+  durationMs: ToolItem['durationMs'];
+}
+
 type Listener = () => void;
 
 /** Frozen so every empty-thread snapshot is the same reference (useSyncExternalStore requirement). */
 const EMPTY_ITEMS: ChatItem[] = [];
 const EMPTY_THREADS: string[] = [];
+const EMPTY_SPAWN_CARDS: SpawnCard[] = [];
+Object.freeze(EMPTY_SPAWN_CARDS);
+/** One notification per displayed frame at most, whatever rate the tokens arrive at. */
+const FRAME_MS = 16;
 Object.freeze(EMPTY_ITEMS);
 Object.freeze(EMPTY_THREADS);
 
@@ -120,12 +133,38 @@ class ChatStoreImpl {
   /** Where the next older page starts, per thread, and whether there is one at all. */
   private pages = new Map<string, HistoryPage>();
   private listeners = new Set<Listener>();
+  private spawnCards = new Map<string, { tools: ToolItem[]; cards: SpawnCard[] }>();
+  /** Pending coalesced notification, see `emitSoon`. */
+  private frame: ReturnType<typeof setTimeout> | null = null;
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  /**
+   * Recomputed only when a spawn card actually changed. Every patch rebuilds the row array, so a
+   * reader keyed on the list alone would see a new value on every token of every stream.
+   */
+  spawnCardsOf(threadId: string): SpawnCard[] {
+    const tools = this.getItems(threadId).filter(
+      (item): item is ToolItem => item.kind === 'tool' && item.name === 'spawn',
+    );
+    const cached = this.spawnCards.get(threadId);
+    if (cached && cached.tools.length === tools.length && cached.tools.every((tool, i) => tool === tools[i])) {
+      return cached.cards;
+    }
+    const cards = tools.map(item => ({
+      id: item.id,
+      name: item.name,
+      args: item.args,
+      ok: item.ok,
+      durationMs: item.durationMs,
+    }));
+    this.spawnCards.set(threadId, { tools, cards });
+    return cards;
   }
 
   getItems(threadId: string): ChatItem[] {
@@ -396,7 +435,7 @@ class ChatStoreImpl {
     const current = this.streams.get(id);
     if (current === undefined) return;
     this.streams.set(id, current + text);
-    this.patch(threadId, id, { text: current + text });
+    this.patch(threadId, id, { text: current + text }, true);
   }
 
   /**
@@ -408,7 +447,7 @@ class ChatStoreImpl {
     const current = this.reasoning.get(id) ?? '';
     const next = current + text;
     this.reasoning.set(id, next);
-    this.patch(threadId, id, { reasoning: next });
+    this.patch(threadId, id, { reasoning: next }, true);
   }
 
   /** Latest estimate from a redacted engine; the server sends a running total, so it replaces. */
@@ -494,6 +533,7 @@ class ChatStoreImpl {
 
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
+    this.spawnCards.delete(threadId);
     this.activeRuns.delete(threadId);
     this.lastStream.delete(threadId);
     this.pendingCommands.delete(threadId);
@@ -503,6 +543,7 @@ class ChatStoreImpl {
 
   clearAll(): void {
     this.threads.clear();
+    this.spawnCards.clear();
     this.streams.clear();
     this.reasoning.clear();
     this.lastStream.clear();
@@ -524,14 +565,15 @@ class ChatStoreImpl {
     this.emit();
   }
 
-  private patch(threadId: string, id: string, patch: Partial<TextItem>): void {
+  private patch(threadId: string, id: string, patch: Partial<TextItem>, coalesce = false): void {
     const items = this.threads.get(threadId);
     if (!items) return;
     this.threads.set(
       threadId,
       items.map(item => (item.id === id && item.kind === 'text' ? { ...item, ...patch } : item)),
     );
-    this.emit();
+    if (coalesce) this.emitSoon();
+    else this.emit();
   }
 
   private removeItem(threadId: string, id: string): void {
@@ -544,7 +586,30 @@ class ChatStoreImpl {
     this.emit();
   }
 
+  /**
+   * A token is not a frame.
+   *
+   * A fast model delivers hundreds of deltas a second, and each one used to notify every reader
+   * at once: the whole shell re-rendered, the thread was walked four times over, and the markdown
+   * of the growing bubble was parsed again from the start. The typing went choppy on a long
+   * answer for no gain, since a screen cannot show more than one state per frame anyway.
+   *
+   * The state is written immediately either way. Only the notification waits, and any other
+   * mutation flushes it, so nothing can be read stale or out of order.
+   */
+  private emitSoon(): void {
+    if (this.frame !== null) return;
+    this.frame = setTimeout(() => {
+      this.frame = null;
+      this.emit();
+    }, FRAME_MS);
+  }
+
   private emit(): void {
+    if (this.frame !== null) {
+      clearTimeout(this.frame);
+      this.frame = null;
+    }
     for (const listener of this.listeners) {
       listener();
     }
@@ -557,6 +622,23 @@ const subscribeToChat = (listener: Listener): (() => void) => chatStore.subscrib
 
 export function useChatItems(threadId: string | null): ChatItem[] {
   const snapshot = useCallback(() => (threadId ? chatStore.getItems(threadId) : EMPTY_ITEMS), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+/**
+ * How many rows the conversation has, for a reader that only needs the count.
+ *
+ * A growing bubble does not change it, so a shell subscribed to this bails out on every frame of
+ * a stream instead of re-rendering, which is the whole point of not handing it the list.
+ */
+export function useChatItemCount(threadId: string | null): number {
+  const snapshot = useCallback(() => (threadId ? chatStore.getItems(threadId).length : 0), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+/** The `spawn` cards of a conversation, same identity as long as none of them changed. */
+export function useSpawnCards(threadId: string | null): SpawnCard[] {
+  const snapshot = useCallback(() => (threadId ? chatStore.spawnCardsOf(threadId) : EMPTY_SPAWN_CARDS), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 

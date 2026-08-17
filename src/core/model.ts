@@ -100,9 +100,11 @@ class ModelStoreImpl {
   requestEndpoints(model: string): void {
     if (this.endpoints.has(model)) return;
     this.endpoints.set(model, PENDING);
-    connection.send(encodeModelEndpoints(model)).catch(() => {
-      // A send that never left means no answer is coming: drop the placeholder so entering the
-      // step again asks once more, rather than spinning forever after a reconnect.
+    // `send` reports failure by resolving false, never by rejecting: the `.catch` this used to
+    // carry could not fire, and a frame that never left spun `loading routes...` forever.
+    connection.send(encodeModelEndpoints(model)).then((delivered) => {
+      if (delivered) return;
+      // No answer is coming: drop the placeholder so entering the step again asks once more.
       this.endpoints.delete(model);
       this.emit();
     });

@@ -102,7 +102,9 @@ export function Composer({
   const staged = (attachments?.length ?? 0) + (location ? 1 : 0);
   // An attachment on its own is a message. Gating on text alone made the button dead for a
   // photo sent without a caption, even though the send path already accepted it.
-  const nothingToSend = empty && staged === 0;
+  // An upload in flight already holds the staged files: a second tap would upload them again
+  // and send a second, empty message beside the first.
+  const nothingToSend = (empty && staged === 0) || uploading === true;
   const [recording, setRecording] = useState(false);
   /**
    * The microphone is offered as long as nothing has been typed, so several notes can be

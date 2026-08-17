@@ -1,6 +1,8 @@
 module.exports = {
   preset: '@react-native/jest-preset',
   setupFiles: ['<rootDir>/jest.setup.js'],
+  // Runs once the test framework exists, which is what a global beforeEach needs.
+  setupFilesAfterEnv: ['<rootDir>/jest.after.js'],
   // The worklets babel plugin compiles in a native unpacker at build time; under Jest its
   // `.native` implementations are redirected to the plain ones, which is what the official
   // resolver does (reanimated 4 + worklets render through the worklets-native path).

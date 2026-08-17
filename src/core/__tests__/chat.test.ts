@@ -210,3 +210,59 @@ describe('chatStore unread', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('what a stream costs its readers', () => {
+  test('a token notifies once per frame, not once per token', async () => {
+    jest.useFakeTimers();
+    try {
+      let notifications = 0;
+      const stop = chatStore.subscribe(() => {
+        notifications += 1;
+      });
+      chatStore.startStream(THREAD, 's1');
+      notifications = 0;
+
+      for (let i = 0; i < 50; i += 1) chatStore.appendDelta(THREAD, 's1', 'x');
+      // The text is there immediately: only the notification waits.
+      expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'x'.repeat(50) });
+      expect(notifications).toBe(0);
+
+      jest.advanceTimersByTime(20);
+      expect(notifications).toBe(1);
+
+      // The end of the stream flushes rather than waits.
+      chatStore.appendDelta(THREAD, 's1', 'y');
+      chatStore.endStream(THREAD, 's1');
+      expect(notifications).toBe(2);
+      stop();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('a growing bubble changes neither the row count nor the spawn cards', () => {
+    chatStore.seedHistory(THREAD, [
+      {
+        role: 'tool',
+        ts: '2026-01-01T00:00:01.000Z',
+        id: 'h-1',
+        name: 'spawn',
+        args: { name: 'researcher', mode: 'session' },
+        durationMs: 12,
+        ok: true,
+        output: 'subagent/researcher-a7b3',
+        truncated: false,
+      },
+    ]);
+    chatStore.startStream(THREAD, 's1');
+    const countBefore = chatStore.getItems(THREAD).length;
+    const cardsBefore = chatStore.spawnCardsOf(THREAD);
+    expect(cardsBefore).toHaveLength(1);
+
+    chatStore.appendDelta(THREAD, 's1', 'writing');
+
+    // Same identity, so a shell subscribed to these bails out instead of re-rendering.
+    expect(chatStore.getItems(THREAD).length).toBe(countBefore);
+    expect(chatStore.spawnCardsOf(THREAD)).toBe(cardsBefore);
+  });
+});

@@ -848,3 +848,49 @@ test('the end of a run reads the context back from the server: the turn that lan
   );
   await unmount(tree);
 });
+
+test('a draft belongs to its conversation, not to the screen that shows it', async () => {
+  const tree = await renderWithHistory();
+  await typeInto(tree, 'half a thought');
+  expect(inputOf(tree).props.value).toBe('half a thought');
+
+  // On a phone the chat screen is unmounted whenever a page covers it, and the draft went with
+  // it: opening Files to check one thing emptied the field.
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Open settings');
+  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await pressLabel(tree, 'Back to chat');
+  await waitFor(() => labelsOf(tree).includes('Message to send'));
+  expect(inputOf(tree).props.value).toBe('half a thought');
+
+  await unmount(tree);
+});
+
+test('a draft does not follow the reader into another conversation', async () => {
+  const tree = await renderWithHistory();
+  await ReactTestRenderer.act(async () => {
+    sessionStore.replace([
+      { threadId: THREAD, title: 'here', messageCount: 3, createdAt: '2026-01-01T00:00:00.000Z', lastActiveAt: '2026-01-01T10:00:00.000Z' },
+      { threadId: 'other', title: 'elsewhere', messageCount: 1, createdAt: '2026-01-02T00:00:00.000Z', lastActiveAt: '2026-01-02T10:00:00.000Z' },
+    ]);
+  });
+  await ReactTestRenderer.act(async () => {
+    chatStore.seedHistory('other', [
+      { id: 'o-0', role: 'user', text: 'another conversation', ts: '2026-01-01T09:00:00.000Z' },
+    ]);
+  });
+  await typeInto(tree, 'meant for this one');
+
+  await pressLabel(tree, 'Open conversations');
+  await waitFor(() => labelsOf(tree).includes('Conversation elsewhere'));
+  await pressLabel(tree, 'Conversation elsewhere');
+
+  // Sending it here would have put a private message in the wrong conversation.
+  await waitFor(() => inputOf(tree).props.value === '');
+
+  // And it is not lost either: it waited in the conversation it was written for.
+  await pressLabel(tree, 'Conversation here');
+  await waitFor(() => inputOf(tree).props.value === 'meant for this one');
+
+  await unmount(tree);
+});

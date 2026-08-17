@@ -5,13 +5,14 @@ import { Bubble } from '../components/Bubble';
 import { ToolCard } from '../components/ToolCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
-import type { ChatItem, TextItem } from '../core/chat';
+import { useChatItems, type ChatItem, type TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
 import { encodeCommandsList, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
+import { draftAttachmentsOf, draftTextOf, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
@@ -51,7 +52,6 @@ export function ChatScreen({
   title,
   subtitle,
   connectionState,
-  items,
   mediaBase,
   deviceInfo,
   hint,
@@ -84,7 +84,6 @@ export function ChatScreen({
   title: string;
   subtitle: string;
   connectionState: WsState;
-  items: ChatItem[];
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
   hint?: string;
@@ -138,13 +137,17 @@ export function ChatScreen({
   // window is. The column is centred inside the pane rather than stretched across it.
   const column = { maxWidth: layout.readingWidth, width: '100%' as const, alignSelf: 'center' as const };
   const listRef = useRef<FlatList<ChatItem>>(null);
-  const [draft, setDraft] = useState('');
+  // Subscribed here rather than handed down: a growing bubble must not re-render the shell that
+  // holds every page of the app, only the conversation showing it.
+  const items = useChatItems(threadId);
+  const [draft, setDraft] = useState(() => draftTextOf(threadId));
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
   const inCommandRef = useRef(false);
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>(() => draftAttachmentsOf(threadId));
   const [attachOpen, setAttachOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const uploadingRef = useRef(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   /** Percent of each staged file that has reached the server, keyed by attachment id. */
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
@@ -161,6 +164,21 @@ export function ChatScreen({
     setAddressOverride(null);
     setLocationSheet(false);
     setLocationDraft('');
+  }, [threadId]);
+
+  /**
+   * A draft belongs to its conversation, not to this component. The cleanup runs both when the
+   * screen is unmounted (a page covering the chat on a phone) and just before the swap to
+   * another conversation, which is what stops a message written here from being sent there.
+   */
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  useEffect(() => {
+    setDraft(draftTextOf(threadId));
+    setAttachments(draftAttachmentsOf(threadId));
+    return () => saveDraft(threadId, draftRef.current, attachmentsRef.current);
   }, [threadId]);
 
   // Re-fetch the catalog every time the user starts a command: a command added on the server
@@ -319,6 +337,9 @@ export function ChatScreen({
   }, []);
 
   const submit = useCallback(() => {
+    // The button is disabled while an upload runs, and this is what covers the keyboard: Enter
+    // does not read the button's state.
+    if (uploadingRef.current) return;
     const text = draft.trim();
     if (!text && attachments.length === 0 && !location) return;
     const stagedLocation = location;
@@ -354,6 +375,7 @@ export function ChatScreen({
         setUploadError('device not initialized');
         return;
       }
+      uploadingRef.current = true;
       setUploading(true);
       setUploadError(null);
       (async () => {
@@ -379,6 +401,7 @@ export function ChatScreen({
         } catch (err) {
           setUploadError(err instanceof Error ? err.message : 'upload failed');
         } finally {
+          uploadingRef.current = false;
           setUploading(false);
         }
       })();
@@ -664,6 +687,7 @@ export function ChatScreen({
           locationBusy={locationBusy}
           onCommandEntered={onCommandEntered}
           uploading={uploading}
+          uploadProgress={uploadProgress}
           uploadError={uploadError}
           streaming={streaming}
           onStop={onStop}
