@@ -31,7 +31,7 @@ import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions
 import { pinnedStore, usePinnedOrder } from '../core/pinned';
 import { parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
-import { flushDiagnostics, loadDiagnostics } from '../core/diagnostics';
+import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnostics';
 import {
   encodeApprovalResponse,
   encodeAgentsConfigGet,
@@ -887,9 +887,19 @@ export function AppShell(): React.JSX.Element {
       .then(flushDiagnostics)
       .catch(() => {});
 
+    // Reported, never swallowed: an identity that never arrives takes the media URLs, the
+    // uploads and the skill documents with it, and a silent catch here cost a whole release
+    // where the browser showed every attachment as a bare filename and said nothing.
     getDeviceInfo()
       .then(setDeviceInfo)
-      .catch(() => {});
+      .catch((err: unknown) => {
+        recordDiag({
+          kind: 'js',
+          at: Date.now(),
+          message: `identity unavailable: ${err instanceof Error ? err.message : String(err)}`,
+          reason: 'device-info',
+        });
+      });
     deviceBridge
       .getAppVersion()
       .then(version => setAppVersion(version || null))

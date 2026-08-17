@@ -249,20 +249,12 @@ jest.mock('./src/core/nativeBridge', () => ({
   useTransferProgress: jest.fn(() => null),
 }));
 
+// The identity a screen sees. Mirrors the real module exactly: it exports one function, and a
+// mock that offers more than that hides the day the module stops offering it.
 jest.mock('./src/core/device', () => ({
-  getCapabilities: jest.fn(() =>
-    Promise.resolve({
-      accessibility: false,
-      notificationListener: false,
-      wssConnection: true,
-    }),
-  ),
   getDeviceInfo: jest.fn(() =>
     Promise.resolve({ deviceId: 'dev-test', token: 'token-test' }),
   ),
-  getAccessibilitySnapshot: jest.fn(() => Promise.resolve(null)),
-  performAccessibilityAction: jest.fn(() => Promise.resolve(true)),
-  onNotification: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
 // Node's URL is spec compliant, the device's is not: RN ships a partial polyfill whose `host`

@@ -1,33 +1,22 @@
-import { DeviceEventEmitter, NativeModules, type EmitterSubscription } from 'react-native';
-import type { AccessibilityNode, Capabilities, NotificationEvent } from './types';
-
-const { DeviceBridge } = NativeModules;
-
-export async function getCapabilities(): Promise<Capabilities> {
-  return DeviceBridge.getCapabilities();
-}
+import { deviceBridge } from './nativeBridge';
 
 export interface DeviceInfo {
   deviceId: string;
   token: string;
 }
 
+/**
+ * Who this client is to the server.
+ *
+ * Read through the bridge, never through `NativeModules` directly: the bridge is the one door
+ * with a web twin, and a direct native call throws in a browser. It did, silently, and the whole
+ * web build lost its media URLs to it, because a rejected identity meant every attachment URL
+ * was built as the empty string.
+ *
+ * Native holds a deviceId and a token. A browser holds neither: it authenticates with the
+ * session cookie set at pairing, so both fields come back empty there and every URL builder
+ * leaves the credential query off.
+ */
 export async function getDeviceInfo(): Promise<DeviceInfo> {
-  return DeviceBridge.getDeviceInfo();
-}
-
-export async function getAccessibilitySnapshot(): Promise<AccessibilityNode | null> {
-  return DeviceBridge.getAccessibilitySnapshot();
-}
-
-export async function performAccessibilityAction(action: {
-  resourceId?: string;
-  text?: string;
-  contentDescription?: string;
-}): Promise<boolean> {
-  return DeviceBridge.performAccessibilityAction(action);
-}
-
-export function onNotification(listener: (event: NotificationEvent) => void): EmitterSubscription {
-  return DeviceEventEmitter.addListener('claw:notification:posted', listener);
+  return deviceBridge.getDeviceInfo();
 }

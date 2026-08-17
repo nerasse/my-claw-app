@@ -172,6 +172,36 @@ one screen. The composer hides the mic when it cannot record, and the Devices sc
 only where a camera exists. A button that fails at the moment it is pressed is worse than no
 button.
 
+## One native door, and the scar that proves it
+
+Claim 1 above ("no screen, no component imports a native module directly") is the load-bearing one,
+and it was false in exactly one file. `src/core/device.ts` read `NativeModules.DeviceBridge`
+itself instead of going through `deviceBridge`. On the web that object does not exist:
+`getDeviceInfo()` threw, the caller in `AppShell` swallowed it (`.catch(() => {})`), and the
+identity stayed `null` forever.
+
+Nothing announced it. What the browser showed was:
+
+- every image and every video in a bubble rendered as its filename, because a null identity means
+  the media URL is built as the empty string, and an attachment without a URL falls through to the
+  name chip
+- the same in the file explorer, and nothing opened when tapped
+- "device not initialized" on any message carrying an attachment
+- no skill document, no voice-note playback
+
+The server was never involved: `/media` accepts the session cookie, and the client simply never
+asked. Two rules come out of it:
+
+1. A native module is read in `nativeBridge.ts` and nowhere else. That file has a web twin; a
+   second door does not.
+2. Empty credentials are a valid identity, not a missing one. `authQuery()` returns the empty
+   string and `mediaUrl()` leaves the query off, because a browser proves who it is with an
+   `HttpOnly` cookie it cannot read.
+
+`src/core/mediaUrl.ts` is the single builder for those URLs, for the same reason: a caller that
+appended `&thumb=1` by hand produced `/media/<id>&thumb=1` on the cookie path, where there was no
+query to extend, so video thumbnails 404'd on the web while working on the phone.
+
 ## Secure context, the hard prerequisite
 
 The deployment is private (tailnet and LAN, no public record, no SSO) but it still needs HTTPS,

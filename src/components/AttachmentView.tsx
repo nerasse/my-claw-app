@@ -1,4 +1,4 @@
-import { authQuery } from '../core/serverUrl';
+import { mediaUrl } from '../core/mediaUrl';
 import React from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import type { AttachmentMeta } from '../core/protocol';
@@ -30,13 +30,14 @@ export function AttachmentView({
   onAccent?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const remote = deviceInfo
-    ? `${mediaBase}/media/${att.id}${authQuery(deviceInfo) ? `?${authQuery(deviceInfo)}` : ''}`
-    : '';
+  const remote = mediaUrl(mediaBase, deviceInfo, att.id);
   const uri = att.uri ?? remote;
   // The server generates a preview frame for videos; without one the stage would stay black
   // until play. The thumbnail request is per-id, cached server-side after the first fetch.
-  const thumbUri = att.type === 'video' && remote ? `${remote}&thumb=1` : undefined;
+  const thumbUri =
+    att.type === 'video' && remote
+      ? mediaUrl(mediaBase, deviceInfo, att.id, { thumb: '1' })
+      : undefined;
   const name = att.filename ?? att.type;
   // Everything reachable opens something: previews where there is one, a download card else.
   // A deleted attachment has nothing left to open.

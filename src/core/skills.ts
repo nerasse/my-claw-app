@@ -12,9 +12,10 @@ export function skillUrl(
   name: string,
   workspace?: string,
 ): string {
+  // The credential pair is omitted rather than sent empty: a browser has none, and its cookie
+  // is what the server falls back to.
   const params = new URLSearchParams({
-    device: deviceInfo.deviceId,
-    token: deviceInfo.token,
+    ...(deviceInfo.deviceId ? { device: deviceInfo.deviceId, token: deviceInfo.token } : {}),
     source,
     name,
     ...(workspace ? { workspace } : {}),

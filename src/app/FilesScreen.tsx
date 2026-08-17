@@ -1,4 +1,4 @@
-import { authQuery } from '../core/serverUrl';
+import { mediaUrl } from '../core/mediaUrl';
 import React, { useCallback, useState } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import type { SessionFileMeta } from '../core/protocol';
@@ -16,16 +16,6 @@ const TYPE_LABEL: Record<SessionFileMeta['type'], string> = {
   video: 'VID',
   file: 'FILE',
 };
-
-function mediaUrl(
-  mediaBase: string,
-  deviceInfo: DeviceInfo | null,
-  id: string,
-): string {
-  return deviceInfo
-    ? `${mediaBase}/media/${id}${authQuery(deviceInfo) ? `?${authQuery(deviceInfo)}` : ''}`
-    : '';
-}
 
 const keyOfFile = (item: SessionFileMeta): string => item.id;
 

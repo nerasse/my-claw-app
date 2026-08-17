@@ -98,36 +98,44 @@ export function GeneralSettingsScreen({
                   <Text style={styles.key}>app</Text>
                   <Text style={styles.value}>{appVersion ?? '…'}</Text>
                 </View>
-                <View style={styles.kv}>
-                  <Text style={styles.key}>device</Text>
-                  <Text style={[styles.value, styles.mono]} selectable>
-                    {deviceInfo.deviceId}
-                  </Text>
-                </View>
-                <View style={styles.kv}>
-                  <Text style={styles.key}>token</Text>
-                  <Text style={[styles.value, styles.mono]} selectable={showToken}>
-                    {showToken ? deviceInfo.token : maskToken(deviceInfo.token)}
-                  </Text>
+                {deviceInfo.deviceId ? (
+                <>
+                  <View style={styles.kv}>
+                    <Text style={styles.key}>device</Text>
+                    <Text style={[styles.value, styles.mono]} selectable>
+                      {deviceInfo.deviceId}
+                    </Text>
+                  </View>
+                  <View style={styles.kv}>
+                    <Text style={styles.key}>token</Text>
+                    <Text style={[styles.value, styles.mono]} selectable={showToken}>
+                      {showToken ? deviceInfo.token : maskToken(deviceInfo.token)}
+                    </Text>
+                    <Pressable
+                      onPress={() => setShowToken(value => !value)}
+                      hitSlop={8}
+                      style={styles.toggle}
+                      accessibilityRole="button"
+                      accessibilityLabel={showToken ? 'Hide token' : 'Show token'}>
+                      <Text style={styles.toggleText}>{showToken ? 'hide' : 'show'}</Text>
+                    </Pressable>
+                  </View>
                   <Pressable
-                    onPress={() => setShowToken(value => !value)}
-                    hitSlop={8}
-                    style={styles.toggle}
+                    style={[styles.button, styles.buttonGhost]}
+                    onPress={() =>
+                      Clipboard.setString(`device: ${deviceInfo.deviceId}\ntoken: ${deviceInfo.token}`)
+                    }
                     accessibilityRole="button"
-                    accessibilityLabel={showToken ? 'Hide token' : 'Show token'}>
-                    <Text style={styles.toggleText}>{showToken ? 'hide' : 'show'}</Text>
+                    accessibilityLabel="Copy device and token">
+                    <Text style={[styles.buttonText, styles.buttonGhostText]}>Copy device & token</Text>
                   </Pressable>
-                </View>
-                <Pressable
-                  style={[styles.button, styles.buttonGhost]}
-                  onPress={() =>
-                    Clipboard.setString(`device: ${deviceInfo.deviceId}\ntoken: ${deviceInfo.token}`)
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel="Copy device and token">
-                  <Text style={[styles.buttonText, styles.buttonGhostText]}>Copy device & token</Text>
-                </Pressable>
-                <Text style={styles.hint}>paste into channels["my-claw-app"].devices on the server</Text>
+                  <Text style={styles.hint}>paste into channels["my-claw-app"].devices on the server</Text>
+                </>
+                ) : (
+                  // A browser has no credential to show: the session cookie is HttpOnly, which
+                  // is the point. Blank device and token rows would read as a broken pairing.
+                  <Text style={styles.hint}>browser session · paired device managed server side</Text>
+                )}
               </>
             ) : (
               <Text style={styles.hint}>device not initialized</Text>
