@@ -31,6 +31,7 @@ import {
   type SessionFileMeta,
   type SkillEntry,
   type ToolEntry,
+  type UpdateResultFrame,
   type VoiceModeResultFrame,
   type WorkspaceEntry,
 } from './protocol';
@@ -76,6 +77,7 @@ export interface ServerFrameHandlers {
   setFilesTotal: (bytes: number) => void;
   setFilesError: (message: string | null) => void;
   setVoice: (frame: VoiceModeResultFrame) => void;
+  setUpdate: (frame: UpdateResultFrame) => void;
   setSkills: (skills: SkillEntry[]) => void;
   setSkillsError: (message: string | null) => void;
   setTools: (tools: ToolEntry[]) => void;
@@ -129,6 +131,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setFilesTotal,
     setFilesError,
     setVoice,
+    setUpdate,
     setSkills,
     setSkillsError,
     setTools,
@@ -333,6 +336,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'voice.mode.result':
       setVoice(frame);
+      break;
+    case 'update.result':
+      setUpdate(frame);
       break;
     case 'model.list.result':
       modelStore.replaceCatalog(frame);

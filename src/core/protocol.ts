@@ -309,6 +309,23 @@ export interface VoiceModeResultFrame {
   cloudAvailable: boolean;
 }
 
+/**
+ * The server's answer to a manual update request.
+ *
+ * Sent before the swap window can stop the service, so `started: true` is a promise that the
+ * socket is about to drop, not a report that anything was installed. `version` is what is running
+ * at the moment of the answer: compare it with the `hello` after reconnecting to know whether the
+ * registry actually had something newer.
+ */
+export interface UpdateResultFrame {
+  type: 'update.result';
+  started: boolean;
+  version: string;
+  /** busy: a run is in flight. denied: the service user cannot start the unit. failed: systemd. */
+  reason?: 'busy' | 'denied' | 'failed';
+  detail?: string;
+}
+
 export interface ModelOption {
   id: string;
   label: string;
@@ -1193,6 +1210,7 @@ export type ServerFrame =
   | DevicePairInfoFrame
   | DevicePairResultFrame
   | TagsResultFrame
+  | UpdateResultFrame
   | ProvidersEnvResultFrame
   | NotificationsInfoFrame
   | HelloFrame
@@ -1229,6 +1247,7 @@ const FRAME_TYPES = new Set([
   'diag.report.result',
   'logs.tail.result',
   'voice.mode.result',
+  'update.result',
   'model.list.result',
   'model.endpoints.result',
   'skills.list.result',
@@ -1332,6 +1351,11 @@ export function encodeVoiceModeGet(): string {
 
 export function encodeVoiceModeSet(mode: VoiceMode): string {
   return JSON.stringify({ type: 'voice.mode.set', mode });
+}
+
+/** Carries nothing: what to install is the registry's answer, not this device's opinion. */
+export function encodeUpdateRun(): string {
+  return JSON.stringify({ type: 'update.run' });
 }
 
 export function encodeSessionList(): string {

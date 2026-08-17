@@ -88,6 +88,7 @@ import {
   encodeJobsDelete,
   encodeJobsRuns,
   encodeVoiceModeGet,
+  encodeUpdateRun,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
   type AgentFileFieldsOut,
@@ -106,6 +107,7 @@ import {
   type SkillTarget,
   type ToolEntry,
   type VoiceMode,
+  type UpdateResultFrame,
   type VoiceModeResultFrame,
   type LocationInput,
   type WorkspaceEntry,
@@ -368,6 +370,9 @@ export function AppShell(): React.JSX.Element {
    *  on its own is indistinguishable from nothing having happened. */
   const [skillsNotice, setSkillsNotice] = useState<string | null>(null);
   const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
+  /** The server's last word on a manual update, and whether one is still unanswered. */
+  const [update, setUpdate] = useState<UpdateResultFrame | null>(null);
+  const [updateAsked, setUpdateAsked] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -809,6 +814,10 @@ export function AppShell(): React.JSX.Element {
       setFilesTotal,
       setFilesError,
       setVoice,
+      setUpdate: frame => {
+        setUpdateAsked(false);
+        setUpdate(frame);
+      },
       setSkills,
       setSkillsError,
       setTools,
@@ -1578,6 +1587,16 @@ export function AppShell(): React.JSX.Element {
     const timer = setTimeout(() => instructionsStore.markUnsupported(), 4000);
     return () => clearTimeout(timer);
   }, [settingsOpen, settingsPage]);
+
+  const runServerUpdate = useCallback(() => {
+    // The socket is expected to die a few seconds after a successful start, so nothing here waits
+    // for anything: the answer arrives first, and the reconnect carries the verdict.
+    setUpdate(null);
+    setUpdateAsked(true);
+    connection.send(encodeUpdateRun()).catch(() => {
+      setUpdateAsked(false);
+    });
+  }, []);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
     // No optimistic write: the server answers with the state it actually stored, including what
@@ -2635,6 +2654,9 @@ export function AppShell(): React.JSX.Element {
                 onUrlChange={changeUrl}
                 voice={voice}
                 onVoiceModeChange={changeVoiceMode}
+                update={update}
+                updateAsked={updateAsked}
+                onUpdateServer={runServerUpdate}
                 status={status}
                 serverVersion={serverVersion}
                 appVersion={appVersion}
