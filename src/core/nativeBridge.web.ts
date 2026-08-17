@@ -162,6 +162,9 @@ export interface DeviceBridgeNative {
 const PREFS_PREFIX = 'claw:pref:';
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
+/** How often a socket that claims to be open is asked to prove it. */
+const HEARTBEAT_MS = 25000;
+const OUTBOX_KEY = 'claw:outbox';
 
 /** Mirrors ClawConnectionService: one socket, an outbox, exponential backoff, state events. */
 class WebConnection {
@@ -173,10 +176,14 @@ class WebConnection {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private wanted = false;
   private lifecycleBound = false;
+  /** Bumped on every open, so a superseded socket's callbacks can be ignored. */
+  private generation = 0;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   connect(url: string): void {
     this.url = url;
     this.wanted = true;
+    this.restoreOutbox();
     this.watchLifecycle();
     this.open();
   }
@@ -214,6 +221,7 @@ class WebConnection {
     this.wanted = false;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    this.stopHeartbeat();
     this.socket?.close();
     this.socket = null;
     this.setState('disconnected');
@@ -225,6 +233,7 @@ class WebConnection {
       return true;
     }
     this.outbox.push(text);
+    this.persistOutbox();
     deviceEvents.emit('claw:ws:outbox', { pending: this.outbox.length });
     return true;
   }
@@ -235,7 +244,39 @@ class WebConnection {
 
   clearOutbox(): void {
     this.outbox = [];
+    this.persistOutbox();
     deviceEvents.emit('claw:ws:outbox', { pending: 0 });
+  }
+
+  /**
+   * The queue outlives the tab, because that is the case it exists for: a message written with no
+   * connection, then a reload or a browser that reclaimed the page, and `send()` had already told
+   * the composer it was on its way.
+   */
+  private persistOutbox(): void {
+    try {
+      if (this.outbox.length === 0) localStorage.removeItem(OUTBOX_KEY);
+      else localStorage.setItem(OUTBOX_KEY, JSON.stringify(this.outbox));
+    } catch {
+      // Private mode, or a full quota: the queue stays in memory, as it was before.
+    }
+  }
+
+  private restoreOutbox(): void {
+    try {
+      const stored = localStorage.getItem(OUTBOX_KEY);
+      if (!stored) return;
+      const parsed: unknown = JSON.parse(stored);
+      if (!Array.isArray(parsed)) return;
+      const frames = parsed.filter((frame): frame is string => typeof frame === 'string');
+      // Ahead of anything queued since the page loaded: they were typed first.
+      this.outbox = [...frames, ...this.outbox];
+      if (this.outbox.length > 0) {
+        deviceEvents.emit('claw:ws:outbox', { pending: this.outbox.length });
+      }
+    } catch {
+      localStorage.removeItem(OUTBOX_KEY);
+    }
   }
 
   currentState(): string {
@@ -245,20 +286,34 @@ class WebConnection {
   private open(): void {
     if (!this.wanted) return;
     this.setState('connecting');
+    // A connect while one is already live replaces it. Without this the old socket stayed open,
+    // kept delivering frames into the same bus, and its retry loop fought the new one. The
+    // native service has carried this guard from the start; the web port had not.
+    const previous = this.socket;
+    this.socket = null;
+    previous?.close(1000, 'reconnecting');
+    const generation = ++this.generation;
     const socket = new WebSocket(this.url);
     this.socket = socket;
 
     socket.onopen = () => {
+      if (generation !== this.generation) {
+        socket.close(1000, 'superseded');
+        return;
+      }
       this.attempt = 0;
       this.setState('connected');
       this.drain();
+      this.startHeartbeat();
     };
     socket.onmessage = event => {
+      if (generation !== this.generation) return;
       deviceEvents.emit('claw:ws:message', { text: String(event.data) });
     };
     socket.onclose = () => {
       if (this.socket !== socket) return;
       this.socket = null;
+      this.stopHeartbeat();
       this.setState('disconnected');
       this.scheduleRetry();
     };
@@ -267,10 +322,41 @@ class WebConnection {
     };
   }
 
+  /**
+   * A browser cannot send a WebSocket ping from JS, and a socket killed by a NAT timeout or a
+   * VPN switch stays `OPEN` forever: the page said "connected" while every frame fell in a hole.
+   * What a dead link cannot fake is draining: bytes handed to a socket with no peer sit in
+   * `bufferedAmount`. Two checks in a row with nothing drained means the link is gone.
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    let stalled = 0;
+    this.heartbeatTimer = setInterval(() => {
+      const socket = this.socket;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      if (socket.bufferedAmount > 0) {
+        stalled += 1;
+        if (stalled >= 2) {
+          stalled = 0;
+          socket.close(4000, 'stalled');
+        }
+        return;
+      }
+      stalled = 0;
+      socket.send(JSON.stringify({ type: 'ping' }));
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+  }
+
   private drain(): void {
     const queued = this.outbox;
     this.outbox = [];
     queued.forEach(text => this.send(text));
+    this.persistOutbox();
     deviceEvents.emit('claw:ws:outbox', { pending: this.outbox.length });
   }
 

@@ -1,6 +1,7 @@
 import { deviceBridge, deviceEvents } from './nativeBridge';
 import type { WsStatusPayload } from './types';
 import { parseServerFrame, type ServerFrame } from './protocol';
+import { isValidServerUrl } from './serverUrl';
 
 type StateListener = (status: WsStatusPayload) => void;
 type MessageListener = (text: string) => void;
@@ -33,6 +34,13 @@ class ClawConnection {
   }
 
   connect(url: string): void {
+    // The one door to the transport, so the one place an address is checked. Below this line it
+    // reaches OkHttp, which answers a missing scheme by throwing out of a service callback and
+    // taking the process with it, at every launch, since the address was already stored.
+    if (!isValidServerUrl(url)) {
+      deviceEvents.emit('claw:ws:state', { state: 'disconnected', reason: 'invalid server address' });
+      return;
+    }
     deviceBridge.connect(url);
   }
 

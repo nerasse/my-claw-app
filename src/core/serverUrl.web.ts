@@ -27,3 +27,8 @@ export const DEFAULT_HTTP_ORIGIN = origin();
 export function authQuery(): string {
   return '';
 }
+
+/** Twin of the native check. The address is the page's own origin here, so it always holds. */
+export function isValidServerUrl(url: string): boolean {
+  return /^(wss?|https?):\/\/[^\s/?#]+\S*$/i.test(url.trim());
+}

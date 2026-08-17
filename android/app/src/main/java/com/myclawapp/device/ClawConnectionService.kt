@@ -20,6 +20,8 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import org.json.JSONArray
+import org.json.JSONException
 import java.util.concurrent.TimeUnit
 
 class ClawConnectionService : Service() {
@@ -62,6 +64,7 @@ class ClawConnectionService : Service() {
     private const val NOTIFICATION_ID = 1001
     private const val MAX_RECONNECT_DELAY_MS = 30_000L
     private const val OUTBOX_CAPACITY = 200
+    private const val OUTBOX_KEY = "outbox"
 
     @Volatile
     private var state = "idle"
@@ -73,6 +76,11 @@ class ClawConnectionService : Service() {
      * Frames typed while the socket is down. Static so a frame queued before the service is
      * even started survives, and drained in order on the next onOpen. Bounded: a phone left
      * offline for a day must not grow the heap without limit.
+     *
+     * Mirrored to disk on every change. The queue used to live in memory only, so a message
+     * written in the metro and killed with the process (LOW_MEMORY, battery) vanished without
+     * a trace: `send()` had already returned true, the bubble showed no error, and the server
+     * history that replaced it on reconnect had never heard of it.
      */
     private val outbox = ArrayDeque<String>()
 
@@ -88,28 +96,72 @@ class ClawConnectionService : Service() {
         if (outbox.size >= OUTBOX_CAPACITY) return false
         outbox.addLast(text)
       }
+      instance?.persistOutbox()
       instance?.emitOutboxSize()
       return true
     }
 
     fun clearOutbox() {
       synchronized(outbox) { outbox.clear() }
+      instance?.persistOutbox()
       instance?.emitOutboxSize()
     }
 
     private fun drainOutbox(ws: WebSocket): Boolean {
+      var sent = false
       while (true) {
-        val next = synchronized(outbox) { outbox.firstOrNull() } ?: return true
-        if (!ws.send(next)) return false
+        val next = synchronized(outbox) { outbox.firstOrNull() }
+        if (next == null) {
+          if (sent) instance?.persistOutbox()
+          return true
+        }
+        if (!ws.send(next)) {
+          if (sent) instance?.persistOutbox()
+          return false
+        }
         synchronized(outbox) { if (outbox.firstOrNull() === next) outbox.removeFirst() }
+        sent = true
       }
     }
+  }
+
+  /**
+   * The queue, as JSON, in the same store the crash reports use: whatever kills this process is
+   * the exact case the queue exists for, so it cannot only live in the heap.
+   */
+  private fun persistOutbox() {
+    val snapshot = synchronized(outbox) { JSONArray(outbox.toList()).toString() }
+    getSharedPreferences("claw_connection", Context.MODE_PRIVATE)
+      .edit().putString(OUTBOX_KEY, snapshot).apply()
+  }
+
+  private fun restoreOutbox() {
+    val stored = getSharedPreferences("claw_connection", Context.MODE_PRIVATE).getString(OUTBOX_KEY, null)
+      ?: return
+    val restored = try {
+      val array = JSONArray(stored)
+      (0 until array.length()).mapNotNull { array.optString(it, null) }
+    } catch (e: JSONException) {
+      Log.w(TAG, "unreadable outbox, dropped", e)
+      emptyList()
+    }
+    if (restored.isEmpty()) return
+    synchronized(outbox) {
+      // Ahead of anything queued since this process started: they were typed first.
+      for (frame in restored.asReversed()) {
+        if (outbox.size >= OUTBOX_CAPACITY) break
+        outbox.addFirst(frame)
+      }
+    }
+    Log.i(TAG, "outbox restored (pending=${pendingCount()})")
+    emitOutboxSize()
   }
 
   override fun onCreate() {
     super.onCreate()
     instance = this
     createChannel()
+    restoreOutbox()
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -164,7 +216,18 @@ class ClawConnectionService : Service() {
     emitState(null, 0)
     val deviceId = DeviceCredentials.deviceId(this)
     val token = DeviceCredentials.token(this)
-    val request = Request.Builder().url(DeviceCredentials.appendToUrl(url, deviceId, token)).build()
+    // OkHttp accepts http/https/ws/wss and throws on anything else, here, on the main thread,
+    // inside onStartCommand. An address typed without its scheme killed the process, and it had
+    // already been stored, so it killed it again at every launch. The JS side checks too; this
+    // is the layer that cannot be bypassed by a stale preference.
+    val request = try {
+      Request.Builder().url(DeviceCredentials.appendToUrl(url, deviceId, token)).build()
+    } catch (e: IllegalArgumentException) {
+      Log.w(TAG, "refusing an unusable server address", e)
+      state = "disconnected"
+      emitState("invalid server address", 0)
+      return
+    }
     webSocket = client.newWebSocket(
       request,
       object : WebSocketListener() {

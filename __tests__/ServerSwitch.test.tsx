@@ -86,6 +86,28 @@ test('a disconnected app never claims to be talking to another server', async ()
   await unmount(tree);
 });
 
+test('an address without a scheme never reaches the socket', async () => {
+  const tree = await renderApp();
+  await announce('connected', OLD_URL);
+  await openSettings(tree);
+  bridge.connect.mockClear();
+
+  // OkHttp answers this by throwing out of a service callback, which kills the process. The
+  // address is persisted as it is typed, so the next launch used to kill it again.
+  await typeUrl(tree, '10.10.20.10:8080/my-claw-app');
+  await waitFor(() => labelsOf(tree).includes('Reconnect to the new server'));
+  await press(tree, 'Reconnect to the new server');
+  expect(bridge.connect).not.toHaveBeenCalled();
+
+  // Refused, and said so: the app reports itself disconnected rather than pretending.
+  await waitFor(() => labelsOf(tree).includes('Connect'));
+
+  await typeUrl(tree, NEW_URL);
+  await press(tree, 'Connect');
+  expect(bridge.connect).toHaveBeenCalledWith(NEW_URL);
+
+  await settleAndUnmount(tree);
+});
 
 describe('the connection indicator in the header', () => {
   it('is absent while connected, and a dropped connection shows an offline badge in its place', async () => {
