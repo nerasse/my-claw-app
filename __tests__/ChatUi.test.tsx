@@ -194,6 +194,37 @@ test('a gallery photo (content:// uri) is copied to the cache before staging', a
   await unmount(tree);
 });
 
+test('an upload that fails gives the typed message back instead of eating it', async () => {
+  const { launchImageLibrary } = require('react-native-image-picker');
+  const tree = await renderWithHistory();
+
+  await pressLabel(tree, 'Add attachment');
+  await pressText(tree, 'Photo from gallery');
+  const callback = launchImageLibrary.mock.calls.at(-1)[1];
+  await ReactTestRenderer.act(async () => {
+    callback({
+      didCancel: false,
+      assets: [{ uri: 'content://media/external/images/42', fileName: 'photo.jpg', type: 'image/jpeg', fileSize: 1234 }],
+    });
+  });
+  await waitFor(() => stringsOf(tree).includes('photo.jpg'));
+
+  // Refused with a status, so it is not retried and the failure is final.
+  bridge.uploadFile.mockResolvedValueOnce({ status: 507, body: 'Insufficient Storage' });
+  await typeInto(tree, 'regarde ca');
+  await pressLabel(tree, 'Send message');
+
+  // The field is cleared the instant the send fires and the upload runs after it: without the
+  // restore, the words were gone and the file was still staged, so there was nothing to send.
+  await waitFor(() => textsOf(tree).includes('upload failed: Insufficient Storage'));
+  expect(inputOf(tree).props.value).toBe('regarde ca');
+  expect(stringsOf(tree)).toContain('photo.jpg');
+  expect(bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('regarde ca'))).toBe(false);
+
+  bridge.uploadFile.mockResolvedValue({ status: 200, body: JSON.stringify({ id: 'media-1' }) });
+  await unmount(tree);
+});
+
 test('the attach button opens the picker sheet and the sheet closes on cancel', async () => {
   const tree = await renderWithHistory();
 

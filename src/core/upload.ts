@@ -20,6 +20,31 @@ export interface UploadedAttachment {
   type: AttachmentMeta['type'];
 }
 
+/** The server answered and said no. Its own type because a refusal is never worth retrying. */
+export class UploadRefused extends Error {
+  constructor(readonly status: number, body: string) {
+    super(`upload failed: ${body || `HTTP ${status}`}`);
+    this.name = 'UploadRefused';
+  }
+}
+
+/** Long enough for a dead connection to be replaced, short enough to feel like one attempt. */
+const RETRY_DELAY_MS = 400;
+
+/**
+ * A failure with no answer behind it: the request never reached the server.
+ *
+ * Retrying that one is the whole point. A browser replays an idempotent request on a connection
+ * the other end had closed, but never a POST, so the first upload after an idle tab dies with no
+ * response at all while everything else looks healthy. An abort is excluded: something cancelled
+ * it on purpose (a reload, a navigation), and repeating it would send what the owner just left.
+ */
+function isTransportFailure(err: unknown): boolean {
+  if (err instanceof UploadRefused) return false;
+  const message = err instanceof Error ? err.message : String(err);
+  return !/abort/i.test(message);
+}
+
 /** An uploaded attachment on its way to the wire, plus what only this device knows about it. */
 export interface OutgoingAttachment {
   id: string;
@@ -55,7 +80,7 @@ export async function uploadMedia(
       if (p.id === transferId && p.total > 0) onProgress(p.bytes, p.total);
     });
   }
-  try {
+  const attempt = async (): Promise<UploadedAttachment> => {
     const response = await deviceBridge.uploadFile(
       attachment.uri,
       url,
@@ -65,10 +90,19 @@ export async function uploadMedia(
       transferId,
     );
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`upload failed: ${response.body || `HTTP ${response.status}`}`);
+      throw new UploadRefused(response.status, response.body);
     }
     const meta = JSON.parse(response.body) as { id: string };
     return { id: meta.id, type: attachment.type };
+  };
+  try {
+    try {
+      return await attempt();
+    } catch (err) {
+      if (!isTransportFailure(err)) throw err;
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      return await attempt();
+    }
   } finally {
     unsubscribe?.();
   }

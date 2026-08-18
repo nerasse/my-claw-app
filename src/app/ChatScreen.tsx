@@ -436,6 +436,10 @@ export function ChatScreen({
           onSend(text, refs, locationToSend);
         } catch (err) {
           setUploadError(err instanceof Error ? err.message : 'upload failed');
+          // The field is cleared the moment the send is fired, and the upload runs after it: a
+          // failed one took the typed words with it and left the file staged, so the message was
+          // gone with nothing to send again. Given back, unless something was typed since.
+          if (text) setDraft(current => (current.trim() ? current : text));
         } finally {
           uploadingRef.current = false;
           setUploading(false);
