@@ -8,6 +8,7 @@ import {
   type VoiceLevelEvent,
   type VoiceRecording,
 } from '../core/nativeBridge';
+import { useLayout } from '../core/layout';
 import { ensureMicPermission, finishRecording, formatDuration } from '../core/voice';
 import { useThemedStyles } from '../theme';
 import type { Palette } from '../theme/palettes';
@@ -41,6 +42,9 @@ interface Props {
  */
 export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Props) {
   const styles = useThemedStyles(createStyles);
+  // Read here rather than passed down: the composer sizes its own pills off the same hook, and a
+  // mic that ignored it stood 8pt taller than the field and the send button it sits next to.
+  const { dense } = useLayout();
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [levels, setLevels] = useState<number[]>([]);
@@ -242,7 +246,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
           onPress={() => {
             keep().catch(() => {});
           }}
-          style={[styles.button, styles.buttonStop]}
+          style={[styles.button, dense && !hero && styles.buttonDense, styles.buttonStop]}
           accessibilityRole="button"
           accessibilityLabel="Stop recording">
           <View style={styles.stopGlyph} />
@@ -253,6 +257,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
           style={[
             styles.button,
             hero && styles.buttonHero,
+            dense && !hero && styles.buttonDense,
             recording && (armed ? styles.buttonArmed : styles.buttonLive),
             { transform: [{ translateX: slide }] },
           ]}
@@ -313,6 +318,8 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   buttonHero: { width: 50, height: 50 },
+  // Same number as the composer's `buttonDense`: one row, one height, whatever is in it.
+  buttonDense: { width: 36, height: 36 },
   buttonLive: { backgroundColor: palette.accent, borderColor: palette.accent },
   buttonArmed: { backgroundColor: palette.danger, borderColor: palette.danger },
   buttonStop: { backgroundColor: palette.danger, borderColor: palette.danger },
