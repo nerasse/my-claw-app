@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
 import { isDangerousHtml } from '../core/markdownSafe';
+import { CodeBlockBar } from './CodeBlockBar';
+import { MarkdownTable } from './MarkdownTable';
 import { font, lineBoxFor, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
 /**
@@ -80,16 +82,27 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
     hr: { marginVertical: space.sm, borderBottomColor: palette.border },
     list: { marginVertical: 2, flexShrink: 0 },
     li: { fontSize: size, color, ...box },
-    table: { marginVertical: space.xs, flexShrink: 0 },
+    // The frame is drawn once by the container and once per inner edge, never twice on the same
+    // line: MarkdownTable drops the trailing borders of the last row and the last column.
+    table: {
+      marginVertical: space.xs,
+      flexShrink: 0,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 6,
+      overflow: 'hidden',
+    },
     tableRow: { borderBottomWidth: 1, borderBottomColor: palette.border },
-    tableCell: { padding: space.xs, borderWidth: 1, borderColor: palette.border },
+    tableCell: { padding: space.xs, borderRightWidth: 1, borderRightColor: palette.border },
     image: { width: 200, height: 200, borderRadius: 6, marginVertical: space.xs },
   };
 }
 
 // The default renderer puts code blocks in a horizontal ScrollView (lines never wrap and the
 // block looks cut on a phone). Chat bubbles render better with wrapped monospace text.
-class WrappingRenderer extends Renderer {
+// Exported for the tests: `react-native-marked` is mocked in the suite, so the only honest way
+// to exercise an override is to call it.
+export class WrappingRenderer extends Renderer {
   constructor(
     private codeStyle: TextStyle,
     private typography: TextStyle,
@@ -115,14 +128,19 @@ class WrappingRenderer extends Renderer {
   // and Android's ScrollView answers a focus by scrolling to it -- through the inversion, which
   // sends the thread flying. Taking text out of a message is the selection viewer's job.
   // See docs/text-selection.md.
-  code(text: string, _language?: string, containerStyle?: ViewStyle, textStyle?: TextStyle) {
+  code(text: string, language?: string, containerStyle?: ViewStyle, textStyle?: TextStyle) {
     return (
       <View key={this.getKey()} style={containerStyle}>
+        <CodeBlockBar value={text} language={language} />
         <Text style={[textStyle, styles.code, this.codeStyle]}>
           {text}
         </Text>
       </View>
     );
+  }
+
+  table(header: ReactNode[][], rows: ReactNode[][][], tableStyle?: ViewStyle, rowStyle?: ViewStyle, cellStyle?: ViewStyle): ReactNode {
+    return <MarkdownTable key={this.getKey()} header={header} rows={rows} tableStyle={tableStyle} rowStyle={rowStyle} cellStyle={cellStyle} />;
   }
 }
 

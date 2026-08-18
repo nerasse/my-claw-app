@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
 import { isDangerousHtml } from '../core/markdownSafe';
+import { CodeBlockBar } from './CodeBlockBar';
+import { MarkdownTable } from './MarkdownTable';
 import { font, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
 /** Document body: a fullscreen reader, not a chat bubble, so one size above the chat. */
@@ -117,10 +119,11 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
       overflow: 'hidden',
     },
     tableRow: { borderBottomWidth: 1, borderBottomColor: palette.border },
+    // Inner edges only: the container frames the table, MarkdownTable drops the trailing ones.
     tableCell: {
       padding: space.sm,
-      borderWidth: 0.5,
-      borderColor: palette.border,
+      borderRightWidth: 0.5,
+      borderRightColor: palette.border,
     },
   };
 }
@@ -130,7 +133,7 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
 //  - a paragraph's inline runs are wrapped in a Text node styled `{}`, so the wrapper falls
 //    back to system defaults (16px, black -- invisible text in dark mode);
 //  - code blocks get `styles.em` as their text style, so they render in italics.
-class DocumentRenderer extends Renderer {
+export class DocumentRenderer extends Renderer {
   constructor(
     private codeColor: string,
     private typography: TextStyle,
@@ -147,14 +150,19 @@ class DocumentRenderer extends Renderer {
     return super.html(text, styles);
   }
 
-  code(text: string, _language?: string, containerStyle?: ViewStyle, _textStyle?: TextStyle) {
+  code(text: string, language?: string, containerStyle?: ViewStyle, _textStyle?: TextStyle) {
     return (
       <View key={this.getKey()} style={containerStyle}>
+        <CodeBlockBar value={text} language={language} />
         <Text selectable style={[styles.codeText, { color: this.codeColor }]}>
           {text}
         </Text>
       </View>
     );
+  }
+
+  table(header: ReactNode[][], rows: ReactNode[][][], tableStyle?: ViewStyle, rowStyle?: ViewStyle, cellStyle?: ViewStyle): ReactNode {
+    return <MarkdownTable key={this.getKey()} header={header} rows={rows} tableStyle={tableStyle} rowStyle={rowStyle} cellStyle={cellStyle} />;
   }
 }
 
