@@ -7,7 +7,7 @@ import { ThreadRow } from '../components/ThreadRow';
 import { PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
-import { pinnedStore, usePinnedOrder } from '../core/pinned';
+import { isPinned, pinnedOf, setOrder } from '../core/pinned';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -88,49 +88,29 @@ export function Drawer({
   // A pinned panel never "opens", so it never takes the keyboard away from the composer.
   useDismissKeyboard(pinned ? false : open);
 
-  const threadsById = useMemo(() => new Map(sessions.map(session => [session.threadId, session])), [sessions]);
   // Membership as a Set, not `unread.includes` per row: that scan ran once per visible row on
   // every render of a panel that never unmounts, i.e. on every streaming token.
   const unreadIds = useMemo(() => new Set(unread), [unread]);
 
-  // The pinned set is a per-device preference, the sessions come from the server: the merge
-  // happens here. Pinned rows follow the user's order, the rest keeps the server's.
-  const pinnedOrder = usePinnedOrder();
-  const pinnedIds = useMemo(() => new Set(pinnedOrder), [pinnedOrder]);
+  // Pins and their order come from the server, on the summaries themselves: nothing to merge and
+  // nothing to prune, since a thread that is gone from the listing takes its rank with it.
   const { pinnedRows, restRows, pinnedTotal, restTotal } = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const match = (session: SessionSummary) =>
       !needle || session.title.toLowerCase().includes(needle);
-    const pinnedMatches: SessionSummary[] = [];
-    for (const threadId of pinnedOrder) {
-      const session = threadsById.get(threadId);
-      if (session && match(session)) pinnedMatches.push(session);
-    }
-    const rest = sessions.filter(session => match(session) && !pinnedIds.has(session.threadId));
-    const pinnedCount = sessions.reduce(
-      (count, session) => count + (pinnedIds.has(session.threadId) ? 1 : 0),
-      0,
-    );
+    const onTop = pinnedOf(sessions);
     return {
-      pinnedRows: pinnedMatches,
-      restRows: rest,
-      pinnedTotal: pinnedCount,
-      restTotal: sessions.length - pinnedCount,
+      pinnedRows: onTop.filter(match),
+      restRows: sessions.filter(session => match(session) && !isPinned(session)),
+      pinnedTotal: onTop.length,
+      restTotal: sessions.length - onTop.length,
     };
-  }, [sessions, threadsById, pinnedOrder, pinnedIds, query]);
-
-  // Sessions that vanished (deleted, archived) leave a stale id behind; prune once the server
-  // has spoken, and never before: the list starts empty on boot and would wipe the pins.
-  useEffect(() => {
-    if (sessions.length === 0) return;
-    const kept = pinnedOrder.filter(threadId => threadsById.has(threadId));
-    if (kept.length !== pinnedOrder.length) pinnedStore.setOrder(kept);
-  }, [sessions, pinnedOrder, threadsById]);
+  }, [sessions, query]);
 
   const handleDragEnd = useCallback((params: SortableGridDragEndParams<SessionSummary>) => {
     // The grid hands back the rows already reshuffled, so the drop reads straight off them
     // rather than replaying an index permutation over a captured list.
-    pinnedStore.setOrder(params.data.map(session => session.threadId));
+    setOrder(params.data.map(session => session.threadId));
   }, []);
 
   const sectionCount = (count: number, total: number): string =>

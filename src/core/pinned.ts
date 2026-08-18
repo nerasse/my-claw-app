@@ -1,91 +1,60 @@
-import { useSyncExternalStore } from 'react';
+import { connection } from './connection';
 import { deviceBridge } from './nativeBridge';
+import { encodeSessionPin, encodeSessionPinOrder, type SessionSummary } from './protocol';
 
-const PREFS_KEY = 'pinnedSessions';
-const EMPTY: string[] = [];
-Object.freeze(EMPTY);
+/**
+ * Which conversations sit at the top of the drawer, and in what order.
+ *
+ * The order is the server's, carried by `pinRank` on every summary: the owner reaches the same
+ * conversations from the phone and from the browser, and a pin is about finding one again. Kept
+ * per device, as it was until now, each client had its own private idea of what was pinned, and
+ * the pins made on the phone did not exist in the browser at all. Nothing is stored here: the
+ * listing IS the state, so a pin set anywhere shows up everywhere the next frame lands.
+ */
 
-type Listener = () => void;
+/** The pref this device used to keep its private pins in. Read once, then dropped. */
+const LEGACY_PREFS_KEY = 'pinnedSessions';
 
-function parse(raw: Record<string, string>): string[] {
-  try {
-    const parsed = JSON.parse(raw[PREFS_KEY] ?? '[]');
-    return Array.isArray(parsed)
-      ? parsed.filter((id): id is string => typeof id === 'string')
-      : [];
-  } catch {
-    return [];
-  }
+/** The pinned conversations of a listing, in the owner's order. */
+export function pinnedOf(sessions: SessionSummary[]): SessionSummary[] {
+  return sessions
+    .filter(session => session.pinRank !== undefined)
+    .sort((left, right) => (left.pinRank ?? 0) - (right.pinRank ?? 0));
+}
+
+export function isPinned(session: SessionSummary): boolean {
+  return session.pinRank !== undefined;
+}
+
+export function setPinned(threadId: string, pinned: boolean): void {
+  connection.send(encodeSessionPin(threadId, pinned)).catch(() => {});
+}
+
+/** The user dropped a row: the new order is authoritative, and the server writes it down. */
+export function setOrder(threadIds: string[]): void {
+  connection.send(encodeSessionPinOrder(threadIds)).catch(() => {});
 }
 
 /**
- * Which conversations sit at the top of the drawer, and in what order. The server owns the
- * sessions; this only says how the drawer shows them, so it lives in the same per-device
- * settings bag as the theme. The order is what the user dragged it to: the array IS the order.
+ * Hands this device's old private pins to the server, once. Without it every pin made before the
+ * server owned them would silently vanish on update, which reads as data loss even though it is
+ * only a preference. The pref is cleared whatever the server then makes of the ids: it has had
+ * its one chance to be heard, and keeping it would replay a stale order over a live one.
  */
-class PinnedStore {
-  private order: string[] = EMPTY;
-  private listeners = new Set<Listener>();
-
-  subscribe(listener: Listener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+export async function migrateLocalPins(): Promise<void> {
+  try {
+    const stored = await deviceBridge.prefsGetAll();
+    const raw = stored[LEGACY_PREFS_KEY];
+    if (!raw) return;
+    const parsed: unknown = JSON.parse(raw);
+    const threadIds = Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === 'string')
+      : [];
+    await deviceBridge.prefsSet(LEGACY_PREFS_KEY, null);
+    if (threadIds.length === 0) return;
+    for (const threadId of threadIds) setPinned(threadId, true);
+    setOrder(threadIds);
+  } catch {
+    // A pref that cannot be read is a pref that never existed: nothing to hand over.
   }
-
-  orderOf(): string[] {
-    return this.order;
-  }
-
-  async hydrate(): Promise<void> {
-    try {
-      const order = parse(await deviceBridge.prefsGetAll());
-      if (order.length === this.order.length && order.every((id, i) => id === this.order[i]))
-        return;
-      this.order = order.length === 0 ? EMPTY : order;
-      this.emit();
-    } catch {
-      this.order = EMPTY;
-    }
-  }
-
-  setPinned(threadId: string, pinned: boolean): void {
-    if (pinned) {
-      if (this.order.includes(threadId)) return;
-      this.order = [...this.order, threadId];
-    } else {
-      const next = this.order.filter(id => id !== threadId);
-      if (next.length === this.order.length) return;
-      this.order = next.length === 0 ? EMPTY : next;
-    }
-    this.emit();
-    this.persist();
-  }
-
-  /** The user dragged a row: the new order is authoritative, and it gets written down. */
-  setOrder(order: string[]): void {
-    this.order = order.length === 0 ? EMPTY : [...order];
-    this.emit();
-    this.persist();
-  }
-
-  private persist(): void {
-    deviceBridge
-      .prefsSet(PREFS_KEY, JSON.stringify(this.order))
-      .catch(() => {});
-  }
-
-  private emit(): void {
-    for (const listener of this.listeners) listener();
-  }
-}
-
-export const pinnedStore = new PinnedStore();
-
-const subscribeToPins = (listener: Listener): (() => void) => pinnedStore.subscribe(listener);
-
-/** The pinned thread ids, in the user's order. */
-export function usePinnedOrder(): string[] {
-  return useSyncExternalStore(subscribeToPins, () => pinnedStore.orderOf());
 }

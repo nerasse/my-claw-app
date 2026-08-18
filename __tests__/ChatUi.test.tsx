@@ -3,7 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter, FlatList, PermissionsAndroid } from 'react-native';
+import { DeviceEventEmitter, FlatList, PermissionsAndroid, StyleSheet } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
@@ -441,6 +441,32 @@ test('an empty thread shows the hero composer, which leaves once history arrives
   expect(
     tree.root.findAll(node => String(node.type) === 'TextInput' && node.props.placeholder === 'message', { deep: true }),
   ).toHaveLength(1);
+  await unmount(tree);
+});
+
+test('the frame around the composer belongs to the wrapper, never to the field', async () => {
+  const tree = await renderWithHistory();
+
+  const input = tree.root.find(
+    node => String(node.type) === 'TextInput' && node.props.placeholder === 'message',
+  );
+  const inputStyle = StyleSheet.flatten(input.props.style) as Record<string, number>;
+  // Border, background and padding on the field itself scroll away with the text on Android, so
+  // a long message ends up written across the rounded edge and cut mid-line.
+  expect(inputStyle.borderWidth).toBeUndefined();
+  expect(inputStyle.backgroundColor).toBeUndefined();
+  expect(inputStyle.padding).toBe(0);
+  expect(inputStyle.maxHeight).toBeGreaterThan(0);
+
+  // Up through the composite TextInput to the View that draws the frame.
+  let ancestor = input.parent;
+  while (ancestor && String(ancestor.type) !== 'View') ancestor = ancestor.parent;
+  const frame = StyleSheet.flatten(ancestor!.props.style) as Record<string, number>;
+  expect(frame.borderWidth).toBe(1);
+  expect(frame.paddingVertical).toBeGreaterThan(0);
+  // The text ceiling and the frame's padding are what add up to the height a thumb sees; the
+  // frame is never allowed to be shorter than the send button beside it.
+  expect(frame.minHeight).toBe(44);
   await unmount(tree);
 });
 

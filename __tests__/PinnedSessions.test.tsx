@@ -1,15 +1,18 @@
 /**
  * @format
  *
- * Pinned conversations: the drawer lifts them into their own section, their actions button
- * becomes a drag handle, and the whole arrangement survives server refreshes because the
- * order lives in the per-device preferences, not in the session list.
+ * Pinned conversations: the drawer lifts them into their own section, their row becomes a drag
+ * handle, and both the pin and its order belong to the server. The device asks (`session.pin`,
+ * `session.pin.order`) and draws what comes back on the summaries, so the phone and the browser
+ * cannot disagree about what is pinned.
  */
 
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
-import { pinnedStore } from '../src/core/pinned';
+import { deviceBridge } from '../src/core/nativeBridge';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
+
+const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 
 function emit(frame: Record<string, unknown>): Promise<void> {
   return ReactTestRenderer.act(async () => {
@@ -17,14 +20,27 @@ function emit(frame: Record<string, unknown>): Promise<void> {
   });
 }
 
-function summary(threadId: string, title: string) {
+function summary(threadId: string, title: string, pinRank?: number) {
   return {
     threadId,
     title,
     messageCount: 1,
     createdAt: '2026-08-06T10:00:00.000Z',
     lastActiveAt: '2026-08-06T10:05:00.000Z',
+    ...(pinRank === undefined ? {} : { pinRank }),
   };
+}
+
+function sentFrames(): Record<string, unknown>[] {
+  return bridge.sendMessage.mock.calls
+    .map(([frame]) => {
+      try {
+        return JSON.parse(String(frame)) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    })
+    .filter(frame => String(frame.type).startsWith('session.pin'));
 }
 
 function pressLabel(tree: Tree, label: string): Promise<void> {
@@ -52,13 +68,27 @@ async function bootWith(sessions: ReturnType<typeof summary>[]): Promise<Tree> {
   return tree;
 }
 
-test('pinning lifts a conversation into its own section and makes the row announce the hold', async () => {
+beforeEach(() => {
+  bridge.sendMessage.mockClear();
+  bridge.prefsGetAll.mockResolvedValue({});
+});
+
+test('pinning asks the server, and the answer is what lifts the row into its own section', async () => {
   const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
   await pressLabel(tree, 'Open conversations');
   await waitFor(() => textsOf(tree).includes('conversations · 2'));
 
   await pressLabel(tree, 'Actions for conversation Alpha');
   await pressLabel(tree, 'Pin to top');
+
+  expect(sentFrames()).toEqual([{ type: 'session.pin', threadId: 't-alpha', pinned: true }]);
+  // Nothing moved yet: the rank is the server's word, not the tap's.
+  expect(textsOf(tree)).not.toContain('pinned · 1');
+
+  await emit({
+    type: 'session.list.result',
+    sessions: [summary('t-alpha', 'Alpha', 0), summary('t-beta', 'Beta')],
+  });
 
   await waitFor(() => textsOf(tree).includes('pinned · 1'));
   expect(textsOf(tree)).toContain('conversations · 1');
@@ -69,62 +99,60 @@ test('pinning lifts a conversation into its own section and makes the row announ
   await settleAndUnmount(tree);
 });
 
-test('unpinning puts the conversation back into the list', async () => {
-  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
+test('unpinning asks for the pin to be dropped, and the row goes back to the list', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha', 0), summary('t-beta', 'Beta')]);
   await pressLabel(tree, 'Open conversations');
-  await waitFor(() => textsOf(tree).includes('conversations · 2'));
-
-  await pressLabel(tree, 'Actions for conversation Alpha');
-  await pressLabel(tree, 'Pin to top');
   await waitFor(() => textsOf(tree).includes('pinned · 1'));
 
   await pressLabel(tree, 'Actions for conversation Alpha');
   await pressLabel(tree, 'Unpin');
+
+  expect(sentFrames()).toEqual([{ type: 'session.pin', threadId: 't-alpha', pinned: false }]);
+
+  await emit({
+    type: 'session.list.result',
+    sessions: [summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')],
+  });
 
   await waitFor(() => textsOf(tree).includes('conversations · 2'));
   expect(textsOf(tree)).not.toContain('pinned · 1');
   await settleAndUnmount(tree);
 });
 
-test('a dragged order sticks and survives a server refresh of the list', async () => {
-  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
+test('the rank orders the pinned block, whatever order the listing arrives in', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha', 1), summary('t-beta', 'Beta', 0)]);
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Actions for conversation Alpha');
-  await pressLabel(tree, 'Pin to top');
-  await pressLabel(tree, 'Actions for conversation Beta');
-  await pressLabel(tree, 'Pin to top');
   await waitFor(() => textsOf(tree).includes('pinned · 2'));
 
-  // The drop of a drag: the store receives the new order, the drawer renders it.
-  await ReactTestRenderer.act(async () => {
-    pinnedStore.setOrder(['t-beta', 't-alpha']);
-  });
-  // Row order is read from the conversation labels: the pinned section renders its rows
-  // first, so the dragged order must put Beta's row before Alpha's.
   const conversationOrder = () =>
     labelsOf(tree)
       .filter(label => label.startsWith('Conversation '))
       // Pinned rows carry the reorder hint; the order is what is under test, not the wording.
       .map(label => label.replace(', hold to reorder', ''));
-  await waitFor(() => {
-    const order = conversationOrder();
-    return order.indexOf('Conversation Beta') >= 0
-      && order.indexOf('Conversation Beta') < order.indexOf('Conversation Alpha');
-  });
-
-  // The server re-sends its list (activity elsewhere); the pins and their order survive.
-  await emit({ type: 'session.list.result', sessions: [summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')] });
-  await waitFor(() => textsOf(tree).includes('pinned · 2'));
   const order = conversationOrder();
   expect(order.indexOf('Conversation Beta')).toBeLessThan(order.indexOf('Conversation Alpha'));
   await settleAndUnmount(tree);
 });
 
-test('the pinned section is one column wide, and the row itself is the grab area', async () => {
-  const tree = await bootWith([summary('t-alpha', 'Alpha')]);
+test('a drop sends the dropped order, read from the rows the sortable hands back', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha', 0), summary('t-beta', 'Beta', 1)]);
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Actions for conversation Alpha');
-  await pressLabel(tree, 'Pin to top');
+  await waitFor(() => textsOf(tree).includes('pinned · 2'));
+
+  const grid = tree.root.find(node => node.props.testID === 'sortable-grid');
+  await ReactTestRenderer.act(async () => {
+    grid.props.onDragEnd({ data: [summary('t-beta', 'Beta', 1), summary('t-alpha', 'Alpha', 0)] });
+  });
+
+  expect(sentFrames()).toEqual([
+    { type: 'session.pin.order', threadIds: ['t-beta', 't-alpha'] },
+  ]);
+  await settleAndUnmount(tree);
+});
+
+test('the pinned section is one column wide, and the row itself is the grab area', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha', 0)]);
+  await pressLabel(tree, 'Open conversations');
   await waitFor(() => textsOf(tree).includes('pinned · 1'));
 
   // Both halves of the same bug: a sortable that is not told to be a single column falls back
@@ -138,10 +166,8 @@ test('the pinned section is one column wide, and the row itself is the grab area
 });
 
 test('each heading sits on its own list, pinned block first', async () => {
-  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
+  const tree = await bootWith([summary('t-alpha', 'Alpha', 0), summary('t-beta', 'Beta')]);
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Actions for conversation Alpha');
-  await pressLabel(tree, 'Pin to top');
   await waitFor(() => textsOf(tree).includes('pinned · 1'));
 
   // The separation is the headings: the pinned count leads, the conversations count follows,
@@ -163,40 +189,32 @@ test('each heading sits on its own list, pinned block first', async () => {
   await settleAndUnmount(tree);
 });
 
-test('a drop reorders from the rows the sortable hands back', async () => {
-  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
+test('a session that disappears takes its pin with it, with nothing to prune', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha', 0), summary('t-beta', 'Beta')]);
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Actions for conversation Alpha');
-  await pressLabel(tree, 'Pin to top');
-  await pressLabel(tree, 'Actions for conversation Beta');
-  await pressLabel(tree, 'Pin to top');
-  await waitFor(() => textsOf(tree).includes('pinned · 2'));
-
-  // The drop itself, played through the callback the grid owns: the reordered rows come back
-  // as data, and the store must be written from them.
-  const grid = tree.root.find(node => node.props.testID === 'sortable-grid');
-  await ReactTestRenderer.act(async () => {
-    grid.props.onDragEnd({ data: [summary('t-beta', 'Beta'), summary('t-alpha', 'Alpha')] });
-  });
-
-  expect(pinnedStore.orderOf()).toEqual(['t-beta', 't-alpha']);
-  const order = labelsOf(tree)
-    .filter(label => label.startsWith('Conversation '))
-    .map(label => label.replace(', hold to reorder', ''));
-  expect(order.indexOf('Conversation Beta')).toBeLessThan(order.indexOf('Conversation Alpha'));
-  await settleAndUnmount(tree);
-});
-
-test('a session that disappears takes its pin with it', async () => {
-  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
-  await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Actions for conversation Alpha');
-  await pressLabel(tree, 'Pin to top');
   await waitFor(() => textsOf(tree).includes('pinned · 1'));
 
   await emit({ type: 'session.list.result', sessions: [summary('t-beta', 'Beta')] });
   await waitFor(() => textsOf(tree).includes('conversations · 1'));
   expect(textsOf(tree)).not.toContain('pinned · 1');
   expect(labelsOf(tree)).not.toContain('Conversation Alpha, hold to reorder');
+  // And no reorder was invented on the way: a listing without the thread is not a drop.
+  expect(sentFrames()).toEqual([]);
+  await settleAndUnmount(tree);
+});
+
+test('the pins this device kept to itself are handed over once, then forgotten', async () => {
+  bridge.prefsGetAll.mockResolvedValue({ pinnedSessions: '["t-beta","t-alpha"]' });
+
+  const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
+  await waitFor(() => sentFrames().length === 3);
+
+  expect(sentFrames()).toEqual([
+    { type: 'session.pin', threadId: 't-beta', pinned: true },
+    { type: 'session.pin', threadId: 't-alpha', pinned: true },
+    { type: 'session.pin.order', threadIds: ['t-beta', 't-alpha'] },
+  ]);
+  // Cleared whatever the server makes of them: a second boot must not replay a stale order.
+  expect(bridge.prefsSet).toHaveBeenCalledWith('pinnedSessions', null);
   await settleAndUnmount(tree);
 });

@@ -28,7 +28,7 @@ import {
 } from '../core/chat';
 import { groupRoster, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
-import { pinnedStore, usePinnedOrder } from '../core/pinned';
+import { isPinned, migrateLocalPins, setPinned } from '../core/pinned';
 import { parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
 import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnostics';
@@ -465,7 +465,6 @@ export function AppShell(): React.JSX.Element {
   const historyPage = useHistoryPage(activeThread);
   const sessions = useSessions();
   const archivedSessions = useArchivedSessions();
-  const pinnedOrder = usePinnedOrder();
   const unread = useUnreadThreads();
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
   const catalog = useModelCatalog();
@@ -892,7 +891,8 @@ export function AppShell(): React.JSX.Element {
         connection.send(encodeSessionList());
       });
     });
-    pinnedStore.hydrate().catch(() => {});
+    // The pins this device kept to itself before the server owned them, handed over once.
+    migrateLocalPins().catch(() => {});
 
     // Reports of what killed the previous process, read before the first frame goes out. They
     // are queued natively if the socket is not up yet, so this does not need to wait for it.
@@ -1705,24 +1705,24 @@ export function AppShell(): React.JSX.Element {
   // and Stop between it and the rest.
   const pinAction = useCallback(
     (target: SessionSummary, close: () => void): SheetEntry =>
-      pinnedOrder.includes(target.threadId)
+      isPinned(target)
         ? {
             label: 'Unpin',
             hint: 'back to the conversation list',
             onPress: () => {
-              pinnedStore.setPinned(target.threadId, false);
+              setPinned(target.threadId, false);
               close();
             },
           }
         : {
             label: 'Pin to top',
-            hint: 'keep it above the list',
+            hint: 'on every device, above the list',
             onPress: () => {
-              pinnedStore.setPinned(target.threadId, true);
+              setPinned(target.threadId, true);
               close();
             },
           },
-    [pinnedOrder],
+    [],
   );
 
   const conversationActions = useCallback(

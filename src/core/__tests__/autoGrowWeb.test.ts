@@ -1,0 +1,97 @@
+/**
+ * The composer's height in a browser. A textarea has one fixed height, so it is resized to its
+ * content on every keystroke, and the arithmetic is what this pins: react-native-web renders
+ * every element as `box-sizing: border-box`, while `scrollHeight` excludes the borders. Assigning
+ * one to the other leaves the content short by the border for good, which is how the field came
+ * to scroll on its own and show a first line sliced by its top edge.
+ */
+
+interface FakeStyle {
+  borderTopWidth: string;
+  borderBottomWidth: string;
+}
+
+class FakeTextArea {
+  style: Record<string, string> = {};
+  scrollHeight = 0;
+  rows = 2;
+  computed: FakeStyle = { borderTopWidth: '1px', borderBottomWidth: '1px' };
+}
+
+const globals = globalThis as unknown as {
+  HTMLTextAreaElement: unknown;
+  getComputedStyle: unknown;
+};
+
+globals.HTMLTextAreaElement = FakeTextArea;
+globals.getComputedStyle = (node: FakeTextArea) => node.computed;
+
+const { autoGrow } = require('../webProps.web') as typeof import('../webProps.web');
+
+function field(scrollHeight: number, border = '1px'): FakeTextArea {
+  const node = new FakeTextArea();
+  node.scrollHeight = scrollHeight;
+  node.computed = { borderTopWidth: border, borderBottomWidth: border };
+  return node;
+}
+
+test('the borders are part of the height, or the content is clipped by exactly that much', () => {
+  const node = field(40);
+
+  autoGrow(node, 94);
+
+  expect(node.style.height).toBe('42px');
+  expect(node.style.overflowY).toBe('hidden');
+});
+
+test('the field is asked for one row, or its own default floors it at two', () => {
+  const node = field(16);
+
+  autoGrow(node, 94);
+
+  expect(node.rows).toBe(1);
+});
+
+test('a borderless field is its content, to the pixel', () => {
+  const node = field(40, '0px');
+
+  autoGrow(node, 94);
+
+  expect(node.style.height).toBe('40px');
+});
+
+test('past the ceiling the field stops growing and becomes scrollable', () => {
+  const node = field(200);
+
+  autoGrow(node, 94);
+
+  expect(node.style.height).toBe('94px');
+  // The pair that has to agree: a clamped height with the overflow left hidden is text that can
+  // be neither seen nor scrolled to.
+  expect(node.style.overflowY).toBe('auto');
+});
+
+test('a field exactly at the ceiling still scrolls nothing', () => {
+  const node = field(92);
+
+  autoGrow(node, 94);
+
+  expect(node.style.height).toBe('94px');
+  expect(node.style.overflowY).toBe('hidden');
+});
+
+test('a computed style without borders is read as none rather than as NaN', () => {
+  const node = field(40, '');
+
+  autoGrow(node, 94);
+
+  expect(node.style.height).toBe('40px');
+});
+
+test('anything that is not a textarea is left alone', () => {
+  const node = { style: {} as Record<string, string> };
+
+  autoGrow(node, 94);
+
+  expect(node.style).toEqual({});
+});

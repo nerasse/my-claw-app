@@ -186,11 +186,20 @@ export function Composer({
   /**
    * A textarea has one height in a browser, so the field is resized to its content on every
    * change. No-op on Android, where the multiline TextInput grows by itself.
+   *
+   * The ceiling is the very same number the stylesheet caps the field at. They used to disagree
+   * (180 here, `maxHeight: 112` there): the inline height was clamped by the CSS while the
+   * overflow stayed hidden, so a fifth line was neither visible nor reachable by scrolling.
    */
   const inputRef = useRef<TextInput>(null);
+  const maxTextHeight = hero
+    ? MAX_TEXT_HEIGHT.hero
+    : dense
+      ? MAX_TEXT_HEIGHT.dense
+      : MAX_TEXT_HEIGHT.compact;
   useEffect(() => {
-    autoGrow(inputRef.current, hero ? 240 : 180);
-  }, [value, hero]);
+    autoGrow(inputRef.current, maxTextHeight);
+  }, [value, maxTextHeight]);
 
   return (
     <View style={[styles.wrap, hero && styles.wrapHero]}>
@@ -294,23 +303,28 @@ export function Composer({
           </Pressable>
         ) : null}
         {recording ? null : (
-        <TextInput
-          ref={inputRef}
-          // Read back by the window paste listener on web: a paste is for the chat only when the
-          // focus is here or nowhere.
-          id={COMPOSER_INPUT_ID}
-          style={[styles.input, hero && styles.inputHero, dense && !hero && styles.inputDense]}
-          value={value}
-          onChangeText={onChange}
-          onSubmitEditing={submitOrSelect}
-          onKeyPress={onKeyPress}
-          placeholder={hero ? 'Ask anything' : 'message'}
-          placeholderTextColor={palette.textFaint}
-          autoFocus={autoFocus}
-          multiline
-          blurOnSubmit={false}
-          accessibilityLabel="Message to send"
-        />
+        // The frame is the wrapper's, never the field's: border, background and padding on the
+        // input itself scroll away with the text on Android, which is why a long message came to
+        // sit across the rounded edge, cut in the middle of a line.
+        <View style={[styles.field, hero && styles.fieldHero, dense && !hero && styles.fieldDense]}>
+          <TextInput
+            ref={inputRef}
+            // Read back by the window paste listener on web: a paste is for the chat only when the
+            // focus is here or nowhere.
+            id={COMPOSER_INPUT_ID}
+            style={[styles.input, hero && styles.inputHero, dense && !hero && styles.inputDense]}
+            value={value}
+            onChangeText={onChange}
+            onSubmitEditing={submitOrSelect}
+            onKeyPress={onKeyPress}
+            placeholder={hero ? 'Ask anything' : 'message'}
+            placeholderTextColor={palette.textFaint}
+            autoFocus={autoFocus}
+            multiline
+            blurOnSubmit={false}
+            accessibilityLabel="Message to send"
+          />
+        </View>
         )}
         {micVisible ? (
           <VoiceRecorder
@@ -351,6 +365,13 @@ export function Composer({
     </View>
   );
 }
+
+/**
+ * How tall the text may grow before it scrolls inside its frame, per variant. Text only: the
+ * padding and the border belong to the wrapper, so this is the number the stylesheet caps the
+ * field at and the number the browser's autoGrow stops at, and there is only one of it.
+ */
+const MAX_TEXT_HEIGHT = { compact: 94, dense: 188, hero: 218 };
 
 const createStyles = (palette: Palette) => ({
   wrap: { borderTopWidth: 1, borderTopColor: palette.border, paddingTop: space.sm, gap: space.xs },
@@ -428,25 +449,33 @@ const createStyles = (palette: Palette) => ({
   locationTitle: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text },
   locationAddress: { fontSize: font.small, color: palette.textMuted },
   locationMeta: { fontSize: font.small, color: palette.textFaint },
-  input: {
+  field: {
     flex: 1,
-    maxHeight: 112,
     // Same height as the send button so the two pills align exactly.
     minHeight: 44,
+    justifyContent: 'center' as const,
     paddingHorizontal: space.md,
     paddingVertical: 9,
     borderWidth: 1,
     borderColor: palette.border,
     borderRadius: radius.pill,
-    fontSize: font.body,
-    color: palette.text,
     backgroundColor: palette.surfaceAlt,
   },
-  inputHero: {
+  fieldHero: {
     minHeight: 50,
     paddingHorizontal: space.lg,
     paddingVertical: 11,
     borderRadius: radius.lg,
+  },
+  input: {
+    maxHeight: MAX_TEXT_HEIGHT.compact,
+    // Android's EditText ships its own padding, and the frame owns the spacing now.
+    padding: 0,
+    fontSize: font.body,
+    color: palette.text,
+  },
+  inputHero: {
+    maxHeight: MAX_TEXT_HEIGHT.hero,
     fontSize: 16,
   },
   send: {
@@ -460,7 +489,8 @@ const createStyles = (palette: Palette) => ({
   sendHero: { width: 50, height: 50 },
   buttonDense: { width: 36, height: 36 },
   // A mouse can scroll a tall field and a desktop has the room: four lines is a phone's ceiling.
-  inputDense: { minHeight: 36, paddingVertical: 6, maxHeight: 200 },
+  fieldDense: { minHeight: 36, paddingVertical: 6 },
+  inputDense: { maxHeight: MAX_TEXT_HEIGHT.dense },
   sendIdle: { backgroundColor: palette.surfaceAlt, borderWidth: 1, borderColor: palette.border },
   sendStop: { backgroundColor: palette.danger },
   stopGlyph: { fontSize: 16, lineHeight: 18, color: palette.accentText },
