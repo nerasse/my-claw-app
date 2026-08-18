@@ -429,7 +429,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       } else {
         chatStore.addCommandResult(
           frame.threadId,
-          `cmd-${frame.replyToId ?? 'x'}-${Date.now()}`,
+          // Derived from the send, not from the clock: the server replays that bubble under the
+          // same id, which is what lets a history page recognise it instead of doubling it.
+          frame.replyToId ? `cmd-${frame.replyToId}` : `cmd-${Date.now()}`,
           frame.text,
           frame.replyToId,
           frame.details,

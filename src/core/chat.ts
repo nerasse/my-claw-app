@@ -109,10 +109,18 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.reasoningTokens ? { reasoningTokens: entry.reasoningTokens } : {}),
       ...(entry.command ? { command: true } : {}),
       ...(entry.details ? { details: entry.details } : {}),
+      ...(entry.error ? { error: entry.error } : {}),
       ts,
     };
   });
 }
+
+/**
+ * How long a sent bubble the page does not carry is taken to be a turn still on its way in. Long
+ * enough for preprocessing, gates and a prompt build; short enough that a bubble the server is
+ * never going to mirror does not outlive the screen it was typed on.
+ */
+const UNMIRRORED_SEND_WINDOW_MS = 30_000;
 
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
@@ -244,17 +252,41 @@ class ChatStoreImpl {
    * survive a reopen. Local items win only while a run streams into the thread, or when the
    * server has nothing yet (turn not persisted).
    */
+  /**
+   * The server's page becomes the thread, plus whatever the page cannot know yet.
+   *
+   * The page is built from the live session, not from the file, so it already carries the run in
+   * flight: its question, its finished bubbles, its tool cards. Refusing it while a run was active
+   * (what this did before) meant a device that reloaded mid-run had only the frames broadcast since
+   * it connected -- an answer streaming under no question, until the run ended and a later page was
+   * finally accepted.
+   *
+   * Three things are genuinely local: the bubble still being written (never mirrored, so no page
+   * can hold it), a send the server is holding behind a compaction (flagged, and the hold lasts
+   * minutes) and a send delivered so recently that its turn has not been pushed yet. Everything
+   * else defers to the page.
+   *
+   * The match is by id, which is why the server replays a mirrored user turn under the device's own
+   * `chat.send` id and a command answer under `cmd-<send id>`: same bubble, same id, nothing
+   * doubled. Cards, command answers, notices and errors are page-owned outright.
+   *
+   * The window is what keeps a bubble the server will never mirror (a `/status` typed at some
+   * point, a message that never left) from sitting at the end of the thread for good. Local clock
+   * on both sides of the subtraction, so there is no skew to reason about.
+   */
   seedHistory(threadId: string, entries: HistoryEntry[]): void {
-    const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
-    if (existing.some(item => item.kind === 'text' && item.streaming)) return;
     if (entries.length === 0) return;
-    // A running turn reaches the server's file on a timer, so a page can be a couple of seconds
-    // behind the frames already delivered. What is on screen is then the fresher view, and
-    // replacing it would drop the newest cards. An empty thread still takes the page: that is
-    // an app that reconnected mid-run and has nothing of its own.
-    if (this.activeRuns.has(threadId) && existing.length > 0) return;
-
-    this.threads.set(threadId, itemsOf(entries));
+    const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    const base = itemsOf(entries);
+    const known = new Set(base.map(item => item.id));
+    const now = Date.now();
+    const carried = existing.filter(item => {
+      if (item.kind !== 'text' || known.has(item.id)) return false;
+      if (item.command || item.notice || item.error) return false;
+      if (item.streaming) return true;
+      return item.role === 'user' && (item.queuedSince !== undefined || now - item.ts < UNMIRRORED_SEND_WINDOW_MS);
+    });
+    this.threads.set(threadId, [...base, ...carried]);
     this.emit();
   }
 
@@ -322,7 +354,9 @@ class ChatStoreImpl {
     if (existing) this.patch(threadId, existing, { text });
     else {
       const parent = this.getItems(threadId).find(item => item.id === replyToId);
-      const id = `cmd-pending-${replyToId}`;
+      // The id the answer will keep, and the one the server replays the journalled answer under:
+      // derived from the send so the bubble is the same one whether it was placeheld or not.
+      const id = `cmd-${replyToId}`;
       this.pendingCommands.set(threadId, id);
       this.append(threadId, {
         kind: 'text',

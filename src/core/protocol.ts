@@ -201,6 +201,11 @@ export type HistoryEntry =
       command?: boolean;
       /** The aside folded under that answer (a compaction summary). */
       details?: string;
+      /**
+       * Why the run this bubble stands for died. The live error came in on `chat.stream.abort` and
+       * nowhere else, so a reopened thread showed the question with nothing under it.
+       */
+      error?: string;
     }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 

@@ -101,7 +101,7 @@ describe('chatStore tool cards', () => {
 
 describe('chatStore.seedHistory', () => {
   test('replaces what is on screen so an old rendering cannot survive a reopen', () => {
-    chatStore.addUserMessage(THREAD, 'stale', 'old');
+    chatStore.addAgentMessage(THREAD, 'stale', 'old', []);
     chatStore.seedHistory(THREAD, [
       { id: 'h-1', role: 'user', text: 'check', ts: '2026-01-01T00:00:01.000Z' },
       toolEntry,
@@ -111,11 +111,61 @@ describe('chatStore.seedHistory', () => {
     expect(items.find(item => item.id === 'stale')).toBeUndefined();
   });
 
-  test('keeps live items while a stream is running', () => {
+  test('a send the server never mirrors does not outlive its window', () => {
+    jest.useFakeTimers({ now: 1_800_000_000_000 });
+    try {
+      // A `/status` is answered as a page and journalled as nothing: no turn is ever mirrored
+      // for it, so only the window stops its bubble from sitting there for good.
+      chatStore.addUserMessage(THREAD, 'send-3', '/status');
+      const page = [{ id: 'h-1' as const, role: 'user' as const, text: 'avant', ts: '2026-01-01T00:00:01.000Z' }];
+      chatStore.seedHistory(THREAD, page);
+      expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 'send-3']);
+
+      jest.setSystemTime(1_800_000_031_000);
+      chatStore.seedHistory(THREAD, page);
+      expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('the bubble being written survives the page, after it', () => {
     chatStore.startStream(THREAD, 's1');
     chatStore.appendDelta(THREAD, 's1', 'in progress');
     chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'old', ts: '2026-01-01T00:00:01.000Z' }]);
-    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ id: 's1', streaming: true });
+    // No page can hold a bubble that is still being written, so it is kept -- but the page owns
+    // the order, and the question it carries comes first.
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 's1']);
+    expect(chatStore.getItems(THREAD)[1]).toMatchObject({ id: 's1', streaming: true, text: 'in progress' });
+  });
+
+  test('a mirrored question is not duplicated: same bubble, same id', () => {
+    chatStore.addUserMessage(THREAD, 'send-1', 'la question');
+    chatStore.startStream(THREAD, 's1');
+    // The server replays a mirrored user turn under the device's own chat.send id.
+    chatStore.seedHistory(THREAD, [{ id: 'send-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' }]);
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['send-1', 's1']);
+  });
+
+  test('a send the server has not turned into a turn yet is kept', () => {
+    chatStore.seedRuns([THREAD]);
+    chatStore.addUserMessage(THREAD, 'send-2', 'pendant la compaction');
+    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'tour precedent', ts: '2026-01-01T00:00:01.000Z' }]);
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 'send-2']);
+    chatStore.seedRuns([]);
+  });
+
+  test('page-owned bubbles are never doubled by a local copy', () => {
+    chatStore.addToolCall(THREAD, { ...toolEntry, id: 'live-tool' });
+    chatStore.addCommandResult(THREAD, 'cmd-1', 'Compacted.', undefined);
+    chatStore.abortStream(THREAD, 'dead', 'API Error: 529 Overloaded');
+    chatStore.seedHistory(THREAD, [
+      { id: 'h-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' },
+      toolEntry,
+    ]);
+    // Cards, command answers and failures all come back in the page; keeping the local copies
+    // would show each of them twice.
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', toolEntry.id]);
   });
 
   test('an empty history never wipes the thread', () => {
@@ -124,20 +174,24 @@ describe('chatStore.seedHistory', () => {
     expect(chatStore.getItems(THREAD)).toHaveLength(1);
   });
 
-  test('a run in flight keeps the thread it already shows, page or no page', () => {
-    chatStore.seedRuns([THREAD]);
-    chatStore.addUserMessage(THREAD, 'u1', 'la question');
-    chatStore.addToolCall(THREAD, { ...toolEntry, id: 'live-tool' });
-    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'tour precedent', ts: '2026-01-01T00:00:01.000Z' }]);
-    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['u1', 'live-tool']);
-    chatStore.seedRuns([]);
-  });
-
   test('a run in flight still seeds a thread the app has nothing of', () => {
     chatStore.seedRuns([THREAD]);
     chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'reconnecte', ts: '2026-01-01T00:00:01.000Z' }]);
     expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
     chatStore.seedRuns([]);
+  });
+
+  test('a replayed failure keeps its error, so a reopened thread still says why', () => {
+    chatStore.seedHistory(THREAD, [
+      { id: 'h-1', role: 'user', text: 'continue', ts: '2026-01-01T00:00:01.000Z' },
+      { id: 'f-1', role: 'assistant', text: '', ts: '2026-01-01T00:00:02.000Z', error: 'API Error: 529 Overloaded' },
+    ]);
+    expect(chatStore.getItems(THREAD)[1]).toMatchObject({
+      kind: 'text',
+      role: 'agent',
+      text: '',
+      error: 'API Error: 529 Overloaded',
+    });
   });
 
   test('tool entries keep their arguments, duration and output', () => {
