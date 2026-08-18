@@ -3,7 +3,13 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type { DeviceInfo } from '../core/device';
 import type { WsStatusPayload } from '../core/types';
-import type { UpdateResultFrame, VoiceMode, VoiceModeResultFrame } from '../core/protocol';
+import type { VoiceMode, VoiceModeResultFrame } from '../core/protocol';
+import {
+  updateBusy,
+  updateHint,
+  updateLabel,
+  type UpdatePhase,
+} from '../core/serverUpdate';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -29,39 +35,6 @@ function voiceHint(voice: VoiceModeResultFrame | null): string {
   return voice.mode === 'auto' ? `auto · ${where}` : where;
 }
 
-/**
- * What the update button has to say, in the order the states actually happen.
- *
- * The server answers before its own service goes down, so `started` is a promise that the socket
- * is about to drop, never a report that something was installed. The verdict is the version of the
- * `hello` after reconnecting: a different one means the swap happened, the same one means the
- * registry had nothing newer, and saying "updated" in that case would be a lie the screen tells
- * every 15 minutes anyway.
- */
-function updateHint(
-  update: UpdateResultFrame | null,
-  asked: boolean,
-  serverVersion: string | null,
-  connected: boolean,
-): string {
-  if (asked) return 'asking the server…';
-  if (!update) {
-    return connected
-      ? 'runs the same check the server does every 15 minutes, now'
-      : 'connect to the server to run an update';
-  }
-  if (!update.started) {
-    if (update.reason === 'busy') return 'a run is in flight · an update would interrupt it, try again after';
-    if (update.reason === 'denied') return 'the server may not start the update unit (sudoers drop-in missing)';
-    return 'the server could not start the update';
-  }
-  if (!connected) return `update started from ${update.version} · the server is restarting`;
-  if (serverVersion && serverVersion !== update.version) {
-    return `updated ${update.version} → ${serverVersion}`;
-  }
-  return `still on ${update.version} · nothing newer in the registry, or the swap is not done`;
-}
-
 /** Keeps the last four characters visible so the pair can be recognized, nothing more. */
 function maskToken(token: string): string {
   return `${'•'.repeat(Math.max(token.length - 4, 0))}${token.slice(-4)}`;
@@ -81,8 +54,8 @@ export function GeneralSettingsScreen({
   onBack,
   voice,
   onVoiceModeChange,
-  update,
-  updateAsked,
+  updatePhase,
+  now,
   onUpdateServer,
 }: {
   url: string;
@@ -101,10 +74,10 @@ export function GeneralSettingsScreen({
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
   onVoiceModeChange: (mode: VoiceMode) => void;
-  /** The server's last word on a manual update; null when none was asked this session. */
-  update: UpdateResultFrame | null;
-  /** An update was asked and the server has not answered yet. */
-  updateAsked: boolean;
+  /** Everything the update button knows, decided in core/serverUpdate.ts. */
+  updatePhase: UpdatePhase;
+  /** Ticks once a second while an update runs, and only then: the clock has one owner. */
+  now: number;
   onUpdateServer: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -118,12 +91,7 @@ export function GeneralSettingsScreen({
    * would leave the screen showing one server while the app talks to another.
    */
   const elsewhere = busy && Boolean(status.url) && status.url !== url.trim();
-  /**
-   * An update was started and the server has not come back with a different version yet. The
-   * button stays out of reach for that window: the service is stopping, and a second request
-   * would only queue a systemd job behind the one already swapping.
-   */
-  const waiting = update?.started === true && (!connected || serverVersion === update.version);
+  const busyUpdating = updateBusy(updatePhase);
   const [showToken, setShowToken] = useState(false);
 
   return (
@@ -290,17 +258,21 @@ export function GeneralSettingsScreen({
           <Text style={styles.section}>maintenance</Text>
           <View style={styles.card}>
             <Pressable
-              style={[styles.button, (!connected || updateAsked || waiting) && styles.buttonOff]}
-              disabled={!connected || updateAsked || waiting}
+              style={[styles.button, (!connected || busyUpdating) && styles.buttonOff]}
+              disabled={!connected || busyUpdating}
               onPress={onUpdateServer}
               accessibilityRole="button"
+              accessibilityState={{ disabled: !connected || busyUpdating, busy: busyUpdating }}
               accessibilityLabel="Update the server now">
-              <Text style={styles.buttonText}>{updateAsked ? 'Asking…' : 'Update server'}</Text>
+              {/* The label carries the running clock: a swap plus a health check is a minute of
+                  nothing on the wire, and a button frozen on one word reads as an app that
+                  ignored the press. That is what got pressed five times in three seconds. */}
+              <Text style={styles.buttonText}>{updateLabel(updatePhase, now)}</Text>
             </Pressable>
-            <Text style={styles.hint}>{updateHint(update, updateAsked, serverVersion, connected)}</Text>
-            {update?.detail && !update.started ? (
+            <Text style={styles.hint}>{updateHint(updatePhase, connected)}</Text>
+            {updatePhase.kind === 'refused' && updatePhase.detail ? (
               <Text style={styles.hint} numberOfLines={3}>
-                {update.detail}
+                {updatePhase.detail}
               </Text>
             ) : null}
           </View>

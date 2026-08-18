@@ -107,7 +107,7 @@ import {
   type SkillTarget,
   type ToolEntry,
   type VoiceMode,
-  type UpdateResultFrame,
+
   type VoiceModeResultFrame,
   type LocationInput,
   type WorkspaceEntry,
@@ -152,6 +152,7 @@ import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import { deviceBridge } from '../core/nativeBridge';
 import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
+import { reduceUpdate, type UpdatePhase } from '../core/serverUpdate';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
@@ -370,9 +371,10 @@ export function AppShell(): React.JSX.Element {
    *  on its own is indistinguishable from nothing having happened. */
   const [skillsNotice, setSkillsNotice] = useState<string | null>(null);
   const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
-  /** The server's last word on a manual update, and whether one is still unanswered. */
-  const [update, setUpdate] = useState<UpdateResultFrame | null>(null);
-  const [updateAsked, setUpdateAsked] = useState(false);
+  /** Everything the update button knows. A phase, not booleans: see core/serverUpdate.ts. */
+  const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: 'idle' });
+  /** Only moves while an update runs, so nothing else in the tree redraws on a clock. */
+  const [updateNow, setUpdateNow] = useState(0);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -806,7 +808,12 @@ export function AppShell(): React.JSX.Element {
       selectThread,
       setLastRun,
       setLocationEnabled,
-      setServerVersion,
+      // The version the server announces is the other half of the verdict: same one back means
+      // nothing was installed, a different one means the swap happened.
+      setServerVersion: version => {
+        setServerVersion(version);
+        setUpdatePhase(phase => reduceUpdate(phase, { type: 'hello', version }));
+      },
       setDiagSnapshot,
       setDiagLogs,
       setDiagBusy,
@@ -814,10 +821,7 @@ export function AppShell(): React.JSX.Element {
       setFilesTotal,
       setFilesError,
       setVoice,
-      setUpdate: frame => {
-        setUpdateAsked(false);
-        setUpdate(frame);
-      },
+      setUpdate: frame => setUpdatePhase(phase => reduceUpdate(phase, { type: 'result', frame, now: Date.now() })),
       setSkills,
       setSkillsError,
       setTools,
@@ -1591,12 +1595,30 @@ export function AppShell(): React.JSX.Element {
   const runServerUpdate = useCallback(() => {
     // The socket is expected to die a few seconds after a successful start, so nothing here waits
     // for anything: the answer arrives first, and the reconnect carries the verdict.
-    setUpdate(null);
-    setUpdateAsked(true);
+    setUpdatePhase(phase => reduceUpdate(phase, { type: 'asked' }));
+    setUpdateNow(Date.now());
     connection.send(encodeUpdateRun()).catch(() => {
-      setUpdateAsked(false);
+      setUpdatePhase(phase => reduceUpdate(phase, { type: 'sendFailed' }));
     });
   }, []);
+
+  // One clock, owned here, alive only while an update runs. It drives both the label's counter
+  // and the two deadlines the phase depends on (nothing restarted, or nothing came back).
+  useEffect(() => {
+    if (updatePhase.kind !== 'running') return;
+    const tick = setInterval(() => {
+      const now = Date.now();
+      setUpdateNow(now);
+      setUpdatePhase(phase => reduceUpdate(phase, { type: 'tick', now }));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [updatePhase.kind]);
+
+  // The socket dropping is half the verdict: the updater only stops the service when it has
+  // something to install.
+  useEffect(() => {
+    setUpdatePhase(phase => reduceUpdate(phase, { type: 'socket', connected: status.state === 'connected' }));
+  }, [status.state]);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
     // No optimistic write: the server answers with the state it actually stored, including what
@@ -2654,8 +2676,8 @@ export function AppShell(): React.JSX.Element {
                 onUrlChange={changeUrl}
                 voice={voice}
                 onVoiceModeChange={changeVoiceMode}
-                update={update}
-                updateAsked={updateAsked}
+                updatePhase={updatePhase}
+                now={updateNow}
                 onUpdateServer={runServerUpdate}
                 status={status}
                 serverVersion={serverVersion}
