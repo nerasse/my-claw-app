@@ -194,7 +194,7 @@ function ContextCard({ payload }: { payload: StatusPayload }): React.JSX.Element
       <Text style={styles.cardNote}>
         {`${c.measured ? `measured ${short(c.measured.tokens)}` : 'no call recorded yet'} · estimated ${short(
           c.estimated,
-        )}`}
+        )}${c.mirrorIsTranscript ? ' (whole log: the engine compacts its own history)' : ''}`}
       </Text>
     </Card>
   );

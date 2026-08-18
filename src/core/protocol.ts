@@ -612,6 +612,12 @@ export interface StatusPayload {
     estimated: number;
     /** What actually drives auto-compaction. */
     occupied: number;
+    /**
+     * The engine owns the history and the server's copy is only a log of it (claude-sdk), so
+     * `estimated` covers turns the model already summarised away. Absent on the home loop, where
+     * that copy is the prompt.
+     */
+    mirrorIsTranscript?: boolean;
     autoCompactOn: boolean;
     autoCompactThresholdPct: number;
     autoCompactThresholdTokens: number;
