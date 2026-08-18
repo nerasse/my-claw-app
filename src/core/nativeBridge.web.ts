@@ -2,6 +2,7 @@
 // The DOM lib is referenced here rather than in tsconfig: a global `window` would let native
 // code compile against APIs the phone does not have.
 import { useEffect, useState } from 'react';
+import { pastedName } from './fileDrop.web';
 
 /**
  * Web implementation of the single native door (see nativeBridge.ts).
@@ -129,6 +130,8 @@ export interface DeviceBridgeNative {
   getAppVersion(): Promise<string>;
   cancelNotification(id: number): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
+  clipboardHasImage(): Promise<boolean>;
+  clipboardImage(): Promise<PickedFile | null>;
   prepareFile(uri: string): Promise<{ uri: string; name: string; size: number }>;
   uploadFile(
     uri: string,
@@ -621,6 +624,26 @@ export const deviceBridge: DeviceBridgeNative = {
       input.oncancel = () => resolve([]);
       input.click();
     }),
+  /**
+   * The clipboard cannot be inspected without reading it: `navigator.clipboard.read()` is the
+   * only way in, it needs a user gesture, and Firefox does not give it to a page at all. So the
+   * answer here is "the browser can be asked", and the menu entry reports an empty clipboard
+   * once tapped rather than hiding itself. Ctrl+V stays the fast path, this is the fallback for
+   * a tablet with no keyboard.
+   */
+  clipboardHasImage: () =>
+    Promise.resolve(typeof navigator !== 'undefined' && typeof navigator.clipboard?.read === 'function'),
+  clipboardImage: async () => {
+    if (typeof navigator === 'undefined' || typeof navigator.clipboard?.read !== 'function') return null;
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const type = item.types.find(candidate => candidate.startsWith('image/'));
+      if (!type) continue;
+      const blob = await item.getType(type);
+      return { uri: URL.createObjectURL(blob), name: pastedName(type, Date.now()), type, size: blob.size };
+    }
+    return null;
+  },
   // A blob URL is already local and readable: there is nothing to copy anywhere.
   prepareFile: async uri => {
     const blob = await fetch(uri).then(response => response.blob());

@@ -207,6 +207,33 @@ test('the attach button opens the picker sheet and the sheet closes on cancel', 
   await unmount(tree);
 });
 
+test('the paste action appears only when the clipboard holds an image, and stages it', async () => {
+  const tree = await renderWithHistory();
+
+  // Nothing to paste: the entry stays out of the sheet rather than failing once tapped.
+  await pressLabel(tree, 'Add attachment');
+  expect(textsOf(tree)).not.toContain('Paste image');
+  await pressLabel(tree, 'Close menu');
+
+  bridge.clipboardHasImage.mockResolvedValueOnce(true);
+  bridge.clipboardImage.mockResolvedValueOnce({
+    uri: 'file:///cache/clip_1',
+    name: 'pasted-1.png',
+    type: 'image/png',
+    size: 4096,
+  });
+  await pressLabel(tree, 'Add attachment');
+  await waitFor(() => textsOf(tree).includes('Paste image'));
+  await pressText(tree, 'Paste image');
+
+  await waitFor(() => stringsOf(tree).includes('pasted-1.png'));
+  expect(bridge.clipboardImage).toHaveBeenCalled();
+  // Already a file:// uri: the native side copied it while it still held the clipboard grant.
+  expect(bridge.prepareFile).not.toHaveBeenCalledWith('file:///cache/clip_1');
+
+  await unmount(tree);
+});
+
 test('the location action is hidden until the server enables it and sends a structured fix', async () => {
   const tree = await renderWithHistory();
   expect(textsOf(tree)).not.toContain('Share current location');

@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import { COMPOSER_INPUT_ID } from './domIds';
 import type { PickedFile } from './nativeBridge';
 
 /**
@@ -10,13 +11,49 @@ import type { PickedFile } from './nativeBridge';
  * the thing this replaces.
  */
 
+/**
+ * A pasted screenshot often arrives as a `File` with an empty name, and a name without an
+ * extension reaches the agent as an opaque blob: the server stores what it is told. The mime
+ * type is the only thing the clipboard is sure about, so the extension is derived from it.
+ */
+const EXTENSIONS: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+  'image/svg+xml': 'svg',
+  'image/heic': 'heic',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+};
+
+export function pastedName(type: string, at: number): string {
+  const known = EXTENSIONS[type];
+  const guessed = known ?? type.split('/')[1]?.replace(/[^a-z0-9]+/gi, '') ?? '';
+  return guessed ? `pasted-${at}.${guessed}` : `pasted-${at}`;
+}
+
 function toPicked(files: File[]): PickedFile[] {
   return files.map(file => ({
     uri: URL.createObjectURL(file),
-    name: file.name || `pasted-${Date.now()}`,
+    name: file.name || pastedName(file.type, Date.now()),
     type: file.type || 'application/octet-stream',
     size: file.size,
   }));
+}
+
+/**
+ * Whether a paste belongs to the chat. The listener is on the window, so without this a file
+ * pasted into a settings field or a search box would be staged as an attachment on a thread the
+ * user is not even looking at.
+ */
+function pasteIsForChat(target: EventTarget | null): boolean {
+  const active = (document.activeElement as HTMLElement | null) ?? (target as HTMLElement | null);
+  if (!active) return true;
+  if (active.id === COMPOSER_INPUT_ID) return true;
+  const tag = active.tagName;
+  return !(tag === 'INPUT' || tag === 'TEXTAREA' || active.isContentEditable);
 }
 
 export function watchFileDrop(onFiles: (files: PickedFile[]) => void): () => void {
@@ -58,6 +95,7 @@ export function watchFileDrop(onFiles: (files: PickedFile[]) => void): () => voi
   const onPaste = (event: ClipboardEvent): void => {
     const files = Array.from(event.clipboardData?.files ?? []);
     if (files.length === 0) return;
+    if (!pasteIsForChat(event.target)) return;
     // Text pasted alongside an image stays with the field; only the file is intercepted.
     event.preventDefault();
     onFiles(toPicked(files));

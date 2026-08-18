@@ -149,6 +149,7 @@ export function ChatScreen({
   const [uploading, setUploading] = useState(false);
   const uploadingRef = useRef(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [clipboardImage, setClipboardImage] = useState(false);
   /** Percent of each staged file that has reached the server, keyed by attachment id. */
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [location, setLocation] = useState<LocationData | undefined>();
@@ -295,6 +296,41 @@ export function ChatScreen({
       }),
     [addAssets],
   );
+
+  /**
+   * Paste an image from the system clipboard.
+   *
+   * Android has no way to hand a pasted image to a React Native TextInput: RN 0.86 exposes no
+   * paste event and its EditText implements neither commitContent nor setContentMimeTypes, so
+   * the gesture becomes an entry in the sheet that already holds every other way to attach.
+   * The web has Ctrl+V (fileDrop.web.ts) and keeps this as the pointer-only fallback.
+   */
+  const pasteImage = useCallback(() => {
+    setAttachOpen(false);
+    setUploadError(null);
+    deviceBridge
+      .clipboardImage()
+      .then(file => {
+        if (!file) {
+          setUploadError('no image in the clipboard');
+          return;
+        }
+        return addAssets([
+          { uri: file.uri, fileName: file.name, type: file.type, fileSize: file.size || undefined },
+        ]);
+      })
+      .catch(() => setUploadError('clipboard unavailable'));
+  }, [addAssets]);
+
+  const openAttach = useCallback(() => {
+    setAttachOpen(true);
+    // Asked every time the sheet opens: the clipboard changes while the app is in the
+    // background, and a cached answer would offer a paste of something that is gone.
+    deviceBridge
+      .clipboardHasImage()
+      .then(setClipboardImage)
+      .catch(() => setClipboardImage(false));
+  }, []);
 
   const pickFiles = useCallback(() => {
     setAttachOpen(false);
@@ -601,7 +637,7 @@ export function ChatScreen({
             attachments={attachments}
             location={location}
             locationLabel={locationLabel}
-            onPickAttachment={() => setAttachOpen(true)}
+            onPickAttachment={openAttach}
             onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
             onRemoveLocation={removeLocation}
             onPressLocation={openLocationSheet}
@@ -680,7 +716,7 @@ export function ChatScreen({
           attachments={attachments}
           location={location}
           locationLabel={locationLabel}
-          onPickAttachment={() => setAttachOpen(true)}
+          onPickAttachment={openAttach}
           onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
           onRemoveLocation={removeLocation}
           onPressLocation={openLocationSheet}
@@ -704,6 +740,9 @@ export function ChatScreen({
             { label: 'Photo from gallery', onPress: pickPhotos },
             { label: 'Take a photo', onPress: takePhoto },
             { label: 'File', onPress: pickFiles },
+            ...(clipboardImage
+              ? [{ label: 'Paste image', hint: 'The image currently in the clipboard', onPress: pasteImage }]
+              : []),
             ...(locationEnabled
               ? [{ label: 'Share current location', hint: 'One-shot GPS position with approximate address', onPress: shareLocation }]
               : []),

@@ -2,6 +2,7 @@ package com.myclawapp.device
 
 import android.app.Activity
 import android.app.DownloadManager
+import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -15,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.ActivityEventListener
@@ -339,6 +341,77 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       map
     } catch (_: Exception) {
       null
+    }
+  }
+
+  /**
+   * Whether the clipboard holds an image, and the image itself.
+   *
+   * React Native exposes no paste event and its EditText implements neither commitContent nor
+   * setContentMimeTypes, so a pasted screenshot cannot reach the JS side through the text field.
+   * The clipboard is read on demand instead. The two calls are split because reading the clip
+   * description is silent while reading the clip itself raises the Android 12 "pasted from"
+   * toast: an attachment menu that toasts every time it opens is worse than no entry at all.
+   */
+  @ReactMethod
+  fun clipboardHasImage(promise: Promise) {
+    try {
+      val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+      val description = clipboard?.primaryClipDescription
+      if (description == null) {
+        promise.resolve(false)
+        return
+      }
+      val types = (0 until description.mimeTypeCount).map { description.getMimeType(it) }
+      promise.resolve(types.any { it != null && it.startsWith("image/") })
+    } catch (_: Exception) {
+      promise.resolve(false)
+    }
+  }
+
+  @ReactMethod
+  fun clipboardImage(promise: Promise) {
+    try {
+      val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+      // Reading the clip is refused while the app does not hold focus (Android 10+), and that
+      // shows up as a null clip rather than as an exception.
+      val clip = clipboard?.primaryClip
+      val uri = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).uri else null
+      if (uri == null) {
+        promise.resolve(null)
+        return
+      }
+      val resolver = reactContext.contentResolver
+      val type = resolver.getType(uri)
+      if (type == null || !type.startsWith("image/")) {
+        promise.resolve(null)
+        return
+      }
+      // Copied to the cache here rather than by prepareFile later: the permission Android grants
+      // over a clipboard uri belongs to this read, and a second one can land after it is gone.
+      val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(type) ?: "png"
+      var name = "pasted-${System.currentTimeMillis()}.$extension"
+      resolver.query(uri, null, null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+          val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+          if (nameIdx >= 0) cursor.getString(nameIdx)?.let { if (it.isNotBlank()) name = it }
+        }
+      }
+      val input = resolver.openInputStream(uri)
+        ?: run {
+          promise.resolve(null)
+          return
+        }
+      val cached = File(reactContext.cacheDir, "clip_${System.currentTimeMillis()}_${ThreadLocalRandom.current().nextLong().toString(16)}")
+      input.use { stream -> cached.outputStream().use { out -> stream.copyTo(out) } }
+      val map = Arguments.createMap()
+      map.putString("uri", Uri.fromFile(cached).toString())
+      map.putString("name", name)
+      map.putString("type", type)
+      map.putDouble("size", cached.length().toDouble())
+      promise.resolve(map)
+    } catch (e: Exception) {
+      promise.reject("CLIPBOARD_FAILED", e.message ?: "clipboard read failed")
     }
   }
 

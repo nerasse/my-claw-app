@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { PlusIcon, SendIcon } from './icons';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
+import { COMPOSER_INPUT_ID } from '../core/domIds';
 import { editorIntent } from '../core/editorKeys';
 import { useLayout } from '../core/layout';
 import { autoGrow } from '../core/webProps';
@@ -295,6 +296,9 @@ export function Composer({
         {recording ? null : (
         <TextInput
           ref={inputRef}
+          // Read back by the window paste listener on web: a paste is for the chat only when the
+          // focus is here or nowhere.
+          id={COMPOSER_INPUT_ID}
           style={[styles.input, hero && styles.inputHero, dense && !hero && styles.inputDense]}
           value={value}
           onChangeText={onChange}

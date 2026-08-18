@@ -114,6 +114,16 @@ export interface DeviceBridgeNative {
    */
   cancelNotification(id: number): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
+  /**
+   * Whether the clipboard holds an image, read from the clip description alone.
+   *
+   * The description carries the mime types and nothing else, so asking is silent; reading the
+   * clip itself raises the Android 12 "pasted from" toast. The menu entry is therefore decided
+   * from this, and the pixels are only fetched once the entry is tapped.
+   */
+  clipboardHasImage(): Promise<boolean>;
+  /** The clipboard image as a picked file, or null when there is none to take. */
+  clipboardImage(): Promise<PickedFile | null>;
   /** Copies a content:// or file:// uri into the cache and returns a readable file:// uri. */
   prepareFile(
     uri: string,
@@ -207,6 +217,8 @@ export const deviceBridge: DeviceBridgeNative = {
   getAppVersion: () => native?.getAppVersion() ?? Promise.resolve(''),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
+  clipboardHasImage: () => native?.clipboardHasImage() ?? Promise.resolve(false),
+  clipboardImage: () => native?.clipboardImage() ?? Promise.resolve(null),
   prepareFile: uri =>
     native?.prepareFile(uri) ?? Promise.resolve({ uri, name: 'file', size: 0 }),
   uploadFile: (uri, url, filename, type, threadId, transferId) =>

@@ -214,6 +214,8 @@ jest.mock('./src/core/nativeBridge', () => ({
     cancelNotification: jest.fn(() => Promise.resolve()),
     prefsSet: jest.fn(() => Promise.resolve()),
     pickFile: jest.fn(() => Promise.resolve([])),
+    clipboardHasImage: jest.fn(() => Promise.resolve(false)),
+    clipboardImage: jest.fn(() => Promise.resolve(null)),
     prepareFile: jest.fn(() =>
       Promise.resolve({ uri: 'file:///cache/prepared', name: 'file', size: 0 }),
     ),
