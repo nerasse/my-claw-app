@@ -90,15 +90,24 @@ plugins for react-native-web trip on exactly that.
 index.web.js               registers the root component
 metro.config.js            web extensions, alias react-native -> react-native-web
 web/index.html             shell, theme colour, viewport
-npx expo export --platform web --output-dir dist-web
+web/sw.js                  offline shell + push, registered from index.web.js
+web/manifest.webmanifest   PWA identity, linked with crossorigin="use-credentials"
+web/icons/                 192 and 512, referenced by the manifest and the shell
+npm run build:web          scripts/build-web.sh -> dist-web/
 ```
+
+`scripts/build-web.sh` is the only recipe, used by CI and by the release box alike. It had been
+duplicated in the CI job, the two copies drifted, and the shipped tarball carried `index.html` and
+`index.js` only: `/sw.js` fell through to the HTML shell, the browser refused it for its MIME type
+and the PWA, the offline shell and web push were all silently absent. The script fails when a file
+the shell references is missing from the output.
 
 `app.json` needs the autolinking exclusions revisited: several `expo-*` packages are excluded
 today because the app is bare, and the web export path needs some of them back.
 
-CI (`.forgejo/workflows/ci.yml`) gains a `web` job: typecheck against the web target, export,
-then `scripts/release.sh` attaches `dist-web.tar.gz` and its checksum to the release, next to the
-APK and under the same tag.
+CI (`.forgejo/workflows/ci.yml`) has a `web` job: typecheck against the web target, `npm run
+build:web`, then `scripts/release.sh` attaches `dist-web.tar.gz` to the release, next to the APK
+and under the same tag.
 
 ## Who serves it
 

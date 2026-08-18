@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "build:web": "bash scripts/build-web.sh",
     "ios": "react-native run-ios",
     "lint": "eslint . --max-warnings 0",
     "start": "react-native start",

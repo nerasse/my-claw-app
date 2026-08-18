@@ -6,7 +6,10 @@
 <meta name="color-scheme" content="dark light" />
 <meta name="theme-color" content="#0b0d10" />
 <title>MyClaw</title>
-<link rel="manifest" href="/manifest.webmanifest" />
+<!-- use-credentials: a manifest is fetched with credentials omitted by default, and every route
+     here is behind a session cookie, so the default fetch comes back 401 and the app is not
+     installable. -->
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
 <link rel="icon" href="/icons/icon-192.png" />
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 <!-- The first paint, before the bundle has a theme: follow the system so a light desktop does

@@ -55,13 +55,7 @@ jobs:
       # The same Metro that builds the Android bundle, with the web config: a resolution that
       # breaks on the web target must fail here rather than at `myclaw web install`.
       - name: Build the web bundle
-        run: |
-          mkdir -p dist-web
-          ./node_modules/.bin/metro build index.web.js \
-            --platform web --dev false \
-            --config metro.config.web.js \
-            --out dist-web/index.js
-          cp web/index.html dist-web/index.html
+        run: npm run build:web
 
       # The check that matters: react-native-web must not have leaked into anything Android.
       - name: Prove the bundles stay apart
