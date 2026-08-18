@@ -150,6 +150,20 @@ test('a drop sends the dropped order, read from the rows the sortable hands back
   await settleAndUnmount(tree);
 });
 
+test('a finger has to hold before it drags, a cursor drags on the spot', async () => {
+  const tree = await bootWith([summary('t-alpha', 'Alpha', 0), summary('t-beta', 'Beta', 1)]);
+  await pressLabel(tree, 'Open conversations');
+  await waitFor(() => textsOf(tree).includes('pinned · 2'));
+
+  // A touch has to say "this is a drag and not a scroll" by staying still first. Under a cursor
+  // that same wait is the feature not working at all: the pointer moves the instant the button is
+  // down, further than the offset that cancels an activation, so the press never became a drag.
+  const grid = tree.root.find(node => node.props.testID === 'sortable-grid');
+  expect(grid.props.dragActivationDelay).toBe(400);
+  expect(grid.props.dragActivationFailOffset).toBe(5);
+  await settleAndUnmount(tree);
+});
+
 test('the pinned section is one column wide, and the row itself is the grab area', async () => {
   const tree = await bootWith([summary('t-alpha', 'Alpha', 0)]);
   await pressLabel(tree, 'Open conversations');

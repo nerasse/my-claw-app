@@ -12,6 +12,14 @@ export const locationSupported = typeof navigator !== 'undefined' && 'geolocatio
 
 export const scannerSupported = false;
 
+/**
+ * A browser selects text across nodes on its own, and the chat list opts back into `user-select`
+ * (webTheme.web.ts, `[data-claw-select="text"]`), so a drag over several bubbles works. The long
+ * press that opens the message menu on Android is then only in the way: it fires while the reader
+ * is holding to select. Right-click and the row's own button keep the menu one gesture away.
+ */
+export const chatSelectable = true;
+
 /** Asked of the device, not of the window: a touchscreen laptop reports both, and coarse wins. */
 export const pointerFine =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'

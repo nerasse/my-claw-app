@@ -8,6 +8,7 @@ import { PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { isPinned, pinnedOf, setOrder } from '../core/pinned';
+import { pointerFine } from '../core/platform';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -237,7 +238,16 @@ export function Drawer({
                       data={pinnedRows}
                       keyExtractor={keyOfThread}
                       rowGap={space.xs}
-                      dragActivationDelay={400}
+                      // A mouse drags on the spot; only a finger needs to say "this is a drag and
+                      // not a scroll" by holding still first. Under a cursor the 400ms wait was
+                      // the whole feature failing: the pointer moves at once, more than the 5px
+                      // activation fail offset, so the press was cancelled before it ever became
+                      // a drag and the rows simply refused to move.
+                      dragActivationDelay={pointerFine ? 0 : 400}
+                      // And the offset that cancels an activation has to grow with it: a cursor
+                      // yanked across the panel travels 20pt between two frames, which the 5pt
+                      // default reads as "not a drag" even with no delay left to wait for.
+                      dragActivationFailOffset={pointerFine ? 60 : 5}
                       hapticsEnabled
                       renderItem={renderPinned}
                       onDragEnd={handleDragEnd}

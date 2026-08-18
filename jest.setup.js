@@ -160,7 +160,16 @@ jest.mock('react-native-image-picker', () => ({
 jest.mock('react-native-sortables', () => {
   const React = require('react');
   const { View } = require('react-native');
-  const Grid = ({ data = [], renderItem, keyExtractor, columns, customHandle, onDragEnd }) =>
+  const Grid = ({
+    data = [],
+    renderItem,
+    keyExtractor,
+    columns,
+    customHandle,
+    onDragEnd,
+    dragActivationDelay,
+    dragActivationFailOffset,
+  }) =>
     React.createElement(
       View,
       {
@@ -169,6 +178,8 @@ jest.mock('react-native-sortables', () => {
         columns,
         customHandle: Boolean(customHandle),
         onDragEnd,
+        dragActivationDelay,
+        dragActivationFailOffset,
       },
       data.map((item, index) =>
         React.createElement(

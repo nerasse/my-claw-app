@@ -467,6 +467,9 @@ test('the frame around the composer belongs to the wrapper, never to the field',
   // The text ceiling and the frame's padding are what add up to the height a thumb sees; the
   // frame is never allowed to be shorter than the send button beside it.
   expect(frame.minHeight).toBe(44);
+  // Half the collapsed height, never a pill radius: 999 turns a grown field into a stadium whose
+  // ends are half-circles as tall as the field, and the first line of text lands outside them.
+  expect(frame.borderRadius).toBe(frame.minHeight / 2);
   await unmount(tree);
 });
 

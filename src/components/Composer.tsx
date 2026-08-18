@@ -458,7 +458,11 @@ const createStyles = (palette: Palette) => ({
     paddingVertical: 9,
     borderWidth: 1,
     borderColor: palette.border,
-    borderRadius: radius.pill,
+    // Half the collapsed height, not `radius.pill`. A pill radius is 999: empty, the field is a
+    // perfect pill either way, but grown to six lines it becomes a stadium whose ends are
+    // 88pt half-circles, and the first line of text is then drawn outside the shape that is
+    // supposed to contain it. Half the height rounds the corners and leaves the sides straight.
+    borderRadius: 22,
     backgroundColor: palette.surfaceAlt,
   },
   fieldHero: {
@@ -489,7 +493,7 @@ const createStyles = (palette: Palette) => ({
   sendHero: { width: 50, height: 50 },
   buttonDense: { width: 36, height: 36 },
   // A mouse can scroll a tall field and a desktop has the room: four lines is a phone's ceiling.
-  fieldDense: { minHeight: 36, paddingVertical: 6 },
+  fieldDense: { minHeight: 36, paddingVertical: 6, borderRadius: 18 },
   inputDense: { maxHeight: MAX_TEXT_HEIGHT.dense },
   sendIdle: { backgroundColor: palette.surfaceAlt, borderWidth: 1, borderColor: palette.border },
   sendStop: { backgroundColor: palette.danger },

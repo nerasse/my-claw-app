@@ -23,6 +23,11 @@ taking text out of it     -> the selection viewer, one node, raw source
 
 - `Bubble` renders no `selectable`, and a **long press** on a message opens its action sheet
   instead: the gesture that used to start a broken selection now leads where selection works.
+  Only where the platform cannot do it itself, though (`chatSelectable` in `core/platform`): a
+  browser selects across nodes on its own and the list opts back into `user-select`, so there the
+  hold would fire in the middle of the drag the reader is making to select and steal it. On the web
+  the bubble carries no long press at all -- right-click and the row's own button lead to the same
+  menu.
 - `ToolCard` and `CollapsibleAside` (reasoning, compaction summary) carry `BlockActions`:
   **copy** takes the block whole, **select** opens the viewer on it.
 - The bubble menu carries `Select text`, which opens the viewer on the **whole message**:

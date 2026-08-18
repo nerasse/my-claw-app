@@ -8,6 +8,7 @@ import { CollapsibleAside } from './CollapsibleAside';
 import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine } from './ReasoningLine';
 import { LocationView } from './LocationView';
+import { chatSelectable } from '../core/platform';
 import { contextMenuProps } from '../core/webProps';
 import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -49,13 +50,14 @@ export const Bubble = React.memo(function BubbleView({
   const thinkingShown = Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
-      {/* Long press opens the message menu, which is where copying and selecting live now: the
-          gesture would otherwise start a selection the platform cannot finish, and would throw
-          the thread to the other end doing it. See docs/text-selection.md. A Pressable with no
-          onPress lets every control inside it (links, attachments, the tool cards) keep its own
-          touches. */}
+      {/* Long press opens the message menu, which is where copying and selecting live: the gesture
+          would otherwise start a selection the platform cannot finish, and would throw the thread
+          to the other end doing it. See docs/text-selection.md. Not where the platform selects
+          text by itself, though -- in a browser the hold fires in the middle of the drag the
+          reader is making to select, and steals it. A Pressable with no onPress lets every control
+          inside it (links, attachments, the tool cards) keep its own touches. */}
       <Pressable
-        onLongPress={() => onMenu(item)}
+        onLongPress={chatSelectable ? undefined : () => onMenu(item)}
         {...contextMenuProps(() => onMenu(item))}
         style={[
           styles.bubble,

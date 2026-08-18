@@ -21,3 +21,13 @@ export const scannerSupported = true;
  * the app keeps its tap-sized rows and never shows something that only appears under a cursor.
  */
 export const pointerFine = false;
+
+/**
+ * Whether a selection started inside the chat list can be finished by the platform itself.
+ *
+ * False here, and docs/text-selection.md says why: a selection never leaves the `Text` node it
+ * began in, and a selectable view inside the inverted list throws the scroll to the other end. A
+ * long press on a bubble therefore opens the message menu, where copying works, instead of
+ * starting a gesture the platform cannot honour.
+ */
+export const chatSelectable = false;
