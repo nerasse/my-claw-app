@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { ProviderInfo } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 
 /**
  * The configured providers. Each row names the config key, the backend type, the model count
@@ -39,6 +40,9 @@ export function ProvidersScreen({
             {providers.length} configured · models come from the server catalog
           </Text>
         </View>
+        {/* Discovery is server-wide, so the button answers for the whole table as well as for one
+            provider's page: the model counts on these rows are what it brings up to date. */}
+        <DiscoveryButton />
         <Pressable
           onPress={onNewProvider}
           style={styles.backButton}
@@ -47,6 +51,8 @@ export function ProvidersScreen({
           <Text style={styles.addGlyph}>+</Text>
         </Pressable>
       </View>
+
+      <DiscoveryNote />
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>

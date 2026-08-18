@@ -396,3 +396,55 @@ test('back walks env, edit, models, list, index, chat', async () => {
 
   await settleAndUnmount(tree);
 });
+
+test('the refresh button asks the server to discover, and the answer is reported in place', async () => {
+  const tree = await bootToProviders();
+  bridge.sendMessage.mockClear();
+
+  await pressLabel(tree, 'Refresh the model discovery');
+
+  expect(bridge.sendMessage.mock.calls.map(([frame]) => String(frame))).toContain(
+    JSON.stringify({ type: 'model.refresh' }),
+  );
+  // While it runs the button says so, and it cannot be pressed twice into two discoveries.
+  await waitFor(() => labelsOf(tree).includes('Discovering models'));
+  expect(textsOf(tree)).toContain('asking every provider that discovers...');
+
+  await emit({ type: 'model.refresh.result', models: 412, failed: [], enabled: true });
+
+  await waitFor(() => textsOf(tree).includes('412 models in the catalogue'));
+  expect(labelsOf(tree)).toContain('Refresh the model discovery');
+  await settleAndUnmount(tree);
+});
+
+test('a provider that did not answer is named, because its models are only the last known ones', async () => {
+  const tree = await bootToProviders();
+  await pressLabel(tree, 'Refresh the model discovery');
+
+  await emit({ type: 'model.refresh.result', models: 12, failed: ['groq', 'openrouter'], enabled: true });
+
+  await waitFor(() => textsOf(tree).includes('12 models in the catalogue'));
+  expect(textsOf(tree)).toContain('no answer from groq, openrouter · their models are the last known ones');
+  await settleAndUnmount(tree);
+});
+
+test('a server that refuses the refresh stops the spinner and says why', async () => {
+  const tree = await bootToProviders();
+  await pressLabel(tree, 'Refresh the model discovery');
+  await waitFor(() => labelsOf(tree).includes('Discovering models'));
+
+  await emit({ type: 'error', scope: 'model', message: 'model discovery unavailable' });
+
+  await waitFor(() => labelsOf(tree).includes('Refresh the model discovery'));
+  expect(textsOf(tree)).toContain('discovery failed · model discovery unavailable');
+  await settleAndUnmount(tree);
+});
+
+test('the button is on the provider page too, where the models are actually read', async () => {
+  const tree = await bootToProviders();
+  await pressLabel(tree, 'Open provider litellm');
+  await waitFor(() => labelsOf(tree).includes('Edit provider'));
+
+  expect(labelsOf(tree)).toContain('Refresh the model discovery');
+  await settleAndUnmount(tree);
+});

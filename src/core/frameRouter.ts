@@ -343,6 +343,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'model.list.result':
       modelStore.replaceCatalog(frame);
       break;
+    case 'model.refresh.result':
+      modelStore.receiveDiscovery(frame);
+      break;
     case 'model.endpoints.result':
       modelStore.replaceEndpoints(frame);
       break;
@@ -495,6 +498,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (frame.scope === 'files') {
         setFilesError(frame.message);
       } else if (frame.scope === 'model') {
+        // A refused discovery is the one model refusal that belongs to a screen rather than to
+        // the picker: it says so under the button that asked, and the spinner stops.
+        modelStore.failDiscovery(frame.message);
         // A stale picker answered by a server that dropped the model: close the sheet,
         // the next model.list will carry the truth.
         setModelOpen(false);

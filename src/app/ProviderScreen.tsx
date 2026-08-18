@@ -3,6 +3,7 @@ import { FlatList, Platform, Pressable, Text, TextInput, View } from 'react-nati
 import type { ModelOption, ProviderInfo } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 
 /** A component of its own, not a closure in render: FlatList keeps it across renders. */
 function Separator(): React.JSX.Element {
@@ -134,6 +135,9 @@ export function ProviderScreen({
             {`${models.length} model${models.length === 1 ? '' : 's'} · tap one to make it the default`}
           </Text>
         </View>
+        {/* The models on this page come from discovery: the button that re-runs it belongs where
+            they are read, not on a settings page three taps away. */}
+        <DiscoveryButton />
         <Pressable
           onPress={onEditProvider}
           style={styles.backButton}
@@ -148,6 +152,7 @@ export function ProviderScreen({
           {error}
         </Text>
       ) : null}
+      <DiscoveryNote />
 
       {models.length >= SEARCH_MIN_MODELS ? (
         <TextInput

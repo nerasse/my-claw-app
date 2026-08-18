@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { connection } from './connection';
 import {
   encodeModelEndpoints,
+  encodeModelRefresh,
   type ContextState,
   type EffortState,
   type ModelEndpoint,
   type ModelEndpointsResultFrame,
   type ModelListResultFrame,
   type ModelOption,
+  type ModelRefreshResultFrame,
   type ModelResultFrame,
 } from './protocol';
 
@@ -33,6 +35,22 @@ export function endpointOf(ref: string): string | undefined {
   const at = ref.lastIndexOf(PIN);
   return at > 0 ? ref.slice(at + 1) : undefined;
 }
+
+/**
+ * A hand-fired discovery: whether one is running, and what the last one found. `outcome` is kept
+ * after the pass so the screen can say what happened instead of the button just going quiet.
+ */
+export interface DiscoveryState {
+  running: boolean;
+  outcome: ModelRefreshResultFrame | null;
+  error: string | null;
+}
+
+const IDLE_DISCOVERY: DiscoveryState = { running: false, outcome: null, error: null };
+Object.freeze(IDLE_DISCOVERY);
+
+/** Long enough for a provider that answers slowly, short enough to stop a spinner lying. */
+const DISCOVERY_TIMEOUT_MS = 60_000;
 
 /** The routes of one model, and whether the answer is in. `pending` is what the step shows. */
 export interface EndpointState {
@@ -67,6 +85,8 @@ class ModelStoreImpl {
   /** Routes per model, kept for the life of the connection: the server caches them too, and a
    *  picker walked back and forth would otherwise ask OpenRouter again on every visit. */
   private endpoints = new Map<string, EndpointState>();
+  private discovery: DiscoveryState = IDLE_DISCOVERY;
+  private discoveryTimer: ReturnType<typeof setTimeout> | undefined;
   private listeners = new Set<Listener>();
 
   subscribe(listener: Listener): () => void {
@@ -126,6 +146,50 @@ class ModelStoreImpl {
     return this.catalogModel(entry.model);
   }
 
+  discoveryState(): DiscoveryState {
+    return this.discovery;
+  }
+
+  /**
+   * Asks the server to discover again. The button is what makes a provider's new models appear
+   * without waiting six hours for the cycle, or restarting the server to force the boot pass.
+   *
+   * The timeout is not decoration: an older server drops the frame silently, and without it the
+   * spinner would run until the screen closed.
+   */
+  refreshDiscovery(): void {
+    if (this.discovery.running) return;
+    this.discovery = { running: true, outcome: null, error: null };
+    this.emit();
+    connection.send(encodeModelRefresh()).then((delivered) => {
+      if (delivered) return;
+      this.failDiscovery('the server never received it, check the connection');
+    });
+    this.discoveryTimer = setTimeout(
+      () => this.failDiscovery('no answer from the server, it may be too old for this'),
+      DISCOVERY_TIMEOUT_MS,
+    );
+  }
+
+  receiveDiscovery(frame: ModelRefreshResultFrame): void {
+    this.clearDiscoveryTimer();
+    this.discovery = { running: false, outcome: frame, error: null };
+    this.emit();
+  }
+
+  failDiscovery(message: string): void {
+    if (!this.discovery.running) return;
+    this.clearDiscoveryTimer();
+    this.discovery = { running: false, outcome: null, error: message };
+    this.emit();
+  }
+
+  private clearDiscoveryTimer(): void {
+    if (this.discoveryTimer === undefined) return;
+    clearTimeout(this.discoveryTimer);
+    this.discoveryTimer = undefined;
+  }
+
   replaceCatalog(frame: ModelListResultFrame): void {
     this.catalog = frame;
     this.index = new Map(frame.models.map(model => [model.id, model]));
@@ -164,6 +228,11 @@ const subscribeToModels = (listener: Listener): (() => void) => modelStore.subsc
 
 export function useModelCatalog(): ModelListResultFrame {
   return useSyncExternalStore(subscribeToModels, () => modelStore.getSnapshot());
+}
+
+/** Whether a discovery is running, and what the last one found. */
+export function useDiscovery(): DiscoveryState {
+  return useSyncExternalStore(subscribeToModels, () => modelStore.discoveryState());
 }
 
 /**

@@ -419,6 +419,20 @@ export interface ModelListResultFrame {
   defaultModel: string;
 }
 
+/**
+ * How a hand-fired discovery went. The catalogue itself arrives as `model.list.result` just
+ * before, so this frame is only the report: how many models are known now, and which providers
+ * kept their previous ones because they did not answer.
+ */
+export interface ModelRefreshResultFrame {
+  type: 'model.refresh.result';
+  models: number;
+  /** Providers that opt into discovery and did not answer in full, by config key. */
+  failed: string[];
+  /** False when no provider opts into discovery at all: a refresh then changes nothing. */
+  enabled: boolean;
+}
+
 /** One skill of the server catalog. `path` is display-only: where to edit it on the server. */
 export interface SkillEntry {
   name: string;
@@ -1186,6 +1200,7 @@ export type ServerFrame =
   | LogsTailResultFrame
   | VoiceModeResultFrame
   | ModelListResultFrame
+  | ModelRefreshResultFrame
   | ModelEndpointsResultFrame
   | SkillsListResultFrame
   | ToolsListResultFrame
@@ -1255,6 +1270,7 @@ const FRAME_TYPES = new Set([
   'voice.mode.result',
   'update.result',
   'model.list.result',
+  'model.refresh.result',
   'model.endpoints.result',
   'skills.list.result',
   'tools.list.result',
@@ -1443,6 +1459,11 @@ export function encodeApprovalResponse(id: string, accepted: boolean): string {
 
 export function encodeModelList(): string {
   return JSON.stringify({ type: 'model.list' });
+}
+
+/** Asks the server to re-run provider discovery now, rather than at its next six-hour cycle. */
+export function encodeModelRefresh(): string {
+  return JSON.stringify({ type: 'model.refresh' });
 }
 
 /** Asks for the routes of one model. Sent when the picker enters the routing step, never before:
