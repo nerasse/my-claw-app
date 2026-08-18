@@ -324,6 +324,22 @@ class ChatStoreImpl {
     });
   }
 
+  /**
+   * A prompt sent from another window of the same owner. Keyed by the id the sending device
+   * generated, so that device recognises its own bubble and does nothing: the echo reaches every
+   * socket, and dropping it here is what keeps one message one bubble.
+   */
+  echoUserMessage(
+    threadId: string,
+    id: string,
+    text: string,
+    attachments: AttachmentMeta[] = [],
+    location?: LocationData,
+  ): void {
+    if (this.getItems(threadId).some(item => item.id === id)) return;
+    this.addUserMessage(threadId, id, text, attachments, location);
+  }
+
   setLocation(threadId: string, id: string, location: LocationData): void {
     this.patch(threadId, id, { location });
   }

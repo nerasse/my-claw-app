@@ -88,6 +88,37 @@ describe('chatStore attachment merge', () => {
   });
 });
 
+/**
+ * A prompt typed in one window has to appear in the others, or the answer streams in under
+ * nothing: `startStream` looks its parent up by id, finds none, and drops the bubble at the end
+ * of the thread with a fresh timestamp.
+ */
+describe('chatStore prompt echo', () => {
+  test('an echo from another window becomes the user bubble the answer replies to', () => {
+    chatStore.echoUserMessage(THREAD, 'm1', 'from the phone');
+    chatStore.startStream(THREAD, 's1', 'm1');
+
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ id: 'm1', role: 'user', text: 'from the phone' });
+    // Anchored on the question, not on the clock: the answer sorts right after it.
+    expect(items[1]!.ts).toBe(items[0]!.ts + 1);
+  });
+
+  test('the window that sent it keeps one bubble, whatever the server mirrors back', () => {
+    chatStore.addUserMessage(THREAD, 'm1', 'typed here');
+    chatStore.echoUserMessage(THREAD, 'm1', 'typed here');
+    expect(chatStore.getItems(THREAD)).toHaveLength(1);
+  });
+
+  test('an echo carries what the bubble needs to draw itself', () => {
+    const shot = { id: 'f1', type: 'image' as const, filename: 'shot.png' };
+    const here = { latitude: 48.85, longitude: 2.35, accuracyMeters: 12, capturedAt: '2026-01-01T00:00:00.000Z' };
+    chatStore.echoUserMessage(THREAD, 'm2', 'look', [shot], here);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ attachments: [shot], location: here });
+  });
+});
+
 describe('chatStore tool cards', () => {
   test('a tool call becomes its own item and repeats are ignored', () => {
     const payload = { id: 'c1', name: 'bash', args: {}, ok: true, output: 'out', truncated: false };

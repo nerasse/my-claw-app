@@ -209,6 +209,23 @@ export type HistoryEntry =
     }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 
+/**
+ * A prompt sent from one of the owner's other windows.
+ *
+ * The sending device drew the bubble itself and carries the same id, so it drops the echo; every
+ * other window gains the question its incoming answer replies to. Before this, a second window
+ * showed the answer hanging under nothing until the thread was reloaded.
+ */
+export interface ChatUserFrame {
+  type: 'chat.user';
+  threadId: string;
+  id: string;
+  text: string;
+  ts?: string;
+  attachments?: AttachmentMeta[];
+  location?: LocationData;
+}
+
 export interface ChatHistoryFrame {
   type: 'chat.history';
   threadId: string;
@@ -1189,6 +1206,7 @@ export interface HelloFrame {
 
 export type ServerFrame =
   | ChatMessageFrame
+  | ChatUserFrame
   | LocationCapabilitiesFrame
   | ChatLocationFrame
   | LocationPreviewResultFrame
