@@ -71,7 +71,6 @@ adb shell am kill com.myclawapp                             # simulates a system
 - Nothing the server pushed while a socket was down is replayed. `core/resume.ts` is what a fresh
   connection asks for, and it includes the open conversation's history for that reason: a device that
   crashed or slept otherwise sits on its own stale copy until the owner switches threads.
-
 - The foreground service notification carries **static** text: it reads "Agent connection active"
   even while the state is `disconnected`. Do not trust it, read `claw:ws:state`.
 - The outbox (`ClawConnectionService`) is mirrored to SharedPreferences under `claw_connection`,

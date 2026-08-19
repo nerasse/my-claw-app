@@ -136,6 +136,21 @@ describe('chatStore compaction hold', () => {
     expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.queuedSince)).toHaveLength(0);
   });
 
+  test('a prompt mirrored from another window can be marked as held', () => {
+    // The window that did not type it has no local bubble: the mark names the sender's id, so it
+    // only lands because the echo created the bubble under that same id.
+    chatStore.echoUserMessage(THREAD, 'm1', 'from the phone');
+    chatStore.markQueued(THREAD, 'm1');
+    const item = chatStore.getItems(THREAD)[0];
+    expect(item!.kind === 'text' ? item!.queuedSince : undefined).toBeGreaterThan(0);
+
+    // What the router does on chat.stream.start, in that order: the wait is over, the run writes.
+    chatStore.clearQueued(THREAD);
+    chatStore.startStream(THREAD, 's1', 'm1');
+    const cleared = chatStore.getItems(THREAD)[0];
+    expect(cleared!.kind === 'text' ? cleared!.queuedSince : undefined).toBeUndefined();
+  });
+
   test('the mark is stamped once, so a repeated hold does not restart the clock', () => {
     chatStore.addUserMessage(THREAD, 'm1', 'first');
     chatStore.markQueued(THREAD, 'm1');
