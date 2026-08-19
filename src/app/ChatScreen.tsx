@@ -6,6 +6,7 @@ import { ToolCard } from '../components/ToolCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import { useChatItems, type ChatItem, type TextItem } from '../core/chat';
+import { isGrouped } from '../core/grouping';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
 import { deviceBridge } from '../core/nativeBridge';
@@ -27,22 +28,12 @@ import { watchFileDrop } from '../core/fileDrop';
 import { selectableProps } from '../core/webProps';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
-const GROUP_WINDOW_MS = 120_000;
-
 function pickAssetToPending(asset: { uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }): PendingAttachment | null {
   if (!asset.uri) return null;
   const filename = asset.fileName ?? `photo-${Date.now()}.jpg`;
   const mimeType = asset.type ?? 'application/octet-stream';
   const type: AttachmentMeta['type'] = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'file';
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
-}
-
-/** Same author, close in time and not split by a tool card: render as one visual block. */
-function isGrouped(items: ChatItem[], index: number): boolean {
-  const item = items[index];
-  const previous = items[index - 1];
-  if (!item || !previous || item.kind !== 'text' || previous.kind !== 'text') return false;
-  return previous.role === item.role && item.ts - previous.ts < GROUP_WINDOW_MS;
 }
 
 const keyOfItem = (item: ChatItem): string => item.id;
