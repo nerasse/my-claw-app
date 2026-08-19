@@ -1042,7 +1042,7 @@ export interface ProvidersEnvResultFrame {
 export interface ProviderPatch {
   type: 'providers.upsert';
   key: string;
-  providerType?: 'openai' | 'claude-sdk' | 'codex';
+  providerType?: 'openai' | 'claude-sdk' | 'codex' | 'anthropic';
   baseUrl?: string;
   apiKeyEnv?: string;
   group?: string;

@@ -4,7 +4,7 @@ import type { ProviderInfo, ProvidersEnvResultFrame } from '../core/protocol';
 import { envNamePresent } from '../core/providers';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
-export type ProviderType = 'openai' | 'claude-sdk' | 'codex';
+export type ProviderType = 'openai' | 'claude-sdk' | 'codex' | 'anthropic';
 
 /** Server rule for the config key (the MCP one: it becomes part of the model namespace). */
 const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
@@ -131,7 +131,7 @@ export function ProviderEditScreen({
         <View style={styles.category}>
           <Text style={styles.section}>engine</Text>
           <View style={styles.segment}>
-            {(['openai', 'claude-sdk', 'codex'] as const).map(type => (
+            {(['openai', 'claude-sdk', 'codex', 'anthropic'] as const).map(type => (
               <Pressable
                 key={type}
                 onPress={() => setProviderType(type)}
@@ -270,13 +270,13 @@ export function ProviderEditScreen({
                 style={styles.input}
                 value={fallbackModel}
                 onChangeText={setFallbackModel}
-                placeholder="fallback model id (claude-sdk only)"
+                placeholder="fallback model id (claude-sdk and anthropic only)"
                 placeholderTextColor={styles.placeholder.color}
                 autoCorrect={false}
                 accessibilityLabel="Provider fallback model"
               />
             </>
-          ) : providerType === 'claude-sdk' ? (
+          ) : providerType === 'claude-sdk' || providerType === 'anthropic' ? (
             <TextInput
               style={styles.input}
               value={fallbackModel}
