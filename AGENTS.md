@@ -63,6 +63,15 @@ adb shell am kill com.myclawapp                             # simulates a system
 
 ## Known traps
 
+- `parseServerFrame` is a **whitelist**: a frame type it does not hold is answered `null` and never
+  reaches the router. It is a silent drop, invisible to any test that hands `routeFrame` a typed
+  object instead of a string, and it once threw away a frame the server was sending correctly.
+  `FRAME_TYPES` is now typed `Record<ServerFrame['type'], true>`, so the compiler refuses the file
+  until every member of the union is listed. Do not turn it back into a `Set<string>`.
+- Nothing the server pushed while a socket was down is replayed. `core/resume.ts` is what a fresh
+  connection asks for, and it includes the open conversation's history for that reason: a device that
+  crashed or slept otherwise sits on its own stale copy until the owner switches threads.
+
 - The foreground service notification carries **static** text: it reads "Agent connection active"
   even while the state is `disconnected`. Do not trust it, read `claw:ws:state`.
 - The outbox (`ClawConnectionService`) is mirrored to SharedPreferences under `claw_connection`,

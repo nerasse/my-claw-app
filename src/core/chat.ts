@@ -134,8 +134,6 @@ class ChatStoreImpl {
   private activeRuns = new Set<string>();
   /** Placeholder bubble per thread while a slow command runs, keyed by thread -> bubble id. */
   private pendingCommands = new Map<string, string>();
-  /** The send each thread is holding behind a compaction, keyed by thread -> bubble id. */
-  private queuedSends = new Map<string, string>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
@@ -406,24 +404,24 @@ class ChatStoreImpl {
   markQueued(threadId: string, id: string): void {
     const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id);
     if (!item || item.kind !== 'text' || item.queuedSince) return;
-    this.queuedSends.set(threadId, id);
     this.patch(threadId, id, { queuedSince: Date.now() });
   }
 
   /**
    * The wait is over, whatever ended it: the run streams, answers, or dies. Called on all three
    * rather than on a dedicated frame, so a lost one cannot strand the mark on the bubble.
+   *
+   * Every mark in the thread goes, not one remembered id: a compaction holds *all* the sends
+   * typed while it rewrites the history, and a per-thread slot kept only the last of them, so
+   * the bubbles before it stayed under a badge nothing was ever going to clear.
    */
   clearQueued(threadId: string): void {
-    const id = this.queuedSends.get(threadId);
-    if (!id) return;
-    this.queuedSends.delete(threadId);
     const items = this.threads.get(threadId);
-    if (!items) return;
+    if (!items?.some(item => item.kind === 'text' && item.queuedSince !== undefined)) return;
     this.threads.set(
       threadId,
       items.map(item => {
-        if (item.id !== id || item.kind !== 'text') return item;
+        if (item.kind !== 'text' || item.queuedSince === undefined) return item;
         const rest = { ...item };
         delete rest.queuedSince;
         return rest;

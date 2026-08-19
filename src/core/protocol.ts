@@ -1266,12 +1266,19 @@ export type ServerFrame =
   | HelloFrame
   | ErrorFrame;
 
-const FRAME_TYPES = new Set([
+/**
+ * Every frame the server can send. A `Record` keyed by the union, not a `Set` of strings: the
+ * compiler refuses this object until it carries one entry per member, so a frame added to
+ * `ServerFrame` cannot be half-shipped. A hand-kept set is what dropped the mirrored prompt on
+ * every client while the server was sending it correctly.
+ */
+const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'device.list.result',
   'device.revoke.result',
   'device.pair.info',
   'device.pair.result',
   'chat.message',
+  'chat.user',
   'location.capabilities',
   'chat.location',
   'location.preview.result',
@@ -1328,13 +1335,19 @@ const FRAME_TYPES = new Set([
   'error',
 ]);
 
+/** The list above as a lookup, written once so the type above is the only thing to read. */
+function objectOf<T extends string>(names: T[]): Record<T, true> {
+  return names.reduce((acc, name) => ({ ...acc, [name]: true }), {} as Record<T, true>);
+}
+
 export function parseServerFrame(raw: string): ServerFrame | null {
   try {
     const parsed = JSON.parse(raw) as { type?: unknown };
     if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
       return null;
     }
-    if (!FRAME_TYPES.has(parsed.type)) {
+    // `hasOwnProperty`, never `in`: a frame announcing itself as "toString" would walk in.
+    if (!Object.prototype.hasOwnProperty.call(FRAME_TYPES, parsed.type)) {
       return null;
     }
     return parsed as ServerFrame;

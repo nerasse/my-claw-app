@@ -119,6 +119,34 @@ describe('chatStore prompt echo', () => {
   });
 });
 
+describe('chatStore compaction hold', () => {
+  test('the badge goes from every send the hold parked, not just the last one', () => {
+    chatStore.addUserMessage(THREAD, 'm1', 'first');
+    chatStore.addUserMessage(THREAD, 'm2', 'second');
+    chatStore.addUserMessage(THREAD, 'm3', 'third');
+    chatStore.markQueued(THREAD, 'm1');
+    chatStore.markQueued(THREAD, 'm2');
+    chatStore.markQueued(THREAD, 'm3');
+    expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.queuedSince)).toHaveLength(3);
+
+    chatStore.clearQueued(THREAD);
+
+    // One compaction holds every send typed while it runs, and the run that follows is one
+    // event: whatever ends the wait ends it for all of them.
+    expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.queuedSince)).toHaveLength(0);
+  });
+
+  test('the mark is stamped once, so a repeated hold does not restart the clock', () => {
+    chatStore.addUserMessage(THREAD, 'm1', 'first');
+    chatStore.markQueued(THREAD, 'm1');
+    const first = chatStore.getItems(THREAD)[0];
+    const since = first!.kind === 'text' ? first!.queuedSince : undefined;
+    chatStore.markQueued(THREAD, 'm1');
+    const again = chatStore.getItems(THREAD)[0];
+    expect(again!.kind === 'text' ? again!.queuedSince : undefined).toBe(since);
+  });
+});
+
 describe('chatStore tool cards', () => {
   test('a tool call becomes its own item and repeats are ignored', () => {
     const payload = { id: 'c1', name: 'bash', args: {}, ok: true, output: 'out', truncated: false };

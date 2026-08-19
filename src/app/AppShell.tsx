@@ -26,6 +26,7 @@ import {
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
+import { resumeFrames } from '../core/resume';
 import { groupRoster, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { isPinned, migrateLocalPins, setPinned } from '../core/pinned';
@@ -54,7 +55,6 @@ import {
   encodeSessionInstructionsGet,
   encodeInstructionsSetNested,
   encodeStatusGet,
-  encodeCommandsList,
   encodeConfigGet,
   encodeConfigSet,
   encodeDiagSnapshot,
@@ -780,10 +780,9 @@ export function AppShell(): React.JSX.Element {
         setLocationEnabled(false);
       }
       if (next.state === 'connected') {
-        connection.send(encodeSessionList());
-        connection.send(encodeCommandsList());
-        connection.send(encodeModelList());
-        connection.send(encodeJobsList());
+        for (const frame of resumeFrames(activeThreadRef.current, HISTORY_LIMIT)) {
+          connection.send(frame).catch(() => {});
+        }
       }
     });
     const offPending = connection.onPending(setPending);

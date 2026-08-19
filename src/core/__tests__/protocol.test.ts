@@ -59,6 +59,17 @@ describe('parseServerFrame', () => {
     }
   });
 
+  /**
+   * The whitelist is keyed by the frame union, so a frame the server can send and the app cannot
+   * name does not compile. What is left to check at runtime is that the lookup is a lookup: a
+   * prototype key is not a frame, and a mirrored prompt is one.
+   */
+  test('the whitelist is a lookup, not an object with a prototype', () => {
+    expect(parseServerFrame('{"type":"chat.user","threadId":"t","id":"m1","text":"hi"}')?.type).toBe('chat.user');
+    expect(parseServerFrame('{"type":"toString"}')).toBeNull();
+    expect(parseServerFrame('{"type":"constructor"}')).toBeNull();
+  });
+
   test('rejects anything that is not a known frame', () => {
     expect(parseServerFrame('not json')).toBeNull();
     expect(parseServerFrame('null')).toBeNull();
