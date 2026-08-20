@@ -14,6 +14,7 @@ import {
   type ModelOption,
   type ModelRefreshResultFrame,
   type ModelResultFrame,
+  type RouteSort,
 } from './protocol';
 
 type Listener = () => void;
@@ -62,6 +63,11 @@ export interface EndpointState {
 }
 
 const PENDING: EndpointState = { pending: true, endpoints: [] };
+
+/** Routes are cached per model *and* per ordering: the same model sorted two ways is two lists. */
+function endpointKey(model: string, sort: RouteSort): string {
+  return `${sort}\u0000${model}`;
+}
 Object.freeze(PENDING);
 
 interface ThreadModel {
@@ -115,26 +121,29 @@ class ModelStoreImpl {
   }
 
   /** The routes of a model, as far as this store knows. Pending until the server answers. */
-  endpointsOf(model: string): EndpointState {
-    return this.endpoints.get(model) ?? PENDING;
+  endpointsOf(model: string, sort: RouteSort = 'price'): EndpointState {
+    return this.endpoints.get(endpointKey(model, sort)) ?? PENDING;
   }
 
-  /** Asks for the routes of a model, once. Called from an effect, never while rendering. */
-  requestEndpoints(model: string): void {
-    if (this.endpoints.has(model)) return;
-    this.endpoints.set(model, PENDING);
+  /** Asks for the routes of a model, once per ordering. Called from an effect, never while rendering. */
+  requestEndpoints(model: string, sort: RouteSort = 'price'): void {
+    const key = endpointKey(model, sort);
+    if (this.endpoints.has(key)) return;
+    this.endpoints.set(key, PENDING);
     // `send` reports failure by resolving false, never by rejecting: the `.catch` this used to
     // carry could not fire, and a frame that never left spun `loading routes...` forever.
-    connection.send(encodeModelEndpoints(model)).then((delivered) => {
+    connection.send(encodeModelEndpoints(model, sort)).then((delivered) => {
       if (delivered) return;
       // No answer is coming: drop the placeholder so entering the step again asks once more.
-      this.endpoints.delete(model);
+      this.endpoints.delete(key);
       this.emit();
     });
   }
 
   replaceEndpoints(frame: ModelEndpointsResultFrame): void {
-    this.endpoints.set(frame.model, { pending: false, endpoints: frame.endpoints });
+    // Keyed by model *and* ordering, which is why the answer echoes the sort back: one key per
+    // order, or reordering would read as the order before it since the list is already cached.
+    this.endpoints.set(endpointKey(frame.model, frame.sort ?? 'price'), { pending: false, endpoints: frame.endpoints });
     this.emit();
   }
 
@@ -251,14 +260,14 @@ export function useModelIndex(models: ModelOption[]): Map<string, ModelOption> {
  * The routes of a model, requested on first read. `null` asks for nothing: the step is not open,
  * and a hook cannot be called conditionally.
  */
-export function useModelEndpoints(model: string | null): EndpointState {
+export function useModelEndpoints(model: string | null, sort: RouteSort = 'price'): EndpointState {
   const snapshot = useCallback(
-    () => (model ? modelStore.endpointsOf(model) : PENDING),
-    [model],
+    () => (model ? modelStore.endpointsOf(model, sort) : PENDING),
+    [model, sort],
   );
   useEffect(() => {
-    if (model) modelStore.requestEndpoints(model);
-  }, [model]);
+    if (model) modelStore.requestEndpoints(model, sort);
+  }, [model, sort]);
   return useSyncExternalStore(subscribeToModels, snapshot);
 }
 

@@ -428,10 +428,31 @@ export interface ModelEndpoint {
   promptUsd?: number;
   completionUsd?: number;
   context?: number;
+  /**
+   * The output ceiling of this route, which is the limit that actually refuses a call: showing the
+   * context alone reads as if a 1M-context route accepts a 1M-token answer, and it does not.
+   */
+  maxOutput?: number;
   /** Degraded or down on the provider's own health flag: worth showing, not worth hiding. */
   degraded?: boolean;
   uptime30m?: number;
 }
+
+/**
+ * How a route list is ordered. Price is the default because pinning is usually a price decision;
+ * the others exist because the cheapest route is regularly not the one worth having. The server
+ * sorts, so every surface presents one model's providers in the same order.
+ */
+export type RouteSort = 'price' | 'context' | 'output' | 'uptime';
+
+export const ROUTE_SORTS: readonly RouteSort[] = ['price', 'context', 'output', 'uptime'];
+
+export const ROUTE_SORT_LABELS: Record<RouteSort, string> = {
+  price: 'price',
+  context: 'context',
+  output: 'output',
+  uptime: 'uptime',
+};
 
 /**
  * The routes of one model, cheapest first. An empty list means the model has a single route,
@@ -440,6 +461,12 @@ export interface ModelEndpoint {
 export interface ModelEndpointsResultFrame {
   type: 'model.endpoints.result';
   model: string;
+  /**
+   * The ordering this list is in, echoed back by the server. Routes are cached per model and per
+   * order, and the answer carries no request id: without this a reorder would have to be guessed
+   * from the pending asks, and would read as the order before it.
+   */
+  sort?: RouteSort;
   endpoints: ModelEndpoint[];
 }
 
@@ -1560,8 +1587,8 @@ export function encodeModelRefresh(): string {
 
 /** Asks for the routes of one model. Sent when the picker enters the routing step, never before:
  *  the server calls OpenRouter for it, and a catalogue-wide prefetch would be hundreds of calls. */
-export function encodeModelEndpoints(model: string): string {
-  return JSON.stringify({ type: 'model.endpoints', model });
+export function encodeModelEndpoints(model: string, sort?: RouteSort): string {
+  return JSON.stringify({ type: 'model.endpoints', model, ...(sort ? { sort } : {}) });
 }
 
 /** One declaration of `llm.models`. Only the fields that differ from discovery need to travel:

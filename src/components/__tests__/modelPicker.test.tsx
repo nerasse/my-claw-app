@@ -89,6 +89,9 @@ test('a routable model asks for its routes, once the step is open and not before
   expect(JSON.parse(send.mock.calls[0][0])).toEqual({
     type: 'model.endpoints',
     model: 'openrouter/openai/gpt-5.6-luna',
+    // The ordering rides with the ask: the server sorts, so every surface reads one model's
+    // providers in the same order.
+    sort: 'price',
   });
   // Nothing is answered yet: the step says so rather than showing an empty list as a fact.
   expect(picker.labels()).toContain('loading routes...');
@@ -103,7 +106,12 @@ test('a routable model asks for its routes, once the step is open and not before
       ],
     });
   });
-  expect(picker.labels()).toEqual(['Automatic', 'Azure (azure)', 'OpenAI (openai)', '< Back']);
+  // The orderings sit between the routes and Back: what the list holds, then how it is sorted.
+  expect(picker.labels()).toEqual([
+    'Automatic', 'Azure (azure)', 'OpenAI (openai)',
+    'Sort by price', 'Sort by context', 'Sort by output', 'Sort by uptime',
+    '< Back',
+  ]);
   expect(picker.hint('Azure (azure)')).toBe('$0.150 in / $0.600 out per Mtok · 128k ctx · 100.0% up');
   expect(picker.hint('OpenAI (openai)')).toBe('degraded · $0.200 in / $0.800 out per Mtok');
   picker.unmount();

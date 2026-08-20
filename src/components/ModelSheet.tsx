@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ActionSheet, type SheetOption } from './ActionSheet';
 import { connection } from '../core/connection';
@@ -23,8 +23,11 @@ import {
   encodeModelContextSet,
   encodeModelEffortSet,
   encodeModelSet,
+  ROUTE_SORTS,
+  ROUTE_SORT_LABELS,
   type ModelEndpoint,
   type ModelOption,
+  type RouteSort,
 } from '../core/protocol';
 
 function splitGroup(model: ModelOption): string[] {
@@ -78,7 +81,13 @@ function endpointHint(route: ModelEndpoint): string | undefined {
   if (route.promptUsd !== undefined && route.completionUsd !== undefined) {
     parts.push(`${usd(route.promptUsd)} in / ${usd(route.completionUsd)} out per Mtok`);
   }
-  if (route.context !== undefined) parts.push(`${shortTokens(route.context)} ctx`);
+  // Both sides of the window: the output ceiling is the limit that refuses a call, and showing the
+  // context alone reads as if a 1M-context route accepted a 1M-token answer.
+  if (route.context !== undefined) {
+    parts.push(route.maxOutput === undefined
+      ? `${shortTokens(route.context)} ctx`
+      : `${shortTokens(route.context)} ctx / ${shortTokens(route.maxOutput)} out`);
+  }
   if (route.uptime30m !== undefined) parts.push(`${route.uptime30m.toFixed(1)}% up`);
   return parts.length > 0 ? parts.join(' · ') : undefined;
 }
@@ -230,9 +239,11 @@ export function useModelPickerFlow({
   const stagedLabel = stagedEntry?.label ?? stagedBare;
   const stagedIsTag = stagedBare.startsWith('tag:');
   const effortCurrent = effort?.current ?? '';
+  // How the route list is read, not a setting: it lives with the open sheet and resets with it.
+  const [routeSort, setRouteSort] = useState<RouteSort>('price');
   // Asked for only while the step is open: the server calls OpenRouter to answer, so the routes
   // of a model nobody staged are a call nobody needed.
-  const routes = useModelEndpoints(stage === 'endpoint' ? stagedBare : null);
+  const routes = useModelEndpoints(stage === 'endpoint' ? stagedBare : null, routeSort);
 
   // Both held: they feed the memo that builds the rows, and a fresh `[]` on every render would
   // invalidate it every time.
@@ -435,6 +446,18 @@ export function useModelPickerFlow({
           onPress: () => advance('endpoint', { model: route.id }),
         });
       }
+      // Offered only when there is something to reorder, and it re-asks the server rather than
+      // sorting here: one ordering for every surface, or two menus name a different cheapest.
+      if (routes.endpoints.length > 1) {
+        for (const option of ROUTE_SORTS) {
+          rows.push({
+            key: `sort:${option}`,
+            label: `Sort by ${ROUTE_SORT_LABELS[option]}`,
+            selected: option === routeSort,
+            onPress: () => setRouteSort(option),
+          });
+        }
+      }
       if (routes.pending) {
         rows.push({ key: 'pending', label: 'loading routes...', onPress: () => {} });
       } else if (routes.endpoints.length === 0) {
@@ -535,6 +558,7 @@ export function useModelPickerFlow({
     query,
     rootOption,
     routes,
+    routeSort,
     stagedBare,
     stagedRoute,
     skipPinsOnTag,
