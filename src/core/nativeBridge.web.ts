@@ -164,6 +164,8 @@ export interface DeviceBridgeNative {
 
 const PREFS_PREFIX = 'claw:pref:';
 const RECONNECT_MIN_MS = 1000;
+/** Under this, a connection never really worked: it counts as a failed attempt for the backoff. */
+const MIN_HEALTHY_MS = 5000;
 const RECONNECT_MAX_MS = 30000;
 /** How often a socket that claims to be open is asked to prove it. */
 const HEARTBEAT_MS = 25000;
@@ -176,6 +178,8 @@ class WebConnection {
   private outbox: string[] = [];
   private state = 'idle';
   private attempt = 0;
+  /** When the live socket opened, 0 when none did. A short life is a failure, not a success. */
+  private openedAt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private wanted = false;
   private lifecycleBound = false;
@@ -304,7 +308,9 @@ class WebConnection {
         socket.close(1000, 'superseded');
         return;
       }
-      this.attempt = 0;
+      // Deliberately not resetting the backoff here: an open socket is not yet a working one. The
+      // reset happens on close, and only for a connection that lived long enough to count.
+      this.openedAt = Date.now();
       this.setState('connected');
       this.drain();
       this.startHeartbeat();
@@ -317,6 +323,12 @@ class WebConnection {
       if (this.socket !== socket) return;
       this.socket = null;
       this.stopHeartbeat();
+      // A connection that died as soon as it opened never worked, whatever its close code says, so
+      // the backoff has to keep growing. Resetting on open is what turned a server closing on
+      // connect (it used to evict the previous socket of a device, and two tabs of one browser are
+      // one device) into a reconnect every single second, forever.
+      if (this.openedAt !== 0 && Date.now() - this.openedAt >= MIN_HEALTHY_MS) this.attempt = 0;
+      this.openedAt = 0;
       this.setState('disconnected');
       this.scheduleRetry();
     };
