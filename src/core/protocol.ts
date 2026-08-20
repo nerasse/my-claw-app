@@ -378,6 +378,28 @@ export interface ModelOption {
    * a routing step and asks `model.endpoints` for the routes. Absent means a single route.
    */
   routes?: boolean;
+  /** A `llm.models` entry contributes this model: custom when alone, an override when discovery
+   *  serves the id too. */
+  declared?: boolean;
+  /** Discovery also serves this id, so deleting a declaration resets it instead of removing it. */
+  discovered?: boolean;
+}
+
+/**
+ * A model that exists and cannot run. Never offered by a picker, always listed by the management
+ * view: a filtered list cannot say what it removed, which is how a declaration can survive its own
+ * deletion from a gateway unnoticed.
+ */
+export interface UnavailableModel {
+  id: string;
+  label: string;
+  provider?: string;
+  declared?: boolean;
+  discovered?: boolean;
+  /** The server's availability verdict. */
+  state: 'stale' | 'no-key' | 'no-auth';
+  /** Ready to print: "litellm no longer lists it", "LITELLM_API_KEY is not set". */
+  reason: string;
 }
 
 /** One route of a routable model: what pinning it costs, and whether it is healthy right now. */
@@ -437,8 +459,11 @@ export interface ContextState {
 
 export interface ModelListResultFrame {
   type: 'model.list.result';
+  /** What may run. Every picker reads this and only this. */
   models: ModelOption[];
   defaultModel: string;
+  /** Known and not runnable, with the reason. Absent on a server that predates the field. */
+  unavailable?: UnavailableModel[];
 }
 
 /**
@@ -1512,6 +1537,34 @@ export function encodeModelRefresh(): string {
  *  the server calls OpenRouter for it, and a catalogue-wide prefetch would be hundreds of calls. */
 export function encodeModelEndpoints(model: string): string {
   return JSON.stringify({ type: 'model.endpoints', model });
+}
+
+/** One declaration of `llm.models`. Only the fields that differ from discovery need to travel:
+ *  the server merges an override field by field, so an absent one keeps following the provider. */
+export interface ModelDeclaration {
+  id: string;
+  label?: string;
+  apiId?: string;
+  provider?: string;
+  group?: string;
+  family?: string;
+  vision?: boolean;
+  context?: number;
+  output?: number;
+  supportsEffort?: boolean;
+  effortLevels?: string[];
+  thinkingAdaptive?: boolean;
+  thinkingEnabled?: boolean;
+}
+
+export function encodeModelsUpsert(entry: ModelDeclaration): string {
+  return JSON.stringify({ type: 'models.upsert', ...entry });
+}
+
+/** Deletes a declaration. For an id discovery also serves, this resets it to the provider's own
+ *  answer rather than removing the model. */
+export function encodeModelsRemove(id: string): string {
+  return JSON.stringify({ type: 'models.remove', id });
 }
 
 export function encodeSkillsList(): string {

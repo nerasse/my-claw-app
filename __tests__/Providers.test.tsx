@@ -448,3 +448,104 @@ test('the button is on the provider page too, where the models are actually read
   expect(labelsOf(tree)).toContain('Refresh the model discovery');
   await settleAndUnmount(tree);
 });
+
+/**
+ * Declarations are the hand-written half of the catalogue. They used to be JSON nobody could see
+ * from the app, which is how three entries survived their gateway renaming its whole catalogue:
+ * the picker filtered them out for being stale, correctly, and a filtered list cannot say what it
+ * removed. So the management view shows them, badged, and deleting one is a tap.
+ */
+test('a stale declaration is shown with its reason, and deleting it is one tap', async () => {
+  const tree = await bootToProviders();
+  await emit({
+    type: 'model.list.result',
+    models: [{ id: 'litellm/alive', label: 'Alive', provider: 'litellm' }],
+    defaultModel: 'litellm/alive',
+    unavailable: [
+      {
+        id: 'litellm/gone',
+        label: 'Gone',
+        provider: 'litellm',
+        declared: true,
+        state: 'stale',
+        reason: 'litellm no longer lists it',
+      },
+    ],
+  });
+  await pressLabel(tree, 'Open provider litellm');
+  await waitFor(() => labelsOf(tree).includes('Edit provider'));
+
+  // Shown, with the server's own words, and never in the list a picker reads.
+  expect(textsOf(tree)).toContain('litellm no longer lists it');
+  expect(textsOf(tree)).toContain('not runnable (1)');
+
+  await pressLabel(tree, 'Gone, unavailable: litellm no longer lists it');
+  await waitFor(() => labelsOf(tree).includes('Delete model'));
+  await pressLabel(tree, 'Delete model');
+
+  await waitFor(() => sentFrames().some(f => f.type === 'models.remove'));
+  expect(sentFrames().find(f => f.type === 'models.remove')).toEqual({
+    type: 'models.remove',
+    id: 'litellm/gone',
+  });
+  await settleAndUnmount(tree);
+});
+
+test('declaring a model sends only the fields that were filled in', async () => {
+  const tree = await bootToProviders();
+  await emit({
+    type: 'model.list.result',
+    models: [{ id: 'litellm/alive', label: 'Alive', provider: 'litellm' }],
+    defaultModel: 'litellm/alive',
+    unavailable: [],
+  });
+  await pressLabel(tree, 'Open provider litellm');
+  await waitFor(() => labelsOf(tree).includes('Edit provider'));
+
+  await pressLabel(tree, 'Add a model');
+  await waitFor(() => labelsOf(tree).includes('Create model'));
+  await typeInto(tree, 'Model id', 'litellm/zai-glm-5-2');
+  await typeInto(tree, 'Context window', '200000');
+  await pressLabel(tree, 'Create model');
+
+  await waitFor(() => sentFrames().some(f => f.type === 'models.upsert'));
+  // Nothing else travels: the server merges over discovery field by field, so an absent field
+  // keeps following the provider instead of freezing a copy of it.
+  expect(sentFrames().find(f => f.type === 'models.upsert')).toEqual({
+    type: 'models.upsert',
+    id: 'litellm/zai-glm-5-2',
+    provider: 'litellm',
+    context: 200000,
+  });
+  await settleAndUnmount(tree);
+});
+
+test('an override opens on the effective values and offers a reset, not a delete', async () => {
+  const tree = await bootToProviders();
+  await emit({
+    type: 'model.list.result',
+    models: [
+      {
+        id: 'litellm/pinned',
+        label: 'Pinned',
+        provider: 'litellm',
+        context: 262144,
+        declared: true,
+        discovered: true,
+      },
+    ],
+    defaultModel: 'litellm/pinned',
+    unavailable: [],
+  });
+  await pressLabel(tree, 'Open provider litellm');
+  await waitFor(() => labelsOf(tree).includes('Edit provider'));
+
+  // The badge says which kind of declaration it is, because that decides what deleting does.
+  expect(textsOf(tree)).toContain('override');
+
+  await pressLabel(tree, 'Edit Pinned');
+  await waitFor(() => labelsOf(tree).includes('Save model'));
+  expect(labelsOf(tree)).toContain('Reset to discovered');
+  expect(labelsOf(tree)).not.toContain('Delete model');
+  await settleAndUnmount(tree);
+});

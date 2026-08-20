@@ -3,6 +3,9 @@ import { connection } from './connection';
 import {
   encodeModelEndpoints,
   encodeModelRefresh,
+  encodeModelsRemove,
+  encodeModelsUpsert,
+  type ModelDeclaration,
   type ContextState,
   type EffortState,
   type ModelEndpoint,
@@ -262,4 +265,18 @@ export function useModelEndpoints(model: string | null): EndpointState {
 export function useThreadModel(threadId: string | null): ThreadModel | null {
   const snapshot = useCallback(() => modelStore.threadModel(threadId), [threadId]);
   return useSyncExternalStore(subscribeToModels, snapshot);
+}
+
+/**
+ * Writes one declaration of `llm.models`, or deletes it. The catalogue is not patched here: the
+ * server answers with a fresh `model.list.result`, which is the only copy any screen reads.
+ */
+export function declareModel(entry: ModelDeclaration): void {
+  // `send` reports failure by resolving false, never by rejecting, and the answer to a write is
+  // the fresh catalogue: nothing to do here on either outcome.
+  connection.send(encodeModelsUpsert(entry)).catch(() => {});
+}
+
+export function undeclareModel(id: string): void {
+  connection.send(encodeModelsRemove(id)).catch(() => {});
 }

@@ -101,6 +101,7 @@ import {
   type LogsTailQuery,
   type McpEntry,
   type ModelOption,
+  type UnavailableModel,
   type SessionFileMeta,
   type SessionSummary,
   type SkillEntry,
@@ -135,7 +136,7 @@ import {
   subscribeToPushRegistration,
 } from '../core/notifications';
 import { contextPercent } from '../core/context';
-import { modelStore, useModelCatalog, useThreadModel } from '../core/model';
+import { declareModel, modelStore, undeclareModel, useModelCatalog, useThreadModel } from '../core/model';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
@@ -170,6 +171,7 @@ import { McpsScreen } from './McpsScreen';
 import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
 import { ProvidersScreen } from './ProvidersScreen';
 import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
+import { ModelEditScreen } from './ModelEditScreen';
 import { ProviderEditScreen } from './ProviderEditScreen';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
@@ -224,6 +226,8 @@ const HISTORY_LIMIT = 50;
  */
 const EMPTY_MODELS: ModelOption[] = [];
 Object.freeze(EMPTY_MODELS);
+const EMPTY_UNAVAILABLE: UnavailableModel[] = [];
+Object.freeze(EMPTY_UNAVAILABLE);
 
 /** The config scope shape ("["*"]" for all, absent for inherit) as the editor's mode union. */
 function scopeModeOf(scope: string[] | null | undefined): ScopeMode {
@@ -273,6 +277,7 @@ export function AppShell(): React.JSX.Element {
     | 'provider'
     | 'provider-edit'
     | 'provider-env'
+    | 'model-edit'
     | 'tags'
     | 'skills'
     | 'devices'
@@ -299,6 +304,12 @@ export function AppShell(): React.JSX.Element {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   /** The provider form: create (no key yet) or edit (the key being renamed). */
   const [providerEdit, setProviderEdit] = useState<{ mode: 'create' | 'edit'; key: string | null } | null>(null);
+  /** The declaration being written: which provider it belongs to, and the row it started from. */
+  const [modelEdit, setModelEdit] = useState<{
+    mode: 'create' | 'edit';
+    provider: string;
+    model: ModelOption | UnavailableModel | null;
+  } | null>(null);
   const [providerBusy, setProviderBusy] = useState(false);
   /** The provider waiting for its delete confirmation, with the env key it may take with it. */
   const [providerToDelete, setProviderToDelete] = useState<{ key: string; keyEnv?: string } | null>(null);
@@ -1115,6 +1126,11 @@ export function AppShell(): React.JSX.Element {
       }
       if (settingsPage === 'provider-env') {
         setSettingsPage('provider-edit');
+        return true;
+      }
+      if (settingsPage === 'model-edit') {
+        setSettingsPage('provider');
+        setModelEdit(null);
         return true;
       }
       if (settingsPage === 'provider-edit') {
@@ -1990,6 +2006,17 @@ export function AppShell(): React.JSX.Element {
         : EMPTY_MODELS,
     [agentsConfig?.defaultProvider, catalog.models, selectedProvider],
   );
+  // The other half of the same catalogue: known, not runnable, and shown only here. Same grouping
+  // rule, and empty on a server too old to send the field.
+  const providerUnavailable = useMemo(
+    () =>
+      selectedProvider
+        ? (catalog.unavailable ?? []).filter(
+            model => (model.provider ?? agentsConfig?.defaultProvider) === selectedProvider,
+          )
+        : EMPTY_UNAVAILABLE,
+    [agentsConfig?.defaultProvider, catalog.unavailable, selectedProvider],
+  );
   // Shapes handed to the scope pickers and the agent file editor. Built here once per catalogue
   // change instead of inside the JSX: rebuilt in the render body they were a new array on every
   // frame the shell received, and no child could hold a memo across one.
@@ -2815,6 +2842,7 @@ export function AppShell(): React.JSX.Element {
                   key={selectedProviderInfo.key}
                   provider={selectedProviderInfo}
                   models={providerModels}
+                  unavailable={providerUnavailable}
                   defaultModel={agentsConfig?.defaultModel ?? ''}
                   searchHandle={providerSearch}
                   error={agentsState.error}
@@ -2824,7 +2852,43 @@ export function AppShell(): React.JSX.Element {
                     setProviderEdit({ mode: 'edit', key: selectedProviderInfo.key });
                     setSettingsPage('provider-edit');
                   }}
+                  onEditModel={model => {
+                    setModelEdit({ mode: 'edit', provider: selectedProviderInfo.key, model });
+                    setSettingsPage('model-edit');
+                  }}
+                  onAddModel={() => {
+                    setModelEdit({ mode: 'create', provider: selectedProviderInfo.key, model: null });
+                    setSettingsPage('model-edit');
+                  }}
                   onBack={() => setSettingsPage('providers')}
+                />
+              ) : (
+                providersPage
+              )
+            ) : settingsPage === 'model-edit' ? (
+              modelEdit ? (
+                <ModelEditScreen
+                  mode={modelEdit.mode}
+                  model={modelEdit.model}
+                  provider={modelEdit.provider}
+                  declared={modelEdit.model?.declared === true}
+                  discovered={modelEdit.model?.discovered === true}
+                  error={agentsState.error}
+                  busy={false}
+                  onSave={entry => {
+                    declareModel(entry);
+                    setModelEdit(null);
+                    setSettingsPage('provider');
+                  }}
+                  onDelete={() => {
+                    if (modelEdit.model) undeclareModel(modelEdit.model.id);
+                    setModelEdit(null);
+                    setSettingsPage('provider');
+                  }}
+                  onBack={() => {
+                    setModelEdit(null);
+                    setSettingsPage('provider');
+                  }}
                 />
               ) : (
                 providersPage

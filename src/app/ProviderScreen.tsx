@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Platform, Pressable, Text, TextInput, View } from 'react-native';
-import type { ModelOption, ProviderInfo } from '../core/protocol';
+import type { ModelOption, ProviderInfo, UnavailableModel } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
@@ -26,17 +26,29 @@ const keyOfModel = (model: ModelOption): string => model.id;
  */
 export type ProviderSearch = { query: string; clear: () => void };
 
+/**
+ * What a declared entry is called on screen. `override` and `custom` are not decoration: deleting
+ * one resets the model to what the provider says, deleting the other removes it outright.
+ */
+function originBadge(model: { declared?: boolean; discovered?: boolean }): string | null {
+  if (!model.declared) return null;
+  return model.discovered ? 'override' : 'custom';
+}
+
 /** One model. Memoized, and handed the id: a provider page can hold hundreds of these. */
 const ModelRow = React.memo(function ModelRowView({
   model,
   isDefault,
   onSetDefault,
+  onEdit,
 }: {
   model: ModelOption;
   isDefault: boolean;
   onSetDefault: (modelId: string) => void;
+  onEdit: (model: ModelOption) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const badge = originBadge(model);
   return (
     <Pressable
       style={styles.row}
@@ -48,6 +60,7 @@ const ModelRow = React.memo(function ModelRowView({
         <View style={styles.linkTitleLine}>
           <Text style={styles.linkTitle}>{model.label}</Text>
           {isDefault ? <Text style={styles.badge}>default</Text> : null}
+          {badge ? <Text style={styles.badgeAlt}>{badge}</Text> : null}
         </View>
         {model.id !== model.label ? (
           <Text style={styles.hint} numberOfLines={1}>
@@ -56,6 +69,53 @@ const ModelRow = React.memo(function ModelRowView({
         ) : null}
       </View>
       <Text style={styles.checkmark}>{isDefault ? '✓' : ''}</Text>
+      {/* Its own target, because the row already means "make this the default": one gesture per
+          intent, and editing is not something to discover by long-pressing. */}
+      <Pressable
+        onPress={() => onEdit(model)}
+        hitSlop={8}
+        style={styles.editTarget}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${model.label}`}>
+        <Text style={styles.editGlyph}>✎</Text>
+      </Pressable>
+    </Pressable>
+  );
+});
+
+/**
+ * A model that exists and cannot run, with the reason the server gave.
+ *
+ * Shown, never offered. A picker that hides an unavailable model is right; a management page that
+ * hides it leaves a declaration nobody can find and nobody can delete, which is exactly how three
+ * dead entries survived a gateway renaming its whole catalogue.
+ */
+const UnavailableRow = React.memo(function UnavailableRowView({
+  model,
+  onEdit,
+}: {
+  model: UnavailableModel;
+  onEdit: (model: UnavailableModel) => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const badge = originBadge(model);
+  return (
+    <Pressable
+      style={styles.row}
+      onPress={() => onEdit(model)}
+      accessibilityRole="button"
+      accessibilityLabel={`${model.label}, unavailable: ${model.reason}`}>
+      <View style={styles.linkMain}>
+        <View style={styles.linkTitleLine}>
+          <Text style={styles.linkTitleOff}>{model.label}</Text>
+          <Text style={styles.badgeWarn}>{model.state}</Text>
+          {badge ? <Text style={styles.badgeAlt}>{badge}</Text> : null}
+        </View>
+        <Text style={styles.hint} numberOfLines={1}>
+          {model.reason}
+        </Text>
+      </View>
+      <Text style={styles.editGlyph}>✎</Text>
     </Pressable>
   );
 });
@@ -68,15 +128,20 @@ const ModelRow = React.memo(function ModelRowView({
 export function ProviderScreen({
   provider,
   models,
+  unavailable,
   defaultModel,
   searchHandle,
   error,
   onSetDefault,
   onEditProvider,
+  onEditModel,
+  onAddModel,
   onBack,
 }: {
   provider: ProviderInfo;
   models: ModelOption[];
+  /** This provider's models that cannot run, with the reason. Shown above the list, never in it. */
+  unavailable: UnavailableModel[];
   /** The global default id, so the row in force is marked. */
   defaultModel: string;
   /** Where the hardware back key reads and clears the search from. */
@@ -85,6 +150,8 @@ export function ProviderScreen({
   error: string | null;
   onSetDefault: (modelId: string) => void;
   onEditProvider: () => void;
+  onEditModel: (model: ModelOption | UnavailableModel) => void;
+  onAddModel: () => void;
   onBack: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -114,9 +181,49 @@ export function ProviderScreen({
 
   const renderModel = useCallback(
     ({ item }: { item: ModelOption }) => (
-      <ModelRow model={item} isDefault={item.id === defaultModel} onSetDefault={onSetDefault} />
+      <ModelRow
+        model={item}
+        isDefault={item.id === defaultModel}
+        onSetDefault={onSetDefault}
+        onEdit={onEditModel}
+      />
     ),
-    [defaultModel, onSetDefault],
+    [defaultModel, onEditModel, onSetDefault],
+  );
+
+  const shownUnavailable = useMemo(
+    () =>
+      needle
+        ? unavailable.filter(
+            model => model.label.toLowerCase().includes(needle) || model.id.toLowerCase().includes(needle),
+          )
+        : unavailable,
+    [needle, unavailable],
+  );
+
+  // Above the list rather than inside it: these rows are not choices, and a FlatList header keeps
+  // the virtualization for the hundreds of models a discovering provider brings.
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.headerBlock}>
+        <Pressable
+          onPress={onAddModel}
+          style={styles.addRow}
+          accessibilityRole="button"
+          accessibilityLabel="Add a model">
+          <Text style={styles.addText}>+ declare a model</Text>
+        </Pressable>
+        {shownUnavailable.length > 0 ? (
+          <View style={styles.unavailableBlock}>
+            <Text style={styles.sectionLabel}>{`not runnable (${shownUnavailable.length})`}</Text>
+            {shownUnavailable.map(model => (
+              <UnavailableRow key={model.id} model={model} onEdit={onEditModel} />
+            ))}
+          </View>
+        ) : null}
+      </View>
+    ),
+    [onAddModel, onEditModel, shownUnavailable, styles],
   );
 
   return (
@@ -174,6 +281,7 @@ export function ProviderScreen({
         data={shown}
         keyExtractor={keyOfModel}
         renderItem={renderModel}
+        ListHeaderComponent={listHeader}
         ItemSeparatorComponent={Separator}
         initialNumToRender={14}
         maxToRenderPerBatch={12}
@@ -249,6 +357,52 @@ const createStyles = (palette: Palette) => ({
     letterSpacing: 0.3,
   },
   checkmark: { fontSize: font.body, color: palette.accent, fontWeight: '600' as const },
+  linkTitleOff: { fontSize: font.body, fontWeight: '600' as const, color: palette.textMuted },
+  badgeAlt: {
+    fontSize: font.micro,
+    color: palette.textMuted,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  badgeWarn: {
+    fontSize: font.micro,
+    color: palette.danger,
+    borderWidth: 1,
+    borderColor: palette.danger,
+    borderRadius: radius.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  editTarget: {
+    width: 32,
+    height: 32,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  headerBlock: { gap: space.sm, paddingBottom: space.sm },
+  addRow: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  addText: { fontSize: font.body, color: palette.accent, fontWeight: '600' as const },
+  unavailableBlock: { borderBottomWidth: 1, borderBottomColor: palette.border },
+  sectionLabel: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+  },
   search: {
     marginHorizontal: space.md,
     marginTop: space.md,
