@@ -13,7 +13,7 @@ import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
 import { encodeCommandsList, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
-import { draftAttachmentsOf, draftTextOf, saveDraft } from '../core/drafts';
+import { clearDraft, draftAttachmentsOf, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid } from '../core/utils';
@@ -172,6 +172,37 @@ export function ChatScreen({
     setAttachments(draftAttachmentsOf(threadId));
     return () => saveDraft(threadId, draftRef.current, attachmentsRef.current);
   }, [threadId]);
+
+  /** Every change, so the owner's other devices see it. Debounced and deduped by the store. */
+  const changeDraft = useCallback(
+    (text: string) => {
+      setDraft(text);
+      queueDraftSync(threadId, text);
+    },
+    [threadId],
+  );
+
+  /** Sent, or otherwise consumed: drops the pending sync too, or it would land after the send. */
+  const consumeDraft = useCallback(() => {
+    setDraft('');
+    clearDraft(threadId);
+  }, [threadId]);
+
+  /**
+   * A draft written on another device. Applied only into a composer that is empty, or that the
+   * owner is not typing in: replacing live text loses characters and throws the caret to the end,
+   * and the phone in a pocket is exactly the surface that should catch up.
+   */
+  const focusedRef = useRef(false);
+  useEffect(
+    () =>
+      onRemoteDraft(changed => {
+        if (changed !== threadId) return;
+        if (draftRef.current.trim() && focusedRef.current) return;
+        setDraft(draftTextOf(threadId));
+      }),
+    [threadId],
+  );
 
   // Re-fetch the catalog every time the user starts a command: a command added on the server
   // is visible on the next "/" without an app release.
@@ -386,7 +417,7 @@ export function ChatScreen({
     // /tag is app-owned: it opens the tags page or the tag editor, never a message to the
     // model. Intercepted here so it works even when the slash-menu is closed.
     if (!stagedLocation && attachments.length === 0 && onTagCommand?.(text) === true) {
-      setDraft('');
+      consumeDraft();
       return;
     }
     // /new is the wire form of the + button: a fresh conversation, not a reset of this one.
@@ -394,7 +425,7 @@ export function ChatScreen({
     // server as a command about a conversation the user is leaving.
     if (!stagedLocation && attachments.length === 0 && text.toLowerCase() === '/new') {
       onNewThread();
-      setDraft('');
+      consumeDraft();
       return;
     }
     if (attachments.length > 0) {
@@ -441,19 +472,19 @@ export function ChatScreen({
       setAddressOverride(null);
       onSend(text, undefined, locationToSend);
     }
-    setDraft('');
-  }, [attachments, deviceInfo, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
+    consumeDraft();
+  }, [attachments, consumeDraft, deviceInfo, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 
   /** Up arrow on an empty composer: the last thing sent, back in the field. */
   const recallLast = useCallback(() => {
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index];
       if (item?.kind === 'text' && item.role === 'user' && item.text.trim()) {
-        setDraft(item.text);
+        changeDraft(item.text);
         return;
       }
     }
-  }, [items]);
+  }, [changeDraft, items]);
 
   const empty = items.length === 0;
 
@@ -623,7 +654,8 @@ export function ChatScreen({
             hero
             autoFocus={autoFocusHero}
             value={draft}
-            onChange={setDraft}
+            onChange={changeDraft}
+            onFocusChange={focused => (focusedRef.current = focused)}
             onSend={submit}
             onRecorded={stageVoiceNote}
             onRecordingError={setUploadError}
@@ -702,7 +734,8 @@ export function ChatScreen({
         <View style={column}>
         <Composer
           value={draft}
-          onChange={setDraft}
+          onChange={changeDraft}
+          onFocusChange={focused => (focusedRef.current = focused)}
           onSend={submit}
           onRecorded={stageVoiceNote}
           onRecordingError={setUploadError}

@@ -236,6 +236,20 @@ export interface ChatHistoryFrame {
   hasMore?: boolean;
   /** What to send as `before` to reach the page just older than this one. */
   nextBefore?: number;
+  /** The conversation's unsent draft, on the newest page only. Absent means there is none. */
+  draft?: string;
+}
+
+/**
+ * A draft changed on another of the owner's devices. Applied only when the local composer is empty
+ * or unfocused: replacing text being typed loses characters and throws the caret to the end.
+ */
+export interface DraftChangedFrame {
+  type: 'draft.changed';
+  threadId: string;
+  text: string;
+  /** The server's clock, so two devices order their writes the same way. */
+  ts: number;
 }
 
 export interface SessionSummary {
@@ -256,6 +270,8 @@ export interface SessionSummary {
   activeRun?: boolean;
   /** Workspace key the conversation runs in: 'default' or a config.workspaces key. */
   workspace?: string;
+  /** The conversation holds text typed and not sent. One bit: the text itself rides on chat.history. */
+  hasDraft?: boolean;
 }
 
 export interface CommandsListResultFrame {
@@ -1245,6 +1261,7 @@ export type ServerFrame =
   | StreamAbortFrame
   | ToolCallFrame
   | ChatHistoryFrame
+  | DraftChangedFrame
   | SessionListResultFrame
   | SessionWorkspaceSetResultFrame
   | CommandsListResultFrame
@@ -1317,6 +1334,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.stream.abort',
   'chat.tool',
   'chat.history',
+  'draft.changed',
   'chat.command.pending',
   'chat.command.result',
   'chat.send.queued',
@@ -1518,6 +1536,11 @@ export function encodeSessionPin(threadId: string, pinned: boolean): string {
 /** The pinned list as the owner just dropped it. Ids absent from it keep their pin. */
 export function encodeSessionPinOrder(threadIds: string[]): string {
   return JSON.stringify({ type: 'session.pin.order', threadIds });
+}
+
+/** What is typed and not sent, for the owner's other devices. Empty text clears it. */
+export function encodeDraftSet(threadId: string, text: string): string {
+  return JSON.stringify({ type: 'draft.set', threadId, text });
 }
 
 export function encodeApprovalResponse(id: string, accepted: boolean): string {

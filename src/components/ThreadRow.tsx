@@ -56,7 +56,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
         onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${pinned ? ', hold to reorder' : ''}`}>
+        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${item.hasDraft ? ', unsent draft' : ''}${pinned ? ', hold to reorder' : ''}`}>
         <View style={styles.titleRow}>
           {unread ? <View style={styles.dot} /> : null}
           <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
@@ -65,6 +65,8 @@ export const ThreadRow = React.memo(function ThreadRowRow({
           <Text style={styles.date}>{formatDate(item.lastActiveAt)}</Text>
         </View>
         {item.messageCount > 0 ? <Text style={styles.meta}>{item.messageCount} messages</Text> : null}
+        {/* Server-side, so a message begun on another device is findable from this one. */}
+        {item.hasDraft ? <Text style={styles.draft}>draft</Text> : null}
         {item.workspace && item.workspace !== 'default' ? (
           <Text style={styles.workspace}>{item.workspace}</Text>
         ) : null}
@@ -93,6 +95,7 @@ const createStyles = (palette: Palette) => ({
   titleUnread: { fontWeight: '700' as const },
   date: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   meta: { fontSize: font.small, color: palette.textFaint },
+  draft: { alignSelf: 'flex-start' as const, fontSize: font.micro, color: palette.accent },
   /** The named workspace a conversation runs in; the default one stays unlabelled. */
   workspace: {
     alignSelf: 'flex-start' as const,

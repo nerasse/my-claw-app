@@ -15,6 +15,7 @@ import { sessionInstructionsStore } from './sessionInstructions';
 import { providersEnvStore } from './providers';
 import { statusStore } from './status';
 import { locationPreview } from './locationPreview';
+import { applyRemoteDraft } from './drafts';
 import { registerForPush } from './notifications';
 import { uuid } from './utils';
 import {
@@ -338,7 +339,14 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         nextBefore: frame.nextBefore ?? 0,
         hasMore: frame.hasMore === true && frame.nextBefore !== undefined,
       });
+      // Only a draft the server actually holds is applied. An absent one means "no draft there",
+      // which must not wipe text typed here and not yet synced: losing what is written is worse
+      // than keeping a draft one beat longer than the device that cleared it.
+      if (!frame.before && frame.draft) applyRemoteDraft(frame.threadId, frame.draft);
       if (!frame.before) chatStore.markRead(frame.threadId);
+      break;
+    case 'draft.changed':
+      applyRemoteDraft(frame.threadId, frame.text);
       break;
     case 'voice.mode.result':
       setVoice(frame);

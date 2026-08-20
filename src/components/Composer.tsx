@@ -26,6 +26,7 @@ import { font, lineHeightFor, radius, space, useTheme, useThemedStyles, type Pal
 export function Composer({
   value,
   onChange,
+  onFocusChange,
   onSend,
   hint,
   hero,
@@ -51,6 +52,8 @@ export function Composer({
 }: {
   value: string;
   onChange: (text: string) => void;
+  /** Whether the field holds the caret: a draft from another device must not interrupt typing. */
+  onFocusChange?: (focused: boolean) => void;
   onSend: () => void;
   /** Shown above the field when something is worth knowing (offline, queued frames). */
   hint?: string;
@@ -315,6 +318,8 @@ export function Composer({
             style={[styles.input, hero && styles.inputHero, dense && !hero && styles.inputDense]}
             value={value}
             onChangeText={onChange}
+            onFocus={() => onFocusChange?.(true)}
+            onBlur={() => onFocusChange?.(false)}
             onSubmitEditing={submitOrSelect}
             onKeyPress={onKeyPress}
             placeholder={hero ? 'Ask anything' : 'message'}
