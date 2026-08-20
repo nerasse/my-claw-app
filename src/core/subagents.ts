@@ -95,10 +95,21 @@ export interface TemporaryRow {
 export type RosterRow = NamedRow | TemporaryRow;
 
 export interface RosterGroup {
-  major: 'named' | 'temporary';
+  /**
+   * The first grouping level. `named`/`temporary` inside one conversation's roster; a scope label
+   * (`public`, `workspace · <key>`) on the drawer page, which groups by who can reach an agent
+   * rather than by how long it lives.
+   */
+  major: string;
   /** The agent type, the second grouping level. */
   type: string;
   rows: RosterRow[];
+}
+
+/** What the roster shows next to an agent, and what the drawer page groups by. */
+export function scopeLabelOf(entry: SubAgentEntry): string {
+  if (entry.visibility !== 'workspace') return entry.visibility;
+  return `workspace · ${entry.workspaceKey ?? 'default'}`;
 }
 
 /**
@@ -142,6 +153,38 @@ export function groupRoster(agents: SubAgentEntry[]): RosterGroup[] {
       .map(([type, rows]) => ({ major, type, rows }));
 
   return [...groupsOf(buckets.get('named')!, 'named'), ...groupsOf(buckets.get('temporary')!, 'temporary')];
+}
+
+/**
+ * The agents this conversation shares with others, grouped by scope: `public` first, then one
+ * section per workspace. A workspace agent is only ever in the roster when the conversation that
+ * asked belongs to that workspace -- the server filters before sending -- so a section here is a
+ * scope the owner is actually inside, never a directory of everything that exists.
+ *
+ * One-shots are absent by construction: they are private, and private agents belong to the
+ * conversation roster rather than to this page.
+ */
+export function groupSharedRoster(agents: SubAgentEntry[]): RosterGroup[] {
+  const buckets = new Map<string, SubAgentEntry[]>();
+  for (const entry of agents) {
+    if (entry.visibility !== 'global' && entry.visibility !== 'workspace') continue;
+    const label = entry.visibility === 'global' ? 'public' : scopeLabelOf(entry);
+    const rows = buckets.get(label) ?? [];
+    rows.push(entry);
+    buckets.set(label, rows);
+  }
+
+  // `public` leads because it is the widest scope; the workspaces follow alphabetically, so a
+  // section does not move under the reader when an agent starts or stops running.
+  const labels = [...buckets.keys()].sort((a, b) => {
+    if (a === 'public') return -1;
+    if (b === 'public') return 1;
+    return a.localeCompare(b);
+  });
+
+  return labels.flatMap(label =>
+    groupRoster(buckets.get(label)!).map(group => ({ ...group, major: label })),
+  );
 }
 
 export function useSubAgents(threadId: string | null): ThreadRoster {

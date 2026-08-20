@@ -1,4 +1,4 @@
-import { groupRoster, subAgentStore } from '../subagents';
+import { groupRoster, groupSharedRoster, scopeLabelOf, subAgentStore } from '../subagents';
 import type { SubAgentEntry } from '../protocol';
 
 const entry = (over: Partial<SubAgentEntry> & { id: string }): SubAgentEntry => ({
@@ -77,6 +77,43 @@ describe('groupRoster', () => {
 
   it('is empty when there is nothing, rather than showing empty groups', () => {
     expect(groupRoster([])).toEqual([]);
+  });
+});
+
+describe('groupSharedRoster', () => {
+  it('puts public first, then one section per workspace, alphabetically', () => {
+    const groups = groupSharedRoster([
+      entry({ id: 'subagent/b-0001', visibility: 'workspace', workspaceKey: 'beta' }),
+      entry({ id: 'subagent/a-0002', visibility: 'workspace', workspaceKey: 'alpha' }),
+      entry({ id: 'subagent/g-0003' }),
+    ]);
+    expect(groups.map(g => g.major)).toEqual(['public', 'workspace · alpha', 'workspace · beta']);
+  });
+
+  it('keeps private agents out: they belong to the conversation roster', () => {
+    const groups = groupSharedRoster([
+      entry({ id: 'subagent/p-0001', visibility: 'private' }),
+      oneShot(),
+      entry({ id: 'subagent/g-0002' }),
+    ]);
+    expect(groups.flatMap(g => g.rows.map(r => r.entry.id))).toEqual(['subagent/g-0002']);
+  });
+
+  it('groups by agent type inside a workspace section, like the conversation roster', () => {
+    const groups = groupSharedRoster([
+      entry({ id: 'subagent/w-0001', type: 'writer', visibility: 'workspace', workspaceKey: 'alpha' }),
+      entry({ id: 'subagent/r-0002', type: 'research', visibility: 'workspace', workspaceKey: 'alpha' }),
+    ]);
+    expect(groups.map(g => `${g.major}/${g.type}`)).toEqual([
+      'workspace · alpha/research',
+      'workspace · alpha/writer',
+    ]);
+  });
+
+  it('an unkeyed workspace agent reads as the default workspace, not as public', () => {
+    const agent = entry({ id: 'subagent/d-0001', visibility: 'workspace' });
+    expect(scopeLabelOf(agent)).toBe('workspace · default');
+    expect(groupSharedRoster([agent]).map(g => g.major)).toEqual(['workspace · default']);
   });
 });
 

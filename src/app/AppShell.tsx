@@ -27,7 +27,7 @@ import {
   type TextItem,
 } from '../core/chat';
 import { resumeFrames } from '../core/resume';
-import { groupRoster, useSubAgents } from '../core/subagents';
+import { groupRoster, groupSharedRoster, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { isPinned, migrateLocalPins, setPinned } from '../core/pinned';
 import { parseTagCommand } from '../core/commands';
@@ -1325,19 +1325,14 @@ export function AppShell(): React.JSX.Element {
   const roster = useSubAgents(rosterThread);
   const spawnCards = useSpawnCards(activeThread);
   const rosterGroups = useMemo(() => groupRoster(roster.agents), [roster.agents]);
+  // The drawer page shows what this conversation shares with others: public agents, then the
+  // agents of each workspace it can reach. Private ones stay out -- they belong to the
+  // conversation roster, which is the other entry point.
   const globalAgents = useMemo(
-    () =>
-      roster.agents
-        .filter(agent => agent.visibility === 'global')
-        .sort((a, b) => {
-          const running = Number(b.status === 'running') - Number(a.status === 'running');
-          if (running !== 0) return running;
-          const created = b.createdAt.localeCompare(a.createdAt);
-          return created !== 0 ? created : a.id.localeCompare(b.id);
-        }),
+    () => roster.agents.filter(agent => agent.visibility === 'global' || agent.visibility === 'workspace'),
     [roster.agents],
   );
-  const globalGroups = useMemo(() => groupRoster(globalAgents), [globalAgents]);
+  const globalGroups = useMemo(() => groupSharedRoster(globalAgents), [globalAgents]);
   const subagentCount = useMemo(
     () => ({
       total: rosterGroups.reduce((sum, group) => sum + group.rows.length, 0),
@@ -3579,7 +3574,7 @@ export function AppShell(): React.JSX.Element {
       {agentsGlobalOpen ? (
         <AgentsScreen
           parentTitle="conversations"
-          subtitle="shared across conversations"
+          subtitle="public and per-workspace"
           groups={globalGroups}
           status={roster.status}
           onClose={() => setAgentsGlobalOpen(false)}

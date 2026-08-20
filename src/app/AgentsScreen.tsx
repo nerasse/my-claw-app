@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import type { RosterGroup, RosterRow, SubAgentsStatus } from '../core/subagents';
+import { scopeLabelOf, type RosterGroup, type RosterRow, type SubAgentsStatus } from '../core/subagents';
 import type { SubAgentEntry } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
 
@@ -47,7 +47,7 @@ const AgentCard = React.memo(function AgentCardView({
         )}
       </View>
       <Text style={styles.cardMeta} numberOfLines={1}>
-        {`${entry.messageCount} msg${entry.messageCount === 1 ? '' : 's'} · ${entry.visibility}`}
+        {`${entry.messageCount} msg${entry.messageCount === 1 ? '' : 's'} · ${scopeLabelOf(entry)}`}
         {row.kind === 'temporary' ? ' · one-shot' : ''}
         {entry.model ? ` · ${entry.model}` : ''}
       </Text>

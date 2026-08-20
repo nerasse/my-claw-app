@@ -258,7 +258,7 @@ describe('the drawer Sub-Agents entry', () => {
     await pressLabel(tree, 'Open shared agents, 1');
 
     // The page: globals listed, a conversation's private one absent.
-    expect(textsOf(tree)).toContain('shared across conversations');
+    expect(textsOf(tree)).toContain('public and per-workspace');
     expect(textsOf(tree)).toContain('digger-a1b2');
     expect(textsOf(tree)).not.toContain('secret-e5f6');
     expect(labelsOf(tree)).toContain('Open sub-agent subagent/digger-a1b2, idle');
@@ -266,6 +266,25 @@ describe('the drawer Sub-Agents entry', () => {
     await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
     expect(textsOf(tree)).toContain('digger-a1b2 · research');
     expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
+    await settleAndUnmount(tree);
+  });
+
+  it('sections the page by scope: public first, then one per workspace', async () => {
+    const tree = await seed([
+      agent({ id: 'subagent/shared-a1b2' }),
+      agent({ id: 'subagent/builder-c3d4', visibility: 'workspace', workspaceKey: 'alpha' }),
+      agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
+    ]);
+    await pressLabel(tree, 'Open conversations');
+    await pressLabel(tree, 'Open shared agents, 2');
+
+    const texts = textsOf(tree);
+    expect(texts).toContain('public');
+    expect(texts).toContain('workspace · alpha');
+    expect(texts).toContain('shared-a1b2');
+    expect(texts).toContain('builder-c3d4');
+    // A private agent belongs to the conversation roster, not to this page.
+    expect(texts).not.toContain('secret-e5f6');
     await settleAndUnmount(tree);
   });
 
