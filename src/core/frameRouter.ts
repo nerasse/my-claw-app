@@ -424,9 +424,15 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       instructionsStore.receiveSaved(frame);
       break;
     case 'chat.send.queued':
-      // Held behind a compaction: the message left, its run has not started. Said on the
-      // bubble itself, because a silent send during a two-minute hold reads as a drop.
-      chatStore.markQueued(frame.threadId, frame.replyToId);
+      // Held behind a compaction, or queued in the active run's mailbox for the next turn boundary:
+      // the message left, its run has not started (or not reached it yet). Said on the bubble
+      // itself, because a silent send during a two-minute hold reads as a drop.
+      chatStore.markQueued(frame.threadId, frame.replyToId, frame.reason);
+      break;
+    case 'chat.send.acked':
+      // The run drained a queued injection at a turn boundary: lift the mark on the bubble that
+      // carried it. The stream that follows opens its own bubble; this one stays answered.
+      chatStore.clearQueued(frame.threadId, frame.replyToId);
       break;
     case 'chat.command.pending':
       chatStore.addCommandPending(frame.threadId, frame.replyToId, frame.text);

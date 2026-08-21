@@ -346,7 +346,7 @@ function DetailsFold({ payload }: { payload: StatusPayload }): React.JSX.Element
         {s ? <Row label="created" value={s.createdAt.slice(0, 16).replace('T', ' ')} /> : null}
         {s ? <Row label="session id" value={s.id} monospace /> : null}
         {s?.subAgent ? <Row label="spawned by" value={s.subAgent.parentSessionId} monospace /> : null}
-        {r.sdkSessionId ? <Row label="sdk session" value={r.sdkSessionId} monospace /> : null}
+        {r.activeRun === 'none' ? null : <Row label="run" value={r.activeRun} monospace />}
       </Card>
     </Fold>
   );

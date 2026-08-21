@@ -2404,7 +2404,7 @@ export function AppShell(): React.JSX.Element {
   };
   const saveProviderEdit = (patch: {
     key: string;
-    providerType: 'openai' | 'claude-sdk' | 'codex' | 'anthropic';
+    providerType: 'openai' | 'codex' | 'anthropic';
     baseUrl: string;
     group: string;
     discover: boolean;

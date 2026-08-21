@@ -4,7 +4,7 @@ import type { ProviderInfo, ProvidersEnvResultFrame } from '../core/protocol';
 import { envNamePresent } from '../core/providers';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
-export type ProviderType = 'openai' | 'claude-sdk' | 'codex' | 'anthropic';
+export type ProviderType = 'openai' | 'codex' | 'anthropic';
 
 /** Server rule for the config key (the MCP one: it becomes part of the model namespace). */
 const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
@@ -20,9 +20,8 @@ export function suggestEnvName(key: string): string {
 /**
  * The provider form, one page for both halves: creating (empty key, the env value may ride
  * along on the same Save) and editing (the key is the rename target, the env key has its own
- * page). Fields are type-aware: claude-sdk and codex own their targets and their tokens, so
- * baseUrl, the env section and prompt caching are openai-only, and fallbackModel is
- * claude-sdk-only.
+ * page). Fields are type-aware: codex and anthropic own their tokens, so baseUrl, the env
+ * section and prompt caching are openai-only, and fallbackModel is anthropic/codex-only.
  */
 export function ProviderEditScreen({
   mode,
@@ -131,7 +130,7 @@ export function ProviderEditScreen({
         <View style={styles.category}>
           <Text style={styles.section}>engine</Text>
           <View style={styles.segment}>
-            {(['openai', 'claude-sdk', 'codex', 'anthropic'] as const).map(type => (
+            {(['openai', 'codex', 'anthropic'] as const).map(type => (
               <Pressable
                 key={type}
                 onPress={() => setProviderType(type)}
@@ -270,13 +269,13 @@ export function ProviderEditScreen({
                 style={styles.input}
                 value={fallbackModel}
                 onChangeText={setFallbackModel}
-                placeholder="fallback model id (claude-sdk and anthropic only)"
+                placeholder="fallback model id (codex and anthropic only)"
                 placeholderTextColor={styles.placeholder.color}
                 autoCorrect={false}
                 accessibilityLabel="Provider fallback model"
               />
             </>
-          ) : providerType === 'claude-sdk' || providerType === 'anthropic' ? (
+          ) : providerType === 'anthropic' ? (
             <TextInput
               style={styles.input}
               value={fallbackModel}

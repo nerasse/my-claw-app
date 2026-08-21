@@ -689,16 +689,29 @@ export interface CommandResultFrame {
 }
 
 /**
- * The send is parked: a compaction is rewriting the history its run would resume, and the server
- * holds it until that finishes (a minute or two). Without this the bubble sits there with nothing
- * behind it and the app looks dropped. The stream that follows, or the run's end, lifts it.
+ * The send is parked: a compaction is rewriting the history its run would resume, so the router
+ * holds it until that finishes (a minute or two); or a run is already active and the message was
+ * queued in its mailbox for the next turn boundary. Lifted by `chat.send.acked` (an injection
+ * drained) or by the stream that follows (a compaction released). Without this the bubble sits
+ * there with nothing behind it and the app looks dropped.
  */
 export interface SendQueuedFrame {
   type: 'chat.send.queued';
   threadId: string;
   /** The chat.send id being held: the mark belongs to that bubble, not to the thread. */
   replyToId: string;
-  reason: 'compaction';
+  reason: 'compaction' | 'injection';
+}
+
+/**
+ * A queued injection was drained into the run at a turn boundary. Lifts the "queued for the
+ * next turn" mark on the bubble that carried it.
+ */
+export interface SendAckedFrame {
+  type: 'chat.send.acked';
+  threadId: string;
+  /** The chat.send id that was queued and is now drained into the run. */
+  replyToId: string;
 }
 
 /**
@@ -790,7 +803,6 @@ export interface StatusPayload {
     activeRun: string;
     verbose: boolean;
     approvedTools: string[];
-    sdkSessionId?: string;
   };
 }
 
@@ -1150,7 +1162,7 @@ export interface ProvidersEnvResultFrame {
 export interface ProviderPatch {
   type: 'providers.upsert';
   key: string;
-  providerType?: 'openai' | 'claude-sdk' | 'codex' | 'anthropic';
+  providerType?: 'openai' | 'codex' | 'anthropic';
   baseUrl?: string;
   apiKeyEnv?: string;
   group?: string;
@@ -1347,6 +1359,7 @@ export type ServerFrame =
   | CommandPendingFrame
   | CommandResultFrame
   | SendQueuedFrame
+  | SendAckedFrame
   | ChatClearedFrame
   | TranscriptFrame
   | ApprovalRequestFrame
@@ -1407,6 +1420,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.command.pending',
   'chat.command.result',
   'chat.send.queued',
+  'chat.send.acked',
   'chat.cleared',
   'session.list.result',
   'session.workspace.set.result',

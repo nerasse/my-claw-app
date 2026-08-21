@@ -124,9 +124,9 @@ describe('chatStore compaction hold', () => {
     chatStore.addUserMessage(THREAD, 'm1', 'first');
     chatStore.addUserMessage(THREAD, 'm2', 'second');
     chatStore.addUserMessage(THREAD, 'm3', 'third');
-    chatStore.markQueued(THREAD, 'm1');
-    chatStore.markQueued(THREAD, 'm2');
-    chatStore.markQueued(THREAD, 'm3');
+    chatStore.markQueued(THREAD, 'm1', 'compaction');
+    chatStore.markQueued(THREAD, 'm2', 'compaction');
+    chatStore.markQueued(THREAD, 'm3', 'compaction');
     expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.queuedSince)).toHaveLength(3);
 
     chatStore.clearQueued(THREAD);
@@ -140,7 +140,7 @@ describe('chatStore compaction hold', () => {
     // The window that did not type it has no local bubble: the mark names the sender's id, so it
     // only lands because the echo created the bubble under that same id.
     chatStore.echoUserMessage(THREAD, 'm1', 'from the phone');
-    chatStore.markQueued(THREAD, 'm1');
+    chatStore.markQueued(THREAD, 'm1', 'compaction');
     const item = chatStore.getItems(THREAD)[0];
     expect(item!.kind === 'text' ? item!.queuedSince : undefined).toBeGreaterThan(0);
 
@@ -153,12 +153,30 @@ describe('chatStore compaction hold', () => {
 
   test('the mark is stamped once, so a repeated hold does not restart the clock', () => {
     chatStore.addUserMessage(THREAD, 'm1', 'first');
-    chatStore.markQueued(THREAD, 'm1');
+    chatStore.markQueued(THREAD, 'm1', 'compaction');
     const first = chatStore.getItems(THREAD)[0];
     const since = first!.kind === 'text' ? first!.queuedSince : undefined;
-    chatStore.markQueued(THREAD, 'm1');
+    chatStore.markQueued(THREAD, 'm1', 'compaction');
     const again = chatStore.getItems(THREAD)[0];
     expect(again!.kind === 'text' ? again!.queuedSince : undefined).toBe(since);
+  });
+
+  test('an injection hold names its reason, and acking one bubble lifts only that mark', () => {
+    // Two sends land while a run is active: both are queued in its mailbox, the run drains the
+    // first at a turn boundary before the second. acked names the id so the first lift does not
+    // take the second's mark with it.
+    chatStore.addUserMessage(THREAD, 'm1', 'first');
+    chatStore.addUserMessage(THREAD, 'm2', 'second');
+    chatStore.markQueued(THREAD, 'm1', 'injection');
+    chatStore.markQueued(THREAD, 'm2', 'injection');
+    const items = () => chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.queuedSince) as Array<{ id: string; queuedReason?: string }>;
+    expect(items()).toHaveLength(2);
+    expect(items().find(i => i.id === 'm1')?.queuedReason).toBe('injection');
+
+    chatStore.clearQueued(THREAD, 'm1');
+    const held = items();
+    expect(held).toHaveLength(1);
+    expect(held[0].id).toBe('m2');
   });
 });
 

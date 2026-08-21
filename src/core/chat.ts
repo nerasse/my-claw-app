@@ -27,6 +27,9 @@ export interface TextItem {
    * the meantime.
    */
   queuedSince?: number;
+  /** Why the server parked this send: a compaction holding the history, or the run's mailbox
+   *  holding it for the next turn. Drives the bubble's label. */
+  queuedReason?: 'compaction' | 'injection';
   /** A long aside a command produced (a compaction summary), folded away under the outcome. */
   details?: string;
   /** A statement of the system (a model fallback), drawn apart for the same reason. */
@@ -397,14 +400,14 @@ class ChatStoreImpl {
   }
 
   /**
-   * The server parked this send: a compaction is rewriting the history its run would resume. The
-   * mark goes on the bubble the owner already sees rather than on a new one, because nothing new
-   * happened, the message simply has not started yet.
-   */
-  markQueued(threadId: string, id: string): void {
+   * The server parked this send: a compaction is rewriting the history its run would resume, or a
+   *  run is active and the message waits in its mailbox for the next turn boundary. The mark goes
+   *  on the bubble the owner already sees rather than on a new one, because nothing new happened,
+   *  the message simply has not started yet. */
+  markQueued(threadId: string, id: string, reason: 'compaction' | 'injection'): void {
     const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id);
     if (!item || item.kind !== 'text' || item.queuedSince) return;
-    this.patch(threadId, id, { queuedSince: Date.now() });
+    this.patch(threadId, id, { queuedSince: Date.now(), queuedReason: reason });
   }
 
   /**
@@ -415,15 +418,18 @@ class ChatStoreImpl {
    * typed while it rewrites the history, and a per-thread slot kept only the last of them, so
    * the bubbles before it stayed under a badge nothing was ever going to clear.
    */
-  clearQueued(threadId: string): void {
+  clearQueued(threadId: string, id?: string): void {
     const items = this.threads.get(threadId);
-    if (!items?.some(item => item.kind === 'text' && item.queuedSince !== undefined)) return;
+    const matches = (item: ChatItem): item is TextItem =>
+      item.kind === 'text' && item.queuedSince !== undefined && (id === undefined || item.id === id);
+    if (!items?.some(matches)) return;
     this.threads.set(
       threadId,
       items.map(item => {
-        if (item.kind !== 'text' || item.queuedSince === undefined) return item;
+        if (!matches(item)) return item;
         const rest = { ...item };
         delete rest.queuedSince;
+        delete rest.queuedReason;
         return rest;
       }),
     );

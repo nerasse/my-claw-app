@@ -122,12 +122,13 @@ export const Bubble = React.memo(function BubbleView({
           />
         ) : null}
 
-        {/* Held by the server: a compaction is rewriting the history this message's run would
-            resume, so nothing starts until it ends. Counted, because a still line during a
-            two-minute wait reads as a message that never left. */}
+        {/* Held by the server: either a compaction is rewriting the history this message's run
+            would resume (so nothing starts until it ends), or a run is already active and the
+            message waits in its mailbox for the next turn boundary. Counted either way, because a
+            still line during the wait reads as a message that never left. */}
         {item.queuedSince ? (
           <Text style={[styles.queued, agent ? null : styles.queuedUser]}>
-            waiting for the compaction
+            {item.queuedReason === 'injection' ? 'queued for the next turn' : 'waiting for the compaction'}
             <CommandElapsed since={item.queuedSince} onAccent={!agent} />
           </Text>
         ) : null}

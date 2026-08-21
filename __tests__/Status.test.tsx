@@ -66,7 +66,7 @@ const PAYLOAD: StatusPayload = {
     ],
   },
   delegated: null,
-  runtime: { activeRun: 'none', verbose: true, approvedTools: ['bash'], sdkSessionId: 'sdk-1' },
+  runtime: { activeRun: 'none', verbose: true, approvedTools: ['bash'] },
 };
 
 function emit(frame: Record<string, unknown>): Promise<void> {
