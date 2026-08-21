@@ -201,6 +201,24 @@ describe('chatStore tool cards', () => {
     expect(finished).toHaveLength(1);
     expect(finished[0]).toMatchObject({ kind: 'tool', id: 'c2', name: 'bash', running: false, output: 'file.txt', ok: true });
   });
+
+  test('live delta chunks append to the running card output, and settle to the final output', () => {
+    chatStore.startToolCall(THREAD, 'c3', 'bash', { command: 'count.sh' });
+    chatStore.appendToolOutput(THREAD, 'c3', { stdout: 'line 1\n' });
+    chatStore.appendToolOutput(THREAD, 'c3', { stdout: 'line 2\n', stderr: 'warn' });
+    const live = chatStore.getItems(THREAD)[0] as { output: string; running: boolean };
+    expect(live.running).toBe(true);
+    expect(live.output).toContain('line 1');
+    expect(live.output).toContain('line 2');
+    expect(live.output).toContain('STDERR: warn');
+
+    // Settling replaces the streamed text with the final output (the server sends the full
+    // accumulated output in the end frame).
+    chatStore.addToolCall(THREAD, { id: 'c3', name: 'bash', args: { command: 'count.sh' }, ok: true, output: 'line 1\nline 2\n', truncated: false });
+    const settled = chatStore.getItems(THREAD)[0] as { output: string; running: boolean };
+    expect(settled.running).toBe(false);
+    expect(settled.output).toBe('line 1\nline 2\n');
+  });
 });
 
 describe('chatStore.seedHistory', () => {

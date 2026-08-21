@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
@@ -33,6 +33,13 @@ export const ToolCard = React.memo(function ToolCardView({
   // on every streaming delta.
   const args = open ? JSON.stringify(item.args, null, 2) : '';
   const running = item.running === true;
+
+  // Auto-expand while a tool streams live output (bash), so the owner watches it land instead of
+  // opening the card manually. Settling (running -> false) leaves the card open: the result is
+  // already on screen, collapsing would hide what was just produced.
+  useEffect(() => {
+    if (running && item.output) setOpen(true);
+  }, [running, item.output]);
 
   return (
     <View style={[styles.card, !item.ok && styles.cardError, open && styles.cardOpen]}>

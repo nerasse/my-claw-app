@@ -270,6 +270,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // the same id and fills the output, upserting in place.
       chatStore.startToolCall(frame.threadId, frame.id, frame.name, frame.args);
       break;
+    case 'chat.tool.delta':
+      // Live output from a running tool (bash): append to the card the start frame opened.
+      chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr });
+      break;
     case 'chat.tool':
       chatStore.addToolCall(frame.threadId, {
         id: frame.id,

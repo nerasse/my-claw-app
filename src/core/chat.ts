@@ -608,6 +608,18 @@ class ChatStoreImpl {
     });
   }
 
+  /** Live output from a running tool (bash): append the chunk to the card the start frame opened.
+   *  Coalesced so a fast command does not re-render on every byte. The `chat.tool` frame settles
+   *  it and replaces the streamed text with the final output. */
+  appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string }): void {
+    const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id && entry.kind === 'tool') as ToolItem | undefined;
+    if (!item || !item.running) return;
+    const append = (item.output ? (item.output.endsWith('\n') || item.output === '' ? '' : '\n') : '') +
+      (chunk.stdout ?? '') +
+      (chunk.stderr ? `${chunk.stdout ? '\n' : ''}STDERR: ${chunk.stderr}` : '');
+    this.patchTool(threadId, id, { output: item.output + append }, true);
+  }
+
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
     this.spawnCards.delete(threadId);

@@ -197,6 +197,18 @@ export interface ToolStartFrame {
   ts: string;
 }
 
+/** Live output from a running tool (bash), appended to the card the start frame opened. Streamed
+ *  in throttled chunks; the `chat.tool` frame that follows settles it. */
+export interface ToolDeltaFrame {
+  type: 'chat.tool.delta';
+  /** Same id as the start/end pair. */
+  id: string;
+  threadId: string;
+  stdout: string;
+  stderr: string;
+  ts: string;
+}
+
 export type HistoryEntry =
   | {
       id: string;
@@ -1354,6 +1366,7 @@ export type ServerFrame =
   | StreamAbortFrame
   | ToolCallFrame
   | ToolStartFrame
+  | ToolDeltaFrame
   | ChatHistoryFrame
   | DraftChangedFrame
   | SessionListResultFrame
@@ -1431,6 +1444,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.stream.abort',
   'chat.tool',
   'chat.tool.start',
+  'chat.tool.delta',
   'chat.history',
   'draft.changed',
   'chat.command.pending',
