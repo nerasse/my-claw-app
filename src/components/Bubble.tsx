@@ -30,6 +30,7 @@ export const Bubble = React.memo(function BubbleView({
   showTime,
   onMenu,
   onOpenAttachment,
+  expandReasoning,
 }: {
   item: TextItem;
   mediaBase: string;
@@ -42,6 +43,8 @@ export const Bubble = React.memo(function BubbleView({
     kind: 'image' | 'text' | 'video' | 'file',
     target: { url: string; filename: string; sizeBytes?: number },
   ) => void;
+  /** Server-owned pref: reasoning blocks start expanded instead of folded. */
+  expandReasoning?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const agent = item.role === 'agent';
@@ -75,7 +78,7 @@ export const Bubble = React.memo(function BubbleView({
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
-          <ReasoningLine reasoning={item.reasoning} tokens={item.reasoningTokens} streaming={item.streaming} />
+          <ReasoningLine reasoning={item.reasoning} tokens={item.reasoningTokens} streaming={item.streaming} expandReasoning={expandReasoning} />
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
         {item.attachments.map(att => (

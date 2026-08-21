@@ -446,6 +446,14 @@ export interface VoiceModeResultFrame {
   cloudAvailable: boolean;
 }
 
+export interface UiPrefsResultFrame {
+  type: 'uiPrefs.result';
+  /** Keep tool cards expanded after their run settles (default false -> folded). */
+  expandTools: boolean;
+  /** Keep the reasoning block expanded after the turn settles (default false -> folded). */
+  expandReasoning: boolean;
+}
+
 /**
  * The server's answer to a manual update request.
  *
@@ -1408,6 +1416,7 @@ export type ServerFrame =
   | DiagReportResultFrame
   | LogsTailResultFrame
   | VoiceModeResultFrame
+  | UiPrefsResultFrame
   | ModelListResultFrame
   | ModelRefreshResultFrame
   | ModelEndpointsResultFrame
@@ -1493,6 +1502,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'diag.report.result',
   'logs.tail.result',
   'voice.mode.result',
+  'uiPrefs.result',
   'update.result',
   'model.list.result',
   'model.refresh.result',
@@ -1606,6 +1616,14 @@ export function encodeVoiceModeGet(): string {
 
 export function encodeVoiceModeSet(mode: VoiceMode): string {
   return JSON.stringify({ type: 'voice.mode.set', mode });
+}
+
+export function encodeUiPrefsGet(): string {
+  return JSON.stringify({ type: 'uiPrefs.get' });
+}
+
+export function encodeUiPrefsSet(prefs: { expandTools?: boolean; expandReasoning?: boolean }): string {
+  return JSON.stringify({ type: 'uiPrefs.set', prefs });
 }
 
 /** Carries nothing: what to install is the registry's answer, not this device's opinion. */

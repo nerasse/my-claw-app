@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import type { DeviceInfo } from '../core/device';
+import type { UiPrefsResultFrame, VoiceMode, VoiceModeResultFrame } from '../core/protocol';
 import type { WsStatusPayload } from '../core/types';
-import type { VoiceMode, VoiceModeResultFrame } from '../core/protocol';
+import type { DeviceInfo } from '../core/device';
 import {
   updateBusy,
   updateHint,
@@ -54,6 +54,8 @@ export function GeneralSettingsScreen({
   onBack,
   voice,
   onVoiceModeChange,
+  uiPrefs,
+  onUiPrefsChange,
   updatePhase,
   now,
   onUpdateServer,
@@ -74,6 +76,9 @@ export function GeneralSettingsScreen({
   /** Null until the server has answered voice.mode.get. */
   voice: VoiceModeResultFrame | null;
   onVoiceModeChange: (mode: VoiceMode) => void;
+  /** Server-owned display prefs; null until uiPrefs.get is answered. */
+  uiPrefs: UiPrefsResultFrame | null;
+  onUiPrefsChange: (prefs: { expandTools?: boolean; expandReasoning?: boolean }) => void;
   /** Everything the update button knows, decided in core/serverUpdate.ts. */
   updatePhase: UpdatePhase;
   /** Ticks once a second while an update runs, and only then: the clock has one owner. */
@@ -222,6 +227,38 @@ export function GeneralSettingsScreen({
         </View>
 
         <View style={styles.categoryItem}>
+          <Text style={styles.section}>appearance</Text>
+          <View style={styles.card}>
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabel}>
+                <Text style={styles.switchTitle}>Always expand tool cards</Text>
+                <Text style={styles.hint}>Keep the full tool output visible once a call settles; off (default) folds it back to one line.</Text>
+              </View>
+              <Switch
+                value={uiPrefs?.expandTools ?? false}
+                onValueChange={value => onUiPrefsChange({ expandTools: value })}
+                disabled={!uiPrefs}
+                accessibilityLabel="Always expand tool cards"
+                accessibilityRole="switch"
+              />
+            </View>
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabel}>
+                <Text style={styles.switchTitle}>Always expand reasoning</Text>
+                <Text style={styles.hint}>Show the model's thinking block open by default; off (default) leaves it folded.</Text>
+              </View>
+              <Switch
+                value={uiPrefs?.expandReasoning ?? false}
+                onValueChange={value => onUiPrefsChange({ expandReasoning: value })}
+                disabled={!uiPrefs}
+                accessibilityLabel="Always expand reasoning"
+                accessibilityRole="switch"
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.categoryItem}>
           <Text style={styles.section}>voice</Text>
           <View style={styles.card}>
             <View style={styles.segment}>
@@ -333,6 +370,20 @@ const createStyles = (palette: Palette) => ({
   segmentItemOff: { opacity: 0.4 },
   segmentText: { fontSize: font.meta, color: palette.textMuted },
   segmentTextActive: { color: palette.text, fontWeight: '600' as const },
+  switchRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.md,
+    paddingVertical: 4,
+  },
+  switchLabel: {
+    flex: 1,
+  },
+  switchTitle: {
+    color: palette.text,
+    fontSize: font.body,
+    fontWeight: '600' as const,
+  },
   hint: { fontSize: font.small, color: palette.textFaint },
   input: {
     borderWidth: 1,

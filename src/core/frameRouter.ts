@@ -34,6 +34,7 @@ import {
   type SkillEntry,
   type ToolEntry,
   type UpdateResultFrame,
+  type UiPrefsResultFrame,
   type VoiceModeResultFrame,
   type WorkspaceEntry,
 } from './protocol';
@@ -79,6 +80,7 @@ export interface ServerFrameHandlers {
   setFilesTotal: (bytes: number) => void;
   setFilesError: (message: string | null) => void;
   setVoice: (frame: VoiceModeResultFrame) => void;
+  setUiPrefs: (frame: UiPrefsResultFrame) => void;
   setUpdate: (frame: UpdateResultFrame) => void;
   setSkills: (skills: SkillEntry[]) => void;
   setSkillsError: (message: string | null) => void;
@@ -134,6 +136,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setFilesTotal,
     setFilesError,
     setVoice,
+    setUiPrefs,
     setUpdate,
     setSkills,
     setSkillsError,
@@ -379,6 +382,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'voice.mode.result':
       setVoice(frame);
+      break;
+    case 'uiPrefs.result':
+      setUiPrefs(frame);
       break;
     case 'update.result':
       setUpdate(frame);

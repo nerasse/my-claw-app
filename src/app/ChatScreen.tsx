@@ -71,6 +71,7 @@ export function ChatScreen({
   onSubAgentMenu,
   onLoadOlder,
   loadingOlder,
+  uiPrefs,
 }: {
   threadId: string;
   title: string;
@@ -123,6 +124,8 @@ export function ChatScreen({
   onLoadOlder: () => void;
   /** A page is in flight: the spinner sits at the far end, which is the top of the reading order. */
   loadingOlder: boolean;
+  /** Server-owned display prefs (tool/reasoning auto-expand), applied to every card. */
+  uiPrefs?: { expandTools?: boolean; expandReasoning?: boolean } | null;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -519,7 +522,7 @@ export function ChatScreen({
       // row index is mapped back into it.
       const chronological = reversed.length - 1 - index;
       return item.kind === 'tool' ? (
-        <ToolCard item={item} subagent={subagentDoors.get(item.id)} spawn={spawnLive?.get(item.id)} onOpenSubAgent={onOpenSubAgent} />
+        <ToolCard item={item} subagent={subagentDoors.get(item.id)} spawn={spawnLive?.get(item.id)} onOpenSubAgent={onOpenSubAgent} expandTools={uiPrefs?.expandTools ?? false} />
       ) : (
         <Bubble
           item={item}
@@ -529,10 +532,11 @@ export function ChatScreen({
           showTime={!(grouped[chronological + 1] ?? false)}
           onMenu={onBubbleMenu}
           onOpenAttachment={openAttachment}
+          expandReasoning={uiPrefs?.expandReasoning ?? false}
         />
       );
     },
-    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive],
+    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, uiPrefs],
   );
 
   const locationLabel = location

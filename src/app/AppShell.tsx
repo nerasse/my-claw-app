@@ -88,6 +88,8 @@ import {
   encodeJobsDelete,
   encodeJobsRuns,
   encodeVoiceModeGet,
+  encodeUiPrefsGet,
+  encodeUiPrefsSet,
   encodeUpdateRun,
   encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
@@ -111,6 +113,7 @@ import {
   type VoiceMode,
 
   type VoiceModeResultFrame,
+  type UiPrefsResultFrame,
   type LocationInput,
   type WorkspaceEntry,
   encodeNotificationsRegister,
@@ -386,6 +389,8 @@ export function AppShell(): React.JSX.Element {
    *  on its own is indistinguishable from nothing having happened. */
   const [skillsNotice, setSkillsNotice] = useState<string | null>(null);
   const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
+  /** Server-owned display prefs: every device starts from the same layout choices. */
+  const [uiPrefs, setUiPrefs] = useState<UiPrefsResultFrame | null>(null);
   /** Everything the update button knows. A phase, not booleans: see core/serverUpdate.ts. */
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: 'idle' });
   /** Only moves while an update runs, so nothing else in the tree redraws on a clock. */
@@ -835,6 +840,7 @@ export function AppShell(): React.JSX.Element {
       setFilesTotal,
       setFilesError,
       setVoice,
+      setUiPrefs,
       setUpdate: frame => setUpdatePhase(phase => reduceUpdate(phase, { type: 'result', frame, now: Date.now() })),
       setSkills,
       setSkillsError,
@@ -1507,6 +1513,7 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     if (!settingsOpen) return;
     connection.send(encodeVoiceModeGet()).catch(() => {});
+    connection.send(encodeUiPrefsGet()).catch(() => {});
   }, [settingsOpen]);
 
   useEffect(() => {
@@ -1650,6 +1657,12 @@ export function AppShell(): React.JSX.Element {
     // No optimistic write: the server answers with the state it actually stored, including what
     // "auto" resolved to, and a switch that lied about that would be worse than a slow one.
     connection.send(encodeVoiceModeSet(mode)).catch(() => {});
+  }, []);
+
+  const changeUiPrefs = useCallback((next: { expandTools?: boolean; expandReasoning?: boolean }) => {
+    // No optimistic write either: the server broadcasts the stored state to every window, and
+    // this one rewrites itself from that (frameRouter.setUiPrefs).
+    connection.send(encodeUiPrefsSet(next)).catch(() => {});
   }, []);
 
   // Diagnostics is a page under Other, not a screen of its own: reached from settings, the
@@ -2644,6 +2657,7 @@ export function AppShell(): React.JSX.Element {
             onNewThread={newThread}
             onLoadOlder={loadOlderHistory}
             loadingOlder={historyPage.loading}
+            uiPrefs={uiPrefs}
           />
   );
 
@@ -2714,6 +2728,8 @@ export function AppShell(): React.JSX.Element {
                 onUrlChange={changeUrl}
                 voice={voice}
                 onVoiceModeChange={changeVoiceMode}
+                uiPrefs={uiPrefs}
+                onUiPrefsChange={changeUiPrefs}
                 updatePhase={updatePhase}
                 now={updateNow}
                 onUpdateServer={runServerUpdate}

@@ -16,6 +16,8 @@ import {
   encodeSessionHistory,
   encodeSessionInstructionsGet,
   encodeSessionList,
+  encodeUiPrefsGet,
+  encodeUiPrefsSet,
   parseServerFrame,
 } from '../protocol';
 
@@ -33,6 +35,7 @@ describe('parseServerFrame', () => {
       { type: 'chat.history', threadId: 't', messages: [] },
       { type: 'session.list.result', sessions: [] },
       { type: 'commands.list.result', commands: [{ name: 'status', description: 'diag' }] },
+      { type: 'uiPrefs.result', expandTools: true, expandReasoning: false },
       { type: 'files.list.result', threadId: 't', files: [{ id: 'f1', filename: 'a.pdf', type: 'file', mimeType: 'application/pdf', sizeBytes: 4, ts: 'iso' }], totalBytes: 4 },
       { type: 'approval.request', id: 'a', threadId: 't', toolName: 'bash', args: {}, expiresAt: 1 },
       { type: 'agents.config.result', defaultModel: 'm', defaultEffort: '', effortLevels: [], providers: [], agents: [] },
@@ -68,15 +71,17 @@ describe('parseServerFrame', () => {
     expect(parseServerFrame('{"type":"chat.user","threadId":"t","id":"m1","text":"hi"}')?.type).toBe('chat.user');
     expect(parseServerFrame('{"type":"toString"}')).toBeNull();
     expect(parseServerFrame('{"type":"constructor"}')).toBeNull();
-  });
-
-  test('rejects anything that is not a known frame', () => {
     expect(parseServerFrame('not json')).toBeNull();
     expect(parseServerFrame('null')).toBeNull();
     expect(parseServerFrame('[]')).toBeNull();
     expect(parseServerFrame('{"type":"chat.unknown"}')).toBeNull();
     expect(parseServerFrame('{"id":"no type"}')).toBeNull();
     expect(parseServerFrame('"plain text"')).toBeNull();
+  });
+
+  test('encodes uiPrefs frames', () => {
+    expect(JSON.parse(encodeUiPrefsGet())).toEqual({ type: 'uiPrefs.get' });
+    expect(JSON.parse(encodeUiPrefsSet({ expandTools: true }))).toEqual({ type: 'uiPrefs.set', prefs: { expandTools: true } });
   });
 
   test('keeps the tool payload intact', () => {

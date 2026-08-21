@@ -21,11 +21,14 @@ export function ReasoningLine({
   reasoning,
   tokens,
   streaming,
+  expandReasoning,
 }: {
   reasoning?: string;
   tokens?: number;
   /** The bubble is still being written: the thinking may not be over. */
   streaming: boolean;
+  /** Server-owned pref: start expanded instead of folded. */
+  expandReasoning?: boolean;
 }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
 
@@ -49,6 +52,7 @@ export function ReasoningLine({
       body={body}
       showHint="Show the model's reasoning"
       hideHint="Hide the model's reasoning"
+      defaultOpen={expandReasoning ?? false}
     />
   );
 }

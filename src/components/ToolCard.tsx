@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
@@ -20,6 +20,7 @@ export const ToolCard = React.memo(function ToolCardView({
   subagent,
   spawn,
   onOpenSubAgent,
+  expandTools,
 }: {
   item: ToolItem;
   /** Set when this card spawned a named sub-agent that still exists; the door to it. */
@@ -27,9 +28,17 @@ export const ToolCard = React.memo(function ToolCardView({
   /** Live sub-agent lifecycle state pushed by `chat.spawn.start/end`, when the server sent one. */
   spawn?: { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' };
   onOpenSubAgent?: (toolItemId: string) => void;
+  /** Server-owned pref: when true the card stays expanded even after its run settles. */
+  expandTools?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
+  // Whether the current expansion came from the auto-open below rather than a tap: the settle
+  // only folds back what it itself unfolded.
+  const autoOpened = useRef(false);
+  // A tap during the run gives the owner the hand: no more auto-open and no auto-fold until the
+  // run settles, then the flag clears for the next run of the card.
+  const userTookControl = useRef(false);
   const duration = formatDuration(item.durationMs);
   const preview = summarizeArgs(item.args);
   // Only once unfolded: a thread full of collapsed cards must not stringify every argument list
@@ -39,17 +48,38 @@ export const ToolCard = React.memo(function ToolCardView({
   const spawnRunning = spawn?.status === 'running';
 
   // Auto-expand while a tool streams live output (bash), so the owner watches it land instead of
-  // opening the card manually, and while a sub-agent runs behind a spawn card. Settling
-  // (running -> false) leaves the card open: the result is already on screen, collapsing would
-  // hide what was just produced.
+  // opening the card manually, and while a sub-agent runs behind a spawn card.
+  //
+  // Settling behaviour depends on the server-owned pref: with expandTools on the card stays open
+  // (the result is already on screen), with it off (default) the card folds back to one dense line
+  // so a long run does not leave a wall of expanded cards behind it. A card the owner opened by
+  // hand before the settle is left alone: only the auto-open is undone.
   useEffect(() => {
-    if ((running && item.output) || spawnRunning) setOpen(true);
-  }, [running, item.output, spawnRunning]);
+    const streaming = (running && item.output) || spawnRunning;
+    if (streaming) {
+      // Watch the tool land live: open it unless the owner already decided otherwise.
+      if (!open && !userTookControl.current) {
+        setOpen(true);
+        autoOpened.current = true;
+      }
+    } else {
+      // Settled (or never ran): fold back only what the auto-open unfolded, and only when the
+      // owner never touched the card. A hand-opened card stays as the owner left it.
+      if (!expandTools && autoOpened.current && !userTookControl.current) {
+        setOpen(false);
+        autoOpened.current = false;
+      }
+      userTookControl.current = false;
+    }
+  }, [running, item.output, spawnRunning, expandTools, open]);
 
   return (
     <View style={[styles.card, !item.ok && styles.cardError, open && styles.cardOpen]}>
       <Pressable
-        onPress={() => setOpen(value => !value)}
+        onPress={() => {
+          setOpen(value => !value);
+          userTookControl.current = true;
+        }}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${!item.ok && !running ? ', failed' : ''}`}

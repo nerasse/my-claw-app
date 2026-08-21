@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
@@ -26,14 +26,28 @@ export function CollapsibleAside({
   body,
   showHint,
   hideHint,
+  defaultOpen = false,
 }: {
   label: string;
   body: string;
   showHint: string;
   hideHint: string;
+  /** Initial expansion state; used by the "always expand reasoning" pref. */
+  defaultOpen?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
+
+  // A pref flipped while this aside is on screen should be honoured, not wait for the next turn:
+  // one collapse cycle after the change lands, the aside starts from the pref again.
+  const prevDefault = useRef(defaultOpen);
+  useEffect(() => {
+    if (prevDefault.current !== defaultOpen) {
+      setOpen(defaultOpen);
+      prevDefault.current = defaultOpen;
+    }
+  }, [defaultOpen]);
+
 
   return (
     <View>
