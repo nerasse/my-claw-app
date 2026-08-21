@@ -103,7 +103,7 @@ function searchHint(model: ModelOption): string | undefined {
 
 /** Which screen of the flow is showing. The flow is always model -> [route] -> [effort] ->
  *  [context] -> confirm. */
-export type PickerStage = 'model' | 'endpoint' | 'effort' | 'context' | 'confirm';
+export type PickerStage = 'model' | 'endpoint' | 'effort' | 'context' | 'context-custom' | 'confirm';
 
 /**
  * The whole state of one picker run, owned by the shell so the hardware back key can walk it.
@@ -126,6 +126,9 @@ export interface PickerState {
    *  effort step was not visited, which is not the same thing. */
   effort?: string | null;
   context?: number | 'full';
+  /** Numeric editor opened from the context step. Kept in the shared state so sheet and page
+   * presentations offer exactly the same custom ceiling. */
+  contextDraft?: string;
 }
 
 export const pickerStart: PickerState = { stage: 'model', path: [], trail: [] };
@@ -142,7 +145,7 @@ export function pickerBack(state: PickerState): PickerState | null {
   }
   const previous = state.trail[state.trail.length - 1];
   if (previous === undefined) return null;
-  return { ...state, stage: previous, trail: state.trail.slice(0, -1) };
+  return { ...state, stage: previous, contextDraft: undefined, trail: state.trail.slice(0, -1) };
 }
 
 /** The option shown above the list at the root (e.g. "Use default"), checked when it applies. */
@@ -224,6 +227,7 @@ export function useModelPickerFlow({
   options: SheetOption[];
   back: () => void;
   search: PickerSearch | null;
+  customContextInput: (PickerSearch & { keyboardType: 'number-pad'; returnKeyType: 'done' }) | null;
 } {
   const { stage, path } = state;
   const byId = useModelIndex(models);
@@ -238,6 +242,13 @@ export function useModelPickerFlow({
   const stagedEntry = byId.get(stagedBare);
   const stagedLabel = stagedEntry?.label ?? stagedBare;
   const stagedIsTag = stagedBare.startsWith('tag:');
+  const contextWindow = stagedEntry?.context;
+  const customContext = state.contextDraft?.trim() === '' ? undefined : Number(state.contextDraft);
+  const validCustomContext =
+    Number.isInteger(customContext) &&
+    customContext !== undefined &&
+    customContext > 0 &&
+    (contextWindow === undefined || customContext <= contextWindow);
   const effortCurrent = effort?.current ?? '';
   // How the route list is read, not a setting: it lives with the open sheet and resets with it.
   const [routeSort, setRouteSort] = useState<RouteSort>('price');
@@ -333,7 +344,7 @@ export function useModelPickerFlow({
         onStateChange({ ...next, stage: 'effort' });
         return;
       }
-      if (from !== 'context' && from !== 'confirm' && ceilings.length > 0) {
+      if (from !== 'context' && from !== 'context-custom' && from !== 'confirm' && ceilings.length > 0) {
         onStateChange({ ...next, stage: 'context' });
         return;
       }
@@ -501,8 +512,27 @@ export function useModelPickerFlow({
         });
       }
       rows.push({
+        label: 'Custom…',
+        hint: contextWindow === undefined ? 'enter a positive token ceiling' : `up to ${shortTokens(contextWindow)} tokens`,
+        onPress: () => onStateChange({ ...state, stage: 'context-custom', trail: [...state.trail, 'context'] }),
+      });
+      rows.push({
         label: 'Keep current',
         onPress: () => advance('context', { context: undefined }),
+      });
+      rows.push(...backRow);
+    } else if (stage === 'context-custom') {
+      head = `Custom context for ${stagedLabel}`;
+      rows.push({
+        label: validCustomContext
+          ? `Use ${shortTokens(customContext!)} tokens`
+          : 'Enter a valid token ceiling',
+        hint: contextWindow === undefined
+          ? 'positive whole number of tokens'
+          : `between 1 and ${contextWindow.toLocaleString()} tokens`,
+        onPress: () => {
+          if (validCustomContext) advance('context-custom', { context: customContext! });
+        },
       });
       rows.push(...backRow);
     } else {
@@ -545,6 +575,7 @@ export function useModelPickerFlow({
     advance,
     back,
     context,
+    contextWindow,
     effortCurrent,
     effortLevels,
     list,
@@ -567,6 +598,8 @@ export function useModelPickerFlow({
     stagedLabel,
     stagedModel,
     stage,
+    customContext,
+    validCustomContext,
     state,
     tiers,
     title,
@@ -585,7 +618,18 @@ export function useModelPickerFlow({
         }
       : null;
 
-  return { preview, options, back, search };
+  const customContextInput =
+    stage === 'context-custom'
+      ? {
+          value: state.contextDraft ?? '',
+          onChange: (value: string) => onStateChange({ ...state, contextDraft: value.replace(/[^0-9]/g, '') }),
+          placeholder: contextWindow === undefined ? 'Tokens' : `Max ${contextWindow.toLocaleString()} tokens`,
+          keyboardType: 'number-pad' as const,
+          returnKeyType: 'done' as const,
+        }
+      : null;
+
+  return { preview, options, back, search, customContextInput };
 }
 
 /** The bottom-sheet presentation of the flow: chat, and the jobs editor. */
@@ -597,7 +641,7 @@ export function ModelPickerSheet(
     <ActionSheet
       preview={flow.preview}
       options={flow.options}
-      search={flow.search}
+      search={flow.customContextInput ?? flow.search}
       onClose={props.onClose}
     />
   );
@@ -636,17 +680,18 @@ export function ModelPickerPage({
           </Text>
         </View>
       </View>
-      {flow.search ? (
+      {flow.customContextInput ?? flow.search ? (
         <TextInput
           style={styles.search}
-          value={flow.search.value}
-          onChangeText={flow.search.onChange}
-          placeholder={flow.search.placeholder}
+          value={(flow.customContextInput ?? flow.search)!.value}
+          onChangeText={(flow.customContextInput ?? flow.search)!.onChange}
+          placeholder={(flow.customContextInput ?? flow.search)!.placeholder}
           placeholderTextColor={palette.textFaint}
           autoCorrect={false}
           autoCapitalize="none"
-          returnKeyType="search"
-          accessibilityLabel={flow.search.placeholder}
+          keyboardType={flow.customContextInput ? 'number-pad' : 'default'}
+          returnKeyType={flow.customContextInput ? 'done' : 'search'}
+          accessibilityLabel={(flow.customContextInput ?? flow.search)!.placeholder}
         />
       ) : null}
       <ScrollView

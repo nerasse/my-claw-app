@@ -40,6 +40,9 @@ const EAGER_ROWS = 48;
  * The one bottom sheet of the app: message actions, conversation actions, confirmations,
  * checklists. Every menu shares it, so a new command costs one option instead of a new
  * overlay. Custom content (effort chips, model submenu headers) slots in above the options.
+ *
+ * The text field remains unfocused on mount. A user tap is the only thing that opens its keyboard;
+ * once open, `useSheetBottomInset` moves this sheet above it.
  */
 export function ActionSheet({
   preview,
@@ -55,6 +58,9 @@ export function ActionSheet({
     value: string;
     onChange: (value: string) => void;
     placeholder: string;
+    /** Numeric custom-context fields use the platform number pad rather than the search keyboard. */
+    keyboardType?: 'default' | 'number-pad';
+    returnKeyType?: 'search' | 'done';
   } | null;
   /** Custom content above the options (submenu headers, chips). */
   children?: React.ReactNode;
@@ -128,7 +134,8 @@ export function ActionSheet({
             placeholderTextColor={palette.textFaint}
             autoCorrect={false}
             autoCapitalize="none"
-            returnKeyType="search"
+            keyboardType={search.keyboardType ?? 'default'}
+            returnKeyType={search.returnKeyType ?? 'search'}
             accessibilityLabel={search.placeholder}
           />
         ) : null}

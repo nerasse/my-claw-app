@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Text } from 'react-native';
+import { Text, TextInput } from 'react-native';
 import { useModelPickerFlow, pickerStart, type PickerState } from '../ModelSheet';
 import { modelStore } from '../../core/model';
 import { connection } from '../../core/connection';
@@ -23,6 +23,12 @@ const MODELS: ModelOption[] = [
   { id: 'zen/gpt-5.6-luna', label: 'gpt-5.6-luna', group: 'OpenCode Go' },
 ];
 
+const CONTEXT_MODEL: ModelOption = {
+  id: 'context/model',
+  label: 'Context model',
+  context: 262_000,
+};
+
 interface Harness {
   state: PickerState;
   labels: () => string[];
@@ -30,11 +36,16 @@ interface Harness {
   selected: () => string[];
   press: (label: string) => void;
   preview: () => string;
-  committed: Array<{ model: string }>;
+  input: () => ReactTestRenderer.ReactTestInstance | null;
+  committed: Array<{ model: string; context?: number | 'full' }>;
   unmount: () => void;
 }
 
-function mount(activeId: string): Harness {
+function mount(
+  activeId: string,
+  models: ModelOption[] = MODELS,
+  context: Parameters<typeof useModelPickerFlow>[0]['context'] = null,
+): Harness {
   let flow!: ReturnType<typeof useModelPickerFlow>;
   const harness: Harness = {
     state: pickerStart,
@@ -42,6 +53,10 @@ function mount(activeId: string): Harness {
     hint: label => flow.options.find(option => option.label === label)?.hint,
     selected: () => flow.options.filter(option => option.selected).map(option => option.label),
     preview: () => flow.preview,
+    input: () => {
+      const inputs = tree.root.findAllByType(TextInput);
+      return inputs[0] ?? null;
+    },
     press: label => {
       const option = flow.options.find(entry => entry.label === label);
       if (!option) throw new Error(`no row labelled ${label} in ${flow.options.map(o => o.label).join(', ')}`);
@@ -56,14 +71,24 @@ function mount(activeId: string): Harness {
     harness.state = state;
     flow = useModelPickerFlow({
       title: 'Model',
-      models: MODELS,
+      models,
       activeId,
       state,
       onStateChange: setState,
-      onCommit: choice => harness.committed.push({ model: choice.model }),
+      onCommit: choice => harness.committed.push(choice),
       onClose: () => {},
+      context,
     });
-    return <Text>probe</Text>;
+    return flow.customContextInput ? (
+      <TextInput
+        value={flow.customContextInput.value}
+        onChangeText={flow.customContextInput.onChange}
+        keyboardType={flow.customContextInput.keyboardType}
+        returnKeyType={flow.customContextInput.returnKeyType}
+      />
+    ) : (
+      <Text>probe</Text>
+    );
   }
 
   let tree!: ReactTestRenderer.ReactTestRenderer;
@@ -172,6 +197,40 @@ test('back walks out of the routing step the way it walked in', () => {
   picker.press('< Back');
   expect(picker.state.stage).toBe('model');
   expect(picker.state.path).toEqual(['OpenRouter']);
+  picker.unmount();
+});
+
+test('a custom context ceiling is validated, confirmed, and committed', () => {
+  const picker = mount('context/model', [CONTEXT_MODEL], { current: 'full' });
+  picker.press('Context model');
+  expect(picker.state.stage).toBe('context');
+  picker.press('Custom…');
+  expect(picker.state.stage).toBe('context-custom');
+  expect(picker.labels()).toContain('Enter a valid token ceiling');
+
+  const input = picker.input();
+  expect(input?.props.keyboardType).toBe('number-pad');
+  ReactTestRenderer.act(() => input?.props.onChangeText('128k000'));
+  expect(picker.state.contextDraft).toBe('128000');
+  expect(picker.labels()).toContain('Use 128k tokens');
+
+  picker.press('Use 128k tokens');
+  expect(picker.state.stage).toBe('confirm');
+  expect(picker.preview()).toContain('context: 128000 tokens');
+  picker.press('Apply');
+  expect(picker.committed).toEqual([{ model: 'context/model', context: 128_000 }]);
+  picker.unmount();
+});
+
+test('a custom context cannot exceed the known model window', () => {
+  const picker = mount('context/model', [CONTEXT_MODEL], { current: 'full' });
+  picker.press('Context model');
+  picker.press('Custom…');
+  const input = picker.input();
+  ReactTestRenderer.act(() => input?.props.onChangeText('262001'));
+  expect(picker.labels()).toContain('Enter a valid token ceiling');
+  picker.press('Enter a valid token ceiling');
+  expect(picker.state.stage).toBe('context-custom');
   picker.unmount();
 });
 

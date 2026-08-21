@@ -359,7 +359,7 @@ export function Composer({
         ) : null}
         {stopVisible ? (
           <Pressable
-            style={[styles.send, hero && styles.sendHero, styles.sendStop]}
+            style={[styles.send, hero && styles.sendHero, dense && !hero && styles.buttonDense, styles.sendStop]}
             onPress={onStop}
             accessibilityRole="button"
             accessibilityLabel="Stop generating">
