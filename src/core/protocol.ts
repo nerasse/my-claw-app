@@ -307,6 +307,10 @@ export interface SessionWorkspaceSetResultFrame {
   workspace: string;
 }
 
+export type ApprovalDecision = 'allow-once' | 'allow-session' | 'deny';
+
+export type ApprovalOutcome = ApprovalDecision | 'expired' | 'cancelled';
+
 export interface ApprovalRequestFrame {
   type: 'approval.request';
   id: string;
@@ -315,6 +319,40 @@ export interface ApprovalRequestFrame {
   args: Record<string, unknown>;
   replyToId?: string;
   expiresAt: number;
+  /**
+   * Whether "always allow in this conversation" is on offer. False for the per-invocation tools
+   * (bash, memory): the server refuses a session grant for them anyway, so offering it would be
+   * a button that lies.
+   */
+  allowSessionOffered?: boolean;
+}
+
+/** The prompt is over and nobody here answered it: timed out, cancelled, or another window won. */
+export interface ApprovalResolvedFrame {
+  type: 'approval.resolved';
+  id: string;
+  threadId: string;
+  reason: 'expired' | 'cancelled' | 'answered-elsewhere';
+}
+
+export interface ApprovalHistoryEntry {
+  id: string;
+  threadId: string;
+  toolName: string;
+  args: string;
+  outcome: ApprovalOutcome;
+  requestedAt: string;
+  decidedAt: string;
+  durationMs: number;
+  /** Granted by an earlier "always allow" instead of a prompt: nothing was shown to anyone. */
+  auto: boolean;
+}
+
+export interface ApprovalHistoryResultFrame {
+  type: 'approval.history.result';
+  threadId?: string;
+  entries: ApprovalHistoryEntry[];
+  stats: { total: number; allowed: number; denied: number; expired: number };
 }
 
 export interface DiagSnapshotResultFrame {
@@ -1312,6 +1350,8 @@ export type ServerFrame =
   | ChatClearedFrame
   | TranscriptFrame
   | ApprovalRequestFrame
+  | ApprovalResolvedFrame
+  | ApprovalHistoryResultFrame
   | AgentsConfigResultFrame
   | InstructionsListResultFrame
   | InstructionsFileFrame
@@ -1404,6 +1444,8 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'providers.env.result',
   'chat.transcript',
   'approval.request',
+  'approval.resolved',
+  'approval.history.result',
   'error',
 ]);
 
@@ -1572,8 +1614,12 @@ export function encodeDraftSet(threadId: string, text: string): string {
   return JSON.stringify({ type: 'draft.set', threadId, text });
 }
 
-export function encodeApprovalResponse(id: string, accepted: boolean): string {
-  return JSON.stringify({ type: 'approval.response', id, accepted });
+export function encodeApprovalResponse(id: string, decision: ApprovalDecision): string {
+  return JSON.stringify({ type: 'approval.response', id, decision });
+}
+
+export function encodeApprovalHistory(options: { threadId?: string; limit?: number; before?: string } = {}): string {
+  return JSON.stringify({ type: 'approval.history', ...options });
 }
 
 export function encodeModelList(): string {

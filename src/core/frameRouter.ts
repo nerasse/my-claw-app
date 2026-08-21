@@ -23,6 +23,7 @@ import {
   encodeModelGet,
   encodeSubAgentsList,
   type ApprovalRequestFrame,
+  type ApprovalHistoryResultFrame,
   type ConfigResultFrame,
   type ConfigSavedFrame,
   type JobEntry,
@@ -100,6 +101,7 @@ export interface ServerFrameHandlers {
   setJobRuns: (runs: JobRunEntry[]) => void;
   setRunsError: (message: string | null) => void;
   setApprovals: (update: (current: ApprovalRequestFrame[]) => ApprovalRequestFrame[]) => void;
+  setApprovalHistory: (frame: ApprovalHistoryResultFrame) => void;
   /** The raw config editor's state belongs to its page, so its transitions stay in the shell. */
   onConfigResult: (frame: ConfigResultFrame) => void;
   onConfigSaved: (frame: ConfigSavedFrame) => void;
@@ -154,6 +156,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setJobRuns,
     setRunsError,
     setApprovals,
+    setApprovalHistory,
     onConfigResult,
     onConfigSaved,
     onConfigError,
@@ -506,6 +509,14 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
           ? current
           : [...current, frame],
       );
+      break;
+    case 'approval.resolved':
+      // Answered on another window, timed out, or the run went away: drop it wherever it sits in
+      // the queue, so the sheet never asks about a call that can no longer be answered.
+      setApprovals(current => current.filter(entry => entry.id !== frame.id));
+      break;
+    case 'approval.history.result':
+      setApprovalHistory(frame);
       break;
     case 'error':
       // Where the user asked is where the refusal belongs: a rejected delete used to be

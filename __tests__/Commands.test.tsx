@@ -364,20 +364,56 @@ test('the subtitle shows which model the thread runs on', async () => {
   await settleAndUnmount(tree);
 });
 
-test('an approval request opens a sheet; approving answers the server', async () => {
+test('an approval request opens a sheet; allowing once answers the server', async () => {
   const tree = await renderApp();
   await waitFor(() => labelsOf(tree).includes('Message to send'));
 
-  await emit({ type: 'approval.request', id: 'a1', threadId: THREAD, toolName: 'bash', args: { command: 'rm -rf /tmp/x' }, replyToId: 'm1', expiresAt: Date.now() + 60000 });
+  await emit({ type: 'approval.request', id: 'a1', threadId: THREAD, toolName: 'bash', args: { command: 'rm -rf /tmp/x' }, replyToId: 'm1', expiresAt: Date.now() + 60000, allowSessionOffered: false });
 
-  await waitFor(() => labelsOf(tree).includes('Approve'));
+  await waitFor(() => labelsOf(tree).includes('Allow once'));
   expect(allTexts(tree).some(text => text.includes('rm -rf'))).toBe(true);
+  // bash is per-invocation: the server refuses a session grant for it, so it is not offered.
+  expect(labelsOf(tree).some(label => label.startsWith('Always allow'))).toBe(false);
 
-  await pressLabel(tree, 'Approve');
+  await pressLabel(tree, 'Allow once');
   await waitFor(() =>
-    sentFrames().includes(JSON.stringify({ type: 'approval.response', id: 'a1', accepted: true })),
+    sentFrames().includes(JSON.stringify({ type: 'approval.response', id: 'a1', decision: 'allow-once' })),
   );
-  await waitFor(() => !labelsOf(tree).includes('Approve'));
+  await waitFor(() => !labelsOf(tree).includes('Allow once'));
+
+  await settleAndUnmount(tree);
+});
+
+// Approving one call used to whitelist the tool for the rest of the conversation: the app sent
+// `accepted: true` and the server read it as a session grant. The two are separate buttons now.
+test('a session grant is a distinct button, and says what it costs', async () => {
+  const tree = await renderApp();
+  await waitFor(() => labelsOf(tree).includes('Message to send'));
+
+  await emit({ type: 'approval.request', id: 'a2', threadId: THREAD, toolName: 'write', args: { path: '/tmp/x' }, replyToId: 'm1', expiresAt: Date.now() + 60000, allowSessionOffered: true });
+
+  await waitFor(() => labelsOf(tree).includes('Allow once'));
+  await pressLabel(tree, 'Always allow write here');
+  await waitFor(() =>
+    sentFrames().includes(JSON.stringify({ type: 'approval.response', id: 'a2', decision: 'allow-session' })),
+  );
+
+  await settleAndUnmount(tree);
+});
+
+// A prompt answered on another window, or timed out, must not stay on screen here: the call is
+// already decided and nothing this sheet sends would be read.
+test('a resolved approval closes the sheet without an answer', async () => {
+  const tree = await renderApp();
+  await waitFor(() => labelsOf(tree).includes('Message to send'));
+
+  await emit({ type: 'approval.request', id: 'a3', threadId: THREAD, toolName: 'write', args: { path: '/tmp/x' }, replyToId: 'm1', expiresAt: Date.now() + 60000, allowSessionOffered: true });
+  await waitFor(() => labelsOf(tree).includes('Allow once'));
+
+  await emit({ type: 'approval.resolved', id: 'a3', threadId: THREAD, reason: 'expired' });
+  await waitFor(() => !labelsOf(tree).includes('Allow once'));
+  // sendMessage is not reset between tests, so scope this to the prompt under test.
+  expect(sentFrames().some(frame => frame.includes('a3'))).toBe(false);
 
   await settleAndUnmount(tree);
 });

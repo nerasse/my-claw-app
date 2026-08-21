@@ -7,7 +7,7 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'mcps' | 'workspaces' | 'config' | 'other';
+  key: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other';
 }> = [
   {
     title: 'General',
@@ -61,6 +61,12 @@ const CATEGORIES: Array<{
     key: 'devices',
   },
   {
+    title: 'Tool approvals',
+    hint: 'what the agent was allowed to run, and what was refused',
+    accessibilityLabel: 'Open tool approvals',
+    key: 'approvals',
+  },
+  {
     title: 'Config',
     hint: 'the raw config.json',
     accessibilityLabel: 'Open config',
@@ -90,7 +96,7 @@ export function SettingsScreen({
   providersCount: number;
   onBack: () => void;
   onOpenCategory: (
-    category: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'mcps' | 'workspaces' | 'config' | 'other',
+    category: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other',
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

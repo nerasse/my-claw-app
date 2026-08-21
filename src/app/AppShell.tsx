@@ -11,7 +11,6 @@ import {
   Linking,
   Platform,
   StatusBar,
-  Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,6 +34,7 @@ import { prefs } from '../core/prefs';
 import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnostics';
 import {
   encodeApprovalResponse,
+  encodeApprovalHistory,
   encodeAgentsConfigGet,
   encodeInstructionsGet,
   encodeInstructionsGetNested,
@@ -93,6 +93,7 @@ import {
   MAX_TITLE_LENGTH,
   type AgentFileFieldsOut,
   type ApprovalRequestFrame,
+  type ApprovalHistoryResultFrame,
   type FileScopeMode,
   type JobEntry,
   type SubAgentEntry,
@@ -196,10 +197,12 @@ import { JobsEditorScreen } from './JobsEditorScreen';
 import { JobSessionsScreen } from './JobSessionsScreen';
 import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
+import { ApprovalSheet } from '../components/ApprovalSheet';
+import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ScreenLayer } from '../components/ScreenLayer';
 import { ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
-import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
 import { messageSelectionBody, TextSelectionContext, type SelectionTarget } from '../core/textSelection';
@@ -281,6 +284,7 @@ export function AppShell(): React.JSX.Element {
     | 'tags'
     | 'skills'
     | 'devices'
+    | 'approvals'
     | 'workspaces'
     | 'workspace'
     | 'instruction'
@@ -471,6 +475,7 @@ export function AppShell(): React.JSX.Element {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   // A run can ask several times in a row; each answer clears one, in order.
   const [approvals, setApprovals] = useState<ApprovalRequestFrame[]>([]);
+  const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryResultFrame | null>(null);
 
   const itemCount = useChatItemCount(activeThread);
   const historyPage = useHistoryPage(activeThread);
@@ -852,6 +857,7 @@ export function AppShell(): React.JSX.Element {
       setJobRuns,
       setRunsError,
       setApprovals,
+      setApprovalHistory,
       onConfigResult: frame => {
         setConfigEditor({
           status: 'ready',
@@ -3082,6 +3088,12 @@ export function AppShell(): React.JSX.Element {
               ) : (
                 <EmptyCategoryScreen title="Config" onBack={() => setSettingsPage('index')} />
               )
+            ) : settingsPage === 'approvals' ? (
+              <ApprovalHistoryScreen
+                history={approvalHistory}
+                onBack={() => setSettingsPage('index')}
+                onRefresh={() => connection.send(encodeApprovalHistory())}
+              />
             ) : settingsPage === 'devices' ? (
               <DevicesScreen onBack={() => setSettingsPage('index')} />
             ) : settingsPage === 'skills' ? (
@@ -3479,30 +3491,17 @@ export function AppShell(): React.JSX.Element {
       ) : null}
 
       {approvals.length > 0 ? (
-        <ActionSheet
-          preview={`${approvals[0]!.toolName} wants to run`}
-          options={[
-            {
-              label: 'Approve',
-              onPress: () => {
-                connection.send(encodeApprovalResponse(approvals[0]!.id, true));
-                setApprovals(current => current.slice(1));
-              },
-            },
-            {
-              label: 'Reject',
-              danger: true,
-              onPress: () => {
-                connection.send(encodeApprovalResponse(approvals[0]!.id, false));
-                setApprovals(current => current.slice(1));
-              },
-            },
-          ]}
-          onClose={() => setApprovals(current => current.slice(1))}>
-          <Text style={styles.approvalArgs} selectable>
-            {JSON.stringify(approvals[0]!.args, null, 2)}
-          </Text>
-        </ActionSheet>
+        <ApprovalSheet
+          request={approvals[0]!}
+          pending={approvals.length - 1}
+          onDecide={decision => {
+            connection.send(encodeApprovalResponse(approvals[0]!.id, decision));
+            setApprovals(current => current.slice(1));
+          }}
+          // Dismissing is not an answer: the call stays pending server-side until it times out
+          // and is journalled as expired. Denying is a button, never a tap on the backdrop.
+          onDismiss={() => setApprovals(current => current.slice(1))}
+        />
       ) : null}
 
       {threadToRename ? (
@@ -3788,14 +3787,5 @@ const createStyles = (palette: Palette) => ({
     paddingLeft: space.md,
     borderLeftWidth: 1,
     borderLeftColor: palette.border,
-  },
-  approvalArgs: {
-    fontSize: font.small,
-    fontFamily: 'monospace' as const,
-    color: palette.textMuted,
-    backgroundColor: palette.surfaceAlt,
-    borderRadius: radius.sm,
-    padding: space.sm,
-    maxHeight: 180,
   },
 });
