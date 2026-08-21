@@ -189,6 +189,18 @@ describe('chatStore tool cards', () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ kind: 'tool', name: 'bash', output: 'out' });
   });
+
+  test('a start frame opens a spinner card and the end frame upserts the result onto it', () => {
+    chatStore.startToolCall(THREAD, 'c2', 'bash', { command: 'ls' });
+    const started = chatStore.getItems(THREAD);
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ kind: 'tool', id: 'c2', name: 'bash', running: true, output: '' });
+
+    chatStore.addToolCall(THREAD, { id: 'c2', name: 'bash', args: { command: 'ls' }, ok: true, output: 'file.txt', truncated: false });
+    const finished = chatStore.getItems(THREAD);
+    expect(finished).toHaveLength(1);
+    expect(finished[0]).toMatchObject({ kind: 'tool', id: 'c2', name: 'bash', running: false, output: 'file.txt', ok: true });
+  });
 });
 
 describe('chatStore.seedHistory', () => {

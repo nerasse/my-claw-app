@@ -581,8 +581,31 @@ class ChatStoreImpl {
   }
 
   addToolCall(threadId: string, payload: ToolCallPayload): void {
-    if (this.getItems(threadId).some(item => item.id === payload.id)) return;
-    this.append(threadId, { kind: 'tool', ...payload, ts: Date.now() });
+    // Upsert: a `chat.tool.start` may have opened this card already. The end frame reuses the
+    // same id, so we patch it in place (fill output, drop the spinner) instead of stacking a
+    // second card.
+    if (this.findIndex(threadId, payload.id) >= 0) {
+      this.patchTool(threadId, payload.id, { ...payload, running: false });
+      return;
+    }
+    this.append(threadId, { kind: 'tool', ...payload, running: false, ts: Date.now() });
+  }
+
+  /** A tool started executing: open the card with a spinner and empty output, pending the
+   *  matching `chat.tool` frame that fills it. */
+  startToolCall(threadId: string, id: string, name: string, args: Record<string, unknown>): void {
+    if (this.findIndex(threadId, id) >= 0) return;
+    this.append(threadId, {
+      kind: 'tool',
+      id,
+      name,
+      args,
+      output: '',
+      ok: false,
+      truncated: false,
+      running: true,
+      ts: Date.now(),
+    });
   }
 
   clearThread(threadId: string): void {
@@ -628,6 +651,22 @@ class ChatStoreImpl {
     );
     if (coalesce) this.emitSoon();
     else this.emit();
+  }
+
+  private patchTool(threadId: string, id: string, patch: Partial<ToolItem>, coalesce = false): void {
+    const items = this.threads.get(threadId);
+    if (!items) return;
+    this.threads.set(
+      threadId,
+      items.map(item => (item.id === id && item.kind === 'tool' ? { ...item, ...patch } : item)),
+    );
+    if (coalesce) this.emitSoon();
+    else this.emit();
+  }
+
+  private findIndex(threadId: string, id: string): number {
+    const items = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    return items.findIndex(item => item.id === id);
   }
 
   private removeItem(threadId: string, id: string): void {

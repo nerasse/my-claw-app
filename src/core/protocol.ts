@@ -174,12 +174,26 @@ export interface ToolCallPayload {
   ok: boolean;
   output: string;
   truncated: boolean;
+  /** True between the start frame and the result frame, so the card can show a spinner. */
+  running?: boolean;
 }
 
 export interface ToolCallFrame extends ToolCallPayload {
   type: 'chat.tool';
   threadId: string;
   turnId: string;
+  ts: string;
+}
+
+/** A tool started executing: the card renders a spinner until the matching `chat.tool` frame
+ *  arrives with the same id and upserts the result. */
+export interface ToolStartFrame {
+  type: 'chat.tool.start';
+  id: string;
+  threadId: string;
+  turnId: string;
+  name: string;
+  args: Record<string, unknown>;
   ts: string;
 }
 
@@ -1339,6 +1353,7 @@ export type ServerFrame =
   | StreamDoneFrame
   | StreamAbortFrame
   | ToolCallFrame
+  | ToolStartFrame
   | ChatHistoryFrame
   | DraftChangedFrame
   | SessionListResultFrame
@@ -1415,6 +1430,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.stream.done',
   'chat.stream.abort',
   'chat.tool',
+  'chat.tool.start',
   'chat.history',
   'draft.changed',
   'chat.command.pending',

@@ -265,6 +265,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'chat.stream.abort':
       chatStore.abortStream(frame.threadId, frame.id, frame.error);
       break;
+    case 'chat.tool.start':
+      // A tool began executing: open the card with a spinner. The `chat.tool` that follows reuses
+      // the same id and fills the output, upserting in place.
+      chatStore.startToolCall(frame.threadId, frame.id, frame.name, frame.args);
+      break;
     case 'chat.tool':
       chatStore.addToolCall(frame.threadId, {
         id: frame.id,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { formatDuration, summarizeArgs } from '../core/utils';
@@ -32,6 +32,7 @@ export const ToolCard = React.memo(function ToolCardView({
   // Only once unfolded: a thread full of collapsed cards must not stringify every argument list
   // on every streaming delta.
   const args = open ? JSON.stringify(item.args, null, 2) : '';
+  const running = item.running === true;
 
   return (
     <View style={[styles.card, !item.ok && styles.cardError, open && styles.cardOpen]}>
@@ -39,7 +40,7 @@ export const ToolCard = React.memo(function ToolCardView({
         onPress={() => setOpen(value => !value)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Tool ${item.name}${duration ? `, ${duration}` : ''}${item.ok ? '' : ', failed'}`}
+        accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${!item.ok && !running ? ', failed' : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
@@ -51,7 +52,12 @@ export const ToolCard = React.memo(function ToolCardView({
           ) : (
             <View style={styles.spacer} />
           )}
-          {!item.ok ? <Text style={styles.failed}>failed</Text> : null}
+          {!item.ok && !running ? <Text style={styles.failed}>failed</Text> : null}
+          {running ? (
+            <View style={styles.spinner}>
+              <ActivityIndicator size="small" />
+            </View>
+          ) : null}
           {duration ? <Text style={styles.duration}>{duration}</Text> : null}
         </View>
       </Pressable>
@@ -111,6 +117,7 @@ const createStyles = (palette: Palette) => ({
   spacer: { flex: 1 },
   duration: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   failed: { fontSize: font.micro, color: palette.danger, fontWeight: '600' as const },
+  spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
   label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginTop: 2 },
