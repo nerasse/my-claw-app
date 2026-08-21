@@ -362,42 +362,42 @@ describe('chatStore run lifecycle', () => {
 });
 
 describe('chatStore live spawn cards', () => {
-  const THREAD = 'thread-spawn-live';
+  const SPAWN_THREAD = 'thread-spawn-live';
 
   test('startSpawn marks a tool spawn card running and settles it', () => {
-    chatStore.startToolCall(THREAD, 'card-1', 'spawn', { name: 'researcher', mode: 'run' });
-    chatStore.startSpawn(THREAD, 'card-1', {
+    chatStore.startToolCall(SPAWN_THREAD, 'card-1', 'spawn', { name: 'researcher', mode: 'run' });
+    chatStore.startSpawn(SPAWN_THREAD, 'card-1', {
       subagentId: 'subagent/run-1',
       displayName: 'researcher',
       type: 'research',
       mode: 'run',
     });
-    const cards = chatStore.spawnCardsOf(THREAD);
+    const cards = chatStore.spawnCardsOf(SPAWN_THREAD);
     expect(cards).toHaveLength(1);
     expect(cards[0].status).toBe('running');
     expect(cards[0].subagentId).toBe('subagent/run-1');
 
-    chatStore.settleSpawn(THREAD, 'card-1', { status: 'complete', resultLength: 42 });
-    const settled = chatStore.spawnCardsOf(THREAD);
+    chatStore.settleSpawn(SPAWN_THREAD, 'card-1', { status: 'complete', resultLength: 42 });
+    const settled = chatStore.spawnCardsOf(SPAWN_THREAD);
     expect(settled[0].status).toBe('complete');
   });
 
   test('startSpawn opens a standalone card for a programmatic spawn', () => {
-    chatStore.startSpawn(THREAD, 'subagent/run-2', {
+    chatStore.startSpawn(SPAWN_THREAD, 'subagent/run-2', {
       subagentId: 'subagent/run-2',
       displayName: 'coder',
       type: 'general',
       mode: 'session',
     });
-    const cards = chatStore.spawnCardsOf(THREAD);
+    const cards = chatStore.spawnCardsOf(SPAWN_THREAD);
     expect(cards).toHaveLength(1);
     expect(cards[0].id).toBe('subagent/run-2');
     expect(cards[0].status).toBe('running');
   });
 
   test('settleSpawn on an unknown card is a no-op', () => {
-    chatStore.settleSpawn(THREAD, 'nope', { status: 'error' });
-    expect(chatStore.spawnCardsOf(THREAD)).toHaveLength(0);
+    chatStore.settleSpawn(SPAWN_THREAD, 'nope', { status: 'error' });
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)).toHaveLength(0);
   });
 });
 
