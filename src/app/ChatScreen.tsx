@@ -66,6 +66,7 @@ export function ChatScreen({
   onAgentsPress,
   subagent,
   subagentDoors,
+  spawnLive,
   onOpenSubAgent,
   onSubAgentMenu,
   onLoadOlder,
@@ -114,6 +115,8 @@ export function ChatScreen({
    * the roster, so a killed sub-agent stops offering a door instead of opening a dead thread.
    */
   subagentDoors: Map<string, { label: string; status: 'idle' | 'running' }>;
+  /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
+  spawnLive?: Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }>;
   onOpenSubAgent?: (toolItemId: string) => void;
   onSubAgentMenu?: () => void;
   /** Asks for the page of history just older than what is on screen. */
@@ -516,7 +519,7 @@ export function ChatScreen({
       // row index is mapped back into it.
       const chronological = reversed.length - 1 - index;
       return item.kind === 'tool' ? (
-        <ToolCard item={item} subagent={subagentDoors.get(item.id)} onOpenSubAgent={onOpenSubAgent} />
+        <ToolCard item={item} subagent={subagentDoors.get(item.id)} spawn={spawnLive?.get(item.id)} onOpenSubAgent={onOpenSubAgent} />
       ) : (
         <Bubble
           item={item}
@@ -529,7 +532,7 @@ export function ChatScreen({
         />
       );
     },
-    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors],
+    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive],
   );
 
   const locationLabel = location

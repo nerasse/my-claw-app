@@ -1365,6 +1365,16 @@ export function AppShell(): React.JSX.Element {
     return doors;
   }, [roster.agents, spawnCards]);
 
+  /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
+  const spawnLive = useMemo(() => {
+    const live = new Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }>();
+    for (const card of spawnCards) {
+      if (!card.subagentId || !card.status) continue;
+      live.set(card.id, { subagentId: card.subagentId, displayName: card.args.name as string ?? card.subagentId, status: card.status });
+    }
+    return live;
+  }, [spawnCards]);
+
   const openSubAgentFromCard = useCallback(
     (toolItemId: string) => {
       const card = spawnCards.find(entry => entry.id === toolItemId);
@@ -2605,6 +2615,7 @@ export function AppShell(): React.JSX.Element {
             subagentCount={subagentCount}
             onAgentsPress={() => setAgentsOpen(true)}
             subagentDoors={subagentDoors}
+            spawnLive={spawnLive}
             onOpenSubAgent={openSubAgentFromCard}
             {...(subagentView
               ? {

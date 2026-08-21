@@ -209,6 +209,35 @@ export interface ToolDeltaFrame {
   ts: string;
 }
 
+/** A sub-agent spawned mid-run. Annotates the `spawn` tool card (by id) with its sub-agent
+ *  identity and a running state, or opens a standalone spawn card for a programmatic spawn. */
+export interface SpawnStartFrame {
+  type: 'chat.spawn.start';
+  /** The tool-start card id when spawned from a tool, else the sub-agent id. */
+  id: string;
+  subagentId: string;
+  threadId: string;
+  turnId: string;
+  displayName: string;
+  agentType: string;
+  mode: string;
+  ts: string;
+}
+
+/** Settles a spawn card: the sub-agent finished (complete), errored, or was aborted. */
+export interface SpawnEndFrame {
+  type: 'chat.spawn.end';
+  /** Same id as the start. */
+  id: string;
+  subagentId: string;
+  threadId: string;
+  turnId: string;
+  status: 'complete' | 'error' | 'aborted';
+  resultLength?: number;
+  error?: string;
+  ts: string;
+}
+
 export type HistoryEntry =
   | {
       id: string;
@@ -1367,6 +1396,8 @@ export type ServerFrame =
   | ToolCallFrame
   | ToolStartFrame
   | ToolDeltaFrame
+  | SpawnStartFrame
+  | SpawnEndFrame
   | ChatHistoryFrame
   | DraftChangedFrame
   | SessionListResultFrame
@@ -1445,6 +1476,8 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.tool',
   'chat.tool.start',
   'chat.tool.delta',
+  'chat.spawn.start',
+  'chat.spawn.end',
   'chat.history',
   'draft.changed',
   'chat.command.pending',

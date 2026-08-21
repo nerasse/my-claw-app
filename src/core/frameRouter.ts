@@ -274,6 +274,23 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Live output from a running tool (bash): append to the card the start frame opened.
       chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr });
       break;
+    case 'chat.spawn.start':
+      // A sub-agent spawned mid-run: mark the spawn card (or open a standalone one) as running.
+      chatStore.startSpawn(frame.threadId, frame.id, {
+        subagentId: frame.subagentId,
+        displayName: frame.displayName,
+        type: frame.agentType,
+        mode: frame.mode,
+      });
+      break;
+    case 'chat.spawn.end':
+      // The sub-agent finished/errored/was aborted: settle the card.
+      chatStore.settleSpawn(frame.threadId, frame.id, {
+        status: frame.status,
+        ...(frame.resultLength !== undefined ? { resultLength: frame.resultLength } : {}),
+        ...(frame.error ? { error: frame.error } : {}),
+      });
+      break;
     case 'chat.tool':
       chatStore.addToolCall(frame.threadId, {
         id: frame.id,

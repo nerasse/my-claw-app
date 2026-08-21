@@ -18,11 +18,14 @@ import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } fro
 export const ToolCard = React.memo(function ToolCardView({
   item,
   subagent,
+  spawn,
   onOpenSubAgent,
 }: {
   item: ToolItem;
   /** Set when this card spawned a named sub-agent that still exists; the door to it. */
   subagent?: { label: string; status: 'idle' | 'running' };
+  /** Live sub-agent lifecycle state pushed by `chat.spawn.start/end`, when the server sent one. */
+  spawn?: { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' };
   onOpenSubAgent?: (toolItemId: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -33,13 +36,15 @@ export const ToolCard = React.memo(function ToolCardView({
   // on every streaming delta.
   const args = open ? JSON.stringify(item.args, null, 2) : '';
   const running = item.running === true;
+  const spawnRunning = spawn?.status === 'running';
 
   // Auto-expand while a tool streams live output (bash), so the owner watches it land instead of
-  // opening the card manually. Settling (running -> false) leaves the card open: the result is
-  // already on screen, collapsing would hide what was just produced.
+  // opening the card manually, and while a sub-agent runs behind a spawn card. Settling
+  // (running -> false) leaves the card open: the result is already on screen, collapsing would
+  // hide what was just produced.
   useEffect(() => {
-    if (running && item.output) setOpen(true);
-  }, [running, item.output]);
+    if ((running && item.output) || spawnRunning) setOpen(true);
+  }, [running, item.output, spawnRunning]);
 
   return (
     <View style={[styles.card, !item.ok && styles.cardError, open && styles.cardOpen]}>
@@ -60,6 +65,12 @@ export const ToolCard = React.memo(function ToolCardView({
             <View style={styles.spacer} />
           )}
           {!item.ok && !running ? <Text style={styles.failed}>failed</Text> : null}
+          {spawnRunning ? (
+            <Text style={styles.runState}>● running sub-agent</Text>
+          ) : null}
+          {spawn?.status === 'complete' ? <Text style={styles.okState}>✓ done</Text> : null}
+          {spawn?.status === 'error' ? <Text style={styles.failed}>error</Text> : null}
+          {spawn?.status === 'aborted' ? <Text style={styles.aborted}>aborted</Text> : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
@@ -124,6 +135,9 @@ const createStyles = (palette: Palette) => ({
   spacer: { flex: 1 },
   duration: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   failed: { fontSize: font.micro, color: palette.danger, fontWeight: '600' as const },
+  okState: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
+  aborted: { fontSize: font.micro, color: palette.textFaint, fontWeight: '600' as const },
+  runState: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
   label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },

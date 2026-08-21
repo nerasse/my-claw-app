@@ -51,6 +51,9 @@ export interface SpawnCard {
   args: ToolItem['args'];
   ok: ToolItem['ok'];
   durationMs: ToolItem['durationMs'];
+  /** Live lifecycle state of the sub-agent behind the card, when the server pushed one. */
+  subagentId?: string;
+  status?: 'running' | 'complete' | 'error' | 'aborted';
 }
 
 type Listener = () => void;
@@ -143,6 +146,8 @@ class ChatStoreImpl {
   private pages = new Map<string, HistoryPage>();
   private listeners = new Set<Listener>();
   private spawnCards = new Map<string, { tools: ToolItem[]; cards: SpawnCard[] }>();
+  /** `${threadId}:${cardId}` -> live spawn state pushed by `chat.spawn.start`/`chat.spawn.end`. */
+  private spawnStatus = new Map<string, { subagentId: string; displayName: string; type: string; mode: string; status: 'running' | 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }>();
   /** Pending coalesced notification, see `emitSoon`. */
   private frame: ReturnType<typeof setTimeout> | null = null;
 
@@ -165,15 +170,53 @@ class ChatStoreImpl {
     if (cached && cached.tools.length === tools.length && cached.tools.every((tool, i) => tool === tools[i])) {
       return cached.cards;
     }
-    const cards = tools.map(item => ({
-      id: item.id,
-      name: item.name,
-      args: item.args,
-      ok: item.ok,
-      durationMs: item.durationMs,
-    }));
+    const cards = tools.map(item => {
+      const live = this.spawnStatus.get(`${threadId}:${item.id}`);
+      return {
+        id: item.id,
+        name: item.name,
+        args: item.args,
+        ok: item.ok,
+        durationMs: item.durationMs,
+        ...(live ? { subagentId: live.subagentId, status: live.status } : {}),
+      };
+    });
+    // Standalone spawn cards: a programmatic spawn has no tool item, so it is carried by the
+    // status map alone. Its card id is the subagent id; settled ones stay until the thread is
+    // dismissed.
+    const toolIds = new Set(tools.map(tool => tool.id));
+    for (const [key, live] of this.spawnStatus) {
+      const [tid, cardId] = key.split(':');
+      if (tid !== threadId || toolIds.has(cardId)) continue;
+      cards.push({
+        id: cardId,
+        name: 'spawn',
+        args: { type: live.type, mode: live.mode, task: '' },
+        ok: live.status === 'complete',
+        durationMs: undefined,
+        subagentId: live.subagentId,
+        status: live.status,
+      });
+    }
     this.spawnCards.set(threadId, { tools, cards });
     return cards;
+  }
+
+  /** A sub-agent spawned: record its live state so the spawn card shows it before the tool result
+   *  lands. `cardId` is the tool-start card id (tool spawns) or the sub-agent id. */
+  startSpawn(threadId: string, cardId: string, info: { subagentId: string; displayName: string; type: string; mode: string }): void {
+    this.spawnStatus.set(`${threadId}:${cardId}`, { ...info, status: 'running' });
+    this.spawnCards.delete(threadId);
+    this.emit();
+  }
+
+  /** Settles a spawn card with a final status. Kept so a finished card still shows what happened. */
+  settleSpawn(threadId: string, cardId: string, outcome: { status: 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }): void {
+    const current = this.spawnStatus.get(`${threadId}:${cardId}`);
+    if (!current) return;
+    this.spawnStatus.set(`${threadId}:${cardId}`, { ...current, ...outcome });
+    this.spawnCards.delete(threadId);
+    this.emit();
   }
 
   getItems(threadId: string): ChatItem[] {
@@ -633,6 +676,7 @@ class ChatStoreImpl {
   clearAll(): void {
     this.threads.clear();
     this.spawnCards.clear();
+    this.spawnStatus.clear();
     this.streams.clear();
     this.reasoning.clear();
     this.lastStream.clear();
