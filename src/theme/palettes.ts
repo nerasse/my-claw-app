@@ -24,6 +24,16 @@ export interface Palette {
   ok: string;
   warn: string;
   danger: string;
+  /** Green used for diff additions and success state. */
+  diffAdd: string;
+  /** Red used for diff removals. */
+  diffDel: string;
+  /** Background of a diff addition line. */
+  diffAddBg: string;
+  /** Background of a diff removal line. */
+  diffDelBg: string;
+  /** Background of a diff hunk header (`@@ -a,b +c,d @@`). */
+  diffHunkBg: string;
   overlay: string;
   /** Monospace blocks inside tool cards. */
   codeBg: string;
@@ -45,6 +55,11 @@ export const lightPalette: Palette = {
   ok: '#12855a',
   warn: '#b45309',
   danger: '#c02626',
+  diffAdd: '#12855a',
+  diffDel: '#c02626',
+  diffAddBg: '#e6f4ec',
+  diffDelBg: '#fbeaea',
+  diffHunkBg: '#eef1f6',
   overlay: 'rgba(15,18,24,0.42)',
   codeBg: '#f7f8fa',
 };
@@ -65,6 +80,11 @@ export const darkPalette: Palette = {
   ok: '#3ecf8e',
   warn: '#e0a33e',
   danger: '#ff6b6b',
+  diffAdd: '#3ecf8e',
+  diffDel: '#ff6b6b',
+  diffAddBg: '#12281c',
+  diffDelBg: '#2b1414',
+  diffHunkBg: '#1a1f28',
   overlay: 'rgba(0,0,0,0.6)',
   codeBg: '#11151b',
 };

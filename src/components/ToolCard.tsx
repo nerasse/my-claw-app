@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { formatDuration, summarizeArgs } from '../core/utils';
+import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -46,6 +47,18 @@ export const ToolCard = React.memo(function ToolCardView({
   const args = open ? JSON.stringify(item.args, null, 2) : '';
   const running = item.running === true;
   const spawnRunning = spawn?.status === 'running';
+  // A tool output carrying a unified diff (apply_patch) renders as colour-coded lines instead of
+  // a plain monospace block. splitDiff only runs while the card is expanded (a collapsed card has
+  // nothing to paint).
+  const split = useMemo(
+    () => (open ? splitDiff(item.output) : null),
+    [open, item.output],
+  );
+  const hasDiff = split !== null && split.diff.length > 0;
+  // Grace period between settle and the auto-fold: the final output gets one visible beat before
+  // the card collapses, so a fast tool does not read as a flash open/close.
+  const FOLD_GRACE_MS = 450;
+  const foldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-expand while a tool streams live output (bash), so the owner watches it land instead of
   // opening the card manually, and while a sub-agent runs behind a spawn card.
@@ -55,8 +68,12 @@ export const ToolCard = React.memo(function ToolCardView({
   // so a long run does not leave a wall of expanded cards behind it. A card the owner opened by
   // hand before the settle is left alone: only the auto-open is undone.
   useEffect(() => {
-    const streaming = (running && item.output) || spawnRunning;
+    const streaming = running || spawnRunning;
     if (streaming) {
+      if (foldTimer.current !== null) {
+        clearTimeout(foldTimer.current);
+        foldTimer.current = null;
+      }
       // Watch the tool land live: open it unless the owner already decided otherwise.
       if (!open && !userTookControl.current) {
         setOpen(true);
@@ -64,17 +81,33 @@ export const ToolCard = React.memo(function ToolCardView({
       }
     } else {
       // Settled (or never ran): fold back only what the auto-open unfolded, and only when the
-      // owner never touched the card. A hand-opened card stays as the owner left it.
+      // owner never touched the card. A hand-opened card stays as the owner left it. The fold is
+      // delayed by FOLD_GRACE_MS so the final output is visible for a beat before the card
+      // collapses — instant fold reads as a flash on fast tools.
       if (!expandTools && autoOpened.current && !userTookControl.current) {
-        setOpen(false);
-        autoOpened.current = false;
+        if (foldTimer.current === null) {
+          foldTimer.current = setTimeout(() => {
+            foldTimer.current = null;
+            if (!autoOpened.current || userTookControl.current) return;
+            setOpen(false);
+            autoOpened.current = false;
+          }, FOLD_GRACE_MS);
+        }
+      } else {
+        userTookControl.current = false;
       }
-      userTookControl.current = false;
     }
-  }, [running, item.output, spawnRunning, expandTools, open]);
+  }, [running, spawnRunning, expandTools, open]);
+  // Clear the pending fold if the card unmounts (thread switch) so no setState lands on a dead
+  // component.
+  useEffect(() => {
+    return () => {
+      if (foldTimer.current !== null) clearTimeout(foldTimer.current);
+    };
+  }, []);
 
   return (
-    <View style={[styles.card, !item.ok && styles.cardError, open && styles.cardOpen]}>
+    <View style={[styles.card, !item.ok && !running && styles.cardError, open && styles.cardOpen]}>
       <Pressable
         onPress={() => {
           setOpen(value => !value);
@@ -124,7 +157,10 @@ export const ToolCard = React.memo(function ToolCardView({
             <Text style={styles.label}>output{item.truncated ? ' · truncated' : ''}</Text>
             <BlockActions title={`${item.name} output`} value={item.output} />
           </View>
-          <Text style={styles.code}>{item.output.trim() || '(empty)'}</Text>
+          {split ? <DiffView parts={split} /> : null}
+          {!hasDiff ? (
+            <Text style={styles.code}>{item.output.trim() || '(empty)'}</Text>
+          ) : null}
           {subagent && onOpenSubAgent ? (
             <Pressable
               style={styles.door}
