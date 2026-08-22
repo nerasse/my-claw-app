@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
+import { chatSelectable } from '../core/platform';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -64,7 +65,7 @@ export function CollapsibleAside({
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
           <Text style={styles.label}>{label}</Text>
         </Pressable>
-        {open ? <BlockActions title={label} value={body} /> : null}
+        {open && !chatSelectable ? <BlockActions title={label} value={body} /> : null}
       </View>
       {open ? (
         <View style={styles.body}>

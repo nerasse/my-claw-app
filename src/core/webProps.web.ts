@@ -7,14 +7,14 @@ import type { ViewProps } from 'react-native';
  * here and spread as `Partial<ViewProps>` instead of being cast at every call site.
  */
 
-/** Right-click opens the same menu a long press opens on the phone. */
-export function contextMenuProps(open: () => void): Partial<ViewProps> {
-  return {
-    onContextMenu: (event: { preventDefault: () => void }) => {
-      event.preventDefault();
-      open();
-    },
-  } as Partial<ViewProps>;
+/**
+ * Right-click on the desktop. The browser's own context menu is the right tool there (native
+ * selection and copy already work, see platform.chatSelectable), and every action is one tap
+ * away behind the ⋯ button. Intercepting the event to open the phone-style sheet fought the
+ * user's muscle memory, so the web build no longer touches the context menu at all.
+ */
+export function contextMenuProps(_open: () => void): Partial<ViewProps> {
+  return {};
 }
 
 /**
