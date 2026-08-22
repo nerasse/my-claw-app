@@ -41,7 +41,6 @@ import {
   encodeInstructionsLayerSet,
   encodeInstructionsList,
   encodeInstructionsSet,
-  encodeAgentsModelSet,
   encodeAgentsScopeSet,
   encodeAgentsWorkspaceSet,
   encodeAgentsIterationsSet,
@@ -671,10 +670,6 @@ export function AppShell(): React.JSX.Element {
       .then((delivered) => {
         if (!delivered) chatStore.setPageLoading(threadId, false);
       });
-  }, []);
-
-  const setGlobalDefaultModel = useCallback((modelId: string) => {
-    connection.send(encodeAgentsModelSet('global', modelId)).catch(() => {});
   }, []);
 
   const editJob = useCallback((job: JobEntry) => {
@@ -2886,7 +2881,6 @@ export function AppShell(): React.JSX.Element {
                   defaultModel={agentsConfig?.defaultModel ?? ''}
                   searchHandle={providerSearch}
                   error={agentsState.error}
-                  onSetDefault={setGlobalDefaultModel}
                   onEditProvider={() => {
                     setProviderBusy(false);
                     setProviderEdit({ mode: 'edit', key: selectedProviderInfo.key });

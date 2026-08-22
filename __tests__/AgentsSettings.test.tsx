@@ -419,15 +419,15 @@ describe('providers', () => {
     });
     await openProviders(tree);
     await pressLabel(tree, 'Open provider litellm');
-    await waitFor(() => labelsOf(tree).includes('Set default Naked'));
-    expect(labelsOf(tree)).not.toContain('Set default Opus');
+    await waitFor(() => labelsOf(tree).includes('Edit Naked'));
+    expect(labelsOf(tree)).not.toContain('Edit Opus');
     // Mimo is already the global default: the row says so instead of offering a no-op.
     expect(labelsOf(tree)).toContain('Mimo, already the default');
     expect(textsOf(tree)).toEqual(expect.arrayContaining(['default']));
     await settleAndUnmount(tree);
   });
 
-  test('tapping a model makes it the global default', async () => {
+  test('tapping a model opens its settings, never sets a default', async () => {
     const tree = await boot();
     await emit(providersConfig());
     await emit({
@@ -440,11 +440,13 @@ describe('providers', () => {
     });
     await openProviders(tree);
     await pressLabel(tree, 'Open provider anthropic');
-    await waitFor(() => labelsOf(tree).includes('Set default Opus'));
-    await pressLabel(tree, 'Set default Opus');
+    await waitFor(() => labelsOf(tree).includes('Edit Opus'));
+    await pressLabel(tree, 'Edit Opus');
 
-    expect(sentFrames()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set', agent: 'global', model: 'opus' })]),
+    // Opening the editor is the new tap action; no model is silently switched.
+    await waitFor(() => labelsOf(tree).includes('Model id'));
+    expect(sentFrames()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set' })]),
     );
     await settleAndUnmount(tree);
   });

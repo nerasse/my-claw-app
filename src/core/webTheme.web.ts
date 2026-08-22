@@ -40,7 +40,10 @@ body { overscroll-behavior: none; }
 :focus-visible { outline: 2px solid ${palette.accent}; outline-offset: 2px; border-radius: 6px; }
 input:focus, textarea:focus { outline: none; }
 
-::selection { background: ${palette.accentSoft}; color: ${palette.text}; }
+/* Selected text must stay readable in both themes: accentSoft is dark-on-dark in the dark
+   palette, so the browser paints it nearly invisible. accent + accentText flips one way in
+   light (blue on dark text) and the other way in dark, always with contrast. */
+::selection { background: ${palette.accent}; color: ${palette.accentText}; }
 
 /* Text is unselectable by default in react-native-web. Marked regions opt back in. */
 [data-claw-select="text"], [data-claw-select="text"] * { user-select: text !important; }

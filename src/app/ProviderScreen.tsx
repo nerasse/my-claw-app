@@ -39,12 +39,10 @@ function originBadge(model: { declared?: boolean; discovered?: boolean }): strin
 const ModelRow = React.memo(function ModelRowView({
   model,
   isDefault,
-  onSetDefault,
   onEdit,
 }: {
   model: ModelOption;
   isDefault: boolean;
-  onSetDefault: (modelId: string) => void;
   onEdit: (model: ModelOption) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -52,10 +50,10 @@ const ModelRow = React.memo(function ModelRowView({
   return (
     <Pressable
       style={styles.row}
-      onPress={() => onSetDefault(model.id)}
+      onPress={() => onEdit(model)}
       accessibilityRole="button"
       accessibilityState={{ selected: isDefault }}
-      accessibilityLabel={isDefault ? `${model.label}, already the default` : `Set default ${model.label}`}>
+      accessibilityLabel={isDefault ? `${model.label}, already the default` : `Edit ${model.label}`}>
       <View style={styles.linkMain}>
         <View style={styles.linkTitleLine}>
           <Text style={styles.linkTitle}>{model.label}</Text>
@@ -69,16 +67,6 @@ const ModelRow = React.memo(function ModelRowView({
         ) : null}
       </View>
       <Text style={styles.checkmark}>{isDefault ? '✓' : ''}</Text>
-      {/* Its own target, because the row already means "make this the default": one gesture per
-          intent, and editing is not something to discover by long-pressing. */}
-      <Pressable
-        onPress={() => onEdit(model)}
-        hitSlop={8}
-        style={styles.editTarget}
-        accessibilityRole="button"
-        accessibilityLabel={`Edit ${model.label}`}>
-        <Text style={styles.editGlyph}>✎</Text>
-      </Pressable>
     </Pressable>
   );
 });
@@ -115,7 +103,6 @@ const UnavailableRow = React.memo(function UnavailableRowView({
           {model.reason}
         </Text>
       </View>
-      <Text style={styles.editGlyph}>✎</Text>
     </Pressable>
   );
 });
@@ -123,7 +110,7 @@ const UnavailableRow = React.memo(function UnavailableRowView({
 /**
  * The models one provider contributes, filtered from the shared catalog with the same rule the
  * server uses to count them (a model with no provider of its own follows the global default).
- * Tapping a model makes it the global default; the one in force carries a checkmark.
+ * Tapping a model opens its settings; the one in force carries a checkmark.
  */
 export function ProviderScreen({
   provider,
@@ -132,7 +119,6 @@ export function ProviderScreen({
   defaultModel,
   searchHandle,
   error,
-  onSetDefault,
   onEditProvider,
   onEditModel,
   onAddModel,
@@ -148,7 +134,6 @@ export function ProviderScreen({
   searchHandle?: React.MutableRefObject<ProviderSearch>;
   /** Server refused the last write: shown here, where the user asked for it. */
   error: string | null;
-  onSetDefault: (modelId: string) => void;
   onEditProvider: () => void;
   onEditModel: (model: ModelOption | UnavailableModel) => void;
   onAddModel: () => void;
@@ -184,11 +169,10 @@ export function ProviderScreen({
       <ModelRow
         model={item}
         isDefault={item.id === defaultModel}
-        onSetDefault={onSetDefault}
         onEdit={onEditModel}
       />
     ),
-    [defaultModel, onEditModel, onSetDefault],
+    [defaultModel, onEditModel],
   );
 
   const shownUnavailable = useMemo(
@@ -239,7 +223,7 @@ export function ProviderScreen({
         <View style={styles.headerText}>
           <Text style={styles.title}>{provider.group || provider.key}</Text>
           <Text style={styles.subtitle}>
-            {`${models.length} model${models.length === 1 ? '' : 's'} · tap one to make it the default`}
+            {`${models.length} model${models.length === 1 ? '' : 's'} · tap one to edit`}
           </Text>
         </View>
         {/* The models on this page come from discovery: the button that re-runs it belongs where
