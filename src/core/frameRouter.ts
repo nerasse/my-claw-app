@@ -500,7 +500,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (statusStore.getSnapshot().fetch === 'loading') statusStore.receive(frame);
       break;
     case 'session.instructions.result':
-      if (sessionInstructionsStore.getSnapshot().fetch === 'loading') sessionInstructionsStore.receive(frame);
+      // Accept both the first fetch (loading) and the answer to a set (ready): a control the
+      // page just applied must land, and the report it carries is the fresh truth.
+      if (sessionInstructionsStore.getSnapshot().fetch === 'loading' || sessionInstructionsStore.getSnapshot().fetch === 'ready') {
+        sessionInstructionsStore.receive(frame);
+      }
       break;
     case 'jobs.list.result':
       // The fresh listing is also the answer to a save or a delete: a pending one closes

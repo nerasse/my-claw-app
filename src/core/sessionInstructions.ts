@@ -51,6 +51,13 @@ class SessionInstructionsStoreImpl {
     this.emit();
   }
 
+  /** The page sent a control and is waiting for the server's fresh report. */
+  pending(): void {
+    if (this.state.fetch !== 'ready' && this.state.fetch !== 'loading') return;
+    this.state = { ...this.state, fetch: 'loading', error: null };
+    this.emit();
+  }
+
   fail(message: string): void {
     this.state = { ...this.state, fetch: 'error', error: message };
     this.emit();

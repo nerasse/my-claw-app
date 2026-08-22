@@ -911,6 +911,10 @@ export interface SessionInstructionNested {
   firstAt: string;
   lastAt: string;
   missing: boolean;
+  /** This session turned the file off: it is never injected, and the page greys it. */
+  disabled?: boolean;
+  /** This session unloaded the record: shown until the next lazy reload. */
+  unloaded?: boolean;
 }
 
 export interface SessionInstructionsPayload {
@@ -923,6 +927,14 @@ export interface SessionInstructionsPayload {
   totalBytes: number;
   layers: SessionInstructionLayer[];
   nested: SessionInstructionNested[];
+  /** Layer ids the session turned off (agent, skills, tools, platform, runtime, suggested). */
+  layersOff: string[];
+  /** Skill names the session filtered out of the catalog. */
+  skillsOff: string[];
+  /** Every skill in scope, with the ones the session turned off flagged. Lets the page toggle more. */
+  skills: Array<{ name: string; description: string; off: boolean }>;
+  /** Long-term memory recall off for this session. */
+  memoryRecallOff: boolean;
   /** What the report cannot show, stated by the server rather than guessed here. */
   notes: string[];
 }
@@ -937,6 +949,21 @@ export interface SessionInstructionsResultFrame {
   type: 'session.instructions.result';
   threadId: string;
   instructions: SessionInstructionsPayload;
+}
+
+/** One per-session instruction control the app applies; the server answers with a fresh report. */
+export interface SessionInstructionPatch {
+  kind: 'nested.toggle' | 'nested.unload' | 'layer.toggle' | 'skill.toggle' | 'memory.toggle';
+  path?: string;
+  layer?: string;
+  skill?: string;
+  on?: boolean;
+}
+
+export interface SessionInstructionsSetFrame {
+  type: 'session.instructions.set';
+  threadId: string;
+  patch: SessionInstructionPatch;
 }
 
 /** The thread's history is gone server-side; the app drops its copy. */
@@ -1935,6 +1962,10 @@ export function encodeInstructionsSetNested(
 
 export function encodeSessionInstructionsGet(threadId: string): string {
   return JSON.stringify({ type: 'session.instructions.get', threadId });
+}
+
+export function encodeSessionInstructionsSet(threadId: string, patch: SessionInstructionPatch): string {
+  return JSON.stringify({ type: 'session.instructions.set', threadId, patch });
 }
 
 /**

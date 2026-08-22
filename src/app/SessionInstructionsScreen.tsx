@@ -5,7 +5,7 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useSessionInstructions } from '../core/sessionInstructions';
 import { CopyButton } from '../components/CopyButton';
-import type { SessionInstructionLayer, SessionInstructionNested } from '../core/protocol';
+import type { SessionInstructionLayer, SessionInstructionNested, SessionInstructionPatch } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
 
 /**
@@ -48,10 +48,12 @@ export function SessionInstructionsScreen({
   onClose,
   onEditLayer,
   onEditNested,
+  onPatch,
 }: {
   onClose: () => void;
   onEditLayer: (workspace: string, file: string) => void;
   onEditNested: (item: SessionInstructionNested) => void;
+  onPatch: (patch: SessionInstructionPatch) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const layerFrame = useLayerFrame();
@@ -99,8 +101,33 @@ export function SessionInstructionsScreen({
               key={`${layer.id}-${index}`}
               layer={layer}
               onEdit={layer.edit ? () => onEditLayer(layer.edit!.workspace, layer.edit!.file) : undefined}
+              off={payload.layersOff.includes(layer.id)}
+              onToggle={() => onPatch({ kind: 'layer.toggle', layer: layer.id })}
             />
           ))}
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>controls</Text>
+            <ToggleRow
+              label="long-term memory recall"
+              off={payload.memoryRecallOff}
+              onToggle={() => onPatch({ kind: 'memory.toggle' })}
+            />
+          </View>
+
+          <Text style={styles.section}>{`skills · ${payload.skills.length}`}</Text>
+          {payload.skills.length === 0 ? (
+            <Text style={styles.sectionNote}>No skill is in scope for this conversation.</Text>
+          ) : (
+            payload.skills.map(skill => (
+              <ToggleRow
+                key={skill.name}
+                label={skill.name}
+                off={skill.off}
+                onToggle={() => onPatch({ kind: 'skill.toggle', skill: skill.name })}
+              />
+            ))
+          )}
 
           <Text style={styles.section}>{`nested AGENTS.md · ${payload.nested.length}`}</Text>
           {payload.nested.length === 0 ? (
@@ -108,7 +135,15 @@ export function SessionInstructionsScreen({
               Nothing yet. A file is picked up when a tool touches its directory, once per run.
             </Text>
           ) : (
-            payload.nested.map(item => <NestedRow key={item.path} item={item} onEdit={() => onEditNested(item)} />)
+            payload.nested.map(item => (
+              <NestedRow
+                key={item.path}
+                item={item}
+                onEdit={item.missing ? undefined : () => onEditNested(item)}
+                onToggle={() => onPatch({ kind: 'nested.toggle', path: item.path })}
+                onUnload={() => onPatch({ kind: 'nested.unload', path: item.path })}
+              />
+            ))
           )}
 
           {payload.notes.map(note => (
@@ -122,29 +157,46 @@ export function SessionInstructionsScreen({
   );
 }
 
-function LayerRow({ layer, onEdit }: { layer: SessionInstructionLayer; onEdit?: () => void }): React.JSX.Element {
+function LayerRow({
+  layer,
+  onEdit,
+  off,
+  onToggle,
+}: {
+  layer: SessionInstructionLayer;
+  onEdit?: () => void;
+  off: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
   const origin = originLabel(layer);
   const empty = layer.bytes === 0;
 
   return (
-    <View style={styles.card}>
-      <Pressable
-        onPress={() => setOpen(value => !value)}
-        style={styles.rowHead}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${layer.label}, ${bytes(layer.bytes)}`}>
-        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
-        <View style={styles.rowMain}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {layer.label}
-          </Text>
-          {origin ? <Text style={styles.rowSub}>{origin}</Text> : null}
-        </View>
-        <Text style={[styles.rowBytes, empty && styles.rowBytesOff]}>{empty ? 'empty' : bytes(layer.bytes)}</Text>
-      </Pressable>
+    <View style={[styles.card, off && styles.rowOff]}>
+      <View style={styles.rowHead}>
+        <Toggle
+          on={!off}
+          onToggle={onToggle}
+          accessibilityLabel={off ? `Enable ${layer.label}` : `Disable ${layer.label}`}
+        />
+        <Pressable
+          onPress={() => setOpen(value => !value)}
+          style={styles.rowFlex}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          accessibilityLabel={`${layer.label}, ${bytes(layer.bytes)}`}>
+          <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+          <View style={styles.rowMain}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {layer.label}
+            </Text>
+            {origin ? <Text style={styles.rowSub}>{origin}</Text> : null}
+          </View>
+          <Text style={[styles.rowBytes, empty && styles.rowBytesOff]}>{empty ? 'empty' : bytes(layer.bytes)}</Text>
+        </Pressable>
+      </View>
 
       {open ? (
         <View style={styles.foldBody}>
@@ -165,24 +217,90 @@ function LayerRow({ layer, onEdit }: { layer: SessionInstructionLayer; onEdit?: 
   );
 }
 
-function NestedRow({ item, onEdit }: { item: SessionInstructionNested; onEdit: () => void }): React.JSX.Element {
+function NestedRow({
+  item,
+  onEdit,
+  onToggle,
+  onUnload,
+}: {
+  item: SessionInstructionNested;
+  onEdit?: () => void;
+  onToggle: () => void;
+  onUnload: () => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const off = item.disabled ?? false;
+  return (
+    <View style={[styles.card, off && styles.rowOff]}>
+      <View style={styles.rowHead}>
+        <Toggle
+          on={!off}
+          onToggle={onToggle}
+          accessibilityLabel={off ? `Enable ${item.label}` : `Disable ${item.label}`}
+        />
+        <Pressable
+          onPress={onEdit}
+          disabled={!onEdit || item.missing}
+          style={styles.rowFlex}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !onEdit || item.missing }}
+          accessibilityLabel={`Edit ${item.label}`}>
+          <View style={styles.rowMain}>
+            <Text style={[styles.rowTitle, off && styles.textOff]} numberOfLines={2}>
+              {item.label}
+            </Text>
+            <Text style={styles.rowSub}>
+              {item.missing
+                ? 'deleted since · it did shape this conversation'
+                : item.unloaded
+                ? 'unloaded · picked up again when a tool touches its directory'
+                : `${bytes(item.bytes)} · ${item.count} run${item.count > 1 ? 's' : ''} · ${ago(item.lastAt)}`}
+            </Text>
+          </View>
+        </Pressable>
+        <Pressable
+          onPress={onUnload}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Unload ${item.label}`}>
+          <Text style={styles.action}>unload</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function ToggleRow({
+  label,
+  off,
+  onToggle,
+}: {
+  label: string;
+  off: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.rowHead}>
+      <Toggle on={!off} onToggle={onToggle} accessibilityLabel={`Toggle ${label}`} />
+      <Text style={[styles.rowTitle, off && styles.textOff]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function Toggle({ on, onToggle, accessibilityLabel }: { on: boolean; onToggle: () => void; accessibilityLabel: string }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return (
     <Pressable
-      onPress={onEdit}
-      disabled={item.missing}
-      style={styles.card}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: item.missing }}
-      accessibilityLabel={`Edit ${item.label}`}>
-      <Text style={styles.rowTitle} numberOfLines={2}>
-        {item.label}
-      </Text>
-      <Text style={styles.rowSub}>
-        {item.missing
-          ? 'deleted since · it did shape this conversation'
-          : `${bytes(item.bytes)} · ${item.count} run${item.count > 1 ? 's' : ''} · ${ago(item.lastAt)}`}
-      </Text>
+      onPress={onToggle}
+      hitSlop={8}
+      style={[styles.toggle, on ? styles.toggleOn : styles.toggleOff]}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: on }}
+      accessibilityLabel={accessibilityLabel}>
+      <View style={[styles.toggleKnob, on ? styles.toggleKnobOn : styles.toggleKnobOff]} />
     </Pressable>
   );
 }
@@ -229,11 +347,26 @@ const createStyles = (palette: Palette) => ({
   },
   cardNote: { fontSize: font.small, color: palette.textMuted },
   rowHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  rowFlex: { flex: 1 },
   rowMain: { flex: 1, gap: 1 },
   rowTitle: { fontSize: font.body, color: palette.text },
   rowSub: { fontSize: font.small, color: palette.textFaint },
   rowBytes: { fontSize: font.small, color: palette.textMuted },
   rowBytesOff: { color: palette.textFaint, fontStyle: 'italic' as const },
+  rowOff: { opacity: 0.55 },
+  textOff: { color: palette.textFaint, textDecorationLine: 'line-through' as const },
+  toggle: {
+    width: 40,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 3,
+  },
+  toggleOn: { backgroundColor: palette.accent },
+  toggleOff: { backgroundColor: palette.surfaceAlt, borderWidth: 1, borderColor: palette.border },
+  toggleKnob: { width: 18, height: 18, borderRadius: 9 },
+  toggleKnobOn: { backgroundColor: palette.bg, alignSelf: 'flex-end' as const },
+  toggleKnobOff: { backgroundColor: palette.textMuted, alignSelf: 'flex-start' as const },
   foldGlyph: { fontSize: font.small, color: palette.textFaint, width: 12 },
   foldBody: { gap: space.sm, paddingTop: space.xs },
   actions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md },

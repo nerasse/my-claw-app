@@ -10,7 +10,7 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { SessionInstructionsScreen } from '../SessionInstructionsScreen';
 import { sessionInstructionsStore } from '../../core/sessionInstructions';
-import type { SessionInstructionsPayload } from '../../core/protocol';
+import type { SessionInstructionsPayload, SessionInstructionPatch } from '../../core/protocol';
 
 function payload(over: Partial<SessionInstructionsPayload> = {}): SessionInstructionsPayload {
   return {
@@ -30,6 +30,10 @@ function payload(over: Partial<SessionInstructionsPayload> = {}): SessionInstruc
       { path: '/home/me/dev/repo/AGENTS.md', label: '/home/me/dev/repo/AGENTS.md', bytes: 120, count: 3, firstAt: '2026-08-15T10:00:00.000Z', lastAt: '2026-08-15T12:00:00.000Z', missing: false },
       { path: '/home/me/dev/gone/AGENTS.md', label: '/home/me/dev/gone/AGENTS.md', bytes: 12, count: 1, firstAt: '2026-08-15T09:00:00.000Z', lastAt: '2026-08-15T09:00:00.000Z', missing: true },
     ],
+    layersOff: [],
+    skillsOff: [],
+    skills: [{ name: 'voice', description: 'Voice mode', off: false }],
+    memoryRecallOff: false,
     notes: ['les skills suggérées dépendent du message'],
     ...over,
   };
@@ -61,7 +65,7 @@ function pressLabelled(tree: ReactTestRenderer.ReactTestRenderer, label: string)
   });
 }
 
-function render(handlers: Partial<{ onEditLayer: (w: string, f: string) => void; onEditNested: (item: { path: string }) => void }> = {}) {
+function render(handlers: Partial<{ onEditLayer: (w: string, f: string) => void; onEditNested: (item: { path: string }) => void; onPatch: (patch: SessionInstructionPatch) => void }> = {}) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
@@ -69,6 +73,7 @@ function render(handlers: Partial<{ onEditLayer: (w: string, f: string) => void;
         onClose={() => {}}
         onEditLayer={handlers.onEditLayer ?? (() => {})}
         onEditNested={handlers.onEditNested ?? (() => {})}
+        onPatch={handlers.onPatch ?? (() => {})}
       />,
     );
   });
@@ -164,5 +169,37 @@ describe('editing', () => {
     );
     const texts = textsOf(render()).join('\n');
     expect(texts).toMatch(/120 B · 3 runs/);
+  });
+});
+
+describe('controls', () => {
+  test('a nested file can be turned off and unloaded', () => {
+    const patches: SessionInstructionPatch[] = [];
+    ReactTestRenderer.act(() => sessionInstructionsStore.open('t1'));
+    ReactTestRenderer.act(() =>
+      sessionInstructionsStore.receive({ type: 'session.instructions.result', threadId: 't1', instructions: payload() }),
+    );
+    const tree = render({ onPatch: p => patches.push(p) });
+
+    pressLabelled(tree, 'Disable /home/me/dev/repo/AGENTS.md');
+    expect(patches).toEqual([{ kind: 'nested.toggle', path: '/home/me/dev/repo/AGENTS.md' }]);
+
+    pressLabelled(tree, 'Unload /home/me/dev/repo/AGENTS.md');
+    expect(patches[1]).toEqual({ kind: 'nested.unload', path: '/home/me/dev/repo/AGENTS.md' });
+  });
+
+  test('a layer and memory recall can be turned off', () => {
+    const patches: SessionInstructionPatch[] = [];
+    ReactTestRenderer.act(() => sessionInstructionsStore.open('t1'));
+    ReactTestRenderer.act(() =>
+      sessionInstructionsStore.receive({ type: 'session.instructions.result', threadId: 't1', instructions: payload() }),
+    );
+    const tree = render({ onPatch: p => patches.push(p) });
+
+    pressLabelled(tree, 'Disable Available tools');
+    expect(patches).toContainEqual({ kind: 'layer.toggle', layer: 'tools' });
+
+    pressLabelled(tree, 'Toggle long-term memory recall');
+    expect(patches).toContainEqual({ kind: 'memory.toggle' });
   });
 });

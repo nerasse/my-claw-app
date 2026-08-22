@@ -52,6 +52,7 @@ import {
   encodeChatSend,
   encodeChatStop,
   encodeSessionInstructionsGet,
+  encodeSessionInstructionsSet,
   encodeInstructionsSetNested,
   encodeStatusGet,
   encodeConfigGet,
@@ -3658,6 +3659,14 @@ export function AppShell(): React.JSX.Element {
             onClose={() => {
               sessionInstructionsStore.close();
               setInstructionsPageOpen(false);
+            }}
+            onPatch={patch => {
+              const threadId = sessionInstructions.threadId;
+              if (!threadId) return;
+              sessionInstructionsStore.pending();
+              connection.send(encodeSessionInstructionsSet(threadId, patch)).catch(() => {
+                sessionInstructionsStore.fail('Failed to send the control');
+              });
             }}
             onEditLayer={(workspace, file) => {
               instructionsStore.openEditor(workspace, file);
