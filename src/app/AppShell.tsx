@@ -804,6 +804,12 @@ export function AppShell(): React.JSX.Element {
         for (const frame of resumeFrames(activeThreadRef.current, HISTORY_LIMIT)) {
           connection.send(frame).catch(() => {});
         }
+        // Server-owned display prefs and voice mode shape the conversation as soon as it loads,
+        // not when the owner first opens Settings: a fresh tab must render with the same layout
+        // choices a phone already applied. The Settings screens re-ask when they open, so the
+        // fetch here is only the boot value.
+        connection.send(encodeUiPrefsGet()).catch(() => {});
+        connection.send(encodeVoiceModeGet()).catch(() => {});
       }
     });
     const offPending = connection.onPending(setPending);
