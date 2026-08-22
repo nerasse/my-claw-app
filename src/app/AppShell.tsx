@@ -1359,12 +1359,16 @@ export function AppShell(): React.JSX.Element {
    * dead thread.
    */
   const subagentDoors = useMemo(() => {
+    const byId = new Map(roster.agents.map(agent => [agent.id, agent]));
     const byName = new Map(roster.agents.map(agent => [agent.displayName, agent]));
     const doors = new Map<string, { label: string; status: 'idle' | 'running' }>();
     for (const card of spawnCards) {
-      if (!card.ok || card.args.mode !== 'session') continue;
+      // A one-shot run has no persistent door after it finishes, but while it is listed (or still
+      // running) it must be reachable: the spawn card is the only handle the owner has.
       const claimed = typeof card.args.name === 'string' ? card.args.name : '';
-      const agent = byName.get(claimed);
+      const agent =
+        (card.subagentId ? byId.get(card.subagentId) : undefined) ??
+        byName.get(claimed);
       if (!agent) continue;
       doors.set(card.id, { label: agent.id.replace(/^subagent\//, ''), status: agent.status });
     }
@@ -1385,7 +1389,9 @@ export function AppShell(): React.JSX.Element {
     (toolItemId: string) => {
       const card = spawnCards.find(entry => entry.id === toolItemId);
       const claimed = card && typeof card.args.name === 'string' ? card.args.name : '';
-      const agent = roster.agents.find(entry => entry.displayName === claimed);
+      const agent =
+        (card?.subagentId ? roster.agents.find(entry => entry.id === card.subagentId) : undefined) ??
+        roster.agents.find(entry => entry.displayName === claimed);
       if (!agent || !activeThread) return;
       openSubAgent(agent, activeThread);
     },
