@@ -1746,6 +1746,29 @@ export function AppShell(): React.JSX.Element {
    * one carried Status, the labels disagreed, and the drawer deleted without asking while the
    * header confirmed. The subject is a conversation in both places, so no label says so.
    */
+  // Resync a conversation with the server: a fresh history top page replaces whatever the
+  // screen shows (seedHistory drops the old items), the model row re-reads the session pin,
+  // and the listing re-reads the drawer row. Same frames openThread sends on opening.
+  const refreshThread = useCallback((threadId: string): void => {
+    connection.send(encodeSubAgentsList(threadId)).catch(() => {});
+    connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
+    connection.send(encodeModelGet(threadId));
+    connection.send(encodeSessionList());
+    chatStore.markRead(threadId);
+  }, []);
+
+  const refreshAction = useCallback(
+    (target: SessionSummary, close: () => void): SheetEntry => ({
+      label: 'Refresh',
+      hint: 'resync this conversation with the server',
+      onPress: () => {
+        refreshThread(target.threadId);
+        close();
+      },
+    }),
+    [refreshThread],
+  );
+
   // Pinning leads both menus, on its own: it is the one action that changes nothing about the
   // conversation and everything about finding it again, so it is the row a thumb reaches for
   // without reading. Handed out apart from the list below because the header menu keeps Model
@@ -1849,7 +1872,7 @@ export function AppShell(): React.JSX.Element {
   );
 
   const threadActions: SheetEntry[] = threadMenu
-    ? [pinAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, () => setThreadMenu(null))]
+    ? [refreshAction(threadMenu, () => setThreadMenu(null)), pinAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, () => setThreadMenu(null))]
     : [];
 
   /**
@@ -1959,7 +1982,7 @@ export function AppShell(): React.JSX.Element {
 
   const commandMenuOptions: SheetEntry[] = [
     // Same head as the drawer's sheet: one action, in the same place, whichever menu was opened.
-    ...(activeSummary ? [pinAction(activeSummary, () => setCommandMenuOpen(false))] : []),
+    ...(activeSummary ? [refreshAction(activeSummary, () => setCommandMenuOpen(false)), pinAction(activeSummary, () => setCommandMenuOpen(false))] : []),
     {
       label: 'Model…',
       hint: currentModelLabel
