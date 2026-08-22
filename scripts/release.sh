@@ -31,12 +31,20 @@ cp "$APK" "$tmp/$ASSET_NAME"
 # map is regenerated from the tag when a crash needs reading, and the copy of the bundle inside
 # this APK proves the regenerated one is the right one. See AGENTS.md.
 
-if fj release create "$VERSION" --create-tag --attach "$tmp/$ASSET_NAME" 2>/dev/null; then
-  :
-elif fj release asset create "$VERSION" "$tmp/$ASSET_NAME" "$ASSET_NAME"; then
-  echo "release $VERSION already existed, added $ASSET_NAME"
+if fj release view "$VERSION" >/dev/null 2>&1; then
+  if fj release asset create "$VERSION" "$tmp/$ASSET_NAME" "$ASSET_NAME"; then
+    echo "release $VERSION already existed, added $ASSET_NAME"
+  else
+    echo "release $VERSION already carries $ASSET_NAME, nothing to attach" >&2
+  fi
 else
-  echo "release $VERSION already carries $ASSET_NAME, nothing to attach" >&2
+  # The tag is usually already pushed by CI; fall back to --create-tag when it is not.
+  # Plain `release create --create-tag` fails with 409 once the tag exists, which used to
+  # fall through to a misleading "already carries" message.
+  if ! fj release create "$VERSION" --tag "$VERSION" --attach "$tmp/$ASSET_NAME"; then
+    fj release create "$VERSION" --create-tag --attach "$tmp/$ASSET_NAME"
+  fi
+  echo "created release $VERSION with $ASSET_NAME"
 fi
 
 if [[ -n "$WEB_TARBALL" ]]; then
