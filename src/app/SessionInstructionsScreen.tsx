@@ -146,22 +146,6 @@ export function SessionInstructionsScreen({
             ))
           )}
 
-          {payload.nestedUnloaded.length > 0 ? (
-            <>
-              <Text style={styles.section}>{`unloaded · ${payload.nestedUnloaded.length}`}</Text>
-              {payload.nestedUnloaded.map(item => (
-                <NestedRow
-                  key={item.path}
-                  item={item}
-                  onEdit={item.missing ? undefined : () => onEditNested(item)}
-                  onToggle={() => onPatch({ kind: 'nested.toggle', path: item.path })}
-                  onUnload={() => onPatch({ kind: 'nested.restore', path: item.path })}
-                  restore
-                />
-              ))}
-            </>
-          ) : null}
-
           {payload.notes.map(note => (
             <Text key={note} style={styles.note}>
               {note}
@@ -238,13 +222,11 @@ function NestedRow({
   onEdit,
   onToggle,
   onUnload,
-  restore = false,
 }: {
   item: SessionInstructionNested;
   onEdit?: () => void;
   onToggle: () => void;
   onUnload: () => void;
-  restore?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const off = item.disabled ?? false;
@@ -270,29 +252,17 @@ function NestedRow({
             <Text style={styles.rowSub}>
               {item.missing
                 ? 'deleted since · it did shape this conversation'
-                : restore
-                ? 'unloaded · not injected until you put it back'
                 : `${bytes(item.bytes)} · ${item.count} run${item.count > 1 ? 's' : ''} · ${ago(item.lastAt)}`}
             </Text>
           </View>
         </Pressable>
-        {restore ? (
-          <Pressable
-            onPress={onUnload}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Put back ${item.label}`}>
-            <Text style={styles.action}>put back</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={onUnload}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Unload ${item.label}`}>
-            <Text style={styles.action}>unload</Text>
-          </Pressable>
-        )}
+        <Pressable
+          onPress={onUnload}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Unload ${item.label}`}>
+          <Text style={styles.action}>unload</Text>
+        </Pressable>
       </View>
     </View>
   );

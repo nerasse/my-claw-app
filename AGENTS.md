@@ -61,6 +61,24 @@ adb shell dumpsys activity services com.myclawapp
 adb shell am kill com.myclawapp                             # simulates a system kill (not force-stop)
 ```
 
+## Release & quick checks
+
+- Version lives only in `android/app/build.gradle` (`versionCode` + `versionName`). `package.json` stays `0.0.1`, never bump it.
+- CI (`ci.yml`) only runs lint/types/tests + web bundle: it does **not** build the APK nor publish anything. The release is produced locally (mechanic in the `forgejo` skill):
+  1. `export JAVA_HOME=~/.sdkman/candidates/java/current ANDROID_HOME=~/android-sdk`
+  2. `cd android && ./gradlew assembleRelease --no-daemon` (cold ~15 min, incremental ~25 s)
+  3. `bash scripts/build-web.sh && tar -czf dist-web.tar.gz -C dist-web .`
+  4. `bash scripts/release.sh v<v> android/app/build/outputs/apk/release/app-release.apk dist-web.tar.gz`
+- `release.sh` renames the APK to `my-claw-app-v<v>.apk` and keeps the 5 most recent. If a wrongly-named or duplicate asset is already attached, delete it first via `fj release asset delete`.
+- Verify: `fj release view v<v>` shows the APK + `dist-web.tar.gz`; HEAD `releases/download/v<v>/dist-web.tar.gz` (a fresh asset can briefly 404 behind the proxy while HEAD returns 200).
+- The server installs the bundle itself (`~/.my-claw/web/current`): the user runs the update. Never flip `current` or restart the service by hand.
+
+Quick checks (no `npx` on this machine):
+```sh
+node node_modules/typescript/bin/tsc --noEmit
+node node_modules/jest/bin/jest.js --runInBand   # 74 suites / 632 tests
+```
+
 ## Known traps
 
 - `parseServerFrame` is a **whitelist**: a frame type it does not hold is answered `null` and never

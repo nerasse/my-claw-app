@@ -927,8 +927,6 @@ export interface SessionInstructionsPayload {
   totalBytes: number;
   layers: SessionInstructionLayer[];
   nested: SessionInstructionNested[];
-  /** Files this session unloaded: not in `nested`, the page offers to put them back. */
-  nestedUnloaded: SessionInstructionNested[];
   /** Layer ids the session turned off (agent, skills, tools, platform, runtime, suggested). */
   layersOff: string[];
   /** Skill names the session filtered out of the catalog. */
@@ -955,7 +953,7 @@ export interface SessionInstructionsResultFrame {
 
 /** One per-session instruction control the app applies; the server answers with a fresh report. */
 export interface SessionInstructionPatch {
-  kind: 'nested.toggle' | 'nested.unload' | 'nested.restore' | 'layer.toggle' | 'skill.toggle' | 'memory.toggle';
+  kind: 'nested.toggle' | 'nested.unload' | 'layer.toggle' | 'skill.toggle' | 'memory.toggle';
   path?: string;
   layer?: string;
   skill?: string;
