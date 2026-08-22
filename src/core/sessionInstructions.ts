@@ -51,7 +51,12 @@ class SessionInstructionsStoreImpl {
     this.emit();
   }
 
-  /** The page sent a control and is waiting for the server's fresh report. */
+  /**
+   * The page sent a control and is waiting for the server's fresh report.
+   * The previous payload stays on screen: a control must never flash the page into
+   * "asking the server…" (which would unmount the scroll view and reset its position).
+   * Only the very first open starts from an empty payload.
+   */
   pending(): void {
     if (this.state.fetch !== 'ready' && this.state.fetch !== 'loading') return;
     this.state = { ...this.state, fetch: 'loading', error: null };

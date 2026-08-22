@@ -30,6 +30,7 @@ function payload(over: Partial<SessionInstructionsPayload> = {}): SessionInstruc
       { path: '/home/me/dev/repo/AGENTS.md', label: '/home/me/dev/repo/AGENTS.md', bytes: 120, count: 3, firstAt: '2026-08-15T10:00:00.000Z', lastAt: '2026-08-15T12:00:00.000Z', missing: false },
       { path: '/home/me/dev/gone/AGENTS.md', label: '/home/me/dev/gone/AGENTS.md', bytes: 12, count: 1, firstAt: '2026-08-15T09:00:00.000Z', lastAt: '2026-08-15T09:00:00.000Z', missing: true },
     ],
+    nestedUnloaded: [],
     layersOff: [],
     skillsOff: [],
     skills: [{ name: 'voice', description: 'Voice mode', off: false }],
@@ -186,6 +187,31 @@ describe('controls', () => {
 
     pressLabelled(tree, 'Unload /home/me/dev/repo/AGENTS.md');
     expect(patches[1]).toEqual({ kind: 'nested.unload', path: '/home/me/dev/repo/AGENTS.md' });
+  });
+
+  test('an unloaded file shows in its own section and can be put back', () => {
+    const patches: SessionInstructionPatch[] = [];
+    ReactTestRenderer.act(() => sessionInstructionsStore.open('t1'));
+    ReactTestRenderer.act(() =>
+      sessionInstructionsStore.receive({
+        type: 'session.instructions.result',
+        threadId: 't1',
+        instructions: payload({
+          nested: [],
+          nestedUnloaded: [
+            { path: '/home/me/dev/codex/AGENTS.md', label: '/home/me/dev/codex/AGENTS.md', bytes: 12, count: 0, firstAt: '', lastAt: '', missing: false, unloaded: true },
+          ],
+        }),
+      }),
+    );
+    const tree = render({ onPatch: p => patches.push(p) });
+
+    const texts = textsOf(tree);
+    expect(texts).toContain('unloaded · 1');
+    expect(texts.some(t => t.includes('not injected until you put it back'))).toBe(true);
+
+    pressLabelled(tree, 'Put back /home/me/dev/codex/AGENTS.md');
+    expect(patches).toEqual([{ kind: 'nested.restore', path: '/home/me/dev/codex/AGENTS.md' }]);
   });
 
   test('a layer and memory recall can be turned off', () => {
