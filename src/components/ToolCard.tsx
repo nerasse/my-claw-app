@@ -55,21 +55,20 @@ export const ToolCard = React.memo(function ToolCardView({
     [open, item.output],
   );
   const hasDiff = split !== null && split.diff.length > 0;
-  // Grace period between settle and the auto-fold: the final output gets one visible beat before
-  // the card collapses, so a fast tool does not read as a flash open/close.
+
+  // Stream-expansion is owned by the server pref: with expandTools on, the card opens when the
+  // tool starts and stays open (the result is on screen). With it off, the card is NEVER opened
+  // automatically — not even while running — and only the owner's tap opens it, so a long run
+  // leaves a wall of dense collapsed cards, exactly as configured.
+  //
+  // The grace period below only delays the fold of what auto-open unfolded (i.e. when the pref is
+  // on), so a fast tool does not read as an open/close flash. It never opens anything on its own.
   const FOLD_GRACE_MS = 450;
   const foldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-expand while a tool streams live output (bash), so the owner watches it land instead of
-  // opening the card manually, and while a sub-agent runs behind a spawn card.
-  //
-  // Settling behaviour depends on the server-owned pref: with expandTools on the card stays open
-  // (the result is already on screen), with it off (default) the card folds back to one dense line
-  // so a long run does not leave a wall of expanded cards behind it. A card the owner opened by
-  // hand before the settle is left alone: only the auto-open is undone.
   useEffect(() => {
     const streaming = running || spawnRunning;
-    if (streaming) {
+    if (expandTools && streaming) {
       if (foldTimer.current !== null) {
         clearTimeout(foldTimer.current);
         foldTimer.current = null;
@@ -79,12 +78,16 @@ export const ToolCard = React.memo(function ToolCardView({
         setOpen(true);
         autoOpened.current = true;
       }
-    } else {
-      // Settled (or never ran): fold back only what the auto-open unfolded, and only when the
-      // owner never touched the card. A hand-opened card stays as the owner left it. The fold is
-      // delayed by FOLD_GRACE_MS so the final output is visible for a beat before the card
-      // collapses — instant fold reads as a flash on fast tools.
-      if (!expandTools && autoOpened.current && !userTookControl.current) {
+    } else if (autoOpened.current && !userTookControl.current) {
+      // Settled, and this card's opening came from the auto-open: fold it back. The delay lets the
+      // final output be visible for a beat before the card collapses. (With expandTools off nothing
+      // was ever auto-opened, so autoOpened stays false and this branch is a no-op.)
+      if (!expandTools) {
+        // expandTools just turned off: fold immediately, no grace period to respect.
+        setOpen(false);
+        autoOpened.current = false;
+        foldTimer.current = null;
+      } else {
         if (foldTimer.current === null) {
           foldTimer.current = setTimeout(() => {
             foldTimer.current = null;
@@ -93,11 +96,12 @@ export const ToolCard = React.memo(function ToolCardView({
             autoOpened.current = false;
           }, FOLD_GRACE_MS);
         }
-      } else {
-        userTookControl.current = false;
       }
+    } else {
+      // Nothing auto-opened: the owner's own state stands. Clear the run's takeover flag.
+      userTookControl.current = false;
     }
-  }, [running, spawnRunning, expandTools, open]);
+  }, [expandTools, running, spawnRunning, open]);
   // Clear the pending fold if the card unmounts (thread switch) so no setState lands on a dead
   // component.
   useEffect(() => {

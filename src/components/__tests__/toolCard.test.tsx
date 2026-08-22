@@ -1,7 +1,9 @@
 /**
- * ToolCard live behaviour: a tool that starts streaming opens its card, stays open while it runs,
- * and folds back shortly after it settles — but never during the run, and never a hand-opened
- * card. Without the fold grace period, a fast tool reads as an open/close flash.
+ * ToolCard expansion is owned by the server pref:
+ * - expandTools off (default): the card NEVER auto-opens, not even while a tool runs. Only the
+ *   owner's tap opens it, and a tap survives the settle.
+ * - expandTools on: the card opens when the run starts and stays open while it runs; after the
+ *   settle it stays open too (the pref means "always expand").
  */
 
 import React from 'react';
@@ -44,55 +46,62 @@ function bodyVisible(tree: ReactTestRenderer.ReactTestRenderer): boolean {
     .some(t => t.props.children === 'arguments' || t.props.children === 'output');
 }
 
-describe('ToolCard auto-open/fold', () => {
+function updateItem(tree: ReactTestRenderer.ReactTestRenderer, item: ToolItem, props: Record<string, unknown> = {}) {
+  ReactTestRenderer.act(() => {
+    tree.update(
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+        <ToolCard item={item} {...props} />
+      </ThemeContext.Provider>,
+    );
+  });
+}
+
+describe('ToolCard expansion pref', () => {
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it('opens when a run starts (even before the first output chunk)', () => {
+  it('does NOT auto-open while running when expandTools is off', () => {
     const tree = renderTool(makeItem({ running: true }));
-    expect(bodyVisible(tree)).toBe(true);
-    // The settle must not fold an open card while it is still running.
-    tree.update(
-      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
-        <ToolCard item={makeItem({ running: true, output: 'chunk' })} />
-      </ThemeContext.Provider>,
-    );
-    expect(bodyVisible(tree)).toBe(true);
+    expect(bodyVisible(tree)).toBe(false);
+    // First chunk arrives: still collapsed.
+    updateItem(tree, makeItem({ running: true, output: 'chunk' }));
+    expect(bodyVisible(tree)).toBe(false);
+    // Settles: still collapsed, no flash possible.
+    updateItem(tree, makeItem({ running: false, output: 'result', ok: true }));
+    expect(bodyVisible(tree)).toBe(false);
   });
 
-  it('folds back shortly after the settle, not instantly', () => {
-    jest.useFakeTimers();
-    const tree = renderTool(makeItem({ running: true }));
-    expect(bodyVisible(tree)).toBe(true);
-    ReactTestRenderer.act(() => {
-      tree.update(
-        <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
-          <ToolCard item={makeItem({ running: false, output: 'result', ok: true })} />
-        </ThemeContext.Provider>,
-      );
-    });
-    // Right after the settle the card is still open (grace period).
-    expect(bodyVisible(tree)).toBe(true);
-    ReactTestRenderer.act(() => {
-      jest.advanceTimersByTime(500);
+  it('does NOT auto-open a spawn run when expandTools is off', () => {
+    const tree = renderTool(makeItem({ running: false }), {
+      spawn: { subagentId: 's1', displayName: 'agent', status: 'running' },
     });
     expect(bodyVisible(tree)).toBe(false);
   });
 
-  it('stays open after settle when expandTools is set', () => {
-    jest.useFakeTimers();
+  it('auto-opens while running when expandTools is on', () => {
     const tree = renderTool(makeItem({ running: true }), { expandTools: true });
+    expect(bodyVisible(tree)).toBe(true);
+  });
+
+  it('stays open after the settle when expandTools is on', () => {
+    const tree = renderTool(makeItem({ running: true }), { expandTools: true });
+    updateItem(tree, makeItem({ running: false, output: 'result' }), { expandTools: true });
+    expect(bodyVisible(tree)).toBe(true);
+  });
+
+  it('a manual tap opens the card even with expandTools off, and the settle leaves it open', () => {
+    const tree = renderTool(makeItem({ running: true }));
+    expect(bodyVisible(tree)).toBe(false);
     ReactTestRenderer.act(() => {
-      tree.update(
-        <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
-          <ToolCard item={makeItem({ running: false, output: 'result' })} expandTools={true} />
-        </ThemeContext.Provider>,
+      // The header row is a Pressable labeled 'Tool bash, running'.
+      const header = tree.root.find(
+        node => node.props.accessibilityLabel === 'Tool bash, running' && typeof node.props.onPress === 'function',
       );
+      header.props.onPress();
     });
-    ReactTestRenderer.act(() => {
-      jest.advanceTimersByTime(2000);
-    });
+    expect(bodyVisible(tree)).toBe(true);
+    updateItem(tree, makeItem({ running: false, output: 'result' }));
     expect(bodyVisible(tree)).toBe(true);
   });
 });

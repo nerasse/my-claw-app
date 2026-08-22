@@ -21,17 +21,25 @@ export function textsOf(tree: Tree): string[] {
  * Drains pending promises and timers until the condition holds. Asserting right after a
  * single act() made the suite depend on how many promise hops boot took, which failed on a
  * cold cache: wait on the observable state instead.
+ *
+ * Time-based instead of attempt-based: a slow CI runner (cache miss, contended CPU) can easily
+ * need many more micro-turns than local, and 25 attempts of ~0ms was timing out there while
+ * passing locally. 10s of wall-clock is generous for any reasonable boot, and a broken condition
+ * still fails in the same 10s (just with a clean message instead of "Exceeded timeout of 30000").
  */
-export async function waitFor(check: () => boolean, attempts = 25): Promise<void> {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
+export async function waitFor(check: () => boolean, timeoutMs = 10000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
     if (check()) return;
+    if (Date.now() >= deadline) {
+      throw new Error(`waitFor: condition still false after ${timeoutMs} ms`);
+    }
     await ReactTestRenderer.act(async () => {
       await new Promise<void>(resolve => {
         setTimeout(resolve, 0);
       });
     });
   }
-  if (!check()) throw new Error(`waitFor: condition still false after ${attempts} attempts`);
 }
 
 /**
