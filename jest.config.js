@@ -17,6 +17,8 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-gesture-handler|react-native-reanimated|react-native-worklets|react-native-sortables|@likashefqet/react-native-image-zoom|marked)/)',
   ],
   // Rendering the whole app through react-test-renderer costs seconds on a cold transform
-  // cache; the 5s default turned a slow CI runner into a red build.
-  testTimeout: 30000,
+  // cache; the 5s default turned a slow CI runner into a red build. 30s still burned when the
+  // runner contended with local builds (the boot waitFor + React turns can stack tens of
+  // seconds), so 60s: a genuine deadlock still fails, a contended runner no longer flakes.
+  testTimeout: 60000,
 };
