@@ -89,6 +89,8 @@ Traps:
 - `fj release view v<v>` works here (release named after the tag). In the **server** repo it does not — the release is named `my-claw <version>`.
 - Release assets answer HEAD (a fresh one can briefly 404 behind the proxy). The server's generic **package** registry does not: it answers 405, use `curl --range 0-0`.
 - The server installs the web bundle itself (`~/.my-claw/web/current`). Never flip `current` or restart by hand.
+- Red CI: job logs are reachable (the `forgejo` skill says otherwise). Recipe in the server repo's AGENTS.md, with `claw/my-claw-app` as the repo.
+- `ci.yml` runs `npm test -- --ci` (parallel); AGENTS.md's local command is `--runInBand`. A red CI that is green locally is usually that gap, or the runner: every failure so far has been `Exceeded timeout of 60000 ms`, with the suite at ~180 s against ~46 s when green.
 
 ## Known traps
 
