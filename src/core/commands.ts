@@ -11,7 +11,6 @@ export interface CommandDef {
  * in the app on the next menu open, without a release.
  */
 const DEFAULT_COMMANDS: CommandDef[] = [
-  { name: 'new', description: 'Start a fresh session' },
   { name: 'tag', description: 'Model tags: /tag new "name"' },
   { name: 'model', description: 'Show or change current model, or an agent default: /model <agent>' },
   { name: 'models', description: 'List available models' },
