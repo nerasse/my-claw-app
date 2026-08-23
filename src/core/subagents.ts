@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { SubAgentEntry, SubAgentsListResultFrame } from './protocol';
+import type { SpawnCard } from './chat';
 
 type Listener = () => void;
 
@@ -192,4 +193,88 @@ export function useSubAgents(threadId: string | null): ThreadRoster {
     listener => subAgentStore.subscribe(listener),
     () => (threadId ? subAgentStore.get(threadId) : EMPTY),
   );
+}
+
+/**
+ * The sub-agent a `spawn` card refers to, by the id the server pushed or, failing that, the name
+ * the call asked for.
+ *
+ * The name is what makes a card survive a reload: `chat.spawn.start` carries the id but is sent
+ * once and never replayed, whereas the roster is asked for (`subagents.list`) and comes back
+ * whenever the page reconnects.
+ */
+function agentOfCard(
+  card: SpawnCard,
+  byId: ReadonlyMap<string, SubAgentEntry>,
+  byName: ReadonlyMap<string, SubAgentEntry>,
+): SubAgentEntry | undefined {
+  const claimed = typeof card.args.name === 'string' ? card.args.name : '';
+  return (card.subagentId ? byId.get(card.subagentId) : undefined) ?? byName.get(claimed);
+}
+
+function indexRoster(agents: readonly SubAgentEntry[]): {
+  byId: Map<string, SubAgentEntry>;
+  byName: Map<string, SubAgentEntry>;
+} {
+  return {
+    byId: new Map(agents.map(agent => [agent.id, agent])),
+    byName: new Map(agents.map(agent => [agent.displayName, agent])),
+  };
+}
+
+/**
+ * Which `spawn` cards still lead somewhere, keyed by card id.
+ *
+ * A card outlives the sub-agent it made, so the door is offered only while the roster still lists
+ * it: a killed one stops offering rather than opening a dead thread. A one-shot run has no
+ * persistent door once it finishes, but while it is listed it must be reachable -- the spawn card
+ * is the only handle the owner has on it.
+ */
+export function spawnDoorsOf(
+  cards: readonly SpawnCard[],
+  agents: readonly SubAgentEntry[],
+): Map<string, { label: string; status: 'idle' | 'running' }> {
+  const { byId, byName } = indexRoster(agents);
+  const doors = new Map<string, { label: string; status: 'idle' | 'running' }>();
+  for (const card of cards) {
+    const agent = agentOfCard(card, byId, byName);
+    if (!agent) continue;
+    doors.set(card.id, { label: agent.id.replace(/^subagent\//, ''), status: agent.status });
+  }
+  return doors;
+}
+
+/**
+ * Sub-agent lifecycle state per spawn card, from the `chat.spawn.start/end` frames when they were
+ * seen and from the roster when they were not.
+ *
+ * The fallback exists because those frames are sent once and never replayed: a page reloaded
+ * mid-run had an empty status map, so the card dropped its "running sub-agent" line while the
+ * sub-agent behind it was plainly still going -- the roster panel said `running` and the card
+ * disagreed.
+ *
+ * It applies only to a card whose spawn call has not returned. A session sub-agent is reusable, so
+ * an old card naming an agent that is busy again is not a card whose own call is running, and
+ * `card.running` is what keeps the two apart. Only `running` is ever inferred: the roster says
+ * whether an agent is busy, never whether this particular call completed or errored, and once the
+ * result lands the card shows its own outcome and duration anyway.
+ */
+export function spawnLiveOf(
+  cards: readonly SpawnCard[],
+  agents: readonly SubAgentEntry[],
+): Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }> {
+  const { byId, byName } = indexRoster(agents);
+  const live = new Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }>();
+  for (const card of cards) {
+    if (card.subagentId && card.status) {
+      const named = typeof card.args.name === 'string' ? card.args.name : undefined;
+      live.set(card.id, { subagentId: card.subagentId, displayName: named ?? card.subagentId, status: card.status });
+      continue;
+    }
+    if (!card.running) continue;
+    const agent = agentOfCard(card, byId, byName);
+    if (agent?.status !== 'running') continue;
+    live.set(card.id, { subagentId: agent.id, displayName: agent.displayName, status: 'running' });
+  }
+  return live;
 }

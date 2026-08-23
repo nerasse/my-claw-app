@@ -233,6 +233,74 @@ describe('chatStore.seedHistory', () => {
     expect(items.find(item => item.id === 'stale')).toBeUndefined();
   });
 
+  // Reloading a page while a tool was executing used to draw the card as finished: the server
+  // rebuilt an unanswered call as a successful empty one, and the spinner never came back even
+  // though the sub-agent behind it was still running.
+  test('a tool still executing keeps its running flag through a reseed', () => {
+    chatStore.seedHistory(THREAD, [
+      { id: 'h-1', role: 'user', text: 'lance', ts: '2026-01-01T00:00:01.000Z' },
+      { ...toolEntry, id: 't-call-1', running: true, ok: true, output: '', durationMs: undefined },
+    ]);
+    const [, card] = chatStore.getItems(THREAD);
+    expect(card).toMatchObject({ kind: 'tool', id: 't-call-1', running: true });
+  });
+
+  test('a settled tool is not marked running', () => {
+    chatStore.seedHistory(THREAD, [toolEntry]);
+    const card = chatStore.getItems(THREAD)[0];
+    expect(card.kind).toBe('tool');
+    // ToolCard tests `running === true`, so an absent flag is correctly "not running".
+    expect(card.kind === 'tool' ? card.running : 'wrong-kind').toBeFalsy();
+  });
+
+  // Reported symptom: reload a session while sub-agents run, and as each one finishes a second
+  // spawn card appears beside the first, carrying the duration. The end frame could not find the
+  // card history had drawn, so it appended its own -- and `spawnCardsOf` then listed both.
+  test('a spawn finishing after a reseed leaves one card, not two', () => {
+    chatStore.seedHistory(THREAD, [
+      {
+        role: 'tool', ts: '2026-01-01T00:00:02.000Z', id: 't-call-9', name: 'spawn',
+        args: { type: 'general', mode: 'session', task: 'creuse' },
+        ok: true, output: '', truncated: false, running: true,
+      },
+    ]);
+    expect(chatStore.spawnCardsOf(THREAD)).toHaveLength(1);
+
+    chatStore.addToolCall(THREAD, {
+      id: 't-call-9', name: 'spawn', args: { type: 'general', mode: 'session', task: 'creuse' },
+      ok: true, output: 'fini', truncated: false, durationMs: 91_000,
+    });
+
+    const cards = chatStore.spawnCardsOf(THREAD);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ id: 't-call-9', durationMs: 91_000 });
+    expect(chatStore.getItems(THREAD).filter(i => i.kind === 'tool')).toHaveLength(1);
+  });
+
+  // The roster fallback in `spawnLiveOf` keys off this, to tell a call that is running now from an
+  // old card naming a reusable agent that happens to be busy again.
+  test('a spawn card carries whether its own call has returned', () => {
+    chatStore.seedHistory(THREAD, [
+      { role: 'tool', ts: '2026-01-01T00:00:02.000Z', id: 't-a', name: 'spawn', args: {}, ok: true, output: '', truncated: false, running: true },
+      { role: 'tool', ts: '2026-01-01T00:00:03.000Z', id: 't-b', name: 'spawn', args: {}, ok: true, output: 'fini', truncated: false },
+    ]);
+    const [a, b] = chatStore.spawnCardsOf(THREAD);
+    expect(a.running).toBe(true);
+    expect(b.running).toBeFalsy();
+  });
+
+  // The card history draws and the card the live stream patches share one id, so the tool
+  // finishing after the reload replaces this card instead of appending a second one below it.
+  test('a tool finishing after a reseed patches the seeded card instead of adding one', () => {
+    chatStore.seedHistory(THREAD, [
+      { ...toolEntry, id: 't-call-1', running: true, ok: true, output: '', durationMs: undefined },
+    ]);
+    chatStore.addToolCall(THREAD, { id: 't-call-1', name: 'bash', args: { command: 'echo hi' }, ok: true, output: 'hi', truncated: false, durationMs: 4 });
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'tool', output: 'hi', running: false });
+  });
+
   // The server stores a compaction summary in a `user` turn because that is the role the prompt
   // needs it in. Without the marker the app drew it as a message the owner had typed.
   test('a compaction boundary is carried through as a boundary, not as a question', () => {

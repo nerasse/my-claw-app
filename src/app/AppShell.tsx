@@ -26,7 +26,7 @@ import {
   type TextItem,
 } from '../core/chat';
 import { resumeFrames } from '../core/resume';
-import { groupRoster, groupSharedRoster, useSubAgents } from '../core/subagents';
+import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { isPinned, migrateLocalPins, setPinned } from '../core/pinned';
 import { parseTagCommand } from '../core/commands';
@@ -1355,37 +1355,10 @@ export function AppShell(): React.JSX.Element {
     [rosterGroups, roster.agents],
   );
 
-  /**
-   * Which `spawn` cards still lead somewhere. A card outlives the sub-agent it made, so the door is
-   * offered only while the roster still lists it: a killed one stops offering rather than opening a
-   * dead thread.
-   */
-  const subagentDoors = useMemo(() => {
-    const byId = new Map(roster.agents.map(agent => [agent.id, agent]));
-    const byName = new Map(roster.agents.map(agent => [agent.displayName, agent]));
-    const doors = new Map<string, { label: string; status: 'idle' | 'running' }>();
-    for (const card of spawnCards) {
-      // A one-shot run has no persistent door after it finishes, but while it is listed (or still
-      // running) it must be reachable: the spawn card is the only handle the owner has.
-      const claimed = typeof card.args.name === 'string' ? card.args.name : '';
-      const agent =
-        (card.subagentId ? byId.get(card.subagentId) : undefined) ??
-        byName.get(claimed);
-      if (!agent) continue;
-      doors.set(card.id, { label: agent.id.replace(/^subagent\//, ''), status: agent.status });
-    }
-    return doors;
-  }, [roster.agents, spawnCards]);
-
-  /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
-  const spawnLive = useMemo(() => {
-    const live = new Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }>();
-    for (const card of spawnCards) {
-      if (!card.subagentId || !card.status) continue;
-      live.set(card.id, { subagentId: card.subagentId, displayName: card.args.name as string ?? card.subagentId, status: card.status });
-    }
-    return live;
-  }, [spawnCards]);
+  // Both derivations live in core/subagents.ts: they are pure, and the roster fallback in
+  // `spawnLiveOf` is the part that needed tests of its own.
+  const subagentDoors = useMemo(() => spawnDoorsOf(spawnCards, roster.agents), [spawnCards, roster.agents]);
+  const spawnLive = useMemo(() => spawnLiveOf(spawnCards, roster.agents), [spawnCards, roster.agents]);
 
   const openSubAgentFromCard = useCallback(
     (toolItemId: string) => {

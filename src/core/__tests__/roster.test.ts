@@ -1,4 +1,5 @@
-import { groupRoster, groupSharedRoster, scopeLabelOf, subAgentStore } from '../subagents';
+import { groupRoster, groupSharedRoster, scopeLabelOf, spawnDoorsOf, spawnLiveOf, subAgentStore } from '../subagents';
+import type { SpawnCard } from '../chat';
 import type { SubAgentEntry } from '../protocol';
 
 const entry = (over: Partial<SubAgentEntry> & { id: string }): SubAgentEntry => ({
@@ -135,5 +136,62 @@ describe('subAgentStore', () => {
     subAgentStore.markUnsupported();
     expect(subAgentStore.isUnsupported()).toBe(true);
     expect(subAgentStore.get('a').status).toBe('ready');
+  });
+});
+
+const card = (over: Partial<SpawnCard> = {}): SpawnCard => ({
+  id: 't-call-1',
+  name: 'spawn',
+  args: { type: 'research', mode: 'session', task: 'creuse', name: 'digger' },
+  ok: true,
+  durationMs: undefined,
+  ...over,
+});
+
+describe('spawnDoorsOf', () => {
+  it('offers a door while the roster still lists the agent, and none once it is gone', () => {
+    const agents = [entry({ id: 'subagent/digger', displayName: 'digger' })];
+    expect(spawnDoorsOf([card()], agents).get('t-call-1')).toEqual({ label: 'digger', status: 'idle' });
+    expect(spawnDoorsOf([card()], []).size).toBe(0);
+  });
+
+  it('matches on the pushed id before the claimed name', () => {
+    const agents = [
+      entry({ id: 'subagent/run-abcd', displayName: 'other' }),
+      entry({ id: 'subagent/digger', displayName: 'digger' }),
+    ];
+    const doors = spawnDoorsOf([card({ subagentId: 'subagent/run-abcd' })], agents);
+    expect(doors.get('t-call-1')?.label).toBe('run-abcd');
+  });
+});
+
+describe('spawnLiveOf', () => {
+  it('prefers what the frames pushed', () => {
+    const live = spawnLiveOf([card({ subagentId: 'subagent/digger', status: 'complete' })], []);
+    expect(live.get('t-call-1')).toEqual({ subagentId: 'subagent/digger', displayName: 'digger', status: 'complete' });
+  });
+
+  // `chat.spawn.start` is sent once and never replayed, so a page reloaded mid-run has no status
+  // for the card. The roster is asked for, so it still knows the sub-agent is going.
+  it('falls back to the roster for a call that has not returned', () => {
+    const agents = [entry({ id: 'subagent/digger', displayName: 'digger', status: 'running' })];
+    const live = spawnLiveOf([card({ running: true })], agents);
+    expect(live.get('t-call-1')).toEqual({ subagentId: 'subagent/digger', displayName: 'digger', status: 'running' });
+  });
+
+  // A session sub-agent is reusable: an old, finished card naming an agent that is busy again must
+  // not light up as if its own call were running.
+  it('does not revive a settled card whose named agent is busy again', () => {
+    const agents = [entry({ id: 'subagent/digger', displayName: 'digger', status: 'running' })];
+    expect(spawnLiveOf([card({ running: false, durationMs: 1200 })], agents).size).toBe(0);
+  });
+
+  it('infers nothing when the agent is idle: the card speaks for its own outcome', () => {
+    const agents = [entry({ id: 'subagent/digger', displayName: 'digger', status: 'idle' })];
+    expect(spawnLiveOf([card({ running: true })], agents).size).toBe(0);
+  });
+
+  it('infers nothing when the roster does not know the agent', () => {
+    expect(spawnLiveOf([card({ running: true })], []).size).toBe(0);
   });
 });

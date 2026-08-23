@@ -60,6 +60,12 @@ export interface SpawnCard {
   /** Live lifecycle state of the sub-agent behind the card, when the server pushed one. */
   subagentId?: string;
   status?: 'running' | 'complete' | 'error' | 'aborted';
+  /**
+   * The spawn call itself has not returned. Lets a reader tell "this card's sub-agent is the one
+   * running now" from "this card spawned that named agent once, and it happens to be busy again",
+   * which matters because `chat.spawn.start` is sent once and never replayed to a reloaded page.
+   */
+  running?: boolean;
 }
 
 type Listener = () => void;
@@ -105,6 +111,9 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
         ok: entry.ok,
         output: entry.output,
         truncated: entry.truncated,
+        // Carried through, so a tool still executing when the page reloaded keeps its spinner.
+        // Without it the card rebuilt as a finished, successful, empty-output call.
+        ...(entry.running ? { running: true } : {}),
         ts,
       };
     }
@@ -185,6 +194,7 @@ class ChatStoreImpl {
         args: item.args,
         ok: item.ok,
         durationMs: item.durationMs,
+        ...(item.running ? { running: true } : {}),
         ...(live ? { subagentId: live.subagentId, status: live.status } : {}),
       };
     });
