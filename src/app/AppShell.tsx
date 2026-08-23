@@ -2463,6 +2463,7 @@ export function AppShell(): React.JSX.Element {
     group: string;
     discover: boolean;
     promptCache: boolean;
+    reasoningReplay: boolean;
     pricingProvider: string;
     fallbackModel: string;
     apiKeyEnv: string;
@@ -2482,6 +2483,7 @@ export function AppShell(): React.JSX.Element {
           group: patch.group,
           discover: patch.discover,
           promptCache: patch.promptCache,
+          reasoningReplay: patch.reasoningReplay,
           pricingProvider: patch.pricingProvider,
           fallbackModel: patch.fallbackModel,
           apiKeyEnv: patch.apiKeyEnv,

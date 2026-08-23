@@ -1197,6 +1197,7 @@ export interface ProviderInfo {
   group?: string;
   baseUrl?: string;
   promptCache?: boolean;
+  reasoningReplay?: boolean;
   pricingProvider?: string;
   fallbackModel?: string;
   discover: boolean;
@@ -1265,6 +1266,7 @@ export interface ProviderPatch {
   group?: string;
   discover?: boolean;
   promptCache?: boolean;
+  reasoningReplay?: boolean;
   pricingProvider?: string;
   fallbackModel?: string;
 }

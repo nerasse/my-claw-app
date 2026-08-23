@@ -47,6 +47,7 @@ export function ProviderEditScreen({
     group: string;
     discover: boolean;
     promptCache: boolean;
+    reasoningReplay: boolean;
     pricingProvider: string;
     fallbackModel: string;
     apiKeyEnv: string;
@@ -65,6 +66,9 @@ export function ProviderEditScreen({
   const [group, setGroup] = useState(provider?.group ?? '');
   const [discover, setDiscover] = useState(provider?.discover ?? false);
   const [promptCache, setPromptCache] = useState(provider?.promptCache ?? false);
+  // `?? true`, not `?? false`: this one is on unless the owner turns it off. The providers that
+  // document reasoning replay require it, and an endpoint that returns no reasoning gets none back.
+  const [reasoningReplay, setReasoningReplay] = useState(provider?.reasoningReplay ?? true);
   const [pricingProvider, setPricingProvider] = useState(provider?.pricingProvider ?? '');
   const [fallbackModel, setFallbackModel] = useState(provider?.fallbackModel ?? '');
   const [apiKeyEnv, setApiKeyEnv] = useState(provider?.keyEnv ?? (mode === 'create' ? '' : ''));
@@ -191,6 +195,14 @@ export function ProviderEditScreen({
               />
             </View>
           ) : null}
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>reasoning replay</Text>
+            <Switch
+              value={reasoningReplay}
+              onValueChange={setReasoningReplay}
+              accessibilityLabel="Provider reasoning replay"
+            />
+          </View>
         </View>
 
         {openai ? (
@@ -297,6 +309,7 @@ export function ProviderEditScreen({
               group: group.trim(),
               discover,
               promptCache,
+              reasoningReplay,
               pricingProvider: pricingProvider.trim(),
               fallbackModel: fallbackModel.trim(),
               apiKeyEnv: envName,
