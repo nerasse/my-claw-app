@@ -69,7 +69,7 @@ Version lives only in `android/app/build.gradle` (`versionCode` + `versionName`)
 
 ```sh
 node node_modules/typescript/bin/tsc --noEmit && npx eslint src --ext .ts,.tsx
-node node_modules/jest/bin/jest.js --runInBand   # 74 suites
+node node_modules/jest/bin/jest.js --ci --maxWorkers=2   # 74 suites, same as ci.yml
 git add <files> && git commit                    # never -A
 # bump versionCode + versionName in android/app/build.gradle
 git add android/app/build.gradle && git commit -m "chore: bump X.Y.Z"
@@ -89,8 +89,8 @@ Traps:
 - `fj release view v<v>` works here (release named after the tag). In the **server** repo it does not — the release is named `my-claw <version>`.
 - Release assets answer HEAD (a fresh one can briefly 404 behind the proxy). The server's generic **package** registry does not: it answers 405, use `curl --range 0-0`.
 - The server installs the web bundle itself (`~/.my-claw/web/current`). Never flip `current` or restart by hand.
-- Red CI: job logs are reachable (the `forgejo` skill says otherwise). Recipe in the server repo's AGENTS.md, with `claw/my-claw-app` as the repo.
-- `ci.yml` runs `npm test -- --ci` (parallel); AGENTS.md's local command is `--runInBand`. A red CI that is green locally is usually that gap, or the runner: every failure so far has been `Exceeded timeout of 60000 ms`, with the suite at ~180 s against ~46 s when green.
+- Red CI: job logs are reachable over the API. Recipe in the server repo's AGENTS.md, with `claw/my-claw-app` as the repo.
+- Every app CI failure to date is `Exceeded timeout of 60000 ms`, never a real assertion. Cause: four heavy suites in parallel on a starved runner, ~132 s each instead of ~33 s. `ci.yml` caps `--maxWorkers=2`; run tests the same way locally or a red CI will look green on your box. Do not raise `testTimeout` again.
 
 ## Known traps
 

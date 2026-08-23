@@ -32,8 +32,14 @@ jobs:
       - name: Check types
         run: npm run typecheck
 
+      # Two workers, not the default cpus-1. Four heavy RN suites landing together on a
+      # contended runner each took ~132 s instead of ~33 s, and every test that crossed the
+      # 60 s timeout inside them failed: run #180 was 20 red tests, all timeouts, none a
+      # real failure. Raising the timeout is what was tried twice before (5s -> 30s -> 60s);
+      # it treats the symptom. Halving the concurrency is what keeps a single test's wall
+      # clock under the limit. Costs ~8 s on an idle box, measured.
       - name: Unit tests
-        run: npm test -- --ci
+        run: npm test -- --ci --maxWorkers=2
 
   web:
     name: Web bundle

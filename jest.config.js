@@ -20,5 +20,9 @@ module.exports = {
   // cache; the 5s default turned a slow CI runner into a red build. 30s still burned when the
   // runner contended with local builds (the boot waitFor + React turns can stack tens of
   // seconds), so 60s: a genuine deadlock still fails, a contended runner no longer flakes.
+  //
+  // 60s is the ceiling and it stays there. Raising it again would be the fourth time round the
+  // same loop; when the runner starves, the lever is concurrency, not patience -- ci.yml caps
+  // `--maxWorkers=2` and says why.
   testTimeout: 60000,
 };
