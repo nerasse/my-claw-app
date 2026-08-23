@@ -22,6 +22,15 @@ WEB_ASSET_NAME="dist-web.tar.gz"
 
 cd "$(dirname "$0")/.."
 
+# No CI sees this release, so this is the only guard: a tag that disagrees with the APK it
+# carries publishes a mislabeled build, and the sourcemap regenerated from that tag will not
+# match the shipped bundle (AGENTS.md, "Symbolicating a release stack").
+DECLARED="$(sed -n 's/.*versionName "\(.*\)".*/\1/p' android/app/build.gradle | head -1)"
+if [[ "$VERSION" != "v${DECLARED}" ]]; then
+  echo "version mismatch: tag ${VERSION}, android/app/build.gradle says v${DECLARED}" >&2
+  exit 1
+fi
+
 # fj names the attachment after the file; stage a copy with the versioned name.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

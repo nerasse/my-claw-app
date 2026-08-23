@@ -63,21 +63,32 @@ adb shell am kill com.myclawapp                             # simulates a system
 
 ## Release & quick checks
 
-- Version lives only in `android/app/build.gradle` (`versionCode` + `versionName`). `package.json` stays `0.0.1`, never bump it.
-- CI (`ci.yml`) only runs lint/types/tests + web bundle: it does **not** build the APK nor publish anything. The release is produced locally (mechanic in the `forgejo` skill):
-  1. `export JAVA_HOME=~/.sdkman/candidates/java/current ANDROID_HOME=~/android-sdk`
-  2. `cd android && ./gradlew assembleRelease --no-daemon` (cold ~15 min, incremental ~25 s)
-  3. `bash scripts/build-web.sh && tar -czf dist-web.tar.gz -C dist-web .`
-  4. `bash scripts/release.sh v<v> android/app/build/outputs/apk/release/app-release.apk dist-web.tar.gz`
-- `release.sh` renames the APK to `my-claw-app-v<v>.apk` and keeps the 5 most recent. If a wrongly-named or duplicate asset is already attached, delete it first via `fj release asset delete`.
-- Verify: `fj release view v<v>` shows the APK + `dist-web.tar.gz`; HEAD `releases/download/v<v>/dist-web.tar.gz` (a fresh asset can briefly 404 behind the proxy while HEAD returns 200).
-- The server installs the bundle itself (`~/.my-claw/web/current`): the user runs the update. Never flip `current` or restart the service by hand.
+**Wait for explicit user approval before releasing.** Green CI is not a green light.
 
-Quick checks (no `npx` on this machine):
+Version lives only in `android/app/build.gradle` (`versionCode` + `versionName`); `package.json` stays `0.0.1`. `ci.yml` runs lint/types/tests only — it never builds the APK nor publishes. Release is local (mechanics in the `forgejo` skill):
+
 ```sh
-node node_modules/typescript/bin/tsc --noEmit
-node node_modules/jest/bin/jest.js --runInBand   # 74 suites / 632 tests
+node node_modules/typescript/bin/tsc --noEmit && npx eslint src --ext .ts,.tsx
+node node_modules/jest/bin/jest.js --runInBand   # 74 suites
+git add <files> && git commit                    # never -A
+# bump versionCode + versionName in android/app/build.gradle
+git add android/app/build.gradle && git commit -m "chore: bump X.Y.Z"
+git push origin main                             # BEFORE release.sh
+
+export JAVA_HOME=~/.sdkman/candidates/java/current ANDROID_HOME=~/android-sdk
+(cd android && ./gradlew assembleRelease --no-daemon)   # cold ~15 min, incremental ~25 s
+bash scripts/build-web.sh && tar -czf dist-web.tar.gz -C dist-web .
+bash scripts/release.sh v<v> android/app/build/outputs/apk/release/app-release.apk dist-web.tar.gz
+fj release view v<v>                             # APK + dist-web.tar.gz
 ```
+
+Traps:
+- **Push main before `release.sh`.** It has no tag step: `--create-tag` tags whatever the remote's main is. On unpushed work the tag points at the previous commit while the APK holds the new one — which breaks "Symbolicating a release stack" above, and only the sha256 check would catch it.
+- `release.sh` refuses a version that disagrees with `versionName`. Nothing else enforces it: no CI job sees this release.
+- `release.sh` renames the APK to `my-claw-app-v<v>.apk` and keeps the 5 most recent. Delete a wrongly-named or duplicate asset first via `fj release asset delete`.
+- `fj release view v<v>` works here (release named after the tag). In the **server** repo it does not — the release is named `my-claw <version>`.
+- Release assets answer HEAD (a fresh one can briefly 404 behind the proxy). The server's generic **package** registry does not: it answers 405, use `curl --range 0-0`.
+- The server installs the web bundle itself (`~/.my-claw/web/current`). Never flip `current` or restart by hand.
 
 ## Known traps
 
