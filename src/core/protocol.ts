@@ -261,6 +261,13 @@ export type HistoryEntry =
        * nowhere else, so a reopened thread showed the question with nothing under it.
        */
       error?: string;
+      /**
+       * A compaction boundary, and how many turns above it the summary covers. The server stores
+       * the summary in a `user` turn because that is the role the prompt needs it in; drawn as one
+       * it was a wall of `[Prior context summarized]` in the owner's own voice. `text` is the
+       * summary alone, and the turns it stands for are still replayed above it in full.
+       */
+      summaryOf?: number;
     }
   | ({ role: 'tool'; ts: string } & ToolCallPayload);
 

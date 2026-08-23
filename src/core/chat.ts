@@ -34,6 +34,12 @@ export interface TextItem {
   details?: string;
   /** A statement of the system (a model fallback), drawn apart for the same reason. */
   notice?: boolean;
+  /**
+   * A compaction boundary, and how many turns it summarises. Not a message: the row is drawn as a
+   * divider with the summary folded under it, because the turns above are still in the thread and
+   * the owner did not write this.
+   */
+  summaryOf?: number;
   ts: number;
 }
 
@@ -116,6 +122,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.command ? { command: true } : {}),
       ...(entry.details ? { details: entry.details } : {}),
       ...(entry.error ? { error: entry.error } : {}),
+      ...(entry.summaryOf ? { summaryOf: entry.summaryOf } : {}),
       ts,
     };
   });

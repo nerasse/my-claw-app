@@ -19,5 +19,8 @@ export function isGrouped(items: ChatItem[], index: number): boolean {
   // together at 4px: the thinking read as a note stuck under the answer already written, and the
   // words after it as that same message continuing.
   if (opensThinking(item)) return false;
+  // A compaction boundary is a rule across the thread, not a bubble. Grouping either side of it
+  // would tuck a divider inside a block of messages and tighten the gap around it.
+  if (item.summaryOf || previous.summaryOf) return false;
   return previous.role === item.role && item.ts - previous.ts < GROUP_WINDOW_MS;
 }

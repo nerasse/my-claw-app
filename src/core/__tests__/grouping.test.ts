@@ -73,3 +73,17 @@ describe('a new thinking phase opens its own block', () => {
     expect(isGrouped(items, 1)).toBe(true);
   });
 });
+
+// A compaction boundary is a rule across the thread. Grouped, it would be tucked inside a run of
+// messages at 4px, reading as one of them rather than as the line between two halves of a session.
+describe('a compaction boundary stands alone', () => {
+  test('the boundary does not group under the turn above it', () => {
+    const items = [text({ id: 'a', role: 'user', ts: 1_000 }), text({ id: 'b', role: 'user', ts: 1_400, summaryOf: 8 })];
+    expect(isGrouped(items, 1)).toBe(false);
+  });
+
+  test('the turn below it does not group under the boundary', () => {
+    const items = [text({ id: 'a', role: 'user', ts: 1_000, summaryOf: 8 }), text({ id: 'b', role: 'user', ts: 1_400 })];
+    expect(isGrouped(items, 1)).toBe(false);
+  });
+});

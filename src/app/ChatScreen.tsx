@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Linking, Pressable, Text, View } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
+import { CompactionBoundary } from '../components/CompactionBoundary';
 import { ToolCard } from '../components/ToolCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
@@ -521,6 +522,7 @@ export function ChatScreen({
       // Grouping is a property of reading order, so it is still computed oldest-first and the
       // row index is mapped back into it.
       const chronological = reversed.length - 1 - index;
+      if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
       return item.kind === 'tool' ? (
         <ToolCard item={item} subagent={subagentDoors.get(item.id)} spawn={spawnLive?.get(item.id)} onOpenSubAgent={onOpenSubAgent} expandTools={uiPrefs?.expandTools ?? false} />
       ) : (

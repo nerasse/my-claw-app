@@ -233,6 +233,24 @@ describe('chatStore.seedHistory', () => {
     expect(items.find(item => item.id === 'stale')).toBeUndefined();
   });
 
+  // The server stores a compaction summary in a `user` turn because that is the role the prompt
+  // needs it in. Without the marker the app drew it as a message the owner had typed.
+  test('a compaction boundary is carried through as a boundary, not as a question', () => {
+    chatStore.seedHistory(THREAD, [
+      { id: 'h-1', role: 'user', text: 'avant', ts: '2026-01-01T00:00:01.000Z' },
+      { id: 'h-2', role: 'user', text: 'Prior work: the summary itself.', ts: '2026-01-01T00:00:02.000Z', summaryOf: 8 },
+      { id: 'h-3', role: 'user', text: 'apres', ts: '2026-01-01T00:00:03.000Z' },
+    ]);
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(3);
+    expect(items[1]).toMatchObject({ kind: 'text', summaryOf: 8, text: 'Prior work: the summary itself.' });
+    // The turns either side of it are ordinary messages: a boundary hides nothing.
+    expect(items[0]).toMatchObject({ text: 'avant' });
+    expect(items[0]).not.toHaveProperty('summaryOf');
+    expect(items[2]).toMatchObject({ text: 'apres' });
+    expect(items[2]).not.toHaveProperty('summaryOf');
+  });
+
   test('a send the server never mirrors does not outlive its window', () => {
     jest.useFakeTimers({ now: 1_800_000_000_000 });
     try {
