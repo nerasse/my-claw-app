@@ -65,14 +65,15 @@ adb shell am kill com.myclawapp                             # simulates a system
 
 **Wait for explicit user approval before releasing.** Green CI is not a green light.
 
-Version lives only in `android/app/build.gradle` (`versionCode` + `versionName`); `package.json` stays `0.0.1`. `ci.yml` runs lint/types/tests only — it never builds the APK nor publishes. Release is local (mechanics in the `forgejo` skill):
+`android/app/build.gradle` (`versionCode` + `versionName`) is the source of truth, and `package.json` carries the same `version`. Only `versionName` is enforced (`release.sh` compares it to the tag), so `package.json` is bumped by hand in the same commit -- it silently drifted a whole version once because nothing checks it. `ci.yml` runs lint/types/tests only — it never builds the APK nor publishes. Release is local (mechanics in the `forgejo` skill):
 
 ```sh
 node node_modules/typescript/bin/tsc --noEmit && npx eslint src --ext .ts,.tsx
 node node_modules/jest/bin/jest.js --ci --maxWorkers=2   # 74 suites, same as ci.yml
 git add <files> && git commit                    # never -A
-# bump versionCode + versionName in android/app/build.gradle
-git add android/app/build.gradle && git commit -m "chore: bump X.Y.Z"
+# bump versionCode + versionName in android/app/build.gradle, and version in package.json
+jq '.version="X.Y.Z"' package.json > /tmp/p && mv /tmp/p package.json
+git add android/app/build.gradle package.json && git commit -m "chore: bump X.Y.Z"
 git push origin main                             # BEFORE release.sh
 
 export JAVA_HOME=~/.sdkman/candidates/java/current ANDROID_HOME=~/android-sdk
