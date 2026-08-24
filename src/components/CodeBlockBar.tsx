@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { CopyButton } from './CopyButton';
+import { blockActionsSupported } from '../core/platform';
 import { font, space, useTheme } from '../theme';
 
 /**
@@ -10,6 +11,9 @@ import { font, space, useTheme } from '../theme';
  * also the one thing a selection cannot lift out of the chat list (docs/text-selection.md). The
  * button sits in a strip of its own rather than floating over the first line, which on a block
  * whose first line is long would cover the code it is offering to copy.
+ *
+ * On the web the button is gone and the strip keeps the language alone: the browser selects
+ * across nodes and copies with a keystroke, so this was a control repeating a shortcut.
  */
 export function CodeBlockBar({ value, language }: { value: string; language?: string }): React.JSX.Element {
   const { palette } = useTheme();
@@ -18,7 +22,9 @@ export function CodeBlockBar({ value, language }: { value: string; language?: st
       <Text style={[styles.language, { color: palette.textFaint }]} numberOfLines={1}>
         {language ?? ''}
       </Text>
-      <CopyButton value={value} accessibilityLabel={language ? `Copy ${language} block` : 'Copy code block'} />
+      {blockActionsSupported ? (
+        <CopyButton value={value} accessibilityLabel={language ? `Copy ${language} block` : 'Copy code block'} />
+      ) : null}
     </View>
   );
 }

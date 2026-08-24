@@ -4,6 +4,7 @@ import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatDuration, summarizeArgs } from '../core/utils';
+import { summarizeTool } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -43,7 +44,11 @@ export const ToolCard = React.memo(function ToolCardView({
   // run settles, then the flag clears for the next run of the card.
   const userTookControl = useRef(false);
   const duration = formatDuration(item.durationMs);
-  const preview = summarizeArgs(item.args);
+  // The identifying argument rather than whichever one the model serialized first: see
+  // core/toolSummary. Recomputed only when the call itself changes, not on every delta of the
+  // turn around it.
+  const summary = useMemo(() => summarizeTool(item.name, item.args, summarizeArgs(item.args)), [item.name, item.args]);
+  const preview = summary.detail;
   // Only once unfolded: a thread full of collapsed cards must not stringify every argument list
   // on every streaming delta.
   const args = open && argsOpen ? JSON.stringify(item.args, null, 2) : '';
@@ -134,9 +139,10 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+          {summary.glyph ? <Text style={styles.glyph}>{summary.glyph}</Text> : null}
           <Text style={styles.name}>{item.name}</Text>
           {!open && preview ? (
-            <Text style={styles.preview} numberOfLines={1}>
+            <Text style={[styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
               {preview}
             </Text>
           ) : (
@@ -221,7 +227,11 @@ const createStyles = (palette: Palette) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
   name: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
+  glyph: { fontSize: font.micro, color: palette.textFaint, width: 10 },
   preview: { flex: 1, fontSize: font.small, color: palette.textMuted },
+  // A path, a command or a pattern: read in the prose face they look like a sentence that lost
+  // its spaces.
+  previewMono: { fontFamily: 'monospace', fontSize: font.micro },
   spacer: { flex: 1 },
   duration: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   failed: { fontSize: font.micro, color: palette.danger, fontWeight: '600' as const },

@@ -32,8 +32,9 @@ taking text out of it     -> the selection viewer, one node, raw source
   **copy** takes the block whole, **select** opens the viewer on it. On the web `BlockActions`
   renders nothing (`blockActionsSupported` in `core/platform`): the browser selects across nodes
   and copies with a keystroke, so the pair would only repeat, twice per tool card, what the
-  pointer already does. `CodeBlockBar` keeps its copy button everywhere -- a fence is meant to
-  leave the app verbatim and dragging over twenty lines of it is not the same offer.
+  pointer already does. `CodeBlockBar` follows the same flag: on the web its strip keeps the
+  language and loses the button, so no tool render in a browser carries a control that repeats
+  Ctrl+C. The settings pages keep theirs -- they are ordinary scroll views, not the chat list.
 - `ScrollableBlock` caps every block of tool text at `BLOCK_MAX_HEIGHT`. On the web that is a
   real overflow (`blockScrollSupported`): the wheel scrolls what is under the cursor and no
   gesture is disputed. On a touchscreen the block is clipped and a `see all` bar opens the same

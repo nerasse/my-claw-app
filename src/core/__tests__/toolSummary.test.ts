@@ -1,0 +1,58 @@
+/**
+ * A collapsed card is only worth having if it can be scanned. It used to show the first argument
+ * the model happened to serialize, so the same tool read differently from one call to the next.
+ */
+
+import { shortenPath, summarizeTool } from '../toolSummary';
+
+it('names the argument that identifies the call, not the first one serialized', () => {
+  // `path` last on purpose: object order is the model's, and the old preview followed it.
+  const patch = summarizeTool('apply_patch', { edits: [{ old: 'a', new: 'b' }], path: '/home/n/dev/app/src/core/chat.ts' });
+  expect(patch.detail).toBe('core/chat.ts');
+
+  expect(summarizeTool('bash', { timeout: 120000, command: 'ls -la' }).detail).toBe('ls -la');
+  expect(summarizeTool('web_search', { count: 5, query: 'rn markdown hr' }).detail).toBe('rn markdown hr');
+  expect(summarizeTool('fetch', { method: 'GET', url: 'https://example.com/a' }).detail).toBe('GET https://example.com/a');
+});
+
+it('puts the verb ahead of the target where the verb is half the call', () => {
+  expect(summarizeTool('memory', { action: 'remember', content: 'neras prefers terse answers' }).detail).toBe(
+    'remember neras prefers terse answers',
+  );
+  expect(summarizeTool('cron', { action: 'pause', job_id: 'j-1' }).detail).toBe('pause j-1');
+  expect(summarizeTool('spawn', { mode: 'session', type: 'research', name: 'digger' }).detail).toBe('session digger');
+});
+
+it('shortens a path from the left: the tree above a file identifies nothing', () => {
+  expect(shortenPath('/home/neras/dev/my-claw-app/src/core/chat.ts')).toBe('core/chat.ts');
+  // Nothing to gain, nothing lost.
+  expect(shortenPath('/etc/hosts')).toBe('/etc/hosts');
+  expect(shortenPath('chat.ts')).toBe('chat.ts');
+});
+
+it('flattens and clamps, so one card is one line whatever the argument holds', () => {
+  const long = summarizeTool('bash', { command: `echo ${'x'.repeat(200)}` });
+  expect(long.detail.length).toBeLessThanOrEqual(73);
+  expect(long.detail.endsWith('…')).toBe(true);
+  expect(summarizeTool('bash', { command: 'a\n  b\n  c' }).detail).toBe('a b c');
+});
+
+it('marks a path, a command or a pattern as code and a bare verb as prose', () => {
+  expect(summarizeTool('read', { path: '/a/b/c.ts' }).mono).toBe(true);
+  expect(summarizeTool('search', { pattern: '[0-9]+', path: '/src' }).mono).toBe(true);
+  expect(summarizeTool('list_agents', {}).mono).toBe(false);
+  expect(summarizeTool('spawn', { mode: 'session' }).mono).toBe(false);
+});
+
+it('gives a family its shape, and an unknown tool none', () => {
+  expect(summarizeTool('read', { path: 'a' }).glyph).toBe(summarizeTool('write', { path: 'b' }).glyph);
+  expect(summarizeTool('bash', { command: 'ls' }).glyph).not.toBe(summarizeTool('read', { path: 'a' }).glyph);
+  expect(summarizeTool('some_mcp_tool', { anything: 1 }).glyph).toBe('');
+});
+
+it('falls back to the generic preview for a tool it has never heard of', () => {
+  // An MCP server's tool, or a plugin: unknown here, and still readable.
+  expect(summarizeTool('mcp__thing__do', { whatever: 'x' }, 'x +2').detail).toBe('x +2');
+  // Known tool, argument missing: better the generic preview than an empty line.
+  expect(summarizeTool('read', {}, 'fallback').detail).toBe('fallback');
+});

@@ -8,6 +8,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { BlockActions } from '../BlockActions';
+import { CodeBlockBar } from '../CodeBlockBar';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
 
@@ -50,5 +51,20 @@ describe('BlockActions', () => {
     mockSupported = false;
     const tree = render(<BlockActions title="bash output" value="hello" />);
     expect(labels(tree)).toEqual([]);
+  });
+});
+
+/** Same rule for the strip over a fenced block: the language stays, the button does not. */
+describe('CodeBlockBar', () => {
+  it('offers the copy where a selection cannot lift the block out', () => {
+    mockSupported = true;
+    const tree = render(<CodeBlockBar value="const a = 1" language="ts" />);
+    expect(labels(tree)).toEqual(['ts', 'copy']);
+  });
+
+  it('keeps the language and drops the button in a browser', () => {
+    mockSupported = false;
+    const tree = render(<CodeBlockBar value="const a = 1" language="ts" />);
+    expect(labels(tree)).toEqual(['ts']);
   });
 });
