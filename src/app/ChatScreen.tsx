@@ -4,9 +4,10 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary } from '../components/CompactionBoundary';
 import { ToolCard } from '../components/ToolCard';
+import { SubAgentCard } from '../components/SubAgentCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
-import { useChatItems, type ChatItem, type TextItem } from '../core/chat';
+import { isSubAgentTool, useChatItems, type ChatItem, type TextItem } from '../core/chat';
 import { isGrouped } from '../core/grouping';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
@@ -523,8 +524,19 @@ export function ChatScreen({
       // row index is mapped back into it.
       const chronological = reversed.length - 1 - index;
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
+      if (item.kind === 'tool' && isSubAgentTool(item.name)) {
+        return (
+          <SubAgentCard
+            item={item}
+            subagent={subagentDoors.get(item.id)}
+            spawn={spawnLive?.get(item.id)}
+            onOpen={onOpenSubAgent}
+            expandTools={uiPrefs?.expandTools ?? false}
+          />
+        );
+      }
       return item.kind === 'tool' ? (
-        <ToolCard item={item} subagent={subagentDoors.get(item.id)} spawn={spawnLive?.get(item.id)} onOpenSubAgent={onOpenSubAgent} expandTools={uiPrefs?.expandTools ?? false} />
+        <ToolCard item={item} expandTools={uiPrefs?.expandTools ?? false} />
       ) : (
         <Bubble
           item={item}

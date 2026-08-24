@@ -10,25 +10,18 @@ import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } fro
  * One executed tool, collapsed to a single dense line and expanded on tap to show the
  * arguments and the output the agent received.
  *
- * The card is a View whose head is the pressable, not one big Pressable: the expanded body of a
- * `spawn` card carries a button of its own, and a control inside a control is announced as one
- * thing by a screen reader and steals the toggle's touch.
+ * `spawn` and `send` do not come through here: a sub-agent call is a door, not a result, and it
+ * has its own card (SubAgentCard). ChatScreen routes on `isSubAgentTool`.
  *
- * Memoized, and `onOpenSubAgent` takes the card id rather than being closed over it: see Bubble.
+ * The card is a View whose head is the pressable, not one big Pressable: the body carries
+ * controls of its own, and a control inside a control is announced as one thing by a screen
+ * reader and steals the toggle's touch.
  */
 export const ToolCard = React.memo(function ToolCardView({
   item,
-  subagent,
-  spawn,
-  onOpenSubAgent,
   expandTools,
 }: {
   item: ToolItem;
-  /** Set when this card spawned a named sub-agent that still exists; the door to it. */
-  subagent?: { label: string; status: 'idle' | 'running' };
-  /** Live or replayed sub-agent lifecycle state pushed by `chat.spawn.start/end` or history. */
-  spawn?: { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' };
-  onOpenSubAgent?: (toolItemId: string) => void;
   /** Server-owned pref: when true the card stays expanded even after its run settles. */
   expandTools?: boolean;
 }): React.JSX.Element {
@@ -50,7 +43,6 @@ export const ToolCard = React.memo(function ToolCardView({
   // on every streaming delta.
   const args = open && argsOpen ? JSON.stringify(item.args, null, 2) : '';
   const running = item.running === true;
-  const spawnRunning = spawn?.status === 'running';
   // A tool output carrying a unified diff (apply_patch) renders as colour-coded lines instead of
   // a plain monospace block. splitDiff only runs while the card is expanded (a collapsed card has
   // nothing to paint).
@@ -71,7 +63,7 @@ export const ToolCard = React.memo(function ToolCardView({
   const foldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const streaming = running || spawnRunning;
+    const streaming = running;
     if (expandTools && streaming) {
       if (foldTimer.current !== null) {
         clearTimeout(foldTimer.current);
@@ -105,7 +97,7 @@ export const ToolCard = React.memo(function ToolCardView({
       // Nothing auto-opened: the owner's own state stands. Clear the run's takeover flag.
       userTookControl.current = false;
     }
-  }, [expandTools, running, spawnRunning, open]);
+  }, [expandTools, running, open]);
   // Clear the pending fold if the card unmounts (thread switch) so no setState lands on a dead
   // component.
   useEffect(() => {
@@ -141,12 +133,6 @@ export const ToolCard = React.memo(function ToolCardView({
             <View style={styles.spacer} />
           )}
           {!item.ok && !running ? <Text style={styles.failed}>failed</Text> : null}
-          {spawnRunning ? (
-            <Text style={styles.runState}>● running sub-agent</Text>
-          ) : null}
-          {spawn?.status === 'complete' ? <Text style={styles.okState}>✓ done</Text> : null}
-          {spawn?.status === 'error' ? <Text style={styles.failed}>error</Text> : null}
-          {spawn?.status === 'aborted' ? <Text style={styles.aborted}>aborted</Text> : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
@@ -195,20 +181,6 @@ export const ToolCard = React.memo(function ToolCardView({
           {!hasDiff ? (
             <Text style={styles.code}>{item.output.trim() || '(empty)'}</Text>
           ) : null}
-          {subagent && onOpenSubAgent ? (
-            <Pressable
-              style={styles.door}
-              onPress={() => onOpenSubAgent(item.id)}
-              accessibilityRole="button"
-              accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}>
-              <Text style={styles.doorGlyph}>◈</Text>
-              <Text style={styles.doorLabel} numberOfLines={1}>
-                {`open ${subagent.label}`}
-              </Text>
-              <Text style={styles.doorState}>{subagent.status === 'running' ? '● running' : 'idle'}</Text>
-              <Text style={styles.doorChevron}>›</Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
     </View>
@@ -235,9 +207,6 @@ const createStyles = (palette: Palette) => ({
   spacer: { flex: 1 },
   duration: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   failed: { fontSize: font.micro, color: palette.danger, fontWeight: '600' as const },
-  okState: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
-  aborted: { fontSize: font.micro, color: palette.textFaint, fontWeight: '600' as const },
-  runState: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
   label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
@@ -245,22 +214,6 @@ const createStyles = (palette: Palette) => ({
   // Right-aligned under the fold's own row: the buttons belong to the block below them, and a
   // row that is empty on web (BlockActions renders nothing there) must not leave a gap.
   argsActions: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const },
-  door: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    marginTop: space.xs,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.surfaceAlt,
-  },
-  doorGlyph: { fontSize: font.meta, color: palette.accent },
-  doorLabel: { flex: 1, fontSize: font.small, color: palette.text, fontFamily: 'monospace' },
-  doorState: { fontSize: font.micro, color: palette.textFaint },
-  doorChevron: { fontSize: font.meta, color: palette.textFaint },
   code: {
     fontFamily: 'monospace',
     fontSize: font.small,

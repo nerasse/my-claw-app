@@ -1,0 +1,208 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import type { ToolItem } from '../core/chat';
+import { BlockActions } from './BlockActions';
+import { formatDuration } from '../core/utils';
+import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+
+/**
+ * A `spawn` or `send` call: not a tool result to read, a sub-agent to go and see.
+ *
+ * It used to render as an ordinary ToolCard, and the door to the sub-agent was the last node of
+ * the expanded body. Reaching the one thing the card is for meant unfolding it, scrolling past
+ * the serialized call and the whole result, and only then tapping. The door is in the head here,
+ * reachable while the card is still folded, and the body holds what a sub-agent run actually has
+ * to say: the task it was given and the answer it came back with.
+ *
+ * Memoized, and `onOpen` takes the card id rather than being closed over it: see Bubble.
+ */
+export const SubAgentCard = React.memo(function SubAgentCardView({
+  item,
+  subagent,
+  spawn,
+  onOpen,
+  expandTools,
+}: {
+  item: ToolItem;
+  /** Set when this card's sub-agent still exists; without it there is nowhere to go. */
+  subagent?: { label: string; status: 'idle' | 'running' };
+  spawn?: { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' };
+  onOpen?: (toolItemId: string) => void;
+  expandTools?: boolean;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const [open, setOpen] = useState(false);
+  const userTookControl = useRef(false);
+
+  const running = item.running === true || spawn?.status === 'running';
+  const action = item.name === 'send' ? 'send' : 'spawn';
+  // What to call it, in order of trust: the lifecycle frame knows the real display name, the
+  // arguments only know what the caller asked for, and a `send` carries an id instead.
+  const label =
+    spawn?.displayName ??
+    subagent?.label ??
+    (typeof item.args.name === 'string' ? item.args.name : '') ??
+    '';
+  const id = typeof item.args.id === 'string' ? item.args.id : '';
+  const kind = [typeof item.args.type === 'string' ? item.args.type : '', typeof item.args.mode === 'string' ? item.args.mode : '']
+    .filter(Boolean)
+    .join(' · ');
+  // A spawn is given a task, a send is given a message. Same slot either way.
+  const brief = [item.args.task, item.args.message].find(value => typeof value === 'string') as string | undefined;
+
+  // Same rule as a tool card: with the pref off nothing ever opens on its own, and a tap survives
+  // the settle. The head is self-sufficient, so an unopened card here costs the reader nothing.
+  useEffect(() => {
+    if (expandTools && running && !open && !userTookControl.current) setOpen(true);
+    if (!running) userTookControl.current = false;
+  }, [expandTools, running, open]);
+
+  const state = running
+    ? { text: '● running', style: styles.stateRunning }
+    : spawn?.status === 'complete'
+      ? { text: '✓ done', style: styles.stateOk }
+      : spawn?.status === 'error' || item.ok === false
+        ? { text: 'error', style: styles.stateBad }
+        : spawn?.status === 'aborted'
+          ? { text: 'aborted', style: styles.stateFaint }
+          : null;
+
+  return (
+    <View style={[styles.card, running && styles.cardRunning, spawn?.status === 'error' && styles.cardError]}>
+      <View style={styles.head}>
+        <Pressable
+          style={styles.identity}
+          onPress={() => {
+            setOpen(value => !value);
+            userTookControl.current = true;
+          }}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          accessibilityLabel={`Sub-agent ${label || id || action}${running ? ', running' : ''}`}
+          accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
+          <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+          <Text style={styles.glyph}>◈</Text>
+          <Text style={styles.name} numberOfLines={1}>
+            {label || id || action}
+          </Text>
+          {kind ? (
+            <Text style={styles.kind} numberOfLines={1}>
+              {kind}
+            </Text>
+          ) : null}
+          <View style={styles.spacer} />
+          {state ? <Text style={state.style}>{state.text}</Text> : null}
+          {running ? (
+            <View style={styles.spinner}>
+              <ActivityIndicator size="small" />
+            </View>
+          ) : null}
+          {formatDuration(item.durationMs) ? <Text style={styles.duration}>{formatDuration(item.durationMs)}</Text> : null}
+        </Pressable>
+      </View>
+
+      {/* The door, outside the fold and outside the toggle: a control inside a control is
+          announced as one thing by a screen reader and steals the other's touch. */}
+      {subagent && onOpen ? (
+        <Pressable
+          style={styles.door}
+          onPress={() => onOpen(item.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}>
+          <Text style={styles.doorLabel} numberOfLines={1}>
+            {brief ? brief.replace(/\s+/g, ' ').trim() : `open ${subagent.label}`}
+          </Text>
+          <Text style={styles.doorChevron}>›</Text>
+        </Pressable>
+      ) : brief && !open ? (
+        <Text style={styles.brief} numberOfLines={1}>
+          {brief.replace(/\s+/g, ' ').trim()}
+        </Text>
+      ) : null}
+
+      {open ? (
+        <View style={styles.body}>
+          {brief ? (
+            <>
+              <View style={styles.blockHead}>
+                <Text style={styles.label}>{action === 'send' ? 'message' : 'task'}</Text>
+                <BlockActions title={`${action} ${action === 'send' ? 'message' : 'task'}`} value={brief} />
+              </View>
+              <Text style={styles.code}>{brief}</Text>
+            </>
+          ) : null}
+          <View style={styles.blockHead}>
+            <Text style={styles.label}>result{item.truncated ? ' · truncated' : ''}</Text>
+            <BlockActions title={`${label || action} result`} value={item.output} />
+          </View>
+          <Text style={styles.code}>{item.output.trim() || (running ? '(still running)' : '(empty)')}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+});
+
+const createStyles = (palette: Palette) => ({
+  card: {
+    alignSelf: 'stretch' as const,
+    backgroundColor: palette.surfaceAlt,
+    borderColor: palette.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    marginBottom: space.sm,
+    gap: space.xs,
+  },
+  // A running sub-agent is the only card in a thread that is still being written elsewhere.
+  cardRunning: { borderColor: palette.accent },
+  cardError: { borderColor: palette.danger },
+  head: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
+  glyph: { fontSize: font.meta, color: palette.accent },
+  name: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 1 },
+  kind: { fontSize: font.micro, color: palette.textFaint, flexShrink: 1 },
+  spacer: { flex: 1 },
+  duration: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
+  stateRunning: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
+  stateOk: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
+  stateBad: { fontSize: font.micro, color: palette.danger, fontWeight: '600' as const },
+  stateFaint: { fontSize: font.micro, color: palette.textFaint, fontWeight: '600' as const },
+  spinner: { transform: [{ scale: 0.8 }] },
+  // The door carries the brief as its own label: one row that says both what was asked and that
+  // there is somewhere to go, instead of a line of prose above a button repeating the name.
+  door: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  doorLabel: { flex: 1, fontSize: font.small, color: palette.text },
+  doorChevron: { fontSize: font.meta, color: palette.accent },
+  brief: { fontSize: font.small, color: palette.textMuted, paddingHorizontal: space.xs },
+  body: { gap: 3, paddingBottom: 2 },
+  label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
+  blockHead: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    justifyContent: 'space-between' as const,
+    marginTop: 2,
+  },
+  code: {
+    fontSize: font.small,
+    color: palette.text,
+    backgroundColor: palette.bg,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+  },
+});

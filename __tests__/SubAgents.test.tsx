@@ -438,23 +438,17 @@ describe('the door on a spawn card', () => {
         spawnCard({ id: 'tc-gone', args: { mode: 'session', type: 'research', name: 'ghost' } }),
       ],
     );
-    // Expand each card: the door lives in the body, so the collapsed transcript is unchanged.
-    const cards = tree.root.findAll(
-      node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Tool spawn') && typeof node.props.onPress === 'function',
-      { deep: true },
-    );
-    expect(cards).toHaveLength(3);
-    await ReactTestRenderer.act(async () => {
-      for (const card of cards) card.props.onPress();
-    });
+    // Three cards, and none of them has to be unfolded: the door is in the head.
+    expect(controlsLabelled(tree, 'Sub-agent ')).toHaveLength(3);
 
     // Exactly one door: not one per spawn card, and not one for the agent that is gone. The
     // id-carrying shape excludes the drawer's pinned Sub-Agents button.
     // The trailing space is the discriminator: the drawer's "Open sub-agents" has an s, the
     // door carries the id right after "sub-agent".
     expect(controlsLabelled(tree, 'Open sub-agent ')).toEqual(['Open sub-agent digger-a1b2, idle']);
-    expect(labelsOf(tree).some(label => label.includes('ghost'))).toBe(false);
-    expect(labelsOf(tree).some(label => label.includes('peek'))).toBe(false);
+    // The two others name themselves, but lead nowhere.
+    expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent ghost'))).toBe(false);
+    expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent peek'))).toBe(false);
     await settleAndUnmount(tree);
   });
 });
