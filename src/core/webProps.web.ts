@@ -36,6 +36,45 @@ export function selectableProps(): Partial<ViewProps> {
  * pixels for good and the first line is sliced by the top edge. That was the composer's broken
  * border on the web, and it moved with the caret, which is what made it look intermittent.
  */
+/**
+ * Marks a block as "scrolls vertically, and only vertically". The rule itself is in
+ * webTheme.web.ts: `overflow: scroll` in a React Native style means *both* axes and a permanent
+ * pair of bars, which is what put a horizontal scrollbar over and under every tool output.
+ */
+export function blockScrollProps(): Partial<ViewProps> {
+  return { dataSet: { clawScroll: 'y' } } as Partial<ViewProps>;
+}
+
+/**
+ * Makes the wheel work over a capped block inside the thread.
+ *
+ * The chat list is inverted, which react-native-web renders as `transform: scaleY(-1)` on the
+ * list and on every row. A nested scroller inherits that flip: the browser still scrolls it, but
+ * upward and downward are swapped, so a wheel push moved the block the wrong way, hit its top
+ * immediately and handed the gesture to the thread behind it -- which reads exactly as "the
+ * wheel does nothing here". The scrollbar worked because dragging it is not a wheel event.
+ *
+ * So the delta is applied by hand, in the block's own coordinates, and the event is only
+ * swallowed while the block can still move: at either end the thread takes over, which is what a
+ * reader expects from a scroll area nested in another.
+ */
+export function attachBlockWheel(node: unknown): () => void {
+  if (!(node instanceof HTMLElement)) return () => {};
+  const onWheel = (event: WheelEvent): void => {
+    const max = node.scrollHeight - node.clientHeight;
+    if (max <= 0) return;
+    // Inverted ancestor: down on the wheel must lower scrollTop, not raise it.
+    const next = Math.min(Math.max(node.scrollTop - event.deltaY, 0), max);
+    if (next === node.scrollTop) return;
+    node.scrollTop = next;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  // Not passive: the whole point is to be able to keep the thread from scrolling too.
+  node.addEventListener('wheel', onWheel, { passive: false });
+  return () => node.removeEventListener('wheel', onWheel);
+}
+
 export function autoGrow(node: unknown, maxHeight: number): void {
   if (!(node instanceof HTMLTextAreaElement)) return;
   // A textarea is two rows tall by default, and that intrinsic height is a floor `scrollHeight`

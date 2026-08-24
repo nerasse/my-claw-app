@@ -36,6 +36,14 @@ export const READING_WIDTH = 860;
  */
 export const PAGE_WIDTH = 980;
 
+/**
+ * Cap for a tool card. Wider than prose on purpose: a diff, an argument list and a log are data,
+ * not sentences. They have columns of their own, and squeezing them into a reading column does
+ * not make them readable, it wraps every line. Still capped, because a 2000pt row of monospace
+ * on an ultra-wide screen is its own kind of unreadable.
+ */
+export const TOOL_WIDTH = 1280;
+
 export interface Layout {
   width: number;
   height: number;
@@ -52,6 +60,8 @@ export interface Layout {
   readingWidth: number;
   /** Cap for a page of controls. */
   pageWidth: number;
+  /** Cap for a tool card: data, so wider than the prose column it sits among. */
+  toolWidth: number;
 }
 
 /**
@@ -81,6 +91,8 @@ export function useLayout(): Layout {
       dense: desktop && pointerFine,
       readingWidth: READING_WIDTH,
       pageWidth: PAGE_WIDTH,
+      // Never wider than the pane: on a phone the cap is the window, and the card fills it.
+      toolWidth: Math.min(width, TOOL_WIDTH),
     };
   }, [width, height]);
 }

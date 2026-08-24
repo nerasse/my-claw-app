@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import type { Palette } from '../theme';
 import { useThemedStyles } from '../theme';
 
@@ -78,8 +78,13 @@ export const DiffView: React.FC<{ parts: DiffParts }> = ({ parts }) => {
   const { preamble, diff, tail } = parts;
   if (diff.length === 0) return null;
 
+  // A plain View, deliberately. This used to be a horizontal ScrollView, which made the diff a
+  // scroll container of its own: it swallowed the wheel, and it published no vertical overflow,
+  // so an apply_patch card had no way to scroll at all while a bash card did. Long lines wrap,
+  // the same way a fenced code block wraps (docs/markdown-blocks.md); the height cap and the
+  // scrolling belong to ScrollableBlock around it, one rule for every tool.
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <View>
       <View>
         {preamble ? (
           <Text style={styles.plain}>{preamble}</Text>
@@ -120,7 +125,7 @@ export const DiffView: React.FC<{ parts: DiffParts }> = ({ parts }) => {
         })}
         {tail ? <Text style={styles.plain}>{tail}</Text> : null}
       </View>
-    </ScrollView>
+    </View>
   );
 };
 

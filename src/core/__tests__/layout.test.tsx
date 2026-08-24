@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Text, useWindowDimensions } from 'react-native';
-import { useLayout, type Layout } from '../layout';
+import { TOOL_WIDTH, useLayout, type Layout } from '../layout';
 
 /**
  * The breakpoint ladder. Keyed on the window and not on the platform, so a tablet in landscape
@@ -55,4 +55,14 @@ test('a wide desktop opens a page beside the conversation instead of over it', (
 
 test('a conversation never widens past a readable line, whatever the window does', () => {
   expect(layoutAt(3840).readingWidth).toBe(layoutAt(412).readingWidth);
+});
+
+test('a tool card is data and gets a wider column than prose, still capped', () => {
+  const wide = layoutAt(3840);
+  expect(wide.toolWidth).toBeGreaterThan(wide.readingWidth);
+  expect(wide.toolWidth).toBe(TOOL_WIDTH);
+});
+
+test('on a phone the tool column is the window, never wider than the pane', () => {
+  expect(layoutAt(412).toolWidth).toBe(412);
 });

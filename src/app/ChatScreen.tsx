@@ -134,7 +134,18 @@ export function ChatScreen({
   const layout = useLayout();
   // A conversation is prose: past ~90 characters a line stops being readable, however wide the
   // window is. The column is centred inside the pane rather than stretched across it.
-  const column = { maxWidth: layout.readingWidth, width: '100%' as const, alignSelf: 'center' as const };
+  const column = useMemo(
+    () => ({ maxWidth: layout.readingWidth, width: '100%' as const, alignSelf: 'center' as const }),
+    [layout.readingWidth],
+  );
+  // A tool card is not prose. A diff, an argument list and a log have columns of their own, and
+  // the reading cap wrapped every one of their lines while leaving the pane half empty. The cap
+  // therefore belongs to the row, not to the list: the list fills the pane, a bubble centres
+  // itself in the reading column, and a card centres itself in a wider one.
+  const toolColumn = useMemo(
+    () => ({ maxWidth: layout.toolWidth, width: '100%' as const, alignSelf: 'center' as const }),
+    [layout.toolWidth],
+  );
   const listRef = useRef<FlatList<ChatItem>>(null);
   // Subscribed here rather than handed down: a growing bubble must not re-render the shell that
   // holds every page of the app, only the conversation showing it.
@@ -526,6 +537,7 @@ export function ChatScreen({
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
       if (item.kind === 'tool' && isSubAgentTool(item.name)) {
         return (
+          <View style={toolColumn}>
           <SubAgentCard
             item={item}
             threadId={threadId}
@@ -534,11 +546,15 @@ export function ChatScreen({
             onOpen={onOpenSubAgent}
             expandTools={uiPrefs?.expandTools ?? false}
           />
+          </View>
         );
       }
       return item.kind === 'tool' ? (
-        <ToolCard item={item} threadId={threadId} expandTools={uiPrefs?.expandTools ?? false} />
+        <View style={toolColumn}>
+          <ToolCard item={item} threadId={threadId} expandTools={uiPrefs?.expandTools ?? false} />
+        </View>
       ) : (
+        <View style={column}>
         <Bubble
           item={item}
           mediaBase={mediaBase}
@@ -549,9 +565,10 @@ export function ChatScreen({
           onOpenAttachment={openAttachment}
           expandReasoning={uiPrefs?.expandReasoning ?? false}
         />
+        </View>
       );
     },
-    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
+    [column, toolColumn, deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const locationLabel = location
@@ -702,7 +719,9 @@ export function ChatScreen({
         </View>
       ) : (
         <>
-          <View style={[styles.listWrap, column]} {...selectableProps()}>
+          {/* The list itself fills the pane: each row caps its own width above, because a bubble
+              and a tool card do not want the same one. */}
+          <View style={[styles.listWrap, toolColumn]} {...selectableProps()}>
             {/* Inverted: the newest message is index 0 and sits at offset 0, so opening a
                 conversation lands on it with no scrolling at all. scrollToEnd on a list of
                 unmeasured rows aims at an estimated content height and stops short of the last

@@ -48,6 +48,11 @@ input:focus, textarea:focus { outline: none; }
 /* Text is unselectable by default in react-native-web. Marked regions opt back in. */
 [data-claw-select="text"], [data-claw-select="text"] * { user-select: text !important; }
 
+/* A capped tool block. An "overflow: scroll" in a React Native style means both axes and a pair
+   of permanent bars: that is the horizontal scrollbar that sat over and under every tool output.
+   Vertical only, and auto, so a block that fits shows nothing at all. */
+[data-claw-scroll="y"] { overflow-x: hidden !important; overflow-y: auto !important; overscroll-behavior: contain; }
+
 * { scrollbar-width: thin; scrollbar-color: ${palette.border} transparent; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }

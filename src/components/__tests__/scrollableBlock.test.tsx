@@ -51,7 +51,12 @@ function seeAll(tree: ReactTestRenderer.ReactTestRenderer) {
   );
 }
 
-function capped(tree: ReactTestRenderer.ReactTestRenderer, overflow: 'scroll' | 'hidden') {
+/**
+ * The web block caps its height and leaves the axis to CSS (webTheme.web.ts): a React Native
+ * `overflow: 'scroll'` means both axes and two permanent bars, so `undefined` is the wanted
+ * value there, not an oversight.
+ */
+function capped(tree: ReactTestRenderer.ReactTestRenderer, overflow: 'hidden' | undefined) {
   return tree.root
     .findAllByType(View)
     .some(n => [n.props.style].flat(2).some(s => s && s.maxHeight === BLOCK_MAX_HEIGHT && s.overflow === overflow));
@@ -65,7 +70,6 @@ describe('on a touchscreen', () => {
   it('clips the block instead of nesting a scroll view in the thread', () => {
     const tree = render();
     expect(capped(tree, 'hidden')).toBe(true);
-    expect(capped(tree, 'scroll')).toBe(false);
   });
 
   it('offers the full text only once the block is actually cut', () => {
@@ -90,7 +94,8 @@ describe('in a browser', () => {
 
   it('gives the block a real scrollbar and no button', () => {
     const tree = render();
-    expect(capped(tree, 'scroll')).toBe(true);
+    expect(capped(tree, undefined)).toBe(true);
+    expect(capped(tree, 'hidden')).toBe(false);
     expect(seeAll(tree)).toHaveLength(0);
   });
 });

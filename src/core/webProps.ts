@@ -14,3 +14,12 @@ export function selectableProps(): Partial<ViewProps> {
 }
 
 export function autoGrow(_node: unknown, _maxHeight: number): void {}
+
+/** Web only: a capped block scrolls natively on a touchscreen, there is no wheel to fix. */
+export function blockScrollProps(): Partial<ViewProps> {
+  return {};
+}
+
+export function attachBlockWheel(_node: unknown): () => void {
+  return () => {};
+}

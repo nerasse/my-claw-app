@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import { blockScrollSupported } from '../core/platform';
+import { attachBlockWheel, blockScrollProps } from '../core/webProps';
 import { useOpenSelection } from '../core/textSelection';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 
@@ -40,9 +41,20 @@ export function ScrollableBlock({
   // Measured, not guessed from the character count: a wrapped line and a font size are the
   // renderer's business, and a block that fits must not offer to be opened.
   const [clipped, setClipped] = useState(false);
+  // A ref callback rather than an effect: the node is what the listener needs, and this way it is
+  // attached the moment the block mounts and released when it unmounts, with nothing to sync.
+  const bindWheel = useCallback((node: View | null) => {
+    detachWheel.current?.();
+    detachWheel.current = node ? attachBlockWheel(node) : undefined;
+  }, []);
+  const detachWheel = React.useRef<(() => void) | undefined>(undefined);
 
   if (blockScrollSupported) {
-    return <View style={[style, styles.scroller]}>{children}</View>;
+    return (
+      <View ref={bindWheel} style={[style, styles.scroller]} {...blockScrollProps()}>
+        {children}
+      </View>
+    );
   }
 
   const onLayout = (event: LayoutChangeEvent) => {
@@ -70,9 +82,10 @@ export function ScrollableBlock({
 }
 
 const createStyles = (palette: Palette) => ({
-  // `scroll`, not `auto`: react-native-web maps it straight through, and a block that only
-  // sometimes shows its bar makes the layout jump as the output streams in.
-  scroller: { maxHeight: BLOCK_MAX_HEIGHT, overflow: 'scroll' as const },
+  // The height only. Which axis actually scrolls is settled in CSS (webTheme.web.ts,
+  // `[data-claw-scroll]`): a React Native `overflow: scroll` means both axes and two permanent
+  // bars, which is how a horizontal scrollbar ended up over and under every tool output.
+  scroller: { maxHeight: BLOCK_MAX_HEIGHT },
   clip: { maxHeight: BLOCK_MAX_HEIGHT, overflow: 'hidden' as const },
   more: {
     flexDirection: 'row' as const,
