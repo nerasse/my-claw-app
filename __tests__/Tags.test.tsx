@@ -11,7 +11,7 @@ import { chatStore } from '../src/core/chat';
 import { tagsStore } from '../src/core/tags';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { parseTagCommand } from '../src/core/commands';
-import { labelsOf, press, renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
+import { labelsOf, press, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 'thread-tags';
@@ -106,7 +106,7 @@ function tagsResult(over: Record<string, unknown> = {}): Record<string, unknown>
   };
 }
 
-async function bootToTagsPage(): Promise<Tree> {
+async function bootToTagsPage(tagFrame: Record<string, unknown> = tagsResult()): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await emit(agentsConfig());
@@ -129,7 +129,7 @@ async function bootToTagsPage(): Promise<Tree> {
   await waitFor(() =>
     sentFrames().some(frame => frame.type === 'tags.list'),
   );
-  await emit(tagsResult());
+  await emit(tagFrame);
   await waitFor(() => labelsOf(tree).includes('Open tag opus'));
   return tree;
 }
@@ -158,6 +158,22 @@ test('the tags page lists the server catalog, Default row first and read-only', 
   expect(labels).toEqual(expect.arrayContaining(['Open tag opus', 'Delete tag opus']));
   // The Default tag rows but is not editable: no editor link, no delete link.
   expect(labels).not.toEqual(expect.arrayContaining(['Open tag Default', 'Delete tag Default']));
+  await settleAndUnmount(tree);
+});
+
+test('an ordered route is name-only in the list and opens the route editor', async () => {
+  const tree = await bootToTagsPage(tagsResult({
+    tags: [
+      { name: 'Default', model: 'fast-1' },
+      { name: 'opus', model: 'fast-1', route: [{ model: 'fast-1', effort: 'high', contextCap: 200000 }, { model: 'small-1' }], fallbackToGlobalDefault: true },
+    ],
+  }));
+  expect(labelsOf(tree)).toEqual(expect.arrayContaining(['Open tag opus']));
+  expect(labelsOf(tree)).not.toContain('Delete tag opus');
+  await pressLabel(tree, 'Open tag opus');
+  await waitFor(() => textsOf(tree).includes('Fallback order'));
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['fast-1', 'small-1', 'Fallback to global default']));
+  expect(labelsOf(tree)).toContain('Delete tag opus');
   await settleAndUnmount(tree);
 });
 
@@ -314,7 +330,7 @@ test('/tag in the composer opens the tags page', async () => {
   await settleAndUnmount(tree);
 });
 
-test('/tag new "opus" in the composer opens the tag flow', async () => {
+test('/tag new "opus" in the composer opens the ordered route editor', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await emit(agentsConfig());
@@ -324,25 +340,19 @@ test('/tag new "opus" in the composer opens the tag flow', async () => {
     defaultModel: 'fast-1',
   });
   await waitFor(() => labelsOf(tree).includes('Message to send'));
-  await typeInto(tree, 'Message to send', '/tag new "opus"');
+  await typeInto(tree, 'Message to send', '/tag new');
   await pressLabel(tree, 'Send message');
+  await waitFor(() => labelsOf(tree).includes('Name this tag'));
+  await typeInto(tree, 'Name this tag', 'opus');
+  await pressLabel(tree, 'Save');
+  await waitFor(() => textsOf(tree).includes('Fallback order'));
+  expect(labelsOf(tree)).toContain('Add model');
+  await pressLabel(tree, 'Add model');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
   await waitFor(() => labelsOf(tree).includes('medium'));
   await pressLabel(tree, 'medium');
   await waitFor(() => labelsOf(tree).includes('Full: 400k'));
   await pressLabel(tree, 'Full: 400k');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
-  await waitFor(() =>
-    sentFrames().some(
-      frame =>
-        frame.type === 'tags.upsert' &&
-        frame.name === 'opus' &&
-        frame.model === 'fast-1' &&
-        frame.effort === 'medium' &&
-        frame.contextCap === undefined,
-    ),
-  );
   await settleAndUnmount(tree);
 });

@@ -1227,11 +1227,19 @@ export interface AgentsConfigResultFrame {
 
 /** One tag: a named alias for a model/effort/context-cap combo (docs/tags.md on the server).
  *  `model` is "" for the virtual Default tag, which always tracks the current default model. */
-export interface TagInfo {
-  name: string;
+export interface TagRouteCandidate {
   model: string;
   effort?: string;
   contextCap?: number;
+}
+
+export interface TagInfo {
+  name: string;
+  model?: string;
+  effort?: string;
+  contextCap?: number;
+  route?: TagRouteCandidate[];
+  fallbackToGlobalDefault?: boolean;
 }
 
 /** Answer to tags.list and to every tags.* mutation. */
@@ -1890,6 +1898,19 @@ export function encodeTagsUpsert(
     model,
     ...(effort ? { effort } : {}),
     ...(contextCap === undefined ? {} : { contextCap }),
+  });
+}
+
+export function encodeTagsRouteUpsert(
+  name: string,
+  route: TagRouteCandidate[],
+  fallbackToGlobalDefault: boolean,
+): string {
+  return JSON.stringify({
+    type: 'tags.upsert',
+    name,
+    route,
+    ...(fallbackToGlobalDefault ? { fallbackToGlobalDefault: true } : {}),
   });
 }
 

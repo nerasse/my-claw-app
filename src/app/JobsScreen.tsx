@@ -21,7 +21,8 @@ function when(iso: string | null): string {
 
 /** The scheduled tasks of the server: one row per job, a tap opens the editor. Values that
  *  match nothing in the live catalogs are painted red (unknownModel, unknownWorkspace,
- *  unknownSkills/…): they still exist in the job, so they must stay visible to be fixed. */
+ *  unknownSkills/…). Tag references remain valid when their definition is gone because they fall back
+ *  to Default. Other unknown values still exist in the job, so they must stay visible to be fixed. */
 export function JobsScreen({
   error,
   onClose,

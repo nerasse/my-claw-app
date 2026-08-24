@@ -1,7 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { TagInfo } from '../core/protocol';
-import { useModelCatalog, useModelIndex } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -27,14 +26,10 @@ export function TagsScreen({
   onNewTag: () => void;
   onEditTag: (name: string) => void;
   onDeleteTag: (name: string) => void;
-  onOpenContextCap: (name: string) => void;
+  onOpenContextCap?: (name: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const catalog = useModelCatalog();
   useDismissKeyboard();
-
-  const byId = useModelIndex(catalog.models);
-  const labelOf = (modelId: string): string => byId.get(modelId)?.label ?? modelId;
   const isDefault = (tag: TagInfo): boolean => tag.name === 'Default';
 
   return (
@@ -74,68 +69,41 @@ export function TagsScreen({
 
       {tags ? (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          {tags.map(tag => (
-            // One tag is one card: the actions footer sits visibly inside the same unit, so
-            // the next tag's card can never be mistaken for this tag's settings.
+          {tags.map(tag => !isDefault(tag) && tag.route === undefined ? (
             <View key={tag.name} style={styles.card}>
               <Pressable
                 style={[styles.row, styles.link]}
-                onPress={() => {
-                  if (!isDefault(tag)) onEditTag(tag.name);
-                }}
+                onPress={() => { if (!isDefault(tag)) onEditTag(tag.name); }}
                 disabled={isDefault(tag)}
                 accessibilityRole="button"
                 accessibilityLabel={`Open tag ${tag.name}`}>
                 <View style={styles.linkMain}>
-                  <View style={styles.linkTitleLine}>
-                    <Text style={styles.linkTitle}>{tag.name}</Text>
-                    {tag.effort ? <Text style={styles.badge}>{tag.effort}</Text> : null}
-                  </View>
-                  <Text style={styles.hint} numberOfLines={1}>
-                    {isDefault(tag) ? (
-                      <>
-                        follows the default model · {tag.model ? labelOf(tag.model) : ''}{' '}
-                        <Text style={styles.badge}>default</Text>
-                      </>
-                    ) : (
-                      `${labelOf(tag.model)} · ${tag.model}${
-                        tag.contextCap === undefined ? '' : ` · cap ${tag.contextCap}`
-                      }`
-                    )}
-                  </Text>
+                  <View style={styles.linkTitleLine}><Text style={styles.linkTitle}>{tag.name}</Text>{tag.effort ? <Text style={styles.badge}>{tag.effort}</Text> : null}</View>
+                  <Text style={styles.hint} numberOfLines={1}>{isDefault(tag) ? `follows the default model · ${tag.model ?? ''}` : `${tag.model ?? ''}`}</Text>
                 </View>
                 {isDefault(tag) ? null : <Text style={styles.linkGlyph}>›</Text>}
               </Pressable>
-              {isDefault(tag) ? null : (
-                <>
-                  <View style={styles.divider} />
-                  <View style={styles.footer}>
-                    <Pressable
-                      style={styles.footerLink}
-                      onPress={() => onOpenContextCap(tag.name)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Context cap for tag ${tag.name}`}>
-                      <Text style={styles.footerKey}>context cap</Text>
-                      <Text style={styles.footerValue} numberOfLines={1}>
-                        {tag.contextCap === undefined
-                          ? 'agent/global setting'
-                          : tag.contextCap === 0
-                            ? 'no ceiling'
-                            : `${tag.contextCap} tokens`}
-                      </Text>
-                      <Text style={styles.linkGlyph}>›</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.deleteLink}
-                      onPress={() => onDeleteTag(tag.name)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Delete tag ${tag.name}`}>
-                      <Text style={styles.deleteText}>delete</Text>
-                    </Pressable>
-                  </View>
-                </>
-              )}
+              {isDefault(tag) ? null : <>
+                <View style={styles.divider} />
+                <View style={styles.footer}>
+                  <Pressable style={styles.footerLink} onPress={() => onOpenContextCap?.(tag.name)} accessibilityRole="button" accessibilityLabel={`Context cap for tag ${tag.name}`}>
+                    <Text style={styles.footerKey}>context cap</Text><Text style={styles.footerValue}>{tag.contextCap === undefined ? 'agent/global setting' : `${tag.contextCap} tokens`}</Text><Text style={styles.linkGlyph}>›</Text>
+                  </Pressable>
+                  <Pressable style={styles.deleteLink} onPress={() => onDeleteTag(tag.name)} accessibilityRole="button" accessibilityLabel={`Delete tag ${tag.name}`}><Text style={styles.deleteText}>delete</Text></Pressable>
+                </View>
+              </>}
             </View>
+          ) : (
+            <Pressable
+              key={tag.name}
+              style={styles.nameRow}
+              onPress={() => { if (!isDefault(tag)) onEditTag(tag.name); }}
+              disabled={isDefault(tag)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open tag ${tag.name}`}>
+              <Text style={styles.name}>{tag.name}</Text>
+              {isDefault(tag) ? <Text style={styles.defaultHint}>default</Text> : <Text style={styles.linkGlyph}>›</Text>}
+            </Pressable>
           ))}
         </ScrollView>
       ) : null}
@@ -174,7 +142,19 @@ const createStyles = (palette: Palette) => ({
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  body: { padding: space.md, gap: space.md, paddingBottom: space.xl },
+  body: { padding: space.md, gap: space.xs, paddingBottom: space.xl },
+  nameRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  name: { flex: 1, fontSize: font.body, fontWeight: '600' as const, color: palette.text },
+  defaultHint: { fontSize: font.small, color: palette.textFaint },
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

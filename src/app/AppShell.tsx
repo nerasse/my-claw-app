@@ -354,7 +354,9 @@ export function AppShell(): React.JSX.Element {
   const [workspacePickerAgent, setWorkspacePickerAgent] = useState<string | null>(null);
   const [numberEditor, setNumberEditor] = useState<{ field: 'iterations' | 'contextcap'; agent: string } | null>(null);
   /** The tag editor sheet: its group stack is walked by back, and the row to rename over it. */
-  const [tagEditor, setTagEditor] = useState<{ name: string; picker: PickerState } | null>(null);
+  const [tagEditor, setTagEditor] = useState<{ name: string; picker: PickerState | null; pickerIndex: number | null } | null>(null);
+  const [tagEditorDirty, setTagEditorDirty] = useState(false);
+  const [tagEditorDiscard, setTagEditorDiscard] = useState(false);
   /** The context-cap number page for one tag, opened from the tags page. */
   const [tagContextEditor, setTagContextEditor] = useState<string | null>(null);
   /** The name prompt for a tag about to be created, opened by /tag new or the + button. */
@@ -1117,13 +1119,21 @@ export function AppShell(): React.JSX.Element {
         return true;
       }
       if (settingsPage === 'tag-editor') {
-        const previous = pickerBack(tagEditor?.picker ?? pickerStart);
-        if (previous && tagEditor) {
-          setTagEditor({ ...tagEditor, picker: previous });
+        if (tagEditor?.picker) {
+          const previous = pickerBack(tagEditor.picker);
+          if (previous) {
+            setTagEditor({ ...tagEditor, picker: previous });
+          } else {
+            setTagEditor({ ...tagEditor, picker: null, pickerIndex: null });
+          }
           return true;
         }
-        setTagEditor(null);
-        setSettingsPage('tags');
+        if (tagEditorDirty) {
+          setTagEditorDiscard(true);
+        } else {
+          setTagEditor(null);
+          setSettingsPage('tags');
+        }
         return true;
       }
       if (settingsPage === 'agent') {
@@ -1291,6 +1301,7 @@ export function AppShell(): React.JSX.Element {
     leaveSubAgent,
     tagContextEditor,
     tagEditor,
+    tagEditorDirty,
     tagToDelete,
     textViewer,
     threadMenu,
@@ -2265,7 +2276,7 @@ export function AppShell(): React.JSX.Element {
   const saveTagContextCap = (value: number | null): void => {
     if (!tagContextEditor) return;
     const tag = tagsState.tags?.find(entry => entry.name === tagContextEditor);
-    if (tag) {
+    if (tag?.model) {
       connection
         .send(encodeTagsUpsert(tagContextEditor, tag.model, tag.effort, value ?? undefined))
         .catch(() => {});
@@ -2276,11 +2287,20 @@ export function AppShell(): React.JSX.Element {
     setTagContextEditor(null);
   };
   const openTagEditor = (name: string): void => {
-    // The editor is a settings page now, whatever opened it: a /tag command from the chat
-    // lands in Settings the same way the bare /tag does.
-    setTagEditor({ name, picker: pickerStart });
+    // The route editor is a page, not a modal: draft changes stay local until Save.
+    setTagEditor({ name, picker: null, pickerIndex: null });
+    setTagEditorDirty(false);
     setSettingsOpen(true);
     setSettingsPage('tag-editor');
+  };
+  const leaveTagEditor = (): void => {
+    if (tagEditorDirty) {
+      setTagEditorDiscard(true);
+      return;
+    }
+    setTagEditor(null);
+    setTagEditorDirty(false);
+    setSettingsPage('tags');
   };
   /** The /tag command: bare opens the tags page, `new "name"` opens the tag editor. */
   const dispatchTagCommand = useCallback(
@@ -2317,6 +2337,11 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeTagsDelete(tagToDelete)).catch(() => {});
     connection.send(encodeModelList()).catch(() => {});
     connection.send(encodeAgentsConfigGet()).catch(() => {});
+    if (tagEditor?.name === tagToDelete) {
+      setTagEditor(null);
+      setTagEditorDirty(false);
+      setSettingsPage('tags');
+    }
     setTagToDelete(null);
   };
   const agentsPage = (
@@ -2783,12 +2808,14 @@ export function AppShell(): React.JSX.Element {
               tagEditor ? (
                 <TagEditorPage
                   name={tagEditor.name}
-                  state={tagEditor.picker}
-                  onStateChange={picker => setTagEditor(current => (current ? { ...current, picker } : current))}
-                  onBack={() => {
-                    setTagEditor(null);
-                    setSettingsPage('tags');
-                  }}
+                  picker={tagEditor.picker}
+                  pickerIndex={tagEditor.pickerIndex}
+                  onPickerChange={picker => setTagEditor(current => (current ? { ...current, picker } : current))}
+                  onStartPicker={index => setTagEditor(current => (current ? { ...current, picker: pickerStart, pickerIndex: index } : current))}
+                  onClosePicker={() => setTagEditor(current => (current ? { ...current, picker: null, pickerIndex: null } : current))}
+                  onBack={leaveTagEditor}
+                  onDelete={() => setTagToDelete(tagEditor.name)}
+                  onDirtyChange={setTagEditorDirty}
                 />
               ) : (
                 tagsPage
@@ -3476,7 +3503,7 @@ export function AppShell(): React.JSX.Element {
       {newTagPrompt ? (
         <PromptSheet
           title="Name this tag"
-          hint="then pick the model, effort and context cap it pins"
+          hint="then build the ordered fallback route"
           initialValue=""
           placeholder="opus, sonnet, research…"
           maxLength={40}
@@ -3485,9 +3512,28 @@ export function AppShell(): React.JSX.Element {
         />
       ) : null}
 
+      {tagEditorDiscard ? (
+        <ActionSheet
+          preview="Discard the unsaved route changes?"
+          options={[
+            {
+              label: 'Discard changes',
+              danger: true,
+              onPress: () => {
+                setTagEditorDiscard(false);
+                setTagEditorDirty(false);
+                setTagEditor(null);
+                setSettingsPage('tags');
+              },
+            },
+          ]}
+          onClose={() => setTagEditorDiscard(false)}
+        />
+      ) : null}
+
       {tagToDelete ? (
         <ActionSheet
-          preview={`Delete the tag "${tagToDelete}"? Configs still referencing tag:${tagToDelete} will show it as unknown.`}
+          preview={`Delete the tag "${tagToDelete}"? Configs still referencing tag:${tagToDelete} will fall back to the Default tag until it is recreated.`}
           options={[
             {
               label: 'Delete',

@@ -67,8 +67,9 @@ function draftOf(job: JobEntry | null): JobDraft {
 /**
  * The scheduled task editor. Like the agent file editor: structured fields, the schedule parsed
  * with the server's own rules, and the model/workspace/scope pickers fed by the live catalogs
- * with entries that match nothing painted red — a save never blocks on catalog membership, the
- * job is the truth. The scope rows open the same ScopeEditorScreen the agents use.
+ * with entries that match nothing painted red — except tag references, which remain valid and
+ * fall back to Default when their definition is absent. A save never blocks on catalog membership,
+ * the job is the truth. The scope rows open the same ScopeEditorScreen the agents use.
  */
 export function JobsEditorScreen({
   job,
@@ -136,7 +137,7 @@ export function JobsEditorScreen({
   const invalid = scheduleInvalid(draft.schedule);
   const promptMissing = !draft.prompt.trim();
   const canSave = !invalid && !promptMissing && !saving;
-  const modelKnown = !draft.model.trim() || catalog.models.some(model => model.id === draft.model);
+  const modelKnown = !draft.model.trim() || draft.model.startsWith('tag:') || catalog.models.some(model => model.id === draft.model);
   const workspaceKnown = !draft.workspace.trim() || workspaces.some(entry => entry.key === draft.workspace);
 
   const scopeOfKind = (kind: 'skills' | 'mcp' | 'tools'): JobScope => draft[kind];
