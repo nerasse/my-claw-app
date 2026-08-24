@@ -92,7 +92,6 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           accessibilityLabel={`Sub-agent ${label || id || action}${running ? ', running' : ''}`}
           accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
-          <Text style={styles.glyph}>◈</Text>
           <Text style={styles.name} numberOfLines={1}>
             {label || id || action}
           </Text>
@@ -175,7 +174,6 @@ const createStyles = (palette: Palette) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const },
   identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
-  glyph: { fontSize: font.meta, color: palette.accent },
   name: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 1 },
   kind: { fontSize: font.micro, color: palette.textFaint, flexShrink: 1 },
   spacer: { flex: 1 },
