@@ -36,66 +36,6 @@ export function selectableProps(): Partial<ViewProps> {
  * pixels for good and the first line is sliced by the top edge. That was the composer's broken
  * border on the web, and it moved with the caret, which is what made it look intermittent.
  */
-/**
- * Marks a block as "scrolls vertically, and only vertically". The rule itself is in
- * webTheme.web.ts: `overflow: scroll` in a React Native style means *both* axes and a permanent
- * pair of bars, which is what put a horizontal scrollbar over and under every tool output.
- */
-export function blockScrollProps(): Partial<ViewProps> {
-  return { dataSet: { clawScroll: 'y' } } as Partial<ViewProps>;
-}
-
-/**
- * Makes the wheel work over a capped block inside the thread.
- *
- * A block nested in the inverted chat list has to answer the wheel itself, for two reasons.
- *
- * The event must stop here while the block can still move, or the thread behind it scrolls at
- * the same time. And the direction cannot be assumed: react-native-web renders the inverted list
- * as a `scaleY(-1)` on the list and a second one on each row, so a block may sit under an even
- * number of flips (upright, the browser is right) or an odd one (upside down, every delta is
- * backwards). Which one depends on where the block hangs in the tree, so it is measured rather
- * than hardcoded -- guessing it got the direction wrong for every tool block once already.
- *
- * At either end of the block the event is let through and the thread takes over, which is what a
- * reader expects from a scroll area nested in another.
- */
-export function attachBlockWheel(node: unknown): () => void {
-  if (!(node instanceof HTMLElement)) return () => {};
-  // Cached after the first wheel: the transforms are static, and walking to the body on every
-  // notch of a scroll would be paid on the one gesture that must stay smooth.
-  let sign: number | undefined;
-  const onWheel = (event: WheelEvent): void => {
-    const max = node.scrollHeight - node.clientHeight;
-    if (max <= 0) return;
-    if (sign === undefined) sign = verticalSign(node);
-    const next = Math.min(Math.max(node.scrollTop + sign * event.deltaY, 0), max);
-    if (next === node.scrollTop) return;
-    node.scrollTop = next;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-  // Not passive: the whole point is to be able to keep the thread from scrolling too.
-  node.addEventListener('wheel', onWheel, { passive: false });
-  return () => node.removeEventListener('wheel', onWheel);
-}
-
-/**
- * +1 when the element is drawn the right way up, -1 when an odd number of ancestors flips it
- * vertically. Reads the `d` term of each ancestor's transform matrix, which is the vertical
- * scale: negative means mirrored.
- */
-function verticalSign(node: HTMLElement): number {
-  let sign = 1;
-  for (let el: HTMLElement | null = node; el; el = el.parentElement) {
-    const transform = getComputedStyle(el).transform;
-    if (!transform || transform === 'none') continue;
-    const matrix = new DOMMatrixReadOnly(transform);
-    if (matrix.d < 0) sign = -sign;
-  }
-  return sign;
-}
-
 export function autoGrow(node: unknown, maxHeight: number): void {
   if (!(node instanceof HTMLTextAreaElement)) return;
   // A textarea is two rows tall by default, and that intrinsic height is a floor `scrollHeight`

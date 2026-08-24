@@ -35,17 +35,19 @@ taking text out of it     -> the selection viewer, one node, raw source
   pointer already does. `CodeBlockBar` follows the same flag: on the web its strip keeps the
   language and loses the button, so no tool render in a browser carries a control that repeats
   Ctrl+C. The settings pages keep theirs -- they are ordinary scroll views, not the chat list.
-- `ScrollableBlock` caps every block of tool text at `BLOCK_MAX_HEIGHT`. On the web that is a
-  real overflow (`blockScrollSupported`): the wheel scrolls what is under the cursor and no
-  gesture is disputed. On a touchscreen the block is clipped and a `show all` bar unfolds it **in
-  place**, because a ScrollView nested in the inverted list fights it for every drag -- the thread
-  is already a scroll view and is the one gesture that works, so reading a long output is
-  scrolling the conversation. The bar used to open the full-screen viewer instead, which answered
-  "let me see the rest of this" by leaving the conversation for a screen that looked nothing like
-  the card; taking text *out* is a different intent, and it has `BlockActions`. The cut is
-  measured in a layout pass, never guessed from the character count, so a block that fits offers
-  nothing. Unfolding shows the **whole** output: a card arrives clipped to the server's
-  `TOOL_OUTPUT_LIMIT`, and unfolding it sends `chat.tool.full` (`core/toolOutput.ts`, once per
+- `ScrollableBlock` caps every long block in a conversation at `BLOCK_MAX_HEIGHT` (tool arguments
+  and output, a diff, a sub-agent's task and result, a fenced block in an answer) and a `show all`
+  bar unfolds it **in place**. One behaviour on every platform, and no block scrolls on its own.
+  A nested scroll area was tried on the web, where the platform does allow it, and it was wrong
+  twice: it disagreed with the phone, where a ScrollView inside the inverted list disputes every
+  drag with the list and loses, so one card answered one gesture in two ways; and a scrollbar in a
+  card inside a scrolling thread is a trap of its own, three nested scroll areas where the reader
+  learns which one moved after the fact. The thread is the scroll area. The bar also used to open
+  the full-screen viewer, which answered "let me see the rest of this" by leaving the conversation
+  for a screen that looked nothing like the card; taking text *out* is a different intent, and it
+  has `BlockActions`. The cut is measured in a layout pass, never guessed from the character
+  count, so a block that fits offers nothing. Unfolding shows the **whole** output: a card arrives
+  clipped to the server's `TOOL_OUTPUT_LIMIT`, and unfolding it sends `chat.tool.full` (`core/toolOutput.ts`, once per
   card). The clip is a transport decision, not a display one -- every reconnect replays a page of
   history, so the bytes would be paid for by every device, every time.
 - The bubble menu carries `Select text`, which opens the viewer on the **whole message**:

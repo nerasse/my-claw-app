@@ -1,7 +1,6 @@
 /**
- * A tool output must not be allowed to take the whole thread, and no block may throw the
- * inverted chat list by nesting a ScrollView in it. Two behaviours, one per platform, and both
- * keep the full text reachable without leaving the conversation.
+ * A long block in a conversation is capped and unfolds in place, everywhere. No nested scroll
+ * area on any platform: the thread is the scroll area (docs/text-selection.md).
  */
 
 import React from 'react';
@@ -9,14 +8,6 @@ import { Text, View } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
-
-let mockScroll = false;
-jest.mock('../../core/platform', () => ({
-  get blockScrollSupported() {
-    return mockScroll;
-  },
-}));
-
 import { BLOCK_MAX_HEIGHT, ScrollableBlock } from '../ScrollableBlock';
 
 function render() {
@@ -63,58 +54,38 @@ function clipped(tree: ReactTestRenderer.ReactTestRenderer) {
     );
 }
 
-describe('on a touchscreen', () => {
-  beforeEach(() => {
-    mockScroll = false;
-  });
-
-  it('clips the block instead of nesting a scroll view in the thread', () => {
-    const tree = render();
-    expect(clipped(tree)).toBe(true);
-  });
-
-  it('offers the fold only once the block is actually cut', () => {
-    const tree = render();
-    measure(tree, BLOCK_MAX_HEIGHT - 40);
-    expect(foldBar(tree)).toHaveLength(0);
-
-    measure(tree, BLOCK_MAX_HEIGHT + 400);
-    expect(foldBar(tree)).toHaveLength(1);
-  });
-
-  it('unfolds in place rather than sending the reader to another screen', () => {
-    const tree = render();
-    measure(tree, BLOCK_MAX_HEIGHT + 400);
-
-    const [bar] = foldBar(tree);
-    ReactTestRenderer.act(() => bar!.props.onPress());
-    // The cap is gone: the rest of the output is on screen, in the card, and the thread scrolls.
-    expect(clipped(tree)).toBe(false);
-    // Same control, now announcing the way back.
-    expect(foldBar(tree)[0]!.props.accessibilityLabel).toBe('Fold bash output');
-
-    ReactTestRenderer.act(() => bar!.props.onPress());
-    expect(clipped(tree)).toBe(true);
-  });
+it('caps the block instead of nesting a scroll area in the thread', () => {
+  const tree = render();
+  expect(clipped(tree)).toBe(true);
+  // Nothing scrollable of its own, on any platform: three nested scroll areas is a trap, and the
+  // gesture is disputed with the inverted list on a touchscreen.
+  expect(
+    tree.root
+      .findAllByType(View)
+      .some(n => [n.props.style].flat(2).some(s => s && (s.overflow === 'scroll' || s.overflowY))),
+  ).toBe(false);
 });
 
-describe('in a browser', () => {
-  beforeEach(() => {
-    mockScroll = true;
-  });
+it('offers the fold only once the block is actually cut', () => {
+  const tree = render();
+  measure(tree, BLOCK_MAX_HEIGHT - 40);
+  expect(foldBar(tree)).toHaveLength(0);
 
-  it('gives the block a real scrollbar and no fold', () => {
-    const tree = render();
-    // The cap is there, the axis is CSS's business (webTheme.web.ts): an `overflow: 'scroll'` in
-    // a React Native style means both axes and two permanent bars.
-    expect(
-      tree.root
-        .findAllByType(View)
-        .some(n =>
-          [n.props.style].flat(2).some(s => s && s.maxHeight === BLOCK_MAX_HEIGHT && s.overflow === undefined),
-        ),
-    ).toBe(true);
-    expect(clipped(tree)).toBe(false);
-    expect(foldBar(tree)).toHaveLength(0);
-  });
+  measure(tree, BLOCK_MAX_HEIGHT + 400);
+  expect(foldBar(tree)).toHaveLength(1);
+});
+
+it('unfolds in place rather than sending the reader to another screen', () => {
+  const tree = render();
+  measure(tree, BLOCK_MAX_HEIGHT + 400);
+
+  const [bar] = foldBar(tree);
+  ReactTestRenderer.act(() => bar!.props.onPress());
+  // The cap is gone: the rest of the output is on screen, in the card, and the thread scrolls.
+  expect(clipped(tree)).toBe(false);
+  // Same control, now announcing the way back.
+  expect(foldBar(tree)[0]!.props.accessibilityLabel).toBe('Fold bash output');
+
+  ReactTestRenderer.act(() => bar!.props.onPress());
+  expect(clipped(tree)).toBe(true);
 });

@@ -1,33 +1,29 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
-import { blockScrollSupported } from '../core/platform';
-import { attachBlockWheel, blockScrollProps } from '../core/webProps';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 
 /**
- * How tall a block inside a tool card is allowed to grow before it is either scrolled or folded.
- * Roughly fourteen monospace lines: long enough that most outputs never reach it, short enough
- * that one of them cannot bury the answer that follows.
+ * How tall a block inside a tool card is allowed to grow before it is folded. Roughly fourteen
+ * monospace lines: long enough that most outputs never reach it, short enough that one of them
+ * cannot bury the answer that follows.
  */
 export const BLOCK_MAX_HEIGHT = 260;
 
 /**
- * A block of tool text that refuses to take over the thread.
+ * A block of tool text that refuses to take over the thread: capped, with a bar that unfolds it
+ * in place. Arguments, outputs, diffs, a sub-agent's task and result, a fenced block in an
+ * answer -- every long block in a conversation, on every platform.
  *
- * Two behaviours, one per platform, and the platform decides which because of one hard
- * constraint: a ScrollView nested in the inverted chat list disputes every vertical drag with the
- * list and loses in both directions (docs/text-selection.md). So the block scrolls where that is
- * free and grows where it is not.
+ * One behaviour, deliberately. A nested scroll area was tried on the web, where the platform
+ * allows it (the wheel and a scrollbar), and it was the wrong call twice over. It disagreed with
+ * the phone, where a ScrollView inside the inverted chat list disputes every drag with the list
+ * and loses (docs/text-selection.md), so the same card answered the same gesture in two ways. And
+ * a scrollbar inside a card inside a scrolling thread is a trap in its own right: three nested
+ * scroll areas, and the reader finds out which one moved after the fact.
  *
- * - Web: a real overflow. The wheel scrolls whatever is under the cursor.
- * - Touchscreen: capped, and a bar unfolds it **in place** to its full height. The thread is
- *   already a scroll view, and it is the one gesture that works here -- reading a long output is
- *   then scrolling the conversation, which is what a reader does anyway. It used to open a
- *   full-screen raw-text viewer instead, which answered "let me read the rest of this" by leaving
- *   the conversation and showing something that looked nothing like the card.
- *
- * Taking the text out is a different intent and has its own control: `BlockActions` (copy, and
- * select, which is what opens the viewer).
+ * The thread is the scroll area. A block is either short enough to read where it is, or unfolded
+ * into the thread and read by scrolling it. Taking the text out is a different intent and has its
+ * own control (`BlockActions`: copy, and select, which opens the full-screen viewer).
  */
 export function ScrollableBlock({
   title,
@@ -44,21 +40,6 @@ export function ScrollableBlock({
   // renderer's business, and a block that fits must not offer to be unfolded.
   const [clipped, setClipped] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  // A ref callback rather than an effect: the node is what the listener needs, and this way it is
-  // attached the moment the block mounts and released when it unmounts, with nothing to sync.
-  const detachWheel = React.useRef<(() => void) | undefined>(undefined);
-  const bindWheel = useCallback((node: View | null) => {
-    detachWheel.current?.();
-    detachWheel.current = node ? attachBlockWheel(node) : undefined;
-  }, []);
-
-  if (blockScrollSupported) {
-    return (
-      <View ref={bindWheel} style={[style, styles.scroller]} {...blockScrollProps()}>
-        {children}
-      </View>
-    );
-  }
 
   const onLayout = (event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
@@ -67,8 +48,8 @@ export function ScrollableBlock({
 
   return (
     <View>
-      {/* The measured child stays mounted whether it is clipped or not: the height is what
-          decides the bar, so it has to be measured at its natural size either way. */}
+      {/* The measured child stays mounted whether it is clipped or not: its natural height is
+          what decides the bar, so it has to be measured at that height either way. */}
       <View style={[style, expanded ? null : styles.clip]}>
         <View onLayout={onLayout}>{children}</View>
       </View>
@@ -88,10 +69,6 @@ export function ScrollableBlock({
 }
 
 const createStyles = (palette: Palette) => ({
-  // The height only. Which axis actually scrolls is settled in CSS (webTheme.web.ts,
-  // `[data-claw-scroll]`): a React Native `overflow: scroll` means both axes and two permanent
-  // bars, which is how a horizontal scrollbar ended up over and under every tool output.
-  scroller: { maxHeight: BLOCK_MAX_HEIGHT },
   clip: { maxHeight: BLOCK_MAX_HEIGHT, overflow: 'hidden' as const },
   more: {
     flexDirection: 'row' as const,

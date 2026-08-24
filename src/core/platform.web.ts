@@ -27,11 +27,6 @@ export const chatSelectable = true;
  */
 export const blockActionsSupported = false;
 
-/**
- * True: a wheel or a trackpad scrolls the block under the cursor, not the thread behind it, and
- * the browser draws a real scrollbar. No gesture is being disputed here.
- */
-export const blockScrollSupported = true;
 
 /** Asked of the device, not of the window: a touchscreen laptop reports both, and coarse wins. */
 export const pointerFine =
