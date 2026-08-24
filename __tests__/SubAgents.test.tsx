@@ -4,10 +4,10 @@
 
 import ReactTestRenderer from 'react-test-renderer';
 import { chatStore } from '../src/core/chat';
-import { subAgentStore } from '../src/core/subagents';
+import { subAgentCallersStore, subAgentStore } from '../src/core/subagents';
 import { sessionStore } from '../src/core/sessions';
 import { deviceBridge } from '../src/core/nativeBridge';
-import type { SubAgentEntry, ToolCallPayload } from '../src/core/protocol';
+import type { SubAgentCaller, SubAgentEntry, ToolCallPayload } from '../src/core/protocol';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -46,6 +46,7 @@ const spawnCard = (over: Partial<ToolCallPayload> & { id: string }): ToolCallPay
 beforeEach(() => {
   chatStore.clearAll();
   subAgentStore.reset();
+  subAgentCallersStore.reset();
   // The bridge mock outlives a test: without this, a frame sent by an earlier one is still in
   // the log and the next assertion reads it instead of its own.
   bridge.sendMessage.mockClear();
@@ -199,33 +200,131 @@ describe('inside a sub-agent', () => {
   });
 });
 
-describe('handing an answer to the parent', () => {
-  it('sends it into the parent conversation, quoted, and lands back there', async () => {
-    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+describe('handing an answer back to a caller', () => {
+  /** Opens the hand-back sheet on the sub-agent's own answer. */
+  async function openHandoff(tree: Tree): Promise<void> {
     await pressLabel(tree, '1 sub-agent');
     await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
-
     await ReactTestRenderer.act(async () => {
       chatStore.seedHistory(handleFor('subagent/digger-a1b2'), [
         { id: 'h-a', role: 'assistant', text: 'the cause is the token cache', ts: '2026-01-01T10:00:02.000Z' },
       ]);
     });
     await waitFor(() => textsOf(tree).includes('the cause is the token cache'));
-
     await pressLabel(tree, 'Message actions');
+    await pressLabel(tree, 'Hand back to…');
+  }
 
-    const hand = labelsOf(tree).find(label => label.startsWith('Hand to '));
-    expect(hand).toBeDefined();
-    await pressLabel(tree, hand!);
+  const caller = (over: Partial<SubAgentCaller> = {}): SubAgentCaller => ({
+    sessionId: 'my-claw-app/thread/owner/main',
+    threadId: THREAD,
+    creator: true,
+    firstAt: '2026-01-01T09:00:00.000Z',
+    lastAt: '2026-01-01T10:00:00.000Z',
+    runs: 2,
+    title: 'Parent conversation',
+    ...over,
+  });
 
-    // It is a plain send on the parent thread, quoted with the sub-agent it came from: the server
-    // needs no frame of its own for this.
-    const sent = bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
-    const quoted = sent.find(frame => frame.includes('[digger-a1b2] the cause is the token cache'));
-    expect(quoted).toBeDefined();
-    const parsed = JSON.parse(quoted!) as { type: string; threadId: string };
-    expect(parsed.type).toBe('chat.send');
-    expect(parsed.threadId).toBe(THREAD);
+  it('asks the server who called the sub-agent, and says so while it waits', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await openHandoff(tree);
+
+    const asked = bridge.sendMessage.mock.calls
+      .map(([frame]) => String(frame))
+      .find(frame => frame.includes('"subagents.callers"'));
+    expect(asked).toBeDefined();
+    const parsed = JSON.parse(asked!) as { threadId: string; parentThreadId: string };
+    expect(parsed.threadId).toBe(handleFor('subagent/digger-a1b2'));
+    expect(parsed.parentThreadId).toBe(THREAD);
+    // A spinner would be a lie about a list that is simply not here yet.
+    expect(textsOf(tree)).toContain('Looking up who called this sub-agent…');
+    await settleAndUnmount(tree);
+  });
+
+  it('pre-picks the conversation walked in from, and hands the picked answer back to it', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await openHandoff(tree);
+    await ReactTestRenderer.act(async () => {
+      subAgentCallersStore.receive({
+        type: 'subagents.callers.result',
+        threadId: handleFor('subagent/digger-a1b2'),
+        callers: [caller()],
+      });
+    });
+
+    // Pre-picked, so the count is on the action before anything is tapped.
+    await waitFor(() => textsOf(tree).some(t => t.includes('Send for action (1)')));
+    await pressLabel(tree, 'Send for action (1)');
+
+    const sent = bridge.sendMessage.mock.calls
+      .map(([frame]) => String(frame))
+      .find(frame => frame.includes('"subagents.handoff"'));
+    expect(sent).toBeDefined();
+    const handoff = JSON.parse(sent!) as { targets: string[]; mode: string; messageId: string; threadId: string };
+    expect(handoff.targets).toEqual(['my-claw-app/thread/owner/main']);
+    expect(handoff.mode).toBe('ask');
+    // The id of the bubble the owner picked, which is the id the replay view minted for it.
+    expect(handoff.messageId).toBe('h-a');
+    await settleAndUnmount(tree);
+  });
+
+  it('takes several callers at once, and files them as a note when asked', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await openHandoff(tree);
+    await ReactTestRenderer.act(async () => {
+      subAgentCallersStore.receive({
+        type: 'subagents.callers.result',
+        threadId: handleFor('subagent/digger-a1b2'),
+        callers: [
+          caller(),
+          caller({ sessionId: 'my-claw-app/thread/owner/side', threadId: 'side', creator: false, title: 'Side thread', runs: 1 }),
+        ],
+      });
+    });
+    await waitFor(() => textsOf(tree).includes('Side thread'));
+
+    await pressLabel(tree, 'Side thread');
+    await waitFor(() => textsOf(tree).some(t => t.includes('File as a note (2)')));
+    await pressLabel(tree, 'File as a note (2)');
+
+    const sent = bridge.sendMessage.mock.calls
+      .map(([frame]) => String(frame))
+      .find(frame => frame.includes('"subagents.handoff"'));
+    const handoff = JSON.parse(sent!) as { targets: string[]; mode: string };
+    expect(handoff.targets.sort()).toEqual(['my-claw-app/thread/owner/main', 'my-claw-app/thread/owner/side']);
+    expect(handoff.mode).toBe('note');
+    await settleAndUnmount(tree);
+  });
+
+  // Shown rather than dropped: "that conversation is gone" is the answer to why it cannot be
+  // picked, and a silently shorter list is not.
+  it('shows a caller whose conversation is gone as unavailable', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await openHandoff(tree);
+    await ReactTestRenderer.act(async () => {
+      subAgentCallersStore.receive({
+        type: 'subagents.callers.result',
+        threadId: handleFor('subagent/digger-a1b2'),
+        callers: [caller({ sessionId: 'my-claw-app/thread/owner/dead', threadId: undefined, creator: false, title: 'Deleted one', unreachable: 'gone' })],
+      });
+    });
+
+    await waitFor(() => textsOf(tree).includes('Deleted one'));
+    expect(textsOf(tree)).toContain('conversation is gone');
+    // Nothing selectable, so no target count on the action.
+    expect(textsOf(tree)).toContain('Send for action');
+    await settleAndUnmount(tree);
+  });
+
+  it('says so when the sub-agent is no longer reachable', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await openHandoff(tree);
+    await ReactTestRenderer.act(async () => {
+      subAgentCallersStore.refused(handleFor('subagent/digger-a1b2'));
+    });
+
+    await waitFor(() => textsOf(tree).includes('This sub-agent is no longer reachable from here'));
     await settleAndUnmount(tree);
   });
 });

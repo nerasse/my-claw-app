@@ -1,5 +1,12 @@
 import { useSyncExternalStore } from 'react';
-import type { SubAgentEntry, SubAgentsListResultFrame } from './protocol';
+import type {
+  SubAgentCaller,
+  SubAgentEntry,
+  SubAgentHandoffOutcome,
+  SubAgentsCallersResultFrame,
+  SubAgentsHandoffResultFrame,
+  SubAgentsListResultFrame,
+} from './protocol';
 import type { SpawnCard } from './chat';
 
 type Listener = () => void;
@@ -73,6 +80,92 @@ class SubAgentsStoreImpl {
 }
 
 export const subAgentStore = new SubAgentsStoreImpl();
+
+export type CallersStatus = 'idle' | 'loading' | 'ready' | 'refused';
+
+export interface CallersState {
+  status: CallersStatus;
+  callers: SubAgentCaller[];
+  /** The last hand-back's per-target outcome, kept so the sheet can say what actually landed. */
+  delivered?: SubAgentHandoffOutcome[];
+}
+
+const NO_CALLERS: CallersState = { status: 'idle', callers: [] };
+Object.freeze(NO_CALLERS);
+
+/**
+ * Who called each sub-agent, per sub-agent thread, mirrored from `subagents.callers.result`.
+ *
+ * Separate from the roster: the roster is pushed on every lifecycle event and every window holds
+ * it, whereas this is pulled when a menu opens and belongs to the window that opened it. `refused`
+ * is a real state, not an empty list -- an unreachable sub-agent answers like a missing one, and
+ * the sheet must say so rather than show "no callers".
+ */
+class SubAgentCallersStoreImpl {
+  private states = new Map<string, CallersState>();
+  private listeners = new Set<Listener>();
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  get(threadId: string): CallersState {
+    return this.states.get(threadId) ?? NO_CALLERS;
+  }
+
+  /** The request left. Kept apart from `ready` so the sheet can show a spinner, not an empty list. */
+  requested(threadId: string): void {
+    const current = this.get(threadId);
+    this.states.set(threadId, { ...current, status: 'loading' });
+    this.emit();
+  }
+
+  receive(frame: SubAgentsCallersResultFrame): void {
+    this.states.set(frame.threadId, { status: 'ready', callers: frame.callers });
+    this.emit();
+  }
+
+  /** The server refused: an unreachable sub-agent is indistinguishable from a missing one. */
+  refused(threadId: string): void {
+    this.states.set(threadId, { status: 'refused', callers: [] });
+    this.emit();
+  }
+
+  receiveHandoff(frame: SubAgentsHandoffResultFrame): void {
+    const current = this.get(frame.threadId);
+    this.states.set(frame.threadId, { ...current, delivered: frame.delivered });
+    this.emit();
+  }
+
+  /** Forgets the last outcome once the sheet closed, so reopening it does not replay old news. */
+  clearDelivered(threadId: string): void {
+    const current = this.states.get(threadId);
+    if (!current?.delivered) return;
+    this.states.set(threadId, { status: current.status, callers: current.callers });
+    this.emit();
+  }
+
+  reset(): void {
+    this.states.clear();
+    this.emit();
+  }
+
+  private emit(): void {
+    for (const listener of this.listeners) listener();
+  }
+}
+
+export const subAgentCallersStore = new SubAgentCallersStoreImpl();
+
+export function useSubAgentCallers(threadId: string | null): CallersState {
+  return useSyncExternalStore(
+    listener => subAgentCallersStore.subscribe(listener),
+    () => (threadId ? subAgentCallersStore.get(threadId) : NO_CALLERS),
+  );
+}
 
 /** A named sub-agent: created as a `session`, lives on disk until killed or until its parent
  *  conversation is deleted (when private). */

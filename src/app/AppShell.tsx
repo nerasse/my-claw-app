@@ -26,7 +26,7 @@ import {
   type TextItem,
 } from '../core/chat';
 import { resumeFrames } from '../core/resume';
-import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, useSubAgents } from '../core/subagents';
+import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { isPinned, migrateLocalPins, setPinned } from '../core/pinned';
 import { parseTagCommand } from '../core/commands';
@@ -121,6 +121,8 @@ import {
   encodeTagsDelete,
   encodeTagsList,
   encodeSubAgentsList,
+  encodeSubAgentCallers,
+  encodeSubAgentHandoff,
   encodeSubAgentKill,
   encodeSubAgentReset,
   encodeTagsUpsert,
@@ -469,6 +471,14 @@ export function AppShell(): React.JSX.Element {
     parentThreadId: string;
   } | null>(null);
   const [subagentAction, setSubagentAction] = useState<'reset' | 'kill' | null>(null);
+  /**
+   * The hand-back in progress: which answer, and which callers it goes to.
+   *
+   * A set rather than one target, because one answer can be owed to several conversations -- a
+   * global sub-agent works for whoever drives it, and the conversation the owner happened to walk
+   * in from is not necessarily the one waiting for this.
+   */
+  const [handoff, setHandoff] = useState<{ item: TextItem; targets: Set<string> | null } | null>(null);
   const [subagentMenuOpen, setSubagentMenuOpen] = useState(false);
   const [jobRuns, setJobRuns] = useState<JobRunEntry[] | null>(null);
   const [runsError, setRunsError] = useState<string | null>(null);
@@ -1347,6 +1357,9 @@ export function AppShell(): React.JSX.Element {
   // The roster of the conversation in play: while inside a sub-agent that is still the parent's,
   // because that is the scope the server answered for.
   const rosterThread = subagentView?.parentThreadId ?? activeThread;
+  // Who called the sub-agent on screen, for the hand-back sheet. Pulled when that menu opens, so
+  // it is idle for every conversation that never opens it.
+  const handoffCallers = useSubAgentCallers(subagentView?.threadId ?? null);
   const roster = useSubAgents(rosterThread);
   const spawnCards = useSpawnCards(activeThread);
   const rosterGroups = useMemo(() => groupRoster(roster.agents), [roster.agents]);
@@ -3376,14 +3389,19 @@ export function AppShell(): React.JSX.Element {
             ...(subagentView && bubbleMenu.role === 'agent' && bubbleMenu.text.trim()
               ? [
                   {
-                    label: `Hand to ${parentTitleOf(subagentView.parentThreadId)}`,
-                    hint: 'sends it to the parent conversation, quoted',
+                    label: 'Hand back to…',
+                    hint: 'returns it to the conversations that called this sub-agent',
                     onPress: () => {
-                      const quote = `[${subagentView.id.replace(/^subagent\//, '')}] ${bubbleMenu.text}`;
-                      const parentThreadId = subagentView.parentThreadId;
+                      const item = bubbleMenu;
                       setBubbleMenu(null);
-                      leaveSubAgent();
-                      sendChatTo(parentThreadId, quote).catch(() => {});
+                      // `null`, not an empty set: the session ids only arrive with the list, so the
+                      // pre-pick is derived from it below. An empty set would mean "the owner
+                      // unticked everything", which is a different thing.
+                      setHandoff({ item, targets: null });
+                      subAgentCallersStore.requested(subagentView.threadId);
+                      connection
+                        .send(encodeSubAgentCallers(subagentView.threadId, subagentView.parentThreadId))
+                        .catch(() => {});
                     },
                   },
                 ]
@@ -3434,6 +3452,81 @@ export function AppShell(): React.JSX.Element {
           onClose={() => setBubbleMenu(null)}
         />
       ) : null}
+
+      {handoff && subagentView ? (() => {
+        // Derived, never stored: the pre-pick needs the session ids, and those only arrive with the
+        // list. `targets === null` means the owner has not touched the selection yet.
+        const reachable = handoffCallers.callers.filter(c => !c.unreachable && c.threadId);
+        const selected = handoff.targets
+          ?? new Set(reachable.filter(c => c.threadId === subagentView.parentThreadId).map(c => c.sessionId));
+        const toggle = (sessionId: string): void => {
+          const next = new Set(selected);
+          if (next.has(sessionId)) next.delete(sessionId);
+          else next.add(sessionId);
+          setHandoff({ item: handoff.item, targets: next });
+        };
+        const deliver = (mode: 'ask' | 'note'): void => {
+          const targets = [...selected];
+          if (targets.length === 0) return;
+          setHandoff(null);
+          connection
+            .send(encodeSubAgentHandoff(subagentView.threadId, subagentView.parentThreadId, targets, mode, handoff.item.id))
+            .catch(() => {});
+        };
+        const count = selected.size;
+        return (
+          <ActionSheet
+            preview={handoff.item.text}
+            options={[
+              // The state as a row, not as custom content: a sheet says one thing at a time, and a
+              // refusal or an empty list has to read as an answer rather than as an empty menu.
+              ...(handoffCallers.status !== 'ready' || handoffCallers.callers.length === 0
+                ? [{
+                    key: 'state',
+                    label: handoffCallers.status === 'loading'
+                      ? 'Looking up who called this sub-agent…'
+                      : handoffCallers.status === 'refused'
+                        ? 'This sub-agent is no longer reachable from here'
+                        : 'Nothing has called this sub-agent yet',
+                    onPress: () => {},
+                  }]
+                : []),
+              ...reachable.map(caller => ({
+                key: caller.sessionId,
+                label: caller.title ?? caller.threadId ?? caller.sessionId,
+                hint: [
+                  caller.creator ? 'created it' : null,
+                  `${caller.runs} ${caller.runs === 1 ? 'call' : 'calls'}`,
+                ].filter(Boolean).join(' · '),
+                selected: selected.has(caller.sessionId),
+                onPress: () => toggle(caller.sessionId),
+              })),
+              // Shown, not hidden: "that conversation is gone" is the answer to why it cannot be
+              // picked, and a silently shorter list is not.
+              ...handoffCallers.callers.filter(c => c.unreachable || !c.threadId).map(caller => ({
+                key: caller.sessionId,
+                label: caller.title ?? caller.sessionId,
+                hint: 'conversation is gone',
+                onPress: () => {},
+              })),
+              { type: 'separator' as const, key: 'actions' },
+              {
+                key: 'ask',
+                label: count > 0 ? `Send for action (${count})` : 'Send for action',
+                hint: 'lands as a message, so the agent there acts on it',
+                onPress: () => deliver('ask'),
+              },
+              {
+                key: 'note',
+                label: count > 0 ? `File as a note (${count})` : 'File as a note',
+                hint: 'visible in the conversation, never sent to a model',
+                onPress: () => deliver('note'),
+              },
+            ]}
+            onClose={() => setHandoff(null)}
+          />
+        );
+      })() : null}
 
       {subagentMenuOpen && subagentView ? (
         <ActionSheet

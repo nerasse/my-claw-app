@@ -1139,6 +1139,47 @@ export interface SubAgentsListResultFrame {
   agents: SubAgentEntry[];
 }
 
+/**
+ * One conversation a sub-agent has worked for, offered when handing an answer back.
+ *
+ * `parentSessionId` names the creator and the last driver is overwritten by every run, so neither
+ * answers which conversations the agent is working for -- this list does. `unreachable` is set
+ * instead of the entry being dropped: a caller whose conversation is gone reads as unavailable
+ * rather than silently missing.
+ */
+export interface SubAgentCaller {
+  sessionId: string;
+  /** The thread to open, absent when that conversation can no longer be addressed. */
+  threadId?: string;
+  creator: boolean;
+  firstAt: string;
+  lastAt: string;
+  runs: number;
+  title?: string;
+  unreachable?: 'gone';
+}
+
+export interface SubAgentsCallersResultFrame {
+  type: 'subagents.callers.result';
+  /** The sub-agent thread the list belongs to. */
+  threadId: string;
+  callers: SubAgentCaller[];
+}
+
+/** Per target, since one target being gone must not hide the ones that landed. */
+export interface SubAgentHandoffOutcome {
+  sessionId: string;
+  threadId?: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface SubAgentsHandoffResultFrame {
+  type: 'subagents.handoff.result';
+  threadId: string;
+  delivered: SubAgentHandoffOutcome[];
+}
+
 /** Which request was refused. The screen that asked is the one that shows it. */
 export type ErrorScope =
   | 'chat'
@@ -1158,6 +1199,10 @@ export type ErrorScope =
   | 'status'
   | 'jobs'
   | 'tags'
+  // Sent by the server for every subagents.* refusal, kill and reset included. It was missing
+  // here, so those refusals fell through to the generic branch and were drawn as an agent message
+  // in whatever conversation happened to be open.
+  | 'subagents'
   | 'providers';
 
 export interface ErrorFrame {
@@ -1512,6 +1557,8 @@ export type ServerFrame =
   | JobsListResultFrame
   | JobsRunsResultFrame
   | SubAgentsListResultFrame
+  | SubAgentsCallersResultFrame
+  | SubAgentsHandoffResultFrame
   | DeviceListResultFrame
   | DeviceRevokeResultFrame
   | DevicePairInfoFrame
@@ -1590,6 +1637,8 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'jobs.list.result',
   'jobs.runs.result',
   'subagents.list.result',
+  'subagents.callers.result',
+  'subagents.handoff.result',
   'notifications.info',
   'hello',
   'tags.result',
@@ -1660,6 +1709,37 @@ export function encodeSubAgentKill(threadId: string, parentThreadId: string): st
 
 export function encodeSubAgentReset(threadId: string, parentThreadId: string): string {
   return JSON.stringify({ type: 'subagents.reset', threadId, parentThreadId });
+}
+
+/** Which conversations this sub-agent has worked for, as seen from `parentThreadId`. */
+export function encodeSubAgentCallers(threadId: string, parentThreadId: string): string {
+  return JSON.stringify({ type: 'subagents.callers', threadId, parentThreadId });
+}
+
+/**
+ * Hands one of the sub-agent's answers back to conversations that called it.
+ *
+ * `targets` are session ids taken from `subagents.callers.result` and re-checked there server-side,
+ * never free-form. `mode` decides whether each target runs on the text (`ask`) or merely files it
+ * (`note`). An absent `messageId` means the sub-agent's last answer.
+ */
+export function encodeSubAgentHandoff(
+  threadId: string,
+  parentThreadId: string,
+  targets: readonly string[],
+  mode: 'ask' | 'note',
+  messageId?: string,
+  note?: string,
+): string {
+  return JSON.stringify({
+    type: 'subagents.handoff',
+    threadId,
+    parentThreadId,
+    targets,
+    mode,
+    ...(messageId ? { messageId } : {}),
+    ...(note ? { note } : {}),
+  });
 }
 
 export type VoiceMode = 'cloud' | 'local' | 'auto';

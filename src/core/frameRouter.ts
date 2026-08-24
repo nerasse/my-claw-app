@@ -1,6 +1,6 @@
 import { connection } from './connection';
 import { chatStore } from './chat';
-import { subAgentStore } from './subagents';
+import { subAgentCallersStore, subAgentStore } from './subagents';
 import { sessionStore } from './sessions';
 import { commandStore } from './commands';
 import { acknowledgeDiagnostics } from './diagnostics';
@@ -229,6 +229,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'subagents.list.result':
       subAgentStore.receive(frame);
       chatStore.reconcileSpawnRoster(frame.threadId, frame.agents);
+      break;
+    case 'subagents.callers.result':
+      subAgentCallersStore.receive(frame);
+      break;
+    case 'subagents.handoff.result':
+      subAgentCallersStore.receiveHandoff(frame);
       break;
     case 'device.list.result':
       devicesStore.onList(frame);
@@ -615,6 +621,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         }
       } else if (frame.scope === 'tags') {
         tagsStore.fail(frame.message);
+      } else if (frame.scope === 'subagents') {
+        // A refused caller list is a real state: an unreachable sub-agent answers like a missing
+        // one, so the sheet must say so instead of spinning or showing "no callers". Only when a
+        // sub-agent is actually on screen -- kill and reset share this scope from a conversation.
+        const subagentThread = subagentParent() ? activeThreadId() : null;
+        if (subagentThread) subAgentCallersStore.refused(subagentThread);
       } else if (frame.scope === 'providers') {
         providersEnvStore.fail(frame.message);
         setProviderBusy(false);
