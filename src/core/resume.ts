@@ -5,6 +5,7 @@ import {
   encodeModelList,
   encodeSessionHistory,
   encodeSessionList,
+  encodeSubAgentsList,
 } from './protocol';
 
 /**
@@ -21,5 +22,10 @@ export function resumeFrames(activeThreadId: string | null, historyLimit: number
   if (!activeThreadId) return frames;
   // The model too: a thread whose model was changed from another window would keep the old label
   // in the header until the next run ended.
-  return [...frames, encodeSessionHistory(activeThreadId, historyLimit), encodeModelGet(activeThreadId)];
+  return [
+    ...frames,
+    encodeSessionHistory(activeThreadId, historyLimit),
+    encodeSubAgentsList(activeThreadId),
+    encodeModelGet(activeThreadId),
+  ];
 }

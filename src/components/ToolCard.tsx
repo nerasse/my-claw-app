@@ -26,7 +26,7 @@ export const ToolCard = React.memo(function ToolCardView({
   item: ToolItem;
   /** Set when this card spawned a named sub-agent that still exists; the door to it. */
   subagent?: { label: string; status: 'idle' | 'running' };
-  /** Live sub-agent lifecycle state pushed by `chat.spawn.start/end`, when the server sent one. */
+  /** Live or replayed sub-agent lifecycle state pushed by `chat.spawn.start/end` or history. */
   spawn?: { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' };
   onOpenSubAgent?: (toolItemId: string) => void;
   /** Server-owned pref: when true the card stays expanded even after its run settles. */

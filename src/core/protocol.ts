@@ -176,6 +176,8 @@ export interface ToolCallPayload {
   truncated: boolean;
   /** True between the start frame and the result frame, so the card can show a spinner. */
   running?: boolean;
+  /** Persisted state of the sub-agent behind a `spawn` card. */
+  spawn?: SpawnLifecycleState;
 }
 
 export interface ToolCallFrame extends ToolCallPayload {
@@ -183,6 +185,20 @@ export interface ToolCallFrame extends ToolCallPayload {
   threadId: string;
   turnId: string;
   ts: string;
+}
+
+/** Display-only lifecycle state persisted on a `spawn` tool card, so history can replay the
+ * exact running/terminal state without waiting for a live lifecycle frame. */
+export interface SpawnLifecycleState {
+  subagentId: string;
+  displayName: string;
+  agentType: string;
+  mode: string;
+  status: 'running' | 'complete' | 'error' | 'aborted';
+  resultLength?: number;
+  error?: string;
+  startedAt: string;
+  finishedAt?: string;
 }
 
 /** A tool started executing: the card renders a spinner until the matching `chat.tool` frame

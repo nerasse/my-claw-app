@@ -248,16 +248,10 @@ export function spawnDoorsOf(
  * Sub-agent lifecycle state per spawn card, from the `chat.spawn.start/end` frames when they were
  * seen and from the roster when they were not.
  *
- * The fallback exists because those frames are sent once and never replayed: a page reloaded
- * mid-run had an empty status map, so the card dropped its "running sub-agent" line while the
- * sub-agent behind it was plainly still going -- the roster panel said `running` and the card
- * disagreed.
- *
- * It applies only to a card whose spawn call has not returned. A session sub-agent is reusable, so
- * an old card naming an agent that is busy again is not a card whose own call is running, and
- * `card.running` is what keeps the two apart. Only `running` is ever inferred: the roster says
- * whether an agent is busy, never whether this particular call completed or errored, and once the
- * result lands the card shows its own outcome and duration anyway.
+ * New server builds persist this state on the history tool call, so reloads replay terminal states
+ * as well as `running`. The roster remains a compatibility fallback for older history: it can
+ * recover a child that is still running, but it never invents a successful terminal state for an
+ * idle legacy card because an idle roster entry does not identify how that particular call ended.
  */
 export function spawnLiveOf(
   cards: readonly SpawnCard[],

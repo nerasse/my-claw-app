@@ -485,9 +485,85 @@ describe('chatStore live spawn cards', () => {
 
   test('a spawn end clears a reloaded tool card even when its start frame was missed', () => {
     chatStore.startToolCall(SPAWN_THREAD, 'card-reloaded', 'spawn', { name: 'researcher', mode: 'run' });
-    chatStore.settleSpawn(SPAWN_THREAD, 'card-reloaded', { status: 'complete' });
+    chatStore.settleSpawn(SPAWN_THREAD, 'card-reloaded', { subagentId: 'subagent/reloaded', status: 'complete' });
     const card = chatStore.getItems(SPAWN_THREAD).find(item => item.id === 'card-reloaded');
     expect(card?.kind === 'tool' ? card.running : undefined).toBe(false);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ status: 'complete', subagentId: 'subagent/reloaded' });
+  });
+
+  test('history replays the terminal spawn state without a spinner', () => {
+    chatStore.seedHistory(SPAWN_THREAD, [{
+      role: 'tool',
+      id: 'card-history',
+      name: 'spawn',
+      args: { name: 'researcher', mode: 'run' },
+      ok: true,
+      output: '',
+      truncated: false,
+      spawn: {
+        subagentId: 'subagent/history',
+        displayName: 'researcher',
+        agentType: 'research',
+        mode: 'run',
+        status: 'complete',
+        startedAt: '2026-08-24T10:00:00.000Z',
+        finishedAt: '2026-08-24T10:00:01.000Z',
+      },
+      ts: '2026-08-24T10:00:00.000Z',
+    }]);
+    const card = chatStore.getItems(SPAWN_THREAD)[0];
+    expect(card?.kind === 'tool' ? card.running : undefined).toBe(false);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ status: 'complete', subagentId: 'subagent/history' });
+  });
+
+  test('a legacy running card is not falsely marked complete by an idle roster entry', () => {
+    chatStore.seedHistory(SPAWN_THREAD, [{
+      role: 'tool',
+      id: 'card-legacy',
+      name: 'spawn',
+      args: { name: 'researcher', mode: 'run' },
+      ok: false,
+      output: '',
+      running: true,
+      truncated: false,
+      ts: '2026-08-24T10:00:00.000Z',
+    }]);
+    chatStore.reconcileSpawnRoster(SPAWN_THREAD, [{
+      id: 'subagent/legacy',
+      threadId: 'subagent/legacy',
+      displayName: 'researcher',
+      type: 'research',
+      status: 'idle',
+      messageCount: 2,
+      visibility: 'private',
+      createdAt: '2026-08-24T10:00:00.000Z',
+    }]);
+    expect(chatStore.getItems(SPAWN_THREAD)[0]).toMatchObject({ running: true });
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ running: true });
+  });
+
+  test('a delayed spawn start cannot resurrect a terminal card', () => {
+    chatStore.startToolCall(SPAWN_THREAD, 'card-order', 'spawn', { name: 'researcher', mode: 'run' });
+    chatStore.settleSpawn(SPAWN_THREAD, 'card-order', { subagentId: 'subagent/order', status: 'complete' });
+    chatStore.startSpawn(SPAWN_THREAD, 'card-order', {
+      subagentId: 'subagent/order',
+      displayName: 'researcher',
+      type: 'research',
+      mode: 'run',
+    });
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ status: 'complete' });
+    expect(chatStore.getItems(SPAWN_THREAD)[0]).toMatchObject({ running: false });
+  });
+
+  test('clearThread removes the lifecycle state before the thread id is reused', () => {
+    chatStore.startSpawn(SPAWN_THREAD, 'subagent/old', {
+      subagentId: 'subagent/old',
+      displayName: 'old',
+      type: 'research',
+      mode: 'run',
+    });
+    chatStore.clearThread(SPAWN_THREAD);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)).toHaveLength(0);
   });
 
   test('settleSpawn on an unknown card is a no-op', () => {

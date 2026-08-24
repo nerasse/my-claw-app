@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import type { AttachmentMeta, HistoryEntry, LocationData, ToolCallPayload } from './protocol';
+import type { AttachmentMeta, HistoryEntry, LocationData, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
 
 export interface TextItem {
   kind: 'text';
@@ -57,9 +57,14 @@ export interface SpawnCard {
   args: ToolItem['args'];
   ok: ToolItem['ok'];
   durationMs: ToolItem['durationMs'];
-  /** Live lifecycle state of the sub-agent behind the card, when the server pushed one. */
+  /** Live or replayed lifecycle state of the sub-agent behind the card. */
   subagentId?: string;
-  status?: 'running' | 'complete' | 'error' | 'aborted';
+  status?: SpawnLifecycleState['status'];
+  displayName?: string;
+  type?: string;
+  mode?: string;
+  resultLength?: number;
+  error?: string;
   /**
    * The spawn call itself has not returned. Lets a reader tell "this card's sub-agent is the one
    * running now" from "this card spawned that named agent once, and it happens to be busy again",
@@ -113,7 +118,8 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
         truncated: entry.truncated,
         // Carried through, so a tool still executing when the page reloaded keeps its spinner.
         // Without it the card rebuilt as a finished, successful, empty-output call.
-        ...(entry.running ? { running: true } : {}),
+        ...(entry.running && (!entry.spawn || entry.spawn.status === 'running') ? { running: true } : {}),
+        ...(entry.spawn ? { spawn: entry.spawn } : {}),
         ts,
       };
     }
@@ -162,10 +168,23 @@ class ChatStoreImpl {
   private pages = new Map<string, HistoryPage>();
   private listeners = new Set<Listener>();
   private spawnCards = new Map<string, { tools: ToolItem[]; cards: SpawnCard[] }>();
-  /** `${threadId}:${cardId}` -> live spawn state pushed by `chat.spawn.start`/`chat.spawn.end`. */
-  private spawnStatus = new Map<string, { subagentId: string; displayName: string; type: string; mode: string; status: 'running' | 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }>();
+  /** Live spawn states scoped by thread and card, without parsing user-controlled ids. */
+  private spawnStatus = new Map<string, Map<string, SpawnLifecycleState>>();
   /** Pending coalesced notification, see `emitSoon`. */
   private frame: ReturnType<typeof setTimeout> | null = null;
+
+  private spawnState(threadId: string, cardId: string): SpawnLifecycleState | undefined {
+    return this.spawnStatus.get(threadId)?.get(cardId);
+  }
+
+  private setSpawnState(threadId: string, cardId: string, state: SpawnLifecycleState): void {
+    let states = this.spawnStatus.get(threadId);
+    if (!states) {
+      states = new Map();
+      this.spawnStatus.set(threadId, states);
+    }
+    states.set(cardId, state);
+  }
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -187,7 +206,7 @@ class ChatStoreImpl {
       return cached.cards;
     }
     const cards = tools.map(item => {
-      const live = this.spawnStatus.get(`${threadId}:${item.id}`);
+      const live = this.spawnState(threadId, item.id) ?? item.spawn;
       return {
         id: item.id,
         name: item.name,
@@ -195,24 +214,36 @@ class ChatStoreImpl {
         ok: item.ok,
         durationMs: item.durationMs,
         ...(item.running ? { running: true } : {}),
-        ...(live ? { subagentId: live.subagentId, status: live.status } : {}),
+        ...(live ? {
+          subagentId: live.subagentId,
+          status: live.status,
+          displayName: live.displayName,
+          type: live.agentType,
+          mode: live.mode,
+          ...(live.resultLength !== undefined ? { resultLength: live.resultLength } : {}),
+          ...(live.error !== undefined ? { error: live.error } : {}),
+        } : {}),
       };
     });
     // Standalone spawn cards: a programmatic spawn has no tool item, so it is carried by the
     // status map alone. Its card id is the subagent id; settled ones stay until the thread is
     // dismissed.
     const toolIds = new Set(tools.map(tool => tool.id));
-    for (const [key, live] of this.spawnStatus) {
-      const [tid, cardId] = key.split(':');
-      if (tid !== threadId || toolIds.has(cardId)) continue;
+    for (const [cardId, live] of this.spawnStatus.get(threadId) ?? []) {
+      if (toolIds.has(cardId)) continue;
       cards.push({
         id: cardId,
         name: 'spawn',
-        args: { type: live.type, mode: live.mode, task: '' },
+        args: { type: live.agentType, mode: live.mode, task: '' },
         ok: live.status === 'complete',
         durationMs: undefined,
         subagentId: live.subagentId,
         status: live.status,
+        displayName: live.displayName,
+        type: live.agentType,
+        mode: live.mode,
+        ...(live.resultLength !== undefined ? { resultLength: live.resultLength } : {}),
+        ...(live.error !== undefined ? { error: live.error } : {}),
       });
     }
     this.spawnCards.set(threadId, { tools, cards });
@@ -222,29 +253,89 @@ class ChatStoreImpl {
   /** A sub-agent spawned: record its live state so the spawn card shows it before the tool result
    *  lands. `cardId` is the tool-start card id (tool spawns) or the sub-agent id. */
   startSpawn(threadId: string, cardId: string, info: { subagentId: string; displayName: string; type: string; mode: string }): void {
-    this.spawnStatus.set(`${threadId}:${cardId}`, { ...info, status: 'running' });
+    const current = this.spawnState(threadId, cardId);
+    // A delayed start frame must never resurrect a terminal state restored from history or
+    // received earlier on the live socket. It can still clear a stale spinner on that card.
+    if (current?.status !== undefined && current.status !== 'running') {
+      const item = this.getItems(threadId).find(entry => entry.id === cardId);
+      if (item?.kind === 'tool' && item.running) {
+        this.patchTool(threadId, cardId, { running: false, ok: current.status === 'complete', spawn: current }, true);
+      }
+      return;
+    }
+    const next: SpawnLifecycleState = current?.status === 'running'
+      ? { ...current, displayName: info.displayName, agentType: info.type, mode: info.mode }
+      : {
+          subagentId: info.subagentId,
+          displayName: info.displayName,
+          agentType: info.type,
+          mode: info.mode,
+          status: 'running',
+          startedAt: new Date().toISOString(),
+        };
+    this.setSpawnState(threadId, cardId, next);
     this.spawnCards.delete(threadId);
     this.emit();
   }
 
+  /**
+   * Reconciles legacy history that predates persisted spawn lifecycle state. New cards are
+   * authoritative from `spawn`; old cards can only recover a live child from the roster. An idle
+   * legacy child is left unresolved rather than falsely labelled successful.
+   */
+  reconcileSpawnRoster(threadId: string, agents: readonly SubAgentEntry[]): void {
+    const byName = new Map(agents.map(agent => [agent.displayName, agent]));
+    for (const item of this.getItems(threadId)) {
+      if (item.kind !== 'tool' || item.name !== 'spawn' || !item.running) continue;
+      const current = this.spawnState(threadId, item.id) ?? item.spawn;
+      if (current) continue;
+      const name = typeof item.args.name === 'string' ? item.args.name : undefined;
+      const agent = name ? byName.get(name) : undefined;
+      if (!agent) continue;
+      if (agent.status === 'running') {
+        this.startSpawn(threadId, item.id, {
+          subagentId: agent.id,
+          displayName: agent.displayName,
+          type: agent.type,
+          mode: typeof item.args.mode === 'string' ? item.args.mode : 'run',
+        });
+      }
+    }
+  }
+
   /** Settles a spawn card with a final status. Kept so a finished card still shows what happened. */
-  settleSpawn(threadId: string, cardId: string, outcome: { status: 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }): void {
-    const current = this.spawnStatus.get(`${threadId}:${cardId}`);
-    // The lifecycle end can arrive just before the enclosing spawn tool returns its final output.
-    // Stop the tool spinner now: the sub-agent is no longer running, even if the result frame is
-    // still queued behind the lifecycle frame. This also handles a reload that lost the start
-    // frame, where there is no live status entry to settle.
+  settleSpawn(threadId: string, cardId: string, outcome: { subagentId?: string; status: 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }): void {
+    const current = this.spawnState(threadId, cardId);
     const tool = this.getItems(threadId).find(item => item.id === cardId);
     const runningTool = tool?.kind === 'tool' && tool.name === 'spawn' && tool.running;
-    if (runningTool) this.patchTool(threadId, cardId, { running: false }, true);
-    if (!current) {
-      if (runningTool) {
-        this.spawnCards.delete(threadId);
-        this.emit();
-      }
+    const fallbackName = tool?.kind === 'tool' && typeof tool.args.name === 'string' ? tool.args.name : outcome.subagentId ?? cardId;
+    const next: SpawnLifecycleState | undefined = current ?? (outcome.subagentId ? {
+      subagentId: outcome.subagentId,
+      displayName: fallbackName,
+      agentType: tool?.kind === 'tool' && typeof tool.args.type === 'string' ? tool.args.type : 'unknown',
+      mode: tool?.kind === 'tool' && typeof tool.args.mode === 'string' ? tool.args.mode : 'run',
+      status: 'running' as const,
+      startedAt: new Date().toISOString(),
+    } : undefined);
+    // A delayed duplicate terminal event must not rewrite the first terminal outcome.
+    if (current && current.status !== 'running') {
+      if (runningTool) this.patchTool(threadId, cardId, { running: false, ok: current.status === 'complete', spawn: current }, true);
       return;
     }
-    this.spawnStatus.set(`${threadId}:${cardId}`, { ...current, ...outcome });
+    if (next) {
+      const spawn = {
+        ...next,
+        status: outcome.status,
+        ...(outcome.resultLength !== undefined ? { resultLength: outcome.resultLength } : {}),
+        ...(outcome.error !== undefined ? { error: outcome.error } : {}),
+      };
+      this.setSpawnState(threadId, cardId, spawn);
+      if (runningTool || tool?.kind === 'tool') {
+        this.patchTool(threadId, cardId, { running: false, ok: outcome.status === 'complete', spawn }, true);
+      }
+    } else if (runningTool) {
+      this.patchTool(threadId, cardId, { running: false }, true);
+    }
     this.spawnCards.delete(threadId);
     this.emit();
   }
@@ -325,8 +416,7 @@ class ChatStoreImpl {
    * Server history replaces what is on screen: a bubble rendered by an older build must not
    * survive a reopen. Local items win only while a run streams into the thread, or when the
    * server has nothing yet (turn not persisted).
-   */
-  /**
+   *
    * The server's page becomes the thread, plus whatever the page cannot know yet.
    *
    * The page is built from the live session, not from the file, so it already carries the run in
@@ -351,7 +441,23 @@ class ChatStoreImpl {
   seedHistory(threadId: string, entries: HistoryEntry[]): void {
     if (entries.length === 0) return;
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
-    const base = itemsOf(entries);
+    const base = itemsOf(entries).map(item => {
+      if (item.kind !== 'tool' || item.name !== 'spawn') return item;
+      const live = this.spawnState(threadId, item.id);
+      const history = item.spawn;
+      // A fresh server snapshot is authoritative after a reload. In particular, a terminal
+      // history state must beat a stale live `running` bit from the previous socket.
+      const selected = history && history.status !== 'running' ? history : live ?? history;
+      if (selected) {
+        this.setSpawnState(threadId, item.id, selected);
+        return {
+          ...item,
+          spawn: selected,
+          ...(selected.status === 'running' ? { running: true } : { running: false }),
+        };
+      }
+      return item;
+    });
     const known = new Set(base.map(item => item.id));
     const now = Date.now();
     const carried = existing.filter(item => {
@@ -361,6 +467,7 @@ class ChatStoreImpl {
       return item.role === 'user' && (item.queuedSince !== undefined || now - item.ts < UNMIRRORED_SEND_WINDOW_MS);
     });
     this.threads.set(threadId, [...base, ...carried]);
+    this.spawnCards.delete(threadId);
     this.emit();
   }
 
@@ -657,8 +764,14 @@ class ChatStoreImpl {
     // Upsert: a `chat.tool.start` may have opened this card already. The end frame reuses the
     // same id, so we patch it in place (fill output, drop the spinner) instead of stacking a
     // second card.
-    if (this.findIndex(threadId, payload.id) >= 0) {
-      this.patchTool(threadId, payload.id, { ...payload, running: false });
+    const existing = this.getItems(threadId).find(item => item.id === payload.id);
+    if (existing?.kind === 'tool') {
+      const terminalSpawn = existing.spawn && existing.spawn.status !== 'running' ? existing.spawn : undefined;
+      this.patchTool(threadId, payload.id, {
+        ...payload,
+        ...(terminalSpawn ? { spawn: terminalSpawn } : {}),
+        running: false,
+      });
       return;
     }
     this.append(threadId, { kind: 'tool', ...payload, running: false, ts: Date.now() });
@@ -686,7 +799,7 @@ class ChatStoreImpl {
    *  it and replaces the streamed text with the final output. */
   appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string }): void {
     const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id && entry.kind === 'tool') as ToolItem | undefined;
-    if (!item || !item.running) return;
+    if (!item || (!item.running && !(item.name === 'spawn' && item.spawn && item.spawn.status !== 'running'))) return;
     const append = (item.output ? (item.output.endsWith('\n') || item.output === '' ? '' : '\n') : '') +
       (chunk.stdout ?? '') +
       (chunk.stderr ? `${chunk.stdout ? '\n' : ''}STDERR: ${chunk.stderr}` : '');
@@ -696,6 +809,7 @@ class ChatStoreImpl {
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
     this.spawnCards.delete(threadId);
+    this.spawnStatus.delete(threadId);
     this.activeRuns.delete(threadId);
     this.lastStream.delete(threadId);
     this.pendingCommands.delete(threadId);

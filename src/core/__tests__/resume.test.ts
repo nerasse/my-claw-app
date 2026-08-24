@@ -13,6 +13,7 @@ describe('resumeFrames', () => {
       'model.list',
       'jobs.list',
       'session.history',
+      'subagents.list',
       'model.get',
     ]);
     const history = JSON.parse(frames[4]!);

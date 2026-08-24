@@ -228,6 +228,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     }
     case 'subagents.list.result':
       subAgentStore.receive(frame);
+      chatStore.reconcileSpawnRoster(frame.threadId, frame.agents);
       break;
     case 'device.list.result':
       devicesStore.onList(frame);
@@ -289,6 +290,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'chat.spawn.end':
       // The sub-agent finished/errored/was aborted: settle the card.
       chatStore.settleSpawn(frame.threadId, frame.id, {
+        subagentId: frame.subagentId,
         status: frame.status,
         ...(frame.resultLength !== undefined ? { resultLength: frame.resultLength } : {}),
         ...(frame.error ? { error: frame.error } : {}),
@@ -303,6 +305,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         ok: frame.ok,
         output: frame.output,
         truncated: frame.truncated,
+        ...(frame.spawn ? { spawn: frame.spawn } : {}),
       });
       break;
     case 'session.list.result':
@@ -365,6 +368,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // older one, which goes in front of it. `before` is what tells them apart.
       if (frame.before) chatStore.prependHistory(frame.threadId, frame.messages);
       else chatStore.seedHistory(frame.threadId, frame.messages);
+      const roster = subAgentStore.get(frame.threadId);
+      if (roster.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, roster.agents);
       chatStore.setPage(frame.threadId, {
         // An old server answers neither field: no cursor means no older page to ask for,
         // which is exactly the behaviour before this existed.
