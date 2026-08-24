@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-na
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
 import { isDangerousHtml } from '../core/markdownSafe';
 import { CodeBlockBar } from './CodeBlockBar';
+import { ScrollableBlock } from './ScrollableBlock';
 import { MarkdownTable } from './MarkdownTable';
 import { font, lineBoxFor, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
@@ -132,9 +133,11 @@ export class WrappingRenderer extends Renderer {
     return (
       <View key={this.getKey()} style={containerStyle}>
         <CodeBlockBar value={text} language={language} />
-        <Text style={[textStyle, styles.code, this.codeStyle]}>
-          {text}
-        </Text>
+        <ScrollableBlock title={language ? `${language} block` : 'Code block'} value={text}>
+          <Text style={[textStyle, styles.code, this.codeStyle]}>
+            {text}
+          </Text>
+        </ScrollableBlock>
       </View>
     );
   }

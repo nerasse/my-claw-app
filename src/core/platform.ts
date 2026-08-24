@@ -40,3 +40,12 @@ export const chatSelectable = false;
  * the buttons are noise stacked on every argument and every output.
  */
 export const blockActionsSupported = true;
+
+/**
+ * Whether a block inside the chat list can be given its own scrollbar.
+ *
+ * False here. A ScrollView nested in the thread fights it for the gesture, and the thread is
+ * inverted on top of that. A capped block plus a way to the full-screen viewer is the honest
+ * answer on a touchscreen; only the web gets a real overflow.
+ */
+export const blockScrollSupported = false;

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
+import { ScrollableBlock } from './ScrollableBlock';
 import { formatDuration, summarizeArgs } from '../core/utils';
 import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -170,16 +171,24 @@ export const ToolCard = React.memo(function ToolCardView({
               <View style={styles.argsActions}>
                 <BlockActions title={`${item.name} arguments`} value={args} />
               </View>
-              <Text style={styles.code}>{args}</Text>
+              <ScrollableBlock title={`${item.name} arguments`} value={args} style={styles.code}>
+                <Text style={styles.codeText}>{args}</Text>
+              </ScrollableBlock>
             </>
           ) : null}
           <View style={styles.outputHead}>
             <Text style={styles.label}>output{item.truncated ? ' · truncated' : ''}</Text>
             <BlockActions title={`${item.name} output`} value={item.output} />
           </View>
-          {split ? <DiffView parts={split} /> : null}
+          {split ? (
+            <ScrollableBlock title={`${item.name} output`} value={item.output}>
+              <DiffView parts={split} />
+            </ScrollableBlock>
+          ) : null}
           {!hasDiff ? (
-            <Text style={styles.code}>{item.output.trim() || '(empty)'}</Text>
+            <ScrollableBlock title={`${item.name} output`} value={item.output} style={styles.code}>
+              <Text style={styles.codeText}>{item.output.trim() || '(empty)'}</Text>
+            </ScrollableBlock>
           ) : null}
         </View>
       ) : null}
@@ -214,16 +223,20 @@ const createStyles = (palette: Palette) => ({
   // Right-aligned under the fold's own row: the buttons belong to the block below them, and a
   // row that is empty on web (BlockActions renders nothing there) must not leave a gap.
   argsActions: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const },
+  // The plate is the container's, the face is the text's: the block between them owns the
+  // height, and a border drawn on the scrolling node would scroll away with the content.
   code: {
-    fontFamily: 'monospace',
-    fontSize: font.small,
-    lineHeight: lineHeightFor(font.small),
-    color: palette.text,
     backgroundColor: palette.bg,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: palette.border,
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
+  },
+  codeText: {
+    fontFamily: 'monospace',
+    fontSize: font.small,
+    lineHeight: lineHeightFor(font.small),
+    color: palette.text,
   },
 });

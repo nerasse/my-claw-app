@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
+import { ScrollableBlock } from './ScrollableBlock';
 import { formatDuration } from '../core/utils';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -128,14 +129,18 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
                 <Text style={styles.label}>{action === 'send' ? 'message' : 'task'}</Text>
                 <BlockActions title={`${action} ${action === 'send' ? 'message' : 'task'}`} value={brief} />
               </View>
-              <Text style={styles.code}>{brief}</Text>
+              <ScrollableBlock title={`${action} ${action === 'send' ? 'message' : 'task'}`} value={brief} style={styles.code}>
+                <Text style={styles.codeText}>{brief}</Text>
+              </ScrollableBlock>
             </>
           ) : null}
           <View style={styles.blockHead}>
             <Text style={styles.label}>result{item.truncated ? ' · truncated' : ''}</Text>
             <BlockActions title={`${label || action} result`} value={item.output} />
           </View>
-          <Text style={styles.code}>{item.output.trim() || (running ? '(still running)' : '(empty)')}</Text>
+          <ScrollableBlock title={`${label || action} result`} value={item.output} style={styles.code}>
+            <Text style={styles.codeText}>{item.output.trim() || (running ? '(still running)' : '(empty)')}</Text>
+          </ScrollableBlock>
         </View>
       ) : null}
     </View>
@@ -195,9 +200,8 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'space-between' as const,
     marginTop: 2,
   },
+  codeText: { fontSize: font.small, color: palette.text },
   code: {
-    fontSize: font.small,
-    color: palette.text,
     backgroundColor: palette.bg,
     borderRadius: 5,
     borderWidth: 1,
