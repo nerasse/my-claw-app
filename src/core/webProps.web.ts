@@ -48,23 +48,28 @@ export function blockScrollProps(): Partial<ViewProps> {
 /**
  * Makes the wheel work over a capped block inside the thread.
  *
- * The chat list is inverted, which react-native-web renders as `transform: scaleY(-1)` on the
- * list and on every row. A nested scroller inherits that flip: the browser still scrolls it, but
- * upward and downward are swapped, so a wheel push moved the block the wrong way, hit its top
- * immediately and handed the gesture to the thread behind it -- which reads exactly as "the
- * wheel does nothing here". The scrollbar worked because dragging it is not a wheel event.
+ * A block nested in the inverted chat list has to answer the wheel itself, for two reasons.
  *
- * So the delta is applied by hand, in the block's own coordinates, and the event is only
- * swallowed while the block can still move: at either end the thread takes over, which is what a
+ * The event must stop here while the block can still move, or the thread behind it scrolls at
+ * the same time. And the direction cannot be assumed: react-native-web renders the inverted list
+ * as a `scaleY(-1)` on the list and a second one on each row, so a block may sit under an even
+ * number of flips (upright, the browser is right) or an odd one (upside down, every delta is
+ * backwards). Which one depends on where the block hangs in the tree, so it is measured rather
+ * than hardcoded -- guessing it got the direction wrong for every tool block once already.
+ *
+ * At either end of the block the event is let through and the thread takes over, which is what a
  * reader expects from a scroll area nested in another.
  */
 export function attachBlockWheel(node: unknown): () => void {
   if (!(node instanceof HTMLElement)) return () => {};
+  // Cached after the first wheel: the transforms are static, and walking to the body on every
+  // notch of a scroll would be paid on the one gesture that must stay smooth.
+  let sign: number | undefined;
   const onWheel = (event: WheelEvent): void => {
     const max = node.scrollHeight - node.clientHeight;
     if (max <= 0) return;
-    // Inverted ancestor: down on the wheel must lower scrollTop, not raise it.
-    const next = Math.min(Math.max(node.scrollTop - event.deltaY, 0), max);
+    if (sign === undefined) sign = verticalSign(node);
+    const next = Math.min(Math.max(node.scrollTop + sign * event.deltaY, 0), max);
     if (next === node.scrollTop) return;
     node.scrollTop = next;
     event.preventDefault();
@@ -73,6 +78,22 @@ export function attachBlockWheel(node: unknown): () => void {
   // Not passive: the whole point is to be able to keep the thread from scrolling too.
   node.addEventListener('wheel', onWheel, { passive: false });
   return () => node.removeEventListener('wheel', onWheel);
+}
+
+/**
+ * +1 when the element is drawn the right way up, -1 when an odd number of ancestors flips it
+ * vertically. Reads the `d` term of each ancestor's transform matrix, which is the vertical
+ * scale: negative means mirrored.
+ */
+function verticalSign(node: HTMLElement): number {
+  let sign = 1;
+  for (let el: HTMLElement | null = node; el; el = el.parentElement) {
+    const transform = getComputedStyle(el).transform;
+    if (!transform || transform === 'none') continue;
+    const matrix = new DOMMatrixReadOnly(transform);
+    if (matrix.d < 0) sign = -sign;
+  }
+  return sign;
 }
 
 export function autoGrow(node: unknown, maxHeight: number): void {

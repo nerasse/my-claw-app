@@ -39,10 +39,14 @@ export const PAGE_WIDTH = 980;
 /**
  * Cap for a tool card. Wider than prose on purpose: a diff, an argument list and a log are data,
  * not sentences. They have columns of their own, and squeezing them into a reading column does
- * not make them readable, it wraps every line. Still capped, because a 2000pt row of monospace
- * on an ultra-wide screen is its own kind of unreadable.
+ * not make them readable, it wraps every line.
+ *
+ * Not much wider, though. At 1280 the cards overran the header and every other page by 200pt on
+ * each side, and a row that starts outside everything else on screen reads as a layout bug
+ * rather than as a wider column. Aligned with a page of controls instead: the widest thing the
+ * app already draws.
  */
-export const TOOL_WIDTH = 1280;
+export const TOOL_WIDTH = PAGE_WIDTH;
 
 export interface Layout {
   width: number;

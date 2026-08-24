@@ -929,7 +929,10 @@ const createStyles = (palette: Palette) => ({
   listWrap: { flex: 1 },
   // The list is inverted, so its content box is upside down too: what is written as the top
   // padding is drawn under the newest message.
-  listContent: { paddingTop: space.sm, paddingBottom: space.md },
+  // The horizontal padding used to come free with the reading column, which was narrower than
+  // the pane; now that a tool card is allowed the full width it has to be asked for, or a card
+  // is drawn hard against both edges of the window.
+  listContent: { paddingTop: space.sm, paddingBottom: space.md, paddingHorizontal: space.sm },
   olderSpinner: { paddingVertical: space.md, alignItems: 'center' as const },
   hero: {
     flex: 1,
