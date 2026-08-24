@@ -145,7 +145,7 @@ describe('chatStore compaction hold', () => {
     expect(item!.kind === 'text' ? item!.queuedSince : undefined).toBeGreaterThan(0);
 
     // What the router does on chat.stream.start, in that order: the wait is over, the run writes.
-    chatStore.clearQueued(THREAD);
+    chatStore.clearQueued(THREAD, undefined, 'compaction');
     chatStore.startStream(THREAD, 's1', 'm1');
     const cleared = chatStore.getItems(THREAD)[0];
     expect(cleared!.kind === 'text' ? cleared!.queuedSince : undefined).toBeUndefined();
@@ -177,6 +177,43 @@ describe('chatStore compaction hold', () => {
     const held = items();
     expect(held).toHaveLength(1);
     expect(held[0].id).toBe('m2');
+  });
+});
+
+describe('an injected send waits for the run to read it, not for it to speak', () => {
+  test('the segments of the turn in flight do not lift the badge', () => {
+    // The send is parked in the mailbox of a run that is mid-turn. That run keeps talking: the
+    // streamer seals a segment and opens another at every reasoning block and after every tool
+    // round, and it may answer with a notice too. None of that means it has drained the mailbox.
+    chatStore.addUserMessage(THREAD, 'm1', 'en fait, plutot ceci');
+    chatStore.markQueued(THREAD, 'm1', 'injection');
+    const held = () => chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.queuedSince !== undefined);
+
+    // What the router does on chat.stream.start and chat.message, for the current turn.
+    chatStore.clearQueued(THREAD, undefined, 'compaction');
+    expect(held()).toBe(true);
+
+    // The drain: the run reached a turn boundary and read it. This is the real acceptance.
+    chatStore.clearQueued(THREAD, 'm1');
+    expect(held()).toBe(false);
+  });
+
+  test('a compaction hold still goes on any sign of life', () => {
+    // The other wait, unchanged: nothing is on the wire during a compaction, so a stream starting
+    // is proof it is over -- and three frames clear it so a lost one cannot strand the badge.
+    chatStore.addUserMessage(THREAD, 'm1', 'pendant la compaction');
+    chatStore.markQueued(THREAD, 'm1', 'compaction');
+    chatStore.clearQueued(THREAD, undefined, 'compaction');
+    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.queuedSince !== undefined)).toBe(false);
+  });
+
+  test('the end of the run lifts an injection the run never acked', () => {
+    // A run can die, or be stopped, without ever reaching the boundary that would have drained
+    // its mailbox. chat.run.end clears everything for that reason: it is the backstop.
+    chatStore.addUserMessage(THREAD, 'm1', 'jamais lu');
+    chatStore.markQueued(THREAD, 'm1', 'injection');
+    chatStore.clearQueued(THREAD);
+    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.queuedSince !== undefined)).toBe(false);
   });
 });
 

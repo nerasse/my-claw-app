@@ -615,17 +615,29 @@ class ChatStoreImpl {
   }
 
   /**
-   * The wait is over, whatever ended it: the run streams, answers, or dies. Called on all three
-   * rather than on a dedicated frame, so a lost one cannot strand the mark on the bubble.
+   * The wait is over. Every mark in the thread goes, not one remembered id: a compaction holds
+   * *all* the sends typed while it rewrites the history, and a per-thread slot kept only the last
+   * of them, so the bubbles before it stayed under a badge nothing was ever going to clear.
    *
-   * Every mark in the thread goes, not one remembered id: a compaction holds *all* the sends
-   * typed while it rewrites the history, and a per-thread slot kept only the last of them, so
-   * the bubbles before it stayed under a badge nothing was ever going to clear.
+   * `only` is what keeps the two waits apart, and they are not the same wait at all.
+   *
+   * A compaction holds the send with nothing on the wire, so any sign of life means it is over:
+   * a stream, an answer, the end of a run, all three, so a lost frame cannot strand the mark.
+   *
+   * An injection waits for the *next turn boundary* of a run that is talking the whole time. The
+   * streamer seals a segment and opens another at every reasoning block and after every tool
+   * round, so those same signs of life fire repeatedly while the message is still parked in the
+   * mailbox. Clearing on them read as accepted a message the run had not yet looked at. Only the
+   * ack for that id (fired at the drain) and the end of the run lift it -- the run may also die
+   * without ever acking.
    */
-  clearQueued(threadId: string, id?: string): void {
+  clearQueued(threadId: string, id?: string, only?: 'compaction'): void {
     const items = this.threads.get(threadId);
     const matches = (item: ChatItem): item is TextItem =>
-      item.kind === 'text' && item.queuedSince !== undefined && (id === undefined || item.id === id);
+      item.kind === 'text' &&
+      item.queuedSince !== undefined &&
+      (id === undefined || item.id === id) &&
+      (only === undefined || item.queuedReason === only);
     if (!items?.some(matches)) return;
     this.threads.set(
       threadId,

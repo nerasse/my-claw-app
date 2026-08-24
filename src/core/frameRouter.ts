@@ -191,7 +191,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       locationPreview.receive(frame.id, frame.location);
       break;
     case 'chat.message':
-      chatStore.clearQueued(frame.threadId);
+      // Compaction marks only: a run that answers mid-flight (a notice, a media bubble) has not
+      // read what is parked in its mailbox.
+      chatStore.clearQueued(frame.threadId, undefined, 'compaction');
       chatStore.addAgentMessage(
         frame.threadId,
         frame.id,
@@ -255,8 +257,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // The agent is answering, so no command result is coming: a placeholder left by a
       // command this server does not know would sit there forever.
       chatStore.clearCommandPending(frame.threadId);
-      // Whatever it was waiting for is over: the run is writing.
-      chatStore.clearQueued(frame.threadId);
+      // Compaction marks only. A run seals a segment and opens another at every reasoning block
+      // and after every tool round, so this fires many times during the very turn an injected
+      // message is still waiting for -- lifting its badge here read as accepted a message the run
+      // had not looked at yet.
+      chatStore.clearQueued(frame.threadId, undefined, 'compaction');
       chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
       noteActivity(frame.threadId, '');
       break;
