@@ -1366,10 +1366,11 @@ export function AppShell(): React.JSX.Element {
     [rosterGroups, roster.agents],
   );
 
-  // Both derivations live in core/subagents.ts: they are pure, and the roster fallback in
-  // `spawnLiveOf` is the part that needed tests of its own.
+  // Both derivations live in core/subagents.ts, both pure. Only the door needs the roster: the
+  // lifecycle state is already on the card, put there by the server's replay or by
+  // `reconcileSpawnRoster`, so re-deriving it here was a second copy of the same match.
   const subagentDoors = useMemo(() => spawnDoorsOf(spawnCards, roster.agents), [spawnCards, roster.agents]);
-  const spawnLive = useMemo(() => spawnLiveOf(spawnCards, roster.agents), [spawnCards, roster.agents]);
+  const spawnLive = useMemo(() => spawnLiveOf(spawnCards), [spawnCards]);
 
   const openSubAgentFromCard = useCallback(
     (toolItemId: string) => {

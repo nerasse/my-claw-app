@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import type { AttachmentMeta, HistoryEntry, LocationData, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
+import { agentOfCard, indexRoster } from './subagents';
 
 export interface TextItem {
   kind: 'text';
@@ -65,12 +66,6 @@ export interface SpawnCard {
   mode?: string;
   resultLength?: number;
   error?: string;
-  /**
-   * The spawn call itself has not returned. Lets a reader tell "this card's sub-agent is the one
-   * running now" from "this card spawned that named agent once, and it happens to be busy again",
-   * which matters because `chat.spawn.start` is sent once and never replayed to a reloaded page.
-   */
-  running?: boolean;
 }
 
 type Listener = () => void;
@@ -213,7 +208,6 @@ class ChatStoreImpl {
         args: item.args,
         ok: item.ok,
         durationMs: item.durationMs,
-        ...(item.running ? { running: true } : {}),
         ...(live ? {
           subagentId: live.subagentId,
           status: live.status,
@@ -284,13 +278,14 @@ class ChatStoreImpl {
    * legacy child is left unresolved rather than falsely labelled successful.
    */
   reconcileSpawnRoster(threadId: string, agents: readonly SubAgentEntry[]): void {
-    const byName = new Map(agents.map(agent => [agent.displayName, agent]));
+    // The one owner of the roster fallback, sharing its match with `spawnDoorsOf` so the two cannot
+    // disagree about which sub-agent a card refers to.
+    const { byId, byName } = indexRoster(agents);
     for (const item of this.getItems(threadId)) {
       if (item.kind !== 'tool' || item.name !== 'spawn' || !item.running) continue;
       const current = this.spawnState(threadId, item.id) ?? item.spawn;
       if (current) continue;
-      const name = typeof item.args.name === 'string' ? item.args.name : undefined;
-      const agent = name ? byName.get(name) : undefined;
+      const agent = agentOfCard({ args: item.args }, byId, byName);
       if (!agent) continue;
       if (agent.status === 'running') {
         this.startSpawn(threadId, item.id, {

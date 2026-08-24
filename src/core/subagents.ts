@@ -203,8 +203,8 @@ export function useSubAgents(threadId: string | null): ThreadRoster {
  * once and never replayed, whereas the roster is asked for (`subagents.list`) and comes back
  * whenever the page reconnects.
  */
-function agentOfCard(
-  card: SpawnCard,
+export function agentOfCard(
+  card: { args: Record<string, unknown>; subagentId?: string },
   byId: ReadonlyMap<string, SubAgentEntry>,
   byName: ReadonlyMap<string, SubAgentEntry>,
 ): SubAgentEntry | undefined {
@@ -212,7 +212,7 @@ function agentOfCard(
   return (card.subagentId ? byId.get(card.subagentId) : undefined) ?? byName.get(claimed);
 }
 
-function indexRoster(agents: readonly SubAgentEntry[]): {
+export function indexRoster(agents: readonly SubAgentEntry[]): {
   byId: Map<string, SubAgentEntry>;
   byName: Map<string, SubAgentEntry>;
 } {
@@ -245,30 +245,22 @@ export function spawnDoorsOf(
 }
 
 /**
- * Sub-agent lifecycle state per spawn card, from the `chat.spawn.start/end` frames when they were
- * seen and from the roster when they were not.
+ * Sub-agent lifecycle state per spawn card, keyed by card id.
  *
- * New server builds persist this state on the history tool call, so reloads replay terminal states
- * as well as `running`. The roster remains a compatibility fallback for older history: it can
- * recover a child that is still running, but it never invents a successful terminal state for an
- * idle legacy card because an idle roster entry does not identify how that particular call ended.
+ * A pure projection of what the card already carries. The roster fallback that used to live here is
+ * `chatStore.reconcileSpawnRoster`, which is the one place it belongs: it fires when the roster
+ * arrives and writes into the status map every reader shares, instead of being re-derived by one
+ * consumer that happened to hold the roster. Two copies of the same name match were two places for
+ * it to drift.
  */
 export function spawnLiveOf(
   cards: readonly SpawnCard[],
-  agents: readonly SubAgentEntry[],
 ): Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }> {
-  const { byId, byName } = indexRoster(agents);
   const live = new Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }>();
   for (const card of cards) {
-    if (card.subagentId && card.status) {
-      const named = typeof card.args.name === 'string' ? card.args.name : undefined;
-      live.set(card.id, { subagentId: card.subagentId, displayName: named ?? card.subagentId, status: card.status });
-      continue;
-    }
-    if (!card.running) continue;
-    const agent = agentOfCard(card, byId, byName);
-    if (agent?.status !== 'running') continue;
-    live.set(card.id, { subagentId: agent.id, displayName: agent.displayName, status: 'running' });
+    if (!card.subagentId || !card.status) continue;
+    const named = typeof card.args.name === 'string' ? card.args.name : undefined;
+    live.set(card.id, { subagentId: card.subagentId, displayName: card.displayName ?? named ?? card.subagentId, status: card.status });
   }
   return live;
 }

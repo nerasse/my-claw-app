@@ -277,17 +277,6 @@ describe('chatStore.seedHistory', () => {
     expect(chatStore.getItems(THREAD).filter(i => i.kind === 'tool')).toHaveLength(1);
   });
 
-  // The roster fallback in `spawnLiveOf` keys off this, to tell a call that is running now from an
-  // old card naming a reusable agent that happens to be busy again.
-  test('a spawn card carries whether its own call has returned', () => {
-    chatStore.seedHistory(THREAD, [
-      { role: 'tool', ts: '2026-01-01T00:00:02.000Z', id: 't-a', name: 'spawn', args: {}, ok: true, output: '', truncated: false, running: true },
-      { role: 'tool', ts: '2026-01-01T00:00:03.000Z', id: 't-b', name: 'spawn', args: {}, ok: true, output: 'fini', truncated: false },
-    ]);
-    const [a, b] = chatStore.spawnCardsOf(THREAD);
-    expect(a.running).toBe(true);
-    expect(b.running).toBeFalsy();
-  });
 
   // The card history draws and the card the live stream patches share one id, so the tool
   // finishing after the reload replaces this card instead of appending a second one below it.
@@ -516,6 +505,80 @@ describe('chatStore live spawn cards', () => {
     expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ status: 'complete', subagentId: 'subagent/history' });
   });
 
+  // The roster fallback, in the one place that owns it. `chat.spawn.start` is sent once and never
+  // replayed, so history from a server that does not persist lifecycle state leaves a running card
+  // with no status. The roster is asked for (`subagents.list`), so it still knows the child is going.
+  test('the roster recovers a running child on a card history left without a state', () => {
+    chatStore.seedHistory(SPAWN_THREAD, [{
+      role: 'tool',
+      id: 'card-legacy-running',
+      name: 'spawn',
+      args: { name: 'digger', mode: 'run' },
+      ok: false,
+      output: '',
+      running: true,
+      truncated: false,
+      ts: '2026-08-24T10:00:00.000Z',
+    }]);
+    chatStore.reconcileSpawnRoster(SPAWN_THREAD, [{
+      id: 'subagent/digger-01',
+      threadId: 'subagent/digger-01',
+      displayName: 'digger',
+      type: 'research',
+      status: 'running',
+      messageCount: 4,
+      visibility: 'private',
+      createdAt: '2026-08-24T10:00:00.000Z',
+    }]);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({
+      subagentId: 'subagent/digger-01',
+      status: 'running',
+    });
+  });
+
+  // A session sub-agent is reusable, so an old settled card naming an agent that is busy again is
+  // not a card whose own call is running. `running` on the card is what keeps the two apart.
+  test('the roster does not revive a settled card whose named agent is busy again', () => {
+    chatStore.seedHistory(SPAWN_THREAD, [{
+      role: 'tool',
+      id: 'card-settled',
+      name: 'spawn',
+      args: { name: 'digger', mode: 'run' },
+      ok: true,
+      output: 'fini',
+      truncated: false,
+      durationMs: 1200,
+      ts: '2026-08-24T10:00:00.000Z',
+    }]);
+    chatStore.reconcileSpawnRoster(SPAWN_THREAD, [{
+      id: 'subagent/digger-02',
+      threadId: 'subagent/digger-02',
+      displayName: 'digger',
+      type: 'research',
+      status: 'running',
+      messageCount: 1,
+      visibility: 'private',
+      createdAt: '2026-08-24T10:00:00.000Z',
+    }]);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]?.status).toBeUndefined();
+  });
+
+  test('the roster infers nothing for a card whose named agent it does not list', () => {
+    chatStore.seedHistory(SPAWN_THREAD, [{
+      role: 'tool',
+      id: 'card-unknown',
+      name: 'spawn',
+      args: { name: 'ghost', mode: 'run' },
+      ok: false,
+      output: '',
+      running: true,
+      truncated: false,
+      ts: '2026-08-24T10:00:00.000Z',
+    }]);
+    chatStore.reconcileSpawnRoster(SPAWN_THREAD, []);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]?.status).toBeUndefined();
+  });
+
   test('a legacy running card is not falsely marked complete by an idle roster entry', () => {
     chatStore.seedHistory(SPAWN_THREAD, [{
       role: 'tool',
@@ -538,8 +601,9 @@ describe('chatStore live spawn cards', () => {
       visibility: 'private',
       createdAt: '2026-08-24T10:00:00.000Z',
     }]);
+    // On the tool item: `running` is the item's, and it is what `reconcileSpawnRoster` keys off.
     expect(chatStore.getItems(SPAWN_THREAD)[0]).toMatchObject({ running: true });
-    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ running: true });
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]?.status).toBeUndefined();
   });
 
   test('a delayed spawn start cannot resurrect a terminal card', () => {
