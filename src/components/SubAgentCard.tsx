@@ -138,7 +138,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
                 <Text style={styles.label}>{action === 'send' ? 'message' : 'task'}</Text>
                 <BlockActions title={`${action} ${action === 'send' ? 'message' : 'task'}`} value={brief} />
               </View>
-              <ScrollableBlock title={`${action} ${action === 'send' ? 'message' : 'task'}`} value={brief} style={styles.code}>
+              <ScrollableBlock title={`${action} ${action === 'send' ? 'message' : 'task'}`} style={styles.code}>
                 <Text style={styles.codeText}>{brief}</Text>
               </ScrollableBlock>
             </>
@@ -147,7 +147,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
             <Text style={styles.label}>result{item.truncated ? ' · truncated' : ''}</Text>
             <BlockActions title={`${label || action} result`} value={item.output} />
           </View>
-          <ScrollableBlock title={`${label || action} result`} value={item.output} style={styles.code}>
+          <ScrollableBlock title={`${label || action} result`} style={styles.code}>
             <Text style={styles.codeText}>{item.output.trim() || (running ? '(still running)' : '(empty)')}</Text>
           </ScrollableBlock>
         </View>

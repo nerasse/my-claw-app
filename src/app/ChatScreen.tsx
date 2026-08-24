@@ -138,10 +138,11 @@ export function ChatScreen({
     () => ({ maxWidth: layout.readingWidth, width: '100%' as const, alignSelf: 'center' as const }),
     [layout.readingWidth],
   );
-  // A tool card is not prose. A diff, an argument list and a log have columns of their own, and
-  // the reading cap wrapped every one of their lines while leaving the pane half empty. The cap
-  // therefore belongs to the row, not to the list: the list fills the pane, a bubble centres
-  // itself in the reading column, and a card centres itself in a wider one.
+  // Every row of the thread, bubble or card, sits in this one column. A tool card is not prose
+  // and wants more than the reading width, but giving the two their own centred columns put their
+  // left edges 60pt apart, and a thread whose rows do not share an edge reads as broken
+  // alignment. So one column decides where a row starts and ends, and prose is capped inside its
+  // own bubble (88% of it, which lands on the reading width by design).
   const toolColumn = useMemo(
     () => ({ maxWidth: layout.toolWidth, width: '100%' as const, alignSelf: 'center' as const }),
     [layout.toolWidth],
@@ -554,7 +555,7 @@ export function ChatScreen({
           <ToolCard item={item} threadId={threadId} expandTools={uiPrefs?.expandTools ?? false} />
         </View>
       ) : (
-        <View style={column}>
+        <View style={toolColumn}>
         <Bubble
           item={item}
           mediaBase={mediaBase}
@@ -568,7 +569,7 @@ export function ChatScreen({
         </View>
       );
     },
-    [column, toolColumn, deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const locationLabel = location

@@ -37,10 +37,14 @@ taking text out of it     -> the selection viewer, one node, raw source
   Ctrl+C. The settings pages keep theirs -- they are ordinary scroll views, not the chat list.
 - `ScrollableBlock` caps every block of tool text at `BLOCK_MAX_HEIGHT`. On the web that is a
   real overflow (`blockScrollSupported`): the wheel scrolls what is under the cursor and no
-  gesture is disputed. On a touchscreen the block is clipped and a `see all` bar opens the same
-  viewer, because a ScrollView nested in the inverted list fights it for every drag. The cut is
+  gesture is disputed. On a touchscreen the block is clipped and a `show all` bar unfolds it **in
+  place**, because a ScrollView nested in the inverted list fights it for every drag -- the thread
+  is already a scroll view and is the one gesture that works, so reading a long output is
+  scrolling the conversation. The bar used to open the full-screen viewer instead, which answered
+  "let me see the rest of this" by leaving the conversation for a screen that looked nothing like
+  the card; taking text *out* is a different intent, and it has `BlockActions`. The cut is
   measured in a layout pass, never guessed from the character count, so a block that fits offers
-  nothing. What it opens is the **whole** output: a card arrives clipped to the server's
+  nothing. Unfolding shows the **whole** output: a card arrives clipped to the server's
   `TOOL_OUTPUT_LIMIT`, and unfolding it sends `chat.tool.full` (`core/toolOutput.ts`, once per
   card). The clip is a transport decision, not a display one -- every reconnect replays a page of
   history, so the bytes would be paid for by every device, every time.

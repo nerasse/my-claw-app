@@ -185,7 +185,7 @@ export const ToolCard = React.memo(function ToolCardView({
               <View style={styles.argsActions}>
                 <BlockActions title={`${item.name} arguments`} value={args} />
               </View>
-              <ScrollableBlock title={`${item.name} arguments`} value={args} style={styles.code}>
+              <ScrollableBlock title={`${item.name} arguments`} style={styles.code}>
                 <Text style={styles.codeText}>{args}</Text>
               </ScrollableBlock>
             </>
@@ -195,12 +195,12 @@ export const ToolCard = React.memo(function ToolCardView({
             <BlockActions title={`${item.name} output`} value={item.output} />
           </View>
           {split ? (
-            <ScrollableBlock title={`${item.name} output`} value={item.output}>
+            <ScrollableBlock title={`${item.name} output`}>
               <DiffView parts={split} />
             </ScrollableBlock>
           ) : null}
           {!hasDiff ? (
-            <ScrollableBlock title={`${item.name} output`} value={item.output} style={styles.code}>
+            <ScrollableBlock title={`${item.name} output`} style={styles.code}>
               <Text style={styles.codeText}>{item.output.trim() || '(empty)'}</Text>
             </ScrollableBlock>
           ) : null}

@@ -133,7 +133,7 @@ export class WrappingRenderer extends Renderer {
     return (
       <View key={this.getKey()} style={containerStyle}>
         <CodeBlockBar value={text} language={language} />
-        <ScrollableBlock title={language ? `${language} block` : 'Code block'} value={text}>
+        <ScrollableBlock title={language ? `${language} block` : 'Code block'}>
           <Text style={[textStyle, styles.code, this.codeStyle]}>
             {text}
           </Text>

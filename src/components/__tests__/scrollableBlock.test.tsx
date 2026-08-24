@@ -1,14 +1,13 @@
 /**
  * A tool output must not be allowed to take the whole thread, and no block may throw the
  * inverted chat list by nesting a ScrollView in it. Two behaviours, one per platform, and both
- * keep the full text reachable.
+ * keep the full text reachable without leaving the conversation.
  */
 
 import React from 'react';
 import { Text, View } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { ThemeContext } from '../../theme';
-import { TextSelectionContext } from '../../core/textSelection';
 import { lightPalette } from '../../theme/palettes';
 
 let mockScroll = false;
@@ -20,16 +19,14 @@ jest.mock('../../core/platform', () => ({
 
 import { BLOCK_MAX_HEIGHT, ScrollableBlock } from '../ScrollableBlock';
 
-function render(openSelection = jest.fn()) {
+function render() {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
       <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
-        <TextSelectionContext.Provider value={openSelection}>
-          <ScrollableBlock title="bash output" value={'line 1\nline 2'}>
-            <Text>body</Text>
-          </ScrollableBlock>
-        </TextSelectionContext.Provider>
+        <ScrollableBlock title="bash output">
+          <Text>body</Text>
+        </ScrollableBlock>
       </ThemeContext.Provider>,
     );
   });
@@ -44,22 +41,26 @@ function measure(tree: ReactTestRenderer.ReactTestRenderer, height: number) {
   });
 }
 
-function seeAll(tree: ReactTestRenderer.ReactTestRenderer) {
+/** The fold bar, whichever way it currently points. */
+function foldBar(tree: ReactTestRenderer.ReactTestRenderer) {
   return tree.root.findAll(
-    n => n.props.accessibilityLabel === 'Open bash output in full' && typeof n.props.onPress === 'function',
+    n =>
+      typeof n.props.accessibilityLabel === 'string' &&
+      /(Unfold|Fold) bash output/.test(n.props.accessibilityLabel) &&
+      typeof n.props.onPress === 'function',
     { deep: true },
   );
 }
 
-/**
- * The web block caps its height and leaves the axis to CSS (webTheme.web.ts): a React Native
- * `overflow: 'scroll'` means both axes and two permanent bars, so `undefined` is the wanted
- * value there, not an oversight.
- */
-function capped(tree: ReactTestRenderer.ReactTestRenderer, overflow: 'hidden' | undefined) {
+/** Whether some view is holding the block down to the cap. */
+function clipped(tree: ReactTestRenderer.ReactTestRenderer) {
   return tree.root
     .findAllByType(View)
-    .some(n => [n.props.style].flat(2).some(s => s && s.maxHeight === BLOCK_MAX_HEIGHT && s.overflow === overflow));
+    .some(n =>
+      [n.props.style]
+        .flat(2)
+        .some(s => s && s.maxHeight === BLOCK_MAX_HEIGHT && s.overflow === 'hidden'),
+    );
 }
 
 describe('on a touchscreen', () => {
@@ -69,21 +70,31 @@ describe('on a touchscreen', () => {
 
   it('clips the block instead of nesting a scroll view in the thread', () => {
     const tree = render();
-    expect(capped(tree, 'hidden')).toBe(true);
+    expect(clipped(tree)).toBe(true);
   });
 
-  it('offers the full text only once the block is actually cut', () => {
-    const open = jest.fn();
-    const tree = render(open);
+  it('offers the fold only once the block is actually cut', () => {
+    const tree = render();
     measure(tree, BLOCK_MAX_HEIGHT - 40);
-    expect(seeAll(tree)).toHaveLength(0);
+    expect(foldBar(tree)).toHaveLength(0);
 
     measure(tree, BLOCK_MAX_HEIGHT + 400);
-    const [button] = seeAll(tree);
-    expect(button).toBeDefined();
-    ReactTestRenderer.act(() => button!.props.onPress());
-    // The whole value, not what was on screen.
-    expect(open).toHaveBeenCalledWith({ title: 'bash output', body: 'line 1\nline 2' });
+    expect(foldBar(tree)).toHaveLength(1);
+  });
+
+  it('unfolds in place rather than sending the reader to another screen', () => {
+    const tree = render();
+    measure(tree, BLOCK_MAX_HEIGHT + 400);
+
+    const [bar] = foldBar(tree);
+    ReactTestRenderer.act(() => bar!.props.onPress());
+    // The cap is gone: the rest of the output is on screen, in the card, and the thread scrolls.
+    expect(clipped(tree)).toBe(false);
+    // Same control, now announcing the way back.
+    expect(foldBar(tree)[0]!.props.accessibilityLabel).toBe('Fold bash output');
+
+    ReactTestRenderer.act(() => bar!.props.onPress());
+    expect(clipped(tree)).toBe(true);
   });
 });
 
@@ -92,10 +103,18 @@ describe('in a browser', () => {
     mockScroll = true;
   });
 
-  it('gives the block a real scrollbar and no button', () => {
+  it('gives the block a real scrollbar and no fold', () => {
     const tree = render();
-    expect(capped(tree, undefined)).toBe(true);
-    expect(capped(tree, 'hidden')).toBe(false);
-    expect(seeAll(tree)).toHaveLength(0);
+    // The cap is there, the axis is CSS's business (webTheme.web.ts): an `overflow: 'scroll'` in
+    // a React Native style means both axes and two permanent bars.
+    expect(
+      tree.root
+        .findAllByType(View)
+        .some(n =>
+          [n.props.style].flat(2).some(s => s && s.maxHeight === BLOCK_MAX_HEIGHT && s.overflow === undefined),
+        ),
+    ).toBe(true);
+    expect(clipped(tree)).toBe(false);
+    expect(foldBar(tree)).toHaveLength(0);
   });
 });
