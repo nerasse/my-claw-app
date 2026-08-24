@@ -779,3 +779,35 @@ describe('what a stream costs its readers', () => {
     expect(chatStore.spawnCardsOf(THREAD)).toBe(cardsBefore);
   });
 });
+
+describe('seedHistory during a live run', () => {
+  const T = 'thread-reseed-live';
+
+  afterEach(() => chatStore.clearThread(T));
+
+  // A turn is written to the session when it ends, so while one runs its earlier phases are on
+  // screen and in no page. They used to be dropped by any re-seed and only came back at the end.
+  it('keeps the sealed phases of the turn in flight', () => {
+    chatStore.startRun(T);
+    chatStore.addAgentMessage(T, 'phase-1', 'first I check the cache', []);
+    chatStore.seedHistory(T, [
+      { id: 'h-0', role: 'user', text: 'why is it slow', ts: '2026-01-01T10:00:00.000Z' },
+    ]);
+    const texts = chatStore.getItems(T).map(item => (item.kind === 'text' ? item.text : ''));
+    expect(texts).toContain('why is it slow');
+    expect(texts).toContain('first I check the cache');
+  });
+
+  // Once the run is over the session is the truth, and a bubble it does not carry is one the server
+  // will never mirror: keeping it would pin it to the end of the thread for good.
+  it('drops them once the run has ended', () => {
+    chatStore.startRun(T);
+    chatStore.addAgentMessage(T, 'phase-1', 'first I check the cache', []);
+    chatStore.endRun(T);
+    chatStore.seedHistory(T, [
+      { id: 'h-0', role: 'user', text: 'why is it slow', ts: '2026-01-01T10:00:00.000Z' },
+    ]);
+    const texts = chatStore.getItems(T).map(item => (item.kind === 'text' ? item.text : ''));
+    expect(texts).not.toContain('first I check the cache');
+  });
+});

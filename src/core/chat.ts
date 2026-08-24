@@ -469,10 +469,16 @@ class ChatStoreImpl {
     });
     const known = new Set(base.map(item => item.id));
     const now = Date.now();
+    // A turn is written to the session when it ends, so while one is running its earlier phases are
+    // on screen and in no page. Dropping them was visible: a model that thought, answered, thought
+    // again and was still going lost every sealed phase the moment anything re-seeded the thread,
+    // and they only came back when the turn finally landed.
+    const running = this.activeRuns.has(threadId);
     const carried = existing.filter(item => {
       if (item.kind !== 'text' || known.has(item.id)) return false;
       if (item.command || item.notice || item.error) return false;
       if (item.streaming) return true;
+      if (running && item.role === 'agent') return true;
       return item.role === 'user' && (item.queuedSince !== undefined || now - item.ts < UNMIRRORED_SEND_WINDOW_MS);
     });
     this.threads.set(threadId, [...base, ...carried]);
