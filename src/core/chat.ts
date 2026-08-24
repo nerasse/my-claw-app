@@ -230,7 +230,20 @@ class ChatStoreImpl {
   /** Settles a spawn card with a final status. Kept so a finished card still shows what happened. */
   settleSpawn(threadId: string, cardId: string, outcome: { status: 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }): void {
     const current = this.spawnStatus.get(`${threadId}:${cardId}`);
-    if (!current) return;
+    // The lifecycle end can arrive just before the enclosing spawn tool returns its final output.
+    // Stop the tool spinner now: the sub-agent is no longer running, even if the result frame is
+    // still queued behind the lifecycle frame. This also handles a reload that lost the start
+    // frame, where there is no live status entry to settle.
+    const tool = this.getItems(threadId).find(item => item.id === cardId);
+    const runningTool = tool?.kind === 'tool' && tool.name === 'spawn' && tool.running;
+    if (runningTool) this.patchTool(threadId, cardId, { running: false }, true);
+    if (!current) {
+      if (runningTool) {
+        this.spawnCards.delete(threadId);
+        this.emit();
+      }
+      return;
+    }
     this.spawnStatus.set(`${threadId}:${cardId}`, { ...current, ...outcome });
     this.spawnCards.delete(threadId);
     this.emit();

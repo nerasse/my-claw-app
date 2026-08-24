@@ -466,6 +466,8 @@ describe('chatStore live spawn cards', () => {
     chatStore.settleSpawn(SPAWN_THREAD, 'card-1', { status: 'complete', resultLength: 42 });
     const settled = chatStore.spawnCardsOf(SPAWN_THREAD);
     expect(settled[0].status).toBe('complete');
+    const settledTool = chatStore.getItems(SPAWN_THREAD).find(item => item.id === 'card-1');
+    expect(settledTool?.kind === 'tool' ? settledTool.running : undefined).toBe(false);
   });
 
   test('startSpawn opens a standalone card for a programmatic spawn', () => {
@@ -479,6 +481,13 @@ describe('chatStore live spawn cards', () => {
     expect(cards).toHaveLength(1);
     expect(cards[0].id).toBe('subagent/run-2');
     expect(cards[0].status).toBe('running');
+  });
+
+  test('a spawn end clears a reloaded tool card even when its start frame was missed', () => {
+    chatStore.startToolCall(SPAWN_THREAD, 'card-reloaded', 'spawn', { name: 'researcher', mode: 'run' });
+    chatStore.settleSpawn(SPAWN_THREAD, 'card-reloaded', { status: 'complete' });
+    const card = chatStore.getItems(SPAWN_THREAD).find(item => item.id === 'card-reloaded');
+    expect(card?.kind === 'tool' ? card.running : undefined).toBe(false);
   });
 
   test('settleSpawn on an unknown card is a no-op', () => {
