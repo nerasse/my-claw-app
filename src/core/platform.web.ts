@@ -20,6 +20,13 @@ export const scannerSupported = false;
  */
 export const chatSelectable = true;
 
+/**
+ * False: the browser already selects and copies across nodes, and Ctrl+C is one key away. A
+ * `copy`/`select` pair over every argument list and every tool output would only repeat, twice
+ * per card, what the pointer does for free.
+ */
+export const blockActionsSupported = false;
+
 /** Asked of the device, not of the window: a touchscreen laptop reports both, and coarse wins. */
 export const pointerFine =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'

@@ -438,9 +438,18 @@ test('a tool card starts collapsed and reveals arguments and output on tap', asy
   });
   await waitFor(() => textsOf(tree).includes('arguments'));
 
-  const shown = textsOf(tree).join('|');
-  expect(shown).toContain('hello');
-  expect(shown).toContain('"command"');
+  // The output is there straight away; the call that produced it is a fold of its own, so the
+  // serialized arguments are not (an apply_patch would otherwise repeat its whole patch here).
+  expect(textsOf(tree).join('|')).toContain('hello');
+  expect(textsOf(tree).join('|')).not.toContain('"command"');
+
+  const argsRow = tree.root.find(
+    node => node.props.accessibilityLabel === 'Arguments of bash' && typeof node.props.onPress === 'function',
+  );
+  await ReactTestRenderer.act(async () => {
+    argsRow.props.onPress();
+  });
+  await waitFor(() => textsOf(tree).join('|').includes('"command"'));
   expect(textsOf(tree)).toContain('copy');
 
   await unmount(tree);

@@ -34,6 +34,10 @@ export const ToolCard = React.memo(function ToolCardView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
+  // The arguments are a second fold inside the first. What the owner opens a card for is the
+  // result; the call that produced it is context, and for an edit tool it is the whole patch
+  // again as escaped JSON, pushing the readable diff off the screen. So: folded until asked.
+  const [argsOpen, setArgsOpen] = useState(false);
   // Whether the current expansion came from the auto-open below rather than a tap: the settle
   // only folds back what it itself unfolded.
   const autoOpened = useRef(false);
@@ -44,7 +48,7 @@ export const ToolCard = React.memo(function ToolCardView({
   const preview = summarizeArgs(item.args);
   // Only once unfolded: a thread full of collapsed cards must not stringify every argument list
   // on every streaming delta.
-  const args = open ? JSON.stringify(item.args, null, 2) : '';
+  const args = open && argsOpen ? JSON.stringify(item.args, null, 2) : '';
   const running = item.running === true;
   const spawnRunning = spawn?.status === 'running';
   // A tool output carrying a unified diff (apply_patch) renders as colour-coded lines instead of
@@ -109,6 +113,11 @@ export const ToolCard = React.memo(function ToolCardView({
       if (foldTimer.current !== null) clearTimeout(foldTimer.current);
     };
   }, []);
+  // A closed card forgets that its arguments were unfolded: reopening it shows the output first,
+  // the same way it did the first time.
+  useEffect(() => {
+    if (!open) setArgsOpen(false);
+  }, [open]);
 
   return (
     <View style={[styles.card, !item.ok && !running && styles.cardError, open && styles.cardOpen]}>
@@ -151,12 +160,33 @@ export const ToolCard = React.memo(function ToolCardView({
         <View style={styles.body}>
           {/* Neither block is selectable in place: a selection inside the chat list focuses its
               text view and Android scrolls the inverted thread to it. Both carry the buttons
-              instead. See docs/text-selection.md. */}
-          <View style={styles.outputHead}>
-            <Text style={styles.label}>arguments</Text>
-            <BlockActions title={`${item.name} arguments`} value={args} />
-          </View>
-          <Text style={styles.code}>{args}</Text>
+              instead -- on the platforms that need them. See docs/text-selection.md. */}
+          <Pressable
+            onPress={() => setArgsOpen(value => !value)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: argsOpen }}
+            accessibilityLabel={`Arguments of ${item.name}`}
+            accessibilityHint={argsOpen ? 'Hide the arguments' : 'Show the arguments'}>
+            <View style={styles.outputHead}>
+              <Text style={styles.chevron}>{argsOpen ? '▾' : '▸'}</Text>
+              <Text style={styles.label}>arguments</Text>
+              {!argsOpen && preview ? (
+                <Text style={styles.preview} numberOfLines={1}>
+                  {preview}
+                </Text>
+              ) : (
+                <View style={styles.spacer} />
+              )}
+            </View>
+          </Pressable>
+          {argsOpen ? (
+            <>
+              <View style={styles.argsActions}>
+                <BlockActions title={`${item.name} arguments`} value={args} />
+              </View>
+              <Text style={styles.code}>{args}</Text>
+            </>
+          ) : null}
           <View style={styles.outputHead}>
             <Text style={styles.label}>output{item.truncated ? ' · truncated' : ''}</Text>
             <BlockActions title={`${item.name} output`} value={item.output} />
@@ -211,7 +241,10 @@ const createStyles = (palette: Palette) => ({
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
   label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
-  outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginTop: 2 },
+  outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, marginTop: 2 },
+  // Right-aligned under the fold's own row: the buttons belong to the block below them, and a
+  // row that is empty on web (BlockActions renders nothing there) must not leave a gap.
+  argsActions: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const },
   door: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

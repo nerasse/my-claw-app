@@ -29,7 +29,11 @@ taking text out of it     -> the selection viewer, one node, raw source
   the bubble carries no long press at all -- right-click and the row's own button lead to the same
   menu.
 - `ToolCard` and `CollapsibleAside` (reasoning, compaction summary) carry `BlockActions`:
-  **copy** takes the block whole, **select** opens the viewer on it.
+  **copy** takes the block whole, **select** opens the viewer on it. On the web `BlockActions`
+  renders nothing (`blockActionsSupported` in `core/platform`): the browser selects across nodes
+  and copies with a keystroke, so the pair would only repeat, twice per tool card, what the
+  pointer already does. `CodeBlockBar` keeps its copy button everywhere -- a fence is meant to
+  leave the app verbatim and dragging over twenty lines of it is not the same offer.
 - The bubble menu carries `Select text`, which opens the viewer on the **whole message**:
   reasoning, answer and summary joined by `messageSelectionBody`, in the order they were written.
 - `SelectionViewer` is a plain top-anchored `ScrollView` holding one `<Text selectable>`. One node

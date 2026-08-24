@@ -31,3 +31,12 @@ export const pointerFine = false;
  * starting a gesture the platform cannot honour.
  */
 export const chatSelectable = false;
+
+/**
+ * Whether a block of text inside the thread needs its own copy/select buttons.
+ *
+ * True here for the same reason as `chatSelectable` being false: the platform cannot lift text
+ * out of the chat list, so the buttons are the only way. A browser does it natively, and there
+ * the buttons are noise stacked on every argument and every output.
+ */
+export const blockActionsSupported = true;
