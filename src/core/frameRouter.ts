@@ -285,7 +285,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         displayName: frame.displayName,
         type: frame.agentType,
         mode: frame.mode,
-        action: frame.action,
+        // A server older than this field sends none, and an undefined action would reach the card
+        // as its label. `spawn` is what that server could only have meant.
+        action: frame.action === 'send' ? 'send' : 'spawn',
       });
       break;
     case 'chat.spawn.end':
