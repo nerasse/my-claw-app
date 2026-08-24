@@ -11,20 +11,15 @@
  * first-argument preview, and an MCP tool or a plugin therefore still reads sensibly.
  */
 
-/** Families, for the glyph alone. A reader scanning a thread sorts by shape before words. */
-const GLYPH: Record<string, string> = {
-  file: '◧',
-  shell: '›',
-  net: '⚲',
-  memory: '❖',
-  agent: '◈',
-  browser: '⌘',
-  time: '◔',
-  voice: '♪',
-};
+/**
+ * What kind of thing a tool touches. Not drawn: a per-family glyph in the card head was tried and
+ * removed -- a row already carries a chevron, and a second mark next to it read as a stray arrow
+ * rather than as a category. The families stay because they decide the face of the preview.
+ */
+type Family = 'file' | 'shell' | 'net' | 'memory' | 'agent' | 'browser' | 'time' | 'voice';
 
-/** tool -> family. Absent means no glyph: a plugin has no shape we know of. */
-const FAMILY: Record<string, keyof typeof GLYPH> = {
+/** tool -> family. Absent is a tool we know nothing about (an MCP server's, a plugin's). */
+const FAMILY: Record<string, Family> = {
   read: 'file',
   write: 'file',
   apply_patch: 'file',
@@ -114,8 +109,6 @@ function clamp(text: string): string {
 }
 
 export interface ToolSummary {
-  /** The family's shape, or '' for a tool we know nothing about. */
-  glyph: string;
   /** What the call did, in as few characters as identify it. May be empty. */
   detail: string;
   /** Whether `detail` is code (a path, a command, a pattern) and wants the monospace face. */
@@ -130,9 +123,8 @@ export interface ToolSummary {
  */
 export function summarizeTool(name: string, args: Record<string, unknown>, fallback = ''): ToolSummary {
   const family = FAMILY[name];
-  const glyph = family ? GLYPH[family] : '';
   const keys = KEYS[name];
-  if (!keys) return { glyph, detail: clamp(fallback), mono: false };
+  if (!keys) return { detail: clamp(fallback), mono: false };
 
   const verb = firstString(args, VERB_KEYS);
   let target = firstString(args, keys);
@@ -142,7 +134,6 @@ export function summarizeTool(name: string, args: Record<string, unknown>, fallb
 
   const detail = [verb, target].filter(Boolean).join(' ');
   return {
-    glyph,
     detail: clamp(detail || fallback),
     // A verb on its own is a word, not code. Anything carrying a target is a path, a command or
     // a pattern, and reads wrong in the prose face.

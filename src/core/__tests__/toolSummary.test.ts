@@ -44,10 +44,11 @@ it('marks a path, a command or a pattern as code and a bare verb as prose', () =
   expect(summarizeTool('spawn', { mode: 'session' }).mono).toBe(false);
 });
 
-it('gives a family its shape, and an unknown tool none', () => {
-  expect(summarizeTool('read', { path: 'a' }).glyph).toBe(summarizeTool('write', { path: 'b' }).glyph);
-  expect(summarizeTool('bash', { command: 'ls' }).glyph).not.toBe(summarizeTool('read', { path: 'a' }).glyph);
-  expect(summarizeTool('some_mcp_tool', { anything: 1 }).glyph).toBe('');
+it('draws no mark of its own: the row already has a chevron', () => {
+  // A per-family glyph was tried and read as a stray arrow beside the chevron, not as a category.
+  for (const call of [['read', { path: 'a' }], ['bash', { command: 'ls' }], ['some_mcp_tool', { a: 1 }]] as const) {
+    expect(Object.keys(summarizeTool(call[0], call[1])).sort()).toEqual(['detail', 'mono']);
+  }
 });
 
 it('falls back to the generic preview for a tool it has never heard of', () => {

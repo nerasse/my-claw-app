@@ -139,7 +139,6 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
-          {summary.glyph ? <Text style={styles.glyph}>{summary.glyph}</Text> : null}
           <Text style={styles.name}>{item.name}</Text>
           {!open && preview ? (
             <Text style={[styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
@@ -227,7 +226,6 @@ const createStyles = (palette: Palette) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
   name: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
-  glyph: { fontSize: font.micro, color: palette.textFaint, width: 10 },
   preview: { flex: 1, fontSize: font.small, color: palette.textMuted },
   // A path, a command or a pattern: read in the prose face they look like a sentence that lost
   // its spaces.
