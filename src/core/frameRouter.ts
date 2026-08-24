@@ -382,7 +382,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // The same frame carries both the newest page, which replaces the thread, and an
       // older one, which goes in front of it. `before` is what tells them apart.
       if (frame.before) chatStore.prependHistory(frame.threadId, frame.messages);
-      else chatStore.seedHistory(frame.threadId, frame.messages);
+      else chatStore.seedHistory(frame.threadId, frame.messages, frame.activeRun);
       const roster = subAgentStore.get(frame.threadId);
       if (roster.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, roster.agents);
       chatStore.setPage(frame.threadId, {

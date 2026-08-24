@@ -336,6 +336,12 @@ export interface ChatHistoryFrame {
   nextBefore?: number;
   /** The conversation's unsent draft, on the newest page only. Absent means there is none. */
   draft?: string;
+  /**
+   * A run is in flight for this conversation, as of this page. Read instead of the store's own
+   * run flags, which are seeded by `session.list`: that is a separate round trip, and when it
+   * lost the race every sealed bubble of the turn in progress was dropped as stale.
+   */
+  activeRun?: boolean;
 }
 
 /**

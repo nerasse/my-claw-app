@@ -447,8 +447,13 @@ class ChatStoreImpl {
    * point, a message that never left) from sitting at the end of the thread for good. Local clock
    * on both sides of the subtraction, so there is no skew to reason about.
    */
-  seedHistory(threadId: string, entries: HistoryEntry[]): void {
+  seedHistory(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
     if (entries.length === 0) return;
+    // The page's own answer wins when it carries one: the store's flag is seeded by `session.list`,
+    // a separate round trip, so trusting it alone made the decision depend on which reply landed
+    // first. An older server sends nothing here and falls back to the flag, as before.
+    if (activeRun === true) this.activeRuns.add(threadId);
+    else if (activeRun === false) this.activeRuns.delete(threadId);
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const base = itemsOf(entries).map(item => {
       if (item.kind !== 'tool' || !isSubAgentTool(item.name)) return item;
@@ -475,7 +480,11 @@ class ChatStoreImpl {
     // and they only came back when the turn finally landed.
     const running = this.activeRuns.has(threadId);
     const carried = existing.filter(item => {
-      if (item.kind !== 'text' || known.has(item.id)) return false;
+      if (known.has(item.id)) return false;
+      // A card of the turn in progress. The page holds the ones whose assistant message is already
+      // written, but a call that started after that write is on screen and in no page yet, and
+      // dropping it made a reopened thread lose the tool it was visibly running.
+      if (item.kind !== 'text') return running;
       if (item.command || item.notice || item.error) return false;
       if (item.streaming) return true;
       if (running && item.role === 'agent') return true;

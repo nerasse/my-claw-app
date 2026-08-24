@@ -326,6 +326,27 @@ describe('chatStore.seedHistory', () => {
     }
   });
 
+  test('the page carries the run flag, so the list frame cannot lose the race', () => {
+    // Sealed bubble of the turn in progress: written to no page yet, and the store's own run flag
+    // is still false because `session.list` has not answered. The page says the run is live.
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'phase une');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' }], true);
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 's1']);
+    // The same page without the flag drops it: the turn is over, the bubble is stale.
+    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' }], false);
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
+  });
+
+  test('a card of the turn in progress survives the page', () => {
+    chatStore.startToolCall(THREAD, 'call-1', 'bash', { command: 'ls' });
+    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' }], true);
+    // The call started after the assistant message was written, so no page holds it.
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 'call-1']);
+    expect(chatStore.getItems(THREAD)[1]).toMatchObject({ kind: 'tool', running: true });
+  });
+
   test('the bubble being written survives the page, after it', () => {
     chatStore.startStream(THREAD, 's1');
     chatStore.appendDelta(THREAD, 's1', 'in progress');
