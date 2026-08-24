@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import type { AttachmentMeta, HistoryEntry, LocationData, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
+import type { AttachmentMeta, HistoryEntry, LocationData, SpawnAction, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
 import { agentOfCard, indexRoster } from './subagents';
 
 export interface TextItem {
@@ -66,6 +66,17 @@ export interface SpawnCard {
   mode?: string;
   resultLength?: number;
   error?: string;
+}
+
+/**
+ * The two tools a sub-agent card can come from. `spawn` creates one, `send` drives an existing
+ * one, and both run the identical lifecycle: matching on `spawn` alone left every `send` card as a
+ * plain tool row with no status, no door and nothing replayed after a reload.
+ */
+const SUBAGENT_TOOLS: ReadonlySet<string> = new Set(['spawn', 'send']);
+
+export function isSubAgentTool(name: string): boolean {
+  return SUBAGENT_TOOLS.has(name);
 }
 
 type Listener = () => void;
@@ -194,7 +205,7 @@ class ChatStoreImpl {
    */
   spawnCardsOf(threadId: string): SpawnCard[] {
     const tools = this.getItems(threadId).filter(
-      (item): item is ToolItem => item.kind === 'tool' && item.name === 'spawn',
+      (item): item is ToolItem => item.kind === 'tool' && isSubAgentTool(item.name),
     );
     const cached = this.spawnCards.get(threadId);
     if (cached && cached.tools.length === tools.length && cached.tools.every((tool, i) => tool === tools[i])) {
@@ -227,7 +238,7 @@ class ChatStoreImpl {
       if (toolIds.has(cardId)) continue;
       cards.push({
         id: cardId,
-        name: 'spawn',
+        name: live.action,
         args: { type: live.agentType, mode: live.mode, task: '' },
         ok: live.status === 'complete',
         durationMs: undefined,
@@ -246,7 +257,7 @@ class ChatStoreImpl {
 
   /** A sub-agent spawned: record its live state so the spawn card shows it before the tool result
    *  lands. `cardId` is the tool-start card id (tool spawns) or the sub-agent id. */
-  startSpawn(threadId: string, cardId: string, info: { subagentId: string; displayName: string; type: string; mode: string }): void {
+  startSpawn(threadId: string, cardId: string, info: { subagentId: string; displayName: string; type: string; mode: string; action: SpawnAction }): void {
     const current = this.spawnState(threadId, cardId);
     // A delayed start frame must never resurrect a terminal state restored from history or
     // received earlier on the live socket. It can still clear a stale spinner on that card.
@@ -258,12 +269,13 @@ class ChatStoreImpl {
       return;
     }
     const next: SpawnLifecycleState = current?.status === 'running'
-      ? { ...current, displayName: info.displayName, agentType: info.type, mode: info.mode }
+      ? { ...current, displayName: info.displayName, agentType: info.type, mode: info.mode, action: info.action }
       : {
           subagentId: info.subagentId,
           displayName: info.displayName,
           agentType: info.type,
           mode: info.mode,
+          action: info.action,
           status: 'running',
           startedAt: new Date().toISOString(),
         };
@@ -282,7 +294,7 @@ class ChatStoreImpl {
     // disagree about which sub-agent a card refers to.
     const { byId, byName } = indexRoster(agents);
     for (const item of this.getItems(threadId)) {
-      if (item.kind !== 'tool' || item.name !== 'spawn' || !item.running) continue;
+      if (item.kind !== 'tool' || !isSubAgentTool(item.name) || !item.running) continue;
       const current = this.spawnState(threadId, item.id) ?? item.spawn;
       if (current) continue;
       const agent = agentOfCard({ args: item.args }, byId, byName);
@@ -293,6 +305,7 @@ class ChatStoreImpl {
           displayName: agent.displayName,
           type: agent.type,
           mode: typeof item.args.mode === 'string' ? item.args.mode : 'run',
+          action: item.name === 'send' ? 'send' : 'spawn',
         });
       }
     }
@@ -302,13 +315,14 @@ class ChatStoreImpl {
   settleSpawn(threadId: string, cardId: string, outcome: { subagentId?: string; status: 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }): void {
     const current = this.spawnState(threadId, cardId);
     const tool = this.getItems(threadId).find(item => item.id === cardId);
-    const runningTool = tool?.kind === 'tool' && tool.name === 'spawn' && tool.running;
+    const runningTool = tool?.kind === 'tool' && isSubAgentTool(tool.name) && tool.running;
     const fallbackName = tool?.kind === 'tool' && typeof tool.args.name === 'string' ? tool.args.name : outcome.subagentId ?? cardId;
     const next: SpawnLifecycleState | undefined = current ?? (outcome.subagentId ? {
       subagentId: outcome.subagentId,
       displayName: fallbackName,
       agentType: tool?.kind === 'tool' && typeof tool.args.type === 'string' ? tool.args.type : 'unknown',
       mode: tool?.kind === 'tool' && typeof tool.args.mode === 'string' ? tool.args.mode : 'run',
+      action: tool?.kind === 'tool' && tool.name === 'send' ? 'send' as const : 'spawn' as const,
       status: 'running' as const,
       startedAt: new Date().toISOString(),
     } : undefined);
@@ -437,7 +451,7 @@ class ChatStoreImpl {
     if (entries.length === 0) return;
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const base = itemsOf(entries).map(item => {
-      if (item.kind !== 'tool' || item.name !== 'spawn') return item;
+      if (item.kind !== 'tool' || !isSubAgentTool(item.name)) return item;
       const live = this.spawnState(threadId, item.id);
       const history = item.spawn;
       // A fresh server snapshot is authoritative after a reload. In particular, a terminal
@@ -794,7 +808,7 @@ class ChatStoreImpl {
    *  it and replaces the streamed text with the final output. */
   appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string }): void {
     const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id && entry.kind === 'tool') as ToolItem | undefined;
-    if (!item || (!item.running && !(item.name === 'spawn' && item.spawn && item.spawn.status !== 'running'))) return;
+    if (!item || (!item.running && !(isSubAgentTool(item.name) && item.spawn && item.spawn.status !== 'running'))) return;
     const append = (item.output ? (item.output.endsWith('\n') || item.output === '' ? '' : '\n') : '') +
       (chunk.stdout ?? '') +
       (chunk.stderr ? `${chunk.stdout ? '\n' : ''}STDERR: ${chunk.stderr}` : '');

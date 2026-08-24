@@ -189,11 +189,15 @@ export interface ToolCallFrame extends ToolCallPayload {
 
 /** Display-only lifecycle state persisted on a `spawn` tool card, so history can replay the
  * exact running/terminal state without waiting for a live lifecycle frame. */
+export type SpawnAction = 'spawn' | 'send';
+
 export interface SpawnLifecycleState {
   subagentId: string;
   displayName: string;
   agentType: string;
   mode: string;
+  /** Which tool opened the card. Same lifecycle either way, only the wording differs. */
+  action: SpawnAction;
   status: 'running' | 'complete' | 'error' | 'aborted';
   resultLength?: number;
   error?: string;
@@ -237,6 +241,7 @@ export interface SpawnStartFrame {
   displayName: string;
   agentType: string;
   mode: string;
+  action: SpawnAction;
   ts: string;
 }
 

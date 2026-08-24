@@ -446,6 +446,7 @@ describe('chatStore live spawn cards', () => {
       displayName: 'researcher',
       type: 'research',
       mode: 'run',
+      action: 'spawn',
     });
     const cards = chatStore.spawnCardsOf(SPAWN_THREAD);
     expect(cards).toHaveLength(1);
@@ -459,12 +460,69 @@ describe('chatStore live spawn cards', () => {
     expect(settledTool?.kind === 'tool' ? settledTool.running : undefined).toBe(false);
   });
 
+  // `send` drives an existing sub-agent and runs the identical lifecycle: the card must get the
+  // same statuses and the same spinner handling, only the label differs.
+  test('a send card runs the same lifecycle as a spawn card', () => {
+    chatStore.startToolCall(SPAWN_THREAD, 'send-1', 'send', { id: 'subagent/run-1', message: 'again' });
+    chatStore.startSpawn(SPAWN_THREAD, 'send-1', {
+      subagentId: 'subagent/run-1',
+      displayName: 'researcher',
+      type: 'research',
+      mode: 'session',
+      action: 'send',
+    });
+    const cards = chatStore.spawnCardsOf(SPAWN_THREAD);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ id: 'send-1', name: 'send', status: 'running', subagentId: 'subagent/run-1' });
+
+    chatStore.settleSpawn(SPAWN_THREAD, 'send-1', { status: 'complete', resultLength: 3 });
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0].status).toBe('complete');
+    const tool = chatStore.getItems(SPAWN_THREAD).find(item => item.id === 'send-1');
+    expect(tool?.kind === 'tool' ? tool.running : undefined).toBe(false);
+  });
+
+  test('history replays a terminal send state without a spinner', () => {
+    chatStore.seedHistory(SPAWN_THREAD, [{
+      role: 'tool',
+      id: 'send-history',
+      name: 'send',
+      args: { id: 'subagent/history', message: 'again' },
+      ok: true,
+      output: '',
+      truncated: false,
+      spawn: {
+        subagentId: 'subagent/history',
+        displayName: 'researcher',
+        agentType: 'research',
+        mode: 'session',
+        action: 'send',
+        status: 'error',
+        error: 'boom',
+        startedAt: '2026-08-24T10:00:00.000Z',
+        finishedAt: '2026-08-24T10:00:01.000Z',
+      },
+      ts: '2026-08-24T10:00:00.000Z',
+    }]);
+    const card = chatStore.getItems(SPAWN_THREAD)[0];
+    expect(card?.kind === 'tool' ? card.running : undefined).toBe(false);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ status: 'error', error: 'boom' });
+  });
+
+  test('a send end clears a reloaded send card even when its start frame was missed', () => {
+    chatStore.startToolCall(SPAWN_THREAD, 'send-reloaded', 'send', { id: 'subagent/reloaded', message: 'go' });
+    chatStore.settleSpawn(SPAWN_THREAD, 'send-reloaded', { subagentId: 'subagent/reloaded', status: 'aborted' });
+    const card = chatStore.getItems(SPAWN_THREAD).find(item => item.id === 'send-reloaded');
+    expect(card?.kind === 'tool' ? card.running : undefined).toBe(false);
+    expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ status: 'aborted', subagentId: 'subagent/reloaded' });
+  });
+
   test('startSpawn opens a standalone card for a programmatic spawn', () => {
     chatStore.startSpawn(SPAWN_THREAD, 'subagent/run-2', {
       subagentId: 'subagent/run-2',
       displayName: 'coder',
       type: 'general',
       mode: 'session',
+      action: 'spawn',
     });
     const cards = chatStore.spawnCardsOf(SPAWN_THREAD);
     expect(cards).toHaveLength(1);
@@ -494,6 +552,7 @@ describe('chatStore live spawn cards', () => {
         displayName: 'researcher',
         agentType: 'research',
         mode: 'run',
+        action: 'spawn',
         status: 'complete',
         startedAt: '2026-08-24T10:00:00.000Z',
         finishedAt: '2026-08-24T10:00:01.000Z',
@@ -614,6 +673,7 @@ describe('chatStore live spawn cards', () => {
       displayName: 'researcher',
       type: 'research',
       mode: 'run',
+      action: 'spawn',
     });
     expect(chatStore.spawnCardsOf(SPAWN_THREAD)[0]).toMatchObject({ status: 'complete' });
     expect(chatStore.getItems(SPAWN_THREAD)[0]).toMatchObject({ running: false });
@@ -625,6 +685,7 @@ describe('chatStore live spawn cards', () => {
       displayName: 'old',
       type: 'research',
       mode: 'run',
+      action: 'spawn',
     });
     chatStore.clearThread(SPAWN_THREAD);
     expect(chatStore.spawnCardsOf(SPAWN_THREAD)).toHaveLength(0);

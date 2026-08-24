@@ -209,7 +209,10 @@ export function agentOfCard(
   byName: ReadonlyMap<string, SubAgentEntry>,
 ): SubAgentEntry | undefined {
   const claimed = typeof card.args.name === 'string' ? card.args.name : '';
-  return (card.subagentId ? byId.get(card.subagentId) : undefined) ?? byName.get(claimed);
+  // `send` names its target by id, `spawn` by display name: a send card has no `name` argument at
+  // all, so without the id lookup it would never find its door.
+  const addressed = typeof card.args.id === 'string' ? card.args.id : '';
+  return (card.subagentId ? byId.get(card.subagentId) : undefined) ?? byId.get(addressed) ?? byName.get(claimed);
 }
 
 export function indexRoster(agents: readonly SubAgentEntry[]): {

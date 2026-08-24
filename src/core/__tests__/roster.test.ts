@@ -155,6 +155,13 @@ describe('spawnDoorsOf', () => {
     expect(spawnDoorsOf([card()], []).size).toBe(0);
   });
 
+  // A `send` card addresses its target by id and carries no `name` argument at all.
+  it('offers a door to a send card, which names its target by id', () => {
+    const agents = [entry({ id: 'subagent/digger', displayName: 'digger' })];
+    const sendCard = card({ id: 'send-1', name: 'send', args: { id: 'subagent/digger', message: 'again' } });
+    expect(spawnDoorsOf([sendCard], agents).get('send-1')).toEqual({ label: 'digger', status: 'idle' });
+  });
+
   it('matches on the pushed id before the claimed name', () => {
     const agents = [
       entry({ id: 'subagent/run-abcd', displayName: 'other' }),

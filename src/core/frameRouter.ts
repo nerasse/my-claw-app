@@ -285,6 +285,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         displayName: frame.displayName,
         type: frame.agentType,
         mode: frame.mode,
+        action: frame.action,
       });
       break;
     case 'chat.spawn.end':
