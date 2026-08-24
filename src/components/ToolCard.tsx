@@ -4,6 +4,7 @@ import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatDuration, summarizeArgs } from '../core/utils';
+import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -20,9 +21,12 @@ import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } fro
  */
 export const ToolCard = React.memo(function ToolCardView({
   item,
+  threadId,
   expandTools,
 }: {
   item: ToolItem;
+  /** The conversation the card belongs to: what a full-output request has to name. */
+  threadId?: string;
   /** Server-owned pref: when true the card stays expanded even after its run settles. */
   expandTools?: boolean;
 }): React.JSX.Element {
@@ -106,6 +110,11 @@ export const ToolCard = React.memo(function ToolCardView({
       if (foldTimer.current !== null) clearTimeout(foldTimer.current);
     };
   }, []);
+  // The card was pushed with its output clipped, and somebody is now reading it: ask for the
+  // rest. Only on an open card -- a thread full of collapsed ones must cost nothing.
+  useEffect(() => {
+    if (open && item.truncated && threadId) requestToolOutput(threadId, item.id);
+  }, [open, item.truncated, item.id, threadId]);
   // A closed card forgets that its arguments were unfolded: reopening it shows the output first,
   // the same way it did the first time.
   useEffect(() => {

@@ -528,6 +528,7 @@ export function ChatScreen({
         return (
           <SubAgentCard
             item={item}
+            threadId={threadId}
             subagent={subagentDoors.get(item.id)}
             spawn={spawnLive?.get(item.id)}
             onOpen={onOpenSubAgent}
@@ -536,7 +537,7 @@ export function ChatScreen({
         );
       }
       return item.kind === 'tool' ? (
-        <ToolCard item={item} expandTools={uiPrefs?.expandTools ?? false} />
+        <ToolCard item={item} threadId={threadId} expandTools={uiPrefs?.expandTools ?? false} />
       ) : (
         <Bubble
           item={item}
@@ -550,7 +551,7 @@ export function ChatScreen({
         />
       );
     },
-    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, uiPrefs],
+    [deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const locationLabel = location

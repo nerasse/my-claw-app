@@ -229,6 +229,21 @@ export interface ToolDeltaFrame {
   ts: string;
 }
 
+/**
+ * A tool output, whole, in answer to `chat.tool.full`.
+ *
+ * A card is pushed with its output clipped (the server's TOOL_OUTPUT_LIMIT) so a reconnect does
+ * not replay every byte every tool ever printed. `found` false is a call the session no longer
+ * holds: the card keeps the clipped text it has rather than blanking the block.
+ */
+export interface ToolFullFrame {
+  type: 'chat.tool.full.result';
+  threadId: string;
+  id: string;
+  output: string;
+  found: boolean;
+}
+
 /** A sub-agent spawned mid-run. Annotates the `spawn` tool card (by id) with its sub-agent
  *  identity and a running state, or opens a standalone spawn card for a programmatic spawn. */
 export interface SpawnStartFrame {
@@ -1514,6 +1529,7 @@ export type ServerFrame =
   | ToolCallFrame
   | ToolStartFrame
   | ToolDeltaFrame
+  | ToolFullFrame
   | SpawnStartFrame
   | SpawnEndFrame
   | ChatHistoryFrame
@@ -1597,6 +1613,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.tool',
   'chat.tool.start',
   'chat.tool.delta',
+  'chat.tool.full.result',
   'chat.spawn.start',
   'chat.spawn.end',
   'chat.history',
@@ -1825,6 +1842,15 @@ export function encodeLogsTail(query: LogsTailQuery = {}): string {
 /** `before` is the server's cursor, counted back from the newest message; 0 is the newest page. */
 export function encodeSessionHistory(threadId: string, limit = 50, before = 0): string {
   return JSON.stringify({ type: 'session.history', threadId, limit, ...(before ? { before } : {}) });
+}
+
+/**
+ * Asks for one tool card's output in full. Sent when a reader opens a block the card is only
+ * showing clipped, never on its own: the clip exists so a reconnect does not replay every byte
+ * every tool ever printed.
+ */
+export function encodeToolFull(threadId: string, id: string): string {
+  return JSON.stringify({ type: 'chat.tool.full', threadId, id });
 }
 
 export function encodeSessionArchive(threadId: string): string {

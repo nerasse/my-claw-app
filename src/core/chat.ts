@@ -821,6 +821,18 @@ class ChatStoreImpl {
     this.patchTool(threadId, id, { output: item.output + append }, true);
   }
 
+  /**
+   * Replaces a card's clipped output with the whole thing, in answer to `chat.tool.full`.
+   *
+   * `truncated` is cleared with it: the flag is what offers the round-trip, and leaving it set
+   * would offer it again on text that is already complete.
+   */
+  setToolOutput(threadId: string, id: string, output: string): void {
+    const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id && entry.kind === 'tool') as ToolItem | undefined;
+    if (!item) return;
+    this.patchTool(threadId, id, { output, truncated: false });
+  }
+
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
     this.spawnCards.delete(threadId);

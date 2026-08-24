@@ -284,6 +284,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Live output from a running tool (bash): append to the card the start frame opened.
       chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr });
       break;
+    case 'chat.tool.full.result':
+      // The whole output of a card that was pushed clipped. A card the session no longer holds
+      // is answered `found: false`, and then nothing is touched: the clipped text on screen is
+      // better than an empty block.
+      if (frame.found) chatStore.setToolOutput(frame.threadId, frame.id, frame.output);
+      break;
     case 'chat.spawn.start':
       // A sub-agent spawned mid-run: mark the spawn card (or open a standalone one) as running.
       chatStore.startSpawn(frame.threadId, frame.id, {

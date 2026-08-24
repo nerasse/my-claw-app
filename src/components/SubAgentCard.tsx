@@ -4,6 +4,7 @@ import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatDuration } from '../core/utils';
+import { requestToolOutput } from '../core/toolOutput';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -19,12 +20,15 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
  */
 export const SubAgentCard = React.memo(function SubAgentCardView({
   item,
+  threadId,
   subagent,
   spawn,
   onOpen,
   expandTools,
 }: {
   item: ToolItem;
+  /** The conversation the card belongs to: what a full-result request has to name. */
+  threadId?: string;
   /** Set when this card's sub-agent still exists; without it there is nowhere to go. */
   subagent?: { label: string; status: 'idle' | 'running' };
   spawn?: { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' };
@@ -57,6 +61,12 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
     if (expandTools && running && !open && !userTookControl.current) setOpen(true);
     if (!running) userTookControl.current = false;
   }, [expandTools, running, open]);
+
+  // A sub-agent's answer is exactly the kind of output that gets clipped. Asked for in full only
+  // once somebody unfolds the card.
+  useEffect(() => {
+    if (open && item.truncated && threadId) requestToolOutput(threadId, item.id);
+  }, [open, item.truncated, item.id, threadId]);
 
   const state = running
     ? { text: '● running', style: styles.stateRunning }

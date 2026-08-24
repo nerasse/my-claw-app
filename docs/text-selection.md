@@ -39,7 +39,10 @@ taking text out of it     -> the selection viewer, one node, raw source
   gesture is disputed. On a touchscreen the block is clipped and a `see all` bar opens the same
   viewer, because a ScrollView nested in the inverted list fights it for every drag. The cut is
   measured in a layout pass, never guessed from the character count, so a block that fits offers
-  nothing.
+  nothing. What it opens is the **whole** output: a card arrives clipped to the server's
+  `TOOL_OUTPUT_LIMIT`, and unfolding it sends `chat.tool.full` (`core/toolOutput.ts`, once per
+  card). The clip is a transport decision, not a display one -- every reconnect replays a page of
+  history, so the bytes would be paid for by every device, every time.
 - The bubble menu carries `Select text`, which opens the viewer on the **whole message**:
   reasoning, answer and summary joined by `messageSelectionBody`, in the order they were written.
 - `SelectionViewer` is a plain top-anchored `ScrollView` holding one `<Text selectable>`. One node
