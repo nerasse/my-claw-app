@@ -1,4 +1,4 @@
-import { markedStyles } from '../AgentMarkdown';
+import { markedStyles, WrappingRenderer } from '../AgentMarkdown';
 import { darkPalette, font, lightPalette } from '../../theme/palettes';
 
 /**
@@ -65,4 +65,17 @@ test.each(PALETTES)('an aside keeps the block and line-box rules (%s)', (_name, 
   const emoji = markedStyles(palette, 'compacté 🐱', 'aside') as unknown as Sheet;
   expect(emoji.text?.lineHeight).toBeUndefined();
   expect(emoji.h1?.lineHeight).toBeUndefined();
+});
+
+test('a thematic break is drawn in an answer and dropped in a thought', () => {
+  // Models punctuate their thinking with `---` or a run of asterisks, and CommonMark reads those
+  // as a rule: the aside was getting sliced by full-width bars. In an answer the break is meant.
+  const style = { fontSize: font.body, color: lightPalette.text };
+  const aside = new WrappingRenderer(style, style, 'aside');
+  const body = new WrappingRenderer(style, style, 'body');
+
+  expect(aside.hr()).toBeNull();
+  expect(body.hr()).not.toBeNull();
+  // Default tone is the answer's: a caller that says nothing keeps the rule.
+  expect(new WrappingRenderer(style, style).hr()).not.toBeNull();
 });

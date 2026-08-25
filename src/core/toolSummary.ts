@@ -90,8 +90,11 @@ const KEYS: Record<string, readonly string[]> = {
  * height cap and the same actions as an output. What is left goes in the ARGUMENTS fold, so
  * nothing is shown twice and the fold disappears when it holds nothing.
  *
- * Absent on purpose: `apply_patch.edits` (the output is already the diff of what changed) and
- * `spawn`/`send` (SubAgentCard renders task and result itself).
+ * Absent on purpose: `spawn`/`send`, whose task and result SubAgentCard renders itself.
+ *
+ * `apply_patch.edits` is here despite the output carrying the diff of what changed, because that
+ * only holds when the patch applied. A refused patch answers with an error, and then what the
+ * agent tried to write appears nowhere at all -- which is exactly the case a reader needs to see.
  */
 const CONTENT_KEYS: Record<string, string> = {
   bash: 'command',
@@ -102,7 +105,27 @@ const CONTENT_KEYS: Record<string, string> = {
   delegate_browser_task: 'instructions',
   memory: 'content',
   fetch: 'body',
+  apply_patch: 'edits',
 };
+
+/**
+ * `apply_patch.edits` is a list of replacements, not a string. Serialized as JSON it is the very
+ * thing the ARGUMENTS fold was hiding: a patch as escaped one-liners. So it is laid out as the
+ * pairs it is, each side verbatim, which is what makes a refused patch readable.
+ */
+function editsAsText(value: unknown): string {
+  if (!Array.isArray(value) || value.length === 0) return '';
+  const blocks: string[] = [];
+  for (const [index, edit] of value.entries()) {
+    if (typeof edit !== 'object' || edit === null) return '';
+    const { old, new: replacement } = edit as { old?: unknown; new?: unknown };
+    if (typeof old !== 'string' || typeof replacement !== 'string') return '';
+    const label = value.length > 1 ? ` ${index + 1}` : '';
+    // An empty replacement is a deletion, and saying so beats showing nothing under the header.
+    blocks.push(`edit${label} · old\n${old}\n\nedit${label} · new\n${replacement || '(deleted)'}`);
+  }
+  return blocks.join('\n\n');
+}
 
 export interface ToolContent {
   /** The argument name, drawn as the block's label. */
@@ -119,6 +142,10 @@ export function toolContent(name: string, args: Record<string, unknown>): ToolCo
   const key = CONTENT_KEYS[name];
   if (!key) return null;
   const value = args[key];
+  if (Array.isArray(value)) {
+    const text = editsAsText(value);
+    return text ? { key, text } : null;
+  }
   if (typeof value !== 'string' || !value.trim()) return null;
   return { key, text: value };
 }

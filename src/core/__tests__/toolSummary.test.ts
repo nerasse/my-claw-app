@@ -68,7 +68,7 @@ describe('content arguments', () => {
   it('has none for a label-only tool, so nothing is unfolded that a card head already says', () => {
     expect(toolContent('read', { path: '/a.ts' })).toBeNull();
     expect(toolContent('search', { pattern: 'x' })).toBeNull();
-    // The output is already the diff of what changed.
+    // Nothing to lay out: an empty list is not a content block.
     expect(toolContent('apply_patch', { path: '/a.ts', edits: [] })).toBeNull();
     // An MCP tool: unknown, and a block titled after a guessed key would be a lie.
     expect(toolContent('mcp__thing__do', { content: 'x' })).toBeNull();
@@ -90,5 +90,34 @@ describe('content arguments', () => {
     // bash: the command is the whole call. An ARGUMENTS fold there offers `{}`.
     expect(labelArgs('bash', { command: 'ls' })).toBeNull();
     expect(labelArgs('list_agents', {})).toBeNull();
+  });
+});
+
+describe('apply_patch edits', () => {
+  it('lays the replacements out as pairs, not as escaped JSON', () => {
+    // The output carries the diff only when the patch applied. A refused one answers with an
+    // error, and what the agent tried to write would otherwise appear nowhere.
+    const content = toolContent('apply_patch', {
+      path: '/a.ts',
+      edits: [{ old: 'const a = 1;', new: 'const a = 2;' }],
+    });
+    expect(content?.key).toBe('edits');
+    expect(content?.text).toBe('edit \u00b7 old\nconst a = 1;\n\nedit \u00b7 new\nconst a = 2;');
+    expect(content?.text).not.toContain('\\n');
+  });
+
+  it('numbers the pairs when there are several, and names a deletion', () => {
+    const content = toolContent('apply_patch', {
+      path: '/a.ts',
+      edits: [{ old: 'a', new: 'b' }, { old: 'gone', new: '' }],
+    });
+    expect(content?.text).toContain('edit 1 \u00b7 old');
+    expect(content?.text).toContain('edit 2 \u00b7 new\n(deleted)');
+  });
+
+  it('falls back to the fold on a shape it does not recognise', () => {
+    // An older client, a plugin passing something else: better the raw fold than a wrong layout.
+    expect(toolContent('apply_patch', { edits: ['not a pair'] })).toBeNull();
+    expect(labelArgs('apply_patch', { path: '/a.ts', edits: ['x'] })).toEqual({ path: '/a.ts' });
   });
 });

@@ -107,8 +107,21 @@ export class WrappingRenderer extends Renderer {
   constructor(
     private codeStyle: TextStyle,
     private typography: TextStyle,
+    private tone: MarkdownTone = 'body',
   ) {
     super();
+  }
+
+  /**
+   * A rule drawn across a thought is noise. Models punctuate their thinking with `---` or a run of
+   * asterisks, which CommonMark reads as a thematic break, and the aside was getting sliced by
+   * full-width bars every few lines. In an answer the same break is deliberate and stays.
+   *
+   * Only the rendering is neutralised: the tokenizer is untouched, so `**bold**`, `***both***`,
+   * a `* item` list and a fence holding `----` all parse exactly as before.
+   */
+  hr(styles?: ViewStyle): ReactNode {
+    return this.tone === 'aside' ? null : super.hr(styles);
   }
 
   // A paragraph's inline runs are wrapped in a Text node that react-native-marked styles with
@@ -162,6 +175,7 @@ export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: Ma
     return new WrappingRenderer(
       { color, fontSize: codeSize, lineHeight: lineHeightFor(codeSize) },
       { fontSize: size, color, ...lineBoxFor(size, text) },
+      tone,
     );
   }, [palette, text, tone]);
   const elements = useMarkdown(text, { styles: mdStyles, renderer });

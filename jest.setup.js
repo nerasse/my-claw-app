@@ -119,7 +119,7 @@ jest.mock('react-native-reanimated', () => {
 
 jest.mock('react-native-marked', () => {
   const React = require('react');
-  const { Text } = require('react-native');
+  const { Text, View } = require('react-native');
   const FakeMarkdown = ({ value }) =>
     React.createElement(Text, { key: 'md' }, String(value));
   return {
@@ -128,6 +128,12 @@ jest.mock('react-native-marked', () => {
     Renderer: class {
       getKey() {
         return 'k';
+      }
+      // The real base draws a rule here. Kept in the stub because AgentMarkdown overrides it to
+      // drop the rule in an aside, and a base that answered undefined would make that override
+      // pass for the wrong reason.
+      hr(styles) {
+        return React.createElement(View, { key: 'hr', style: styles });
       }
     },
     useMarkdown: value => [
