@@ -239,6 +239,15 @@ describe('chatStore tool cards', () => {
     expect(finished[0]).toMatchObject({ kind: 'tool', id: 'c2', name: 'bash', running: false, output: 'file.txt', ok: true });
   });
 
+  test('a replayed chunk whose head the server dropped marks the card truncated', () => {
+    // The server caps what it keeps of a run in flight, so a window that reloads mid-`bash` can be
+    // handed the tail of an output. `truncated` is what offers the round-trip that fetches the
+    // whole thing; without it the card reads as a short, complete output.
+    chatStore.startToolCall(THREAD, 'c9', 'bash', { command: 'noisy.sh' });
+    chatStore.appendToolOutput(THREAD, 'c9', { stdout: 'tail of it\n', clipped: true });
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ truncated: true, output: 'tail of it\n' });
+  });
+
   test('live delta chunks append to the running card output, and settle to the final output', () => {
     chatStore.startToolCall(THREAD, 'c3', 'bash', { command: 'count.sh' });
     chatStore.appendToolOutput(THREAD, 'c3', { stdout: 'line 1\n' });

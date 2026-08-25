@@ -894,13 +894,16 @@ class ChatStoreImpl {
   /** Live output from a running tool (bash): append the chunk to the card the start frame opened.
    *  Coalesced so a fast command does not re-render on every byte. The `chat.tool` frame settles
    *  it and replaces the streamed text with the final output. */
-  appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string }): void {
+  appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string; clipped?: boolean }): void {
     const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id && entry.kind === 'tool') as ToolItem | undefined;
     if (!item || (!item.running && !(isSubAgentTool(item.name) && item.spawn && item.spawn.status !== 'running'))) return;
     const append = (item.output ? (item.output.endsWith('\n') || item.output === '' ? '' : '\n') : '') +
       (chunk.stdout ?? '') +
       (chunk.stderr ? `${chunk.stdout ? '\n' : ''}STDERR: ${chunk.stderr}` : '');
-    this.patchTool(threadId, id, { output: item.output + append }, true);
+    // `clipped` only ever arrives on a replay: the head of this output was dropped by the
+    // server's live turn journal, so the card says truncated and offers the round-trip that
+    // fetches the whole thing once the call settles.
+    this.patchTool(threadId, id, { output: item.output + append, ...(chunk.clipped ? { truncated: true } : {}) }, true);
   }
 
   /**

@@ -227,6 +227,13 @@ export interface ToolDeltaFrame {
   stdout: string;
   stderr: string;
   ts: string;
+  /**
+   * Set only on a replay of a run that was in flight: the output before this chunk was dropped
+   * from the server's live turn journal to hold its budget. The card is marked truncated, which is
+   * the state that offers `chat.tool.full` once the call settles -- a card silently missing its
+   * head would read as a short, complete output.
+   */
+  clipped?: boolean;
 }
 
 /**

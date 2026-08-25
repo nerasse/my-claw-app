@@ -288,7 +288,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'chat.tool.delta':
       // Live output from a running tool (bash): append to the card the start frame opened.
-      chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr });
+      chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr, clipped: frame.clipped });
       break;
     case 'chat.tool.full.result':
       // The whole output of a card that was pushed clipped. A card the session no longer holds
