@@ -513,7 +513,7 @@ test('tapping a run opens it as a real chat: history asked, thread on screen', a
   await waitFor(() =>
     bridge.sendMessage.mock.calls.some(([frame]) => {
       const parsed = JSON.parse(String(frame)) as Record<string, unknown>;
-      return parsed.type === 'session.history' && parsed.threadId === 'cron-job-1-1723200000000';
+      return parsed.type === 'session.sync' && parsed.threadId === 'cron-job-1-1723200000000';
     }),
   );
   // The header shows the run title, not the raw first message.
@@ -535,7 +535,7 @@ test('the back key walks a run chat to its runs page, then the jobs list', async
   });
   await pressLabel(tree, 'Open run Morning report · 08/08 19:30');
   await waitFor(() =>
-    bridge.sendMessage.mock.calls.some(([frame]) => JSON.parse(String(frame)).type === 'session.history'),
+    bridge.sendMessage.mock.calls.some(([frame]) => JSON.parse(String(frame)).type === 'session.sync'),
   );
 
   // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest

@@ -708,7 +708,7 @@ describe('paging back through a long conversation', () => {
   function sentHistoryRequests(): Array<{ before?: number; limit?: number }> {
     return bridge.sendMessage.mock.calls
       .map(([raw]) => JSON.parse(raw as string))
-      .filter((frame: { type: string }) => frame.type === 'session.history');
+      .filter((frame: { type: string }) => frame.type === 'session.sync' || frame.type === 'session.history' || frame.type === 'session.history');
   }
 
   test('reaching the far end asks for the page before it, once, and prepends it', async () => {
@@ -890,7 +890,7 @@ test('Session files from a drawer conversation opens that conversation and its f
   // The files screen opened over the conversation it belongs to: history and files were asked
   // for the drawer's thread, not for the one that happened to be on screen.
   const sent = bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
-  expect(sent).toContain(JSON.stringify({ type: 'session.history', threadId: 'other-thread', limit: 50 }));
+  expect(sent).toContain(JSON.stringify({ type: 'session.sync', threadId: 'other-thread', since: null }));
   expect(sent).toContain(JSON.stringify({ type: 'files.list', threadId: 'other-thread' }));
   await unmount(tree);
 });

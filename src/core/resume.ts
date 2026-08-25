@@ -3,10 +3,11 @@ import {
   encodeJobsList,
   encodeModelGet,
   encodeModelList,
-  encodeSessionHistory,
+  encodeSessionSync,
   encodeSessionList,
   encodeSubAgentsList,
 } from './protocol';
+import { chatStore } from './chat';
 
 /**
  * What a socket asks for the moment it comes up, in order.
@@ -16,15 +17,19 @@ import {
  * conversation on screen is refetched here, not only the catalogs: a device that dropped, crashed
  * or slept otherwise comes back to its own stale copy and stays there, silently, for as long as
  * the owner does not switch threads.
+ *
+ * The thread is synced via session.sync, which asks for a delta since the last known entry.
+ * If the cursor is stale (unknown-cursor) or the branch diverged (branch-switch), the server
+ * responds with a full page instead, and the client replaces its view.
  */
-export function resumeFrames(activeThreadId: string | null, historyLimit: number): string[] {
+export function resumeFrames(activeThreadId: string | null): string[] {
   const frames = [encodeSessionList(), encodeCommandsList(), encodeModelList(), encodeJobsList()];
   if (!activeThreadId) return frames;
-  // The model too: a thread whose model was changed from another window would keep the old label
-  // in the header until the next run ended.
+  // Ask for entries since the last one we have, on the branch we're showing.
+  const { since, leaf } = chatStore.getSyncState(activeThreadId);
   return [
     ...frames,
-    encodeSessionHistory(activeThreadId, historyLimit),
+    encodeSessionSync(activeThreadId, since, leaf ?? undefined),
     encodeSubAgentsList(activeThreadId),
     encodeModelGet(activeThreadId),
   ];

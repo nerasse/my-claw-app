@@ -1539,6 +1539,7 @@ export type ServerFrame =
   | SpawnStartFrame
   | SpawnEndFrame
   | ChatHistoryFrame
+  | SessionSyncResultFrame
   | DraftChangedFrame
   | SessionListResultFrame
   | SessionWorkspaceSetResultFrame
@@ -1623,6 +1624,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.spawn.start',
   'chat.spawn.end',
   'chat.history',
+  'session.sync.result',
   'draft.changed',
   'chat.command.pending',
   'chat.command.result',
@@ -2361,5 +2363,46 @@ export function encodeNotificationsState(state: { foreground: boolean; threadId?
     type: 'notifications.state',
     foreground: state.foreground,
     ...(state.threadId ? { threadId: state.threadId } : {}),
+  });
+}
+
+// --- Session sync (lot 4) ---
+
+/**
+ * Delta sync for a conversation. Replaces chat.history for the live path; history remains for
+ * pagination backwards.
+ *
+ * Three response shapes:
+ * - `reset` absent: delta to append, same branch
+ * - `reset: "unknown-cursor"`: cursor not found, entries is a fresh page
+ * - `reset: "branch-switch"`: server's leaf diverged from client's, entries is a fresh page
+ */
+export interface SessionSyncResultFrame {
+  type: 'session.sync.result';
+  threadId: string;
+  entries: HistoryEntry[];
+  /** The current leaf of the session (where the next append goes). */
+  leaf: string | null;
+  /** The id of the last entry in the file (may differ from leaf after a branch). */
+  head: string | null;
+  activeRun?: boolean;
+  /** Why the delta was replaced by a full page. Absent means append. */
+  reset?: 'unknown-cursor' | 'branch-switch';
+  /** Whether entries were truncated by the limit. */
+  truncated?: boolean;
+}
+
+/**
+ * Asks for entries since `since`, on the branch ending at `leaf`.
+ *
+ * `since` is the last entry id the client has; null/absent for a fresh open.
+ * `leaf` is what the client is showing; absent means "whatever the server has".
+ */
+export function encodeSessionSync(threadId: string, since?: string | null, leaf?: string): string {
+  return JSON.stringify({
+    type: 'session.sync',
+    threadId,
+    ...(since !== undefined ? { since } : {}),
+    ...(leaf ? { leaf } : {}),
   });
 }

@@ -70,6 +70,7 @@ import {
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
+  encodeSessionSync,
   encodeSessionList,
   encodeSessionRename,
   encodeSessionWorkspaceSet,
@@ -559,7 +560,9 @@ export function AppShell(): React.JSX.Element {
       // owner arrived. A tap cancels its own notification, the drawer and the deep link did not.
       dismissThreadNotification(threadId);
       connection.send(encodeSubAgentsList(threadId)).catch(() => {});
-      connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
+      // Sync the thread: asks for delta since last known entry, or full page if fresh.
+      const { since, leaf } = chatStore.getSyncState(threadId);
+      connection.send(encodeSessionSync(threadId, since, leaf ?? undefined));
       // The model of a conversation is per session: refresh it when the thread changes, so
       // the picker never shows the previous conversation's choice.
       connection.send(encodeModelGet(threadId));
@@ -736,7 +739,8 @@ export function AppShell(): React.JSX.Element {
       setDrawerOpen(false);
       selectThread(entry.threadId);
       chatStore.markRead(entry.threadId);
-      connection.send(encodeSessionHistory(entry.threadId, HISTORY_LIMIT));
+      const { since: entrySince, leaf: entryLeaf } = chatStore.getSyncState(entry.threadId);
+      connection.send(encodeSessionSync(entry.threadId, entrySince, entryLeaf ?? undefined));
     },
     [selectThread],
   );
@@ -809,7 +813,7 @@ export function AppShell(): React.JSX.Element {
         setLocationEnabled(false);
       }
       if (next.state === 'connected') {
-        for (const frame of resumeFrames(activeThreadRef.current, HISTORY_LIMIT)) {
+        for (const frame of resumeFrames(activeThreadRef.current)) {
           connection.send(frame).catch(() => {});
         }
         // Server-owned display prefs and voice mode shape the conversation as soon as it loads,
@@ -1749,7 +1753,8 @@ export function AppShell(): React.JSX.Element {
   // and the listing re-reads the drawer row. Same frames openThread sends on opening.
   const refreshThread = useCallback((threadId: string): void => {
     connection.send(encodeSubAgentsList(threadId)).catch(() => {});
-    connection.send(encodeSessionHistory(threadId, HISTORY_LIMIT));
+    const { since: refreshSince, leaf: refreshLeaf } = chatStore.getSyncState(threadId);
+    connection.send(encodeSessionSync(threadId, refreshSince, refreshLeaf ?? undefined));
     connection.send(encodeModelGet(threadId));
     connection.send(encodeSessionList());
     chatStore.markRead(threadId);
@@ -3774,7 +3779,7 @@ export function AppShell(): React.JSX.Element {
                 setSubagentAction(null);
                 // A deleted sub-agent has no thread left to stand on; a cleared one stays open.
                 if (view.threadId && subagentAction === 'kill') leaveSubAgent();
-                else connection.send(encodeSessionHistory(view.threadId, HISTORY_LIMIT)).catch(() => {});
+                else { const { since: saSince, leaf: saLeaf } = chatStore.getSyncState(view.threadId); connection.send(encodeSessionSync(view.threadId, saSince, saLeaf ?? undefined)).catch(() => {}); }
               },
             },
           ]}

@@ -115,13 +115,13 @@ test('archiving the open conversation lands on another one instead of an empty s
   // The listing reply is what picks the next thread, and it must skip the archived one.
   // KEPT was opened at boot, so what matters is where the app lands afterwards.
   await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'session.history' && frame.threadId === FILED),
+    sentFrames().some(frame => frame.type === 'session.sync' && frame.threadId === FILED),
   );
-  const opened = sentFrames().filter(frame => frame.type === 'session.history');
+  const opened = sentFrames().filter(frame => frame.type === 'session.sync');
   expect(opened[opened.length - 1]).toEqual({
-    type: 'session.history',
+    type: 'session.sync',
     threadId: FILED,
-    limit: 50,
+    since: null,
   });
 
   await settleAndUnmount(tree);
@@ -155,7 +155,7 @@ test('the hardware back button returns from an archived conversation to the list
 
   await pressLabel(tree, 'Conversation Vieux projet');
   await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'session.history' && frame.threadId === FILED),
+    sentFrames().some(frame => frame.type === 'session.sync' && frame.threadId === FILED),
   );
 
   // The Android layer calls the last registered handler and stops when it returns true.

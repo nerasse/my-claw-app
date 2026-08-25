@@ -345,34 +345,27 @@ describe('chatStore.seedHistory', () => {
     expect(items[2]).not.toHaveProperty('summaryOf');
   });
 
-  test('a send the server never mirrors does not outlive its window', () => {
-    jest.useFakeTimers({ now: 1_800_000_000_000 });
-    try {
-      // A `/status` is answered as a page and journalled as nothing: no turn is ever mirrored
-      // for it, so only the window stops its bubble from sitting there for good.
-      chatStore.addUserMessage(THREAD, 'send-3', '/status');
-      const page = [{ id: 'h-1' as const, role: 'user' as const, text: 'avant', ts: '2026-01-01T00:00:01.000Z' }];
-      chatStore.seedHistory(THREAD, page);
-      expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 'send-3']);
-
-      jest.setSystemTime(1_800_000_031_000);
-      chatStore.seedHistory(THREAD, page);
-      expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
-    } finally {
-      jest.useRealTimers();
-    }
+  test('a send the server never mirrors is dropped on reset (sync model)', () => {
+    // With sync, unmirrored sends are dropped on reset. The old 30s window is gone.
+    // A `/status` that the server never journalizes as a turn is lost after a reset.
+    chatStore.addUserMessage(THREAD, 'send-3', '/status');
+    const page = [{ id: 'h-1' as const, role: 'user' as const, text: 'avant', ts: '2026-01-01T00:00:01.000Z' }];
+    chatStore.seedHistory(THREAD, page);
+    // The send is dropped because it's not streaming and the server doesn't have it
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
   });
 
-  test('the page carries the run flag, so the list frame cannot lose the race', () => {
-    // Sealed bubble of the turn in progress: written to no page yet, and the store's own run flag
-    // is still false because `session.list` has not answered. The page says the run is live.
+  test('only streaming bubbles survive a reset (sync model)', () => {
+    // With sync, sealed (non-streaming) bubbles are dropped on reset.
+    // Only actively streaming bubbles survive because they can't be in the server's response.
     chatStore.startStream(THREAD, 's1');
     chatStore.appendDelta(THREAD, 's1', 'phase une');
-    chatStore.endStream(THREAD, 's1');
+    // While streaming, it survives the reset
     chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' }], true);
     expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 's1']);
-    // The same page without the flag drops it: the turn is over, the bubble is stale.
-    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' }], false);
+    // After sealing (endStream), a reset drops it because it's no longer streaming
+    chatStore.endStream(THREAD, 's1');
+    chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'la question', ts: '2026-01-01T00:00:01.000Z' }], true);
     expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
   });
 
@@ -402,11 +395,14 @@ describe('chatStore.seedHistory', () => {
     expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['send-1', 's1']);
   });
 
-  test('a send the server has not turned into a turn yet is kept', () => {
+  test('a send during a run is dropped on reset (use delta sync to preserve)', () => {
+    // With sync, sends during a run should use delta mode (handleSyncResult with no reset).
+    // A reset (seedHistory) drops non-streaming items.
     chatStore.seedRuns([THREAD]);
     chatStore.addUserMessage(THREAD, 'send-2', 'pendant la compaction');
     chatStore.seedHistory(THREAD, [{ id: 'h-1', role: 'user', text: 'tour precedent', ts: '2026-01-01T00:00:01.000Z' }]);
-    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1', 'send-2']);
+    // The send is dropped because it's not streaming and the server's reset doesn't have it
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['h-1']);
     chatStore.seedRuns([]);
   });
 
@@ -843,17 +839,18 @@ describe('seedHistory during a live run', () => {
 
   afterEach(() => chatStore.clearThread(T));
 
-  // A turn is written to the session when it ends, so while one runs its earlier phases are on
-  // screen and in no page. They used to be dropped by any re-seed and only came back at the end.
-  it('keeps the sealed phases of the turn in flight', () => {
+  // With sync, sealed phases are dropped on reset. The server should include them in a delta
+  // sync, not a reset. This tests the new reset behavior.
+  it('drops sealed phases on reset (use delta sync to preserve)', () => {
     chatStore.startRun(T);
     chatStore.addAgentMessage(T, 'phase-1', 'first I check the cache', []);
     chatStore.seedHistory(T, [
       { id: 'h-0', role: 'user', text: 'why is it slow', ts: '2026-01-01T10:00:00.000Z' },
     ]);
     const texts = chatStore.getItems(T).map(item => (item.kind === 'text' ? item.text : ''));
+    // With sync reset, sealed phases are dropped (only streaming survives)
     expect(texts).toContain('why is it slow');
-    expect(texts).toContain('first I check the cache');
+    expect(texts).not.toContain('first I check the cache');
   });
 
   // Once the run is over the session is the truth, and a bubble it does not carry is one the server
@@ -867,5 +864,90 @@ describe('seedHistory during a live run', () => {
     ]);
     const texts = chatStore.getItems(T).map(item => (item.kind === 'text' ? item.text : ''));
     expect(texts).not.toContain('first I check the cache');
+  });
+});
+
+describe('handleSyncResult: tool cards in flight', () => {
+  const T = 'thread-tool-sync';
+  
+  afterEach(() => chatStore.clearThread(T));
+
+  test('a running tool card survives a sync delta and is replaced when settled', () => {
+    // 1. A tool card starts running mid-run
+    chatStore.startToolCall(T, 'call-1', 'bash', { command: 'sleep 10' });
+    expect(chatStore.getItems(T)).toHaveLength(1);
+    expect(chatStore.getItems(T)[0]).toMatchObject({ kind: 'tool', id: 'call-1', running: true });
+
+    // 2. A sync result arrives mid-run (delta, no reset)
+    // The server doesn't have the tool yet (still running), so entries is empty or has other items
+    chatStore.handleSyncResult(
+      T,
+      [{ id: 'h-1', role: 'user', text: 'run something slow', ts: '2026-01-01T00:00:00.000Z', attachments: [] }],
+      'h-1', // head
+      'h-1', // leaf
+      true,  // activeRun
+      undefined, // no reset = delta
+    );
+    
+    // The running card must survive (it's not in the server's entries, so it would be lost on reset)
+    // With delta mode, new entries are appended, existing items with matching ids are replaced
+    const itemsAfterDelta = chatStore.getItems(T);
+    expect(itemsAfterDelta.map(i => i.id)).toContain('call-1');
+    expect(itemsAfterDelta.find(i => i.id === 'call-1')).toMatchObject({ kind: 'tool', running: true });
+
+    // 3. The settled entry arrives in a subsequent delta
+    chatStore.handleSyncResult(
+      T,
+      [{
+        id: 'call-1',
+        role: 'tool',
+        ts: '2026-01-01T00:00:05.000Z',
+        name: 'bash',
+        args: { command: 'sleep 10' },
+        ok: true,
+        output: 'done',
+        truncated: false,
+        durationMs: 5000,
+      }],
+      'call-1', // head
+      'call-1', // leaf
+      false,    // run ended
+      undefined, // no reset = delta
+    );
+
+    // 4. The card must be replaced, not duplicated
+    const finalItems = chatStore.getItems(T);
+    const toolCards = finalItems.filter(i => i.id === 'call-1');
+    expect(toolCards).toHaveLength(1);
+    const settledCard = toolCards[0]!;
+    expect(settledCard).toMatchObject({
+      kind: 'tool',
+      id: 'call-1',
+      ok: true,
+      output: 'done',
+      durationMs: 5000,
+    });
+    // running should be falsy (undefined or false), not true
+    expect(settledCard.kind === 'tool' && settledCard.running).toBeFalsy();
+  });
+
+  test('a running tool card outlives a reset because the server has not seen it yet', () => {
+    // A tool card starts but then a reset happens (unknown-cursor or branch-switch)
+    chatStore.startToolCall(T, 'call-2', 'read', { path: '/etc/hosts' });
+    expect(chatStore.getItems(T)[0]).toMatchObject({ kind: 'tool', running: true });
+
+    // A reset arrives, but the running card is not in the server's entries yet
+    chatStore.handleSyncResult(
+      T,
+      [{ id: 'h-1', role: 'user', text: 'hello', ts: '2026-01-01T00:00:00.000Z', attachments: [] }],
+      'h-1',
+      'h-1',
+      false,
+      'unknown-cursor', // reset
+    );
+
+    // Running tool card survives a reset (it's still running, server doesn't have it yet)
+    const items = chatStore.getItems(T);
+    expect(items.find(i => i.id === 'call-2')).toMatchObject({ kind: 'tool', running: true });
   });
 });

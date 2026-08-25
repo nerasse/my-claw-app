@@ -154,8 +154,6 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
  * enough for preprocessing, gates and a prompt build; short enough that a bubble the server is
  * never going to mirror does not outlive the screen it was typed on.
  */
-const UNMIRRORED_SEND_WINDOW_MS = 30_000;
-
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
   private streams = new Map<string, string>();
@@ -172,6 +170,11 @@ class ChatStoreImpl {
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
   private pages = new Map<string, HistoryPage>();
+  /**
+   * Sync cursors per thread: `since` is the id of the last entry received (for delta requests),
+   * `leaf` is the branch tip the client is showing. Updated after every sync.
+   */
+  private syncState = new Map<string, { since: string | null; leaf: string | null; truncated?: boolean }>();
   private listeners = new Set<Listener>();
   private spawnCards = new Map<string, { tools: ToolItem[]; cards: SpawnCard[] }>();
   /** Live spawn states scoped by thread and card, without parsing user-controlled ids. */
@@ -190,6 +193,15 @@ class ChatStoreImpl {
       this.spawnStatus.set(threadId, states);
     }
     states.set(cardId, state);
+  }
+
+  /** Returns the sync cursor for a thread, or null values for a thread not yet synced. */
+  getSyncState(threadId: string): { since: string | null; leaf: string | null; truncated?: boolean } {
+    return this.syncState.get(threadId) ?? { since: null, leaf: null };
+  }
+
+  private setSyncState(threadId: string, since: string | null, leaf: string | null, truncated?: boolean): void {
+    this.syncState.set(threadId, { since, leaf, ...(truncated ? { truncated } : {}) });
   }
 
   subscribe(listener: Listener): () => void {
@@ -422,45 +434,95 @@ class ChatStoreImpl {
   }
 
   /**
-   * Server history replaces what is on screen: a bubble rendered by an older build must not
-   * survive a reopen. Local items win only while a run streams into the thread, or when the
-   * server has nothing yet (turn not persisted).
+   * Handles a `session.sync.result` from the server.
    *
-   * The server's page becomes the thread, plus whatever the page cannot know yet.
+   * Three cases, distinguished by `reset`:
+   * - Absent: delta to append, same branch. Entries are appended, existing items with matching
+   *   ids are replaced (a tool card that was live is now settled).
+   * - `"unknown-cursor"`: the cursor was not found, entries is a fresh page. Replaces the thread.
+   * - `"branch-switch"`: the server's leaf diverged from the client's. Replaces the thread. This
+   *   is the case that `/branches`, `/fork`, `/undo` will exercise in lots 7 and 8.
    *
-   * The page is built from the live session, not from the file, so it already carries the run in
-   * flight: its question, its finished bubbles, its tool cards. Refusing it while a run was active
-   * (what this did before) meant a device that reloaded mid-run had only the frames broadcast since
-   * it connected -- an answer streaming under no question, until the run ended and a later page was
-   * finally accepted.
+   * In both reset cases, only genuinely local items survive: bubbles still being streamed into.
+   * Everything else defers to the server's snapshot, which is now the source of truth.
    *
-   * Three things are genuinely local: the bubble still being written (never mirrored, so no page
-   * can hold it), a send the server is holding behind a compaction (flagged, and the hold lasts
-   * minutes) and a send delivered so recently that its turn has not been pushed yet. Everything
-   * else defers to the page.
-   *
-   * The match is by id, which is why the server replays a mirrored user turn under the device's own
-   * `chat.send` id and a command answer under `cmd-<send id>`: same bubble, same id, nothing
-   * doubled. Cards, command answers, notices and errors are page-owned outright.
-   *
-   * The window is what keeps a bubble the server will never mirror (a `/status` typed at some
-   * point, a message that never left) from sitting at the end of the thread for good. Local clock
-   * on both sides of the subtraction, so there is no skew to reason about.
+   * When `truncated` is true, the server cut at its limit and there is more to fetch.
    */
-  seedHistory(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
-    if (entries.length === 0) return;
-    // The page's own answer wins when it carries one: the store's flag is seeded by `session.list`,
-    // a separate round trip, so trusting it alone made the decision depend on which reply landed
-    // first. An older server sends nothing here and falls back to the flag, as before.
+  handleSyncResult(
+    threadId: string,
+    entries: HistoryEntry[],
+    head: string | null,
+    leaf: string | null,
+    activeRun?: boolean,
+    reset?: 'unknown-cursor' | 'branch-switch',
+    truncated?: boolean,
+  ): void {
     if (activeRun === true) this.activeRuns.add(threadId);
     else if (activeRun === false) this.activeRuns.delete(threadId);
+
+    if (reset) {
+      // Reset: replace the thread. Only streaming items survive, because they exist only locally.
+      this.resetThread(threadId, entries);
+    } else {
+      // Delta: append entries, replacing any with matching ids (live tool cards settling).
+      this.appendSyncEntries(threadId, entries);
+    }
+
+    // Update sync cursors: head is the last entry in the file, leaf is the branch tip.
+    // If truncated, we don't have head yet -- keep asking until we do.
+    this.setSyncState(threadId, truncated ? this.getSyncState(threadId).since : head, leaf, truncated);
+    this.emit();
+  }
+
+  /**
+   * Reset (replace) a thread with server entries. Only streaming items survive.
+   * Called on unknown-cursor or branch-switch.
+   */
+  private resetThread(threadId: string, entries: HistoryEntry[]): void {
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
-    const base = itemsOf(entries).map(item => {
+    const base = this.itemsOfWithSpawnReconcile(threadId, entries);
+    const known = new Set(base.map(item => item.id));
+
+    // Only genuinely local items survive a reset: bubbles still being streamed into.
+    // These exist only in memory, the server cannot have them.
+    const streaming = existing.filter(item => {
+      if (known.has(item.id)) return false;
+      if (item.kind === 'text' && item.streaming) return true;
+      // A running tool card that isn't in the server's entries yet (started after last persist).
+      if (item.kind === 'tool' && item.running) return true;
+      return false;
+    });
+
+    this.threads.set(threadId, [...base, ...streaming]);
+    this.spawnCards.delete(threadId);
+  }
+
+  /**
+   * Append sync delta entries to a thread. Entries with matching ids replace existing ones
+   * (a live tool card now has its result).
+   */
+  private appendSyncEntries(threadId: string, entries: HistoryEntry[]): void {
+    if (entries.length === 0) return;
+    const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    const incoming = this.itemsOfWithSpawnReconcile(threadId, entries);
+    const incomingIds = new Set(incoming.map(item => item.id));
+
+    // Remove any existing items that the delta replaces (tool cards settling)
+    const kept = existing.filter(item => !incomingIds.has(item.id));
+    this.threads.set(threadId, [...kept, ...incoming]);
+    this.spawnCards.delete(threadId);
+  }
+
+  /**
+   * Convert history entries to ChatItems, reconciling spawn state.
+   * Shared by both reset and delta paths.
+   */
+  private itemsOfWithSpawnReconcile(threadId: string, entries: HistoryEntry[]): ChatItem[] {
+    return itemsOf(entries).map(item => {
       if (item.kind !== 'tool' || !isSubAgentTool(item.name)) return item;
       const live = this.spawnState(threadId, item.id);
       const history = item.spawn;
-      // A fresh server snapshot is authoritative after a reload. In particular, a terminal
-      // history state must beat a stale live `running` bit from the previous socket.
+      // A terminal history state beats a stale live running bit.
       const selected = history && history.status !== 'running' ? history : live ?? history;
       if (selected) {
         this.setSpawnState(threadId, item.id, selected);
@@ -472,26 +534,25 @@ class ChatStoreImpl {
       }
       return item;
     });
-    const known = new Set(base.map(item => item.id));
-    const now = Date.now();
-    // A turn is written to the session when it ends, so while one is running its earlier phases are
-    // on screen and in no page. Dropping them was visible: a model that thought, answered, thought
-    // again and was still going lost every sealed phase the moment anything re-seeded the thread,
-    // and they only came back when the turn finally landed.
-    const running = this.activeRuns.has(threadId);
-    const carried = existing.filter(item => {
-      if (known.has(item.id)) return false;
-      // A card of the turn in progress. The page holds the ones whose assistant message is already
-      // written, but a call that started after that write is on screen and in no page yet, and
-      // dropping it made a reopened thread lose the tool it was visibly running.
-      if (item.kind !== 'text') return running;
-      if (item.command || item.notice || item.error) return false;
-      if (item.streaming) return true;
-      if (running && item.role === 'agent') return true;
-      return item.role === 'user' && (item.queuedSince !== undefined || now - item.ts < UNMIRRORED_SEND_WINDOW_MS);
-    });
-    this.threads.set(threadId, [...base, ...carried]);
-    this.spawnCards.delete(threadId);
+  }
+
+  /**
+   * Handles the newest page of a thread via `chat.history` (no `before`).
+   * Pagination (older pages with `before`) goes through `prependHistory`.
+   */
+  seedHistory(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
+    if (entries.length === 0) return;
+    if (activeRun === true) this.activeRuns.add(threadId);
+    else if (activeRun === false) this.activeRuns.delete(threadId);
+    
+    // The newest page replaces the thread, same as a sync reset.
+    this.resetThread(threadId, entries);
+    
+    // Update sync state from the entries we received.
+    const lastEntry = entries[entries.length - 1];
+    if (lastEntry) {
+      this.setSyncState(threadId, lastEntry.id, null);
+    }
     this.emit();
   }
 
@@ -858,6 +919,7 @@ class ChatStoreImpl {
     this.threads.delete(threadId);
     this.spawnCards.delete(threadId);
     this.spawnStatus.delete(threadId);
+    this.syncState.delete(threadId);
     this.activeRuns.delete(threadId);
     this.lastStream.delete(threadId);
     this.pendingCommands.delete(threadId);
@@ -869,6 +931,7 @@ class ChatStoreImpl {
     this.threads.clear();
     this.spawnCards.clear();
     this.spawnStatus.clear();
+    this.syncState.clear();
     this.streams.clear();
     this.reasoning.clear();
     this.lastStream.clear();

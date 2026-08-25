@@ -232,7 +232,7 @@ test('a notification tap opens the thread it came from, cold start included', as
   await waitFor(() =>
     bridge.sendMessage.mock.calls.some(([frame]) => {
       const parsed = JSON.parse(String(frame)) as Record<string, unknown>;
-      return parsed.type === 'session.history' && parsed.threadId === 'from-notif';
+      return parsed.type === 'session.sync' && parsed.threadId === 'from-notif';
     }),
   );
   await unmount(tree);

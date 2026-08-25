@@ -20,6 +20,7 @@ import { registerForPush } from './notifications';
 import { uuid } from './utils';
 import {
   encodeAgentsConfigGet,
+  encodeSessionSync,
   encodeModelGet,
   encodeSubAgentsList,
   type ApprovalRequestFrame,
@@ -402,6 +403,33 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (!frame.before && frame.draft) applyRemoteDraft(frame.threadId, frame.draft);
       if (!frame.before) chatStore.markRead(frame.threadId);
       break;
+    case 'session.sync.result': {
+      // Delta sync: three cases by reset flag.
+      // - absent: delta to append (same branch)
+      // - "unknown-cursor": cursor not found, full page, replace thread
+      // - "branch-switch": server's leaf diverged, full page, replace thread (lots 7/8)
+      chatStore.handleSyncResult(
+        frame.threadId,
+        frame.entries,
+        frame.head,
+        frame.leaf,
+        frame.activeRun,
+        frame.reset,
+        frame.truncated,
+      );
+      const rosterSync = subAgentStore.get(frame.threadId);
+      if (rosterSync.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, rosterSync.agents);
+      chatStore.markRead(frame.threadId);
+      // If truncated, the server has more entries. Request the rest.
+      if (frame.truncated) {
+        const { since, leaf } = chatStore.getSyncState(frame.threadId);
+        // Use head from the last batch (entries may have been appended, so use the last entry's id)
+        const lastEntry = frame.entries[frame.entries.length - 1];
+        const nextSince = lastEntry?.id ?? since;
+        connection.send(encodeSessionSync(frame.threadId, nextSince, leaf ?? undefined)).catch(() => {});
+      }
+      break;
+    }
     case 'draft.changed':
       applyRemoteDraft(frame.threadId, frame.text);
       break;
