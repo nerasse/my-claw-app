@@ -78,6 +78,63 @@ const KEYS: Record<string, readonly string[]> = {
   delegate_browser_task: ['instructions'],
 };
 
+/**
+ * The argument whose *value* is the subject of the call, per tool.
+ *
+ * Distinct from KEYS above, which names the argument that identifies a call in one line. A path
+ * is a label: it says which file, and the card head says it best. `bash.command` is not a label,
+ * it is the thing that ran, and `write.content` is the text that landed on disk -- which appeared
+ * nowhere on screen at all, since the output of a write is a confirmation, not the content.
+ *
+ * A content argument is rendered as its own block, unfolded, in the monospace face, with the same
+ * height cap and the same actions as an output. What is left goes in the ARGUMENTS fold, so
+ * nothing is shown twice and the fold disappears when it holds nothing.
+ *
+ * Absent on purpose: `apply_patch.edits` (the output is already the diff of what changed) and
+ * `spawn`/`send` (SubAgentCard renders task and result itself).
+ */
+const CONTENT_KEYS: Record<string, string> = {
+  bash: 'command',
+  write: 'content',
+  manage_skills: 'instructions',
+  tts: 'text',
+  cron: 'prompt',
+  delegate_browser_task: 'instructions',
+  memory: 'content',
+  fetch: 'body',
+};
+
+export interface ToolContent {
+  /** The argument name, drawn as the block's label. */
+  key: string;
+  /** Its value, verbatim: this is the one thing that must not be reformatted. */
+  text: string;
+}
+
+/**
+ * The content argument of a call, or null when the tool has none (or sent it empty -- `fetch`
+ * only carries a body on POST/PUT, and an empty block is worse than no block).
+ */
+export function toolContent(name: string, args: Record<string, unknown>): ToolContent | null {
+  const key = CONTENT_KEYS[name];
+  if (!key) return null;
+  const value = args[key];
+  if (typeof value !== 'string' || !value.trim()) return null;
+  return { key, text: value };
+}
+
+/**
+ * The rest of the arguments: what the ARGUMENTS fold shows. Returns null when the content
+ * argument was the only one, so the caller drops the fold rather than offering an empty `{}`.
+ */
+export function labelArgs(name: string, args: Record<string, unknown>): Record<string, unknown> | null {
+  const key = CONTENT_KEYS[name];
+  if (!key || !(key in args)) return Object.keys(args).length > 0 ? args : null;
+  const rest: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args)) if (k !== key) rest[k] = v;
+  return Object.keys(rest).length > 0 ? rest : null;
+}
+
 /** Tools whose `action`/`mode` says as much as their target, shown ahead of it. */
 const VERB_KEYS: readonly string[] = ['action', 'mode', 'method'];
 

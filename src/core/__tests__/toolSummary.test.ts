@@ -3,7 +3,7 @@
  * the model happened to serialize, so the same tool read differently from one call to the next.
  */
 
-import { shortenPath, summarizeTool } from '../toolSummary';
+import { labelArgs, shortenPath, summarizeTool, toolContent } from '../toolSummary';
 
 it('names the argument that identifies the call, not the first one serialized', () => {
   // `path` last on purpose: object order is the model's, and the old preview followed it.
@@ -56,4 +56,39 @@ it('falls back to the generic preview for a tool it has never heard of', () => {
   expect(summarizeTool('mcp__thing__do', { whatever: 'x' }, 'x +2').detail).toBe('x +2');
   // Known tool, argument missing: better the generic preview than an empty line.
   expect(summarizeTool('read', {}, 'fallback').detail).toBe('fallback');
+});
+
+describe('content arguments', () => {
+  it('names the argument whose value is the subject of the call', () => {
+    expect(toolContent('bash', { command: 'ls -l' })).toEqual({ key: 'command', text: 'ls -l' });
+    expect(toolContent('write', { path: '/a.ts', content: 'hello' })?.key).toBe('content');
+    expect(toolContent('cron', { action: 'create', prompt: 'do it' })?.text).toBe('do it');
+  });
+
+  it('has none for a label-only tool, so nothing is unfolded that a card head already says', () => {
+    expect(toolContent('read', { path: '/a.ts' })).toBeNull();
+    expect(toolContent('search', { pattern: 'x' })).toBeNull();
+    // The output is already the diff of what changed.
+    expect(toolContent('apply_patch', { path: '/a.ts', edits: [] })).toBeNull();
+    // An MCP tool: unknown, and a block titled after a guessed key would be a lie.
+    expect(toolContent('mcp__thing__do', { content: 'x' })).toBeNull();
+  });
+
+  it('drops an empty or absent content argument rather than drawing an empty block', () => {
+    // fetch only carries a body on POST/PUT.
+    expect(toolContent('fetch', { url: 'https://x', method: 'GET' })).toBeNull();
+    expect(toolContent('fetch', { url: 'https://x', method: 'POST', body: '{}' })?.text).toBe('{}');
+    expect(toolContent('write', { path: '/a', content: '   ' })).toBeNull();
+  });
+
+  it('leaves the label arguments to the fold, and never the content one twice', () => {
+    expect(labelArgs('write', { path: '/a.ts', content: 'hello' })).toEqual({ path: '/a.ts' });
+    expect(labelArgs('read', { path: '/a.ts' })).toEqual({ path: '/a.ts' });
+  });
+
+  it('reports no fold at all when the content argument was the only one', () => {
+    // bash: the command is the whole call. An ARGUMENTS fold there offers `{}`.
+    expect(labelArgs('bash', { command: 'ls' })).toBeNull();
+    expect(labelArgs('list_agents', {})).toBeNull();
+  });
 });

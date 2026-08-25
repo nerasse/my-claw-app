@@ -4,7 +4,7 @@ import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatDuration, summarizeArgs } from '../core/utils';
-import { summarizeTool } from '../core/toolSummary';
+import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -51,7 +51,14 @@ export const ToolCard = React.memo(function ToolCardView({
   const preview = summary.detail;
   // Only once unfolded: a thread full of collapsed cards must not stringify every argument list
   // on every streaming delta.
-  const args = open && argsOpen ? JSON.stringify(item.args, null, 2) : '';
+  // The argument whose value is the subject of the call (bash.command, write.content...): its own
+  // block, unfolded, because folding it away is what made a written file invisible. See
+  // core/toolSummary. Only computed on an open card.
+  const content = useMemo(() => (open ? toolContent(item.name, item.args) : null), [open, item.name, item.args]);
+  // Everything else, and nothing twice: the fold holds the arguments minus the content one, and
+  // is dropped entirely when that leaves nothing to show.
+  const rest = useMemo(() => (open ? labelArgs(item.name, item.args) : null), [open, item.name, item.args]);
+  const args = open && argsOpen && rest ? JSON.stringify(rest, null, 2) : '';
   const running = item.running === true;
   // A tool output carrying a unified diff (apply_patch) renders as colour-coded lines instead of
   // a plain monospace block. splitDiff only runs while the card is expanded (a collapsed card has
@@ -162,6 +169,18 @@ export const ToolCard = React.memo(function ToolCardView({
           {/* Neither block is selectable in place: a selection inside the chat list focuses its
               text view and Android scrolls the inverted thread to it. Both carry the buttons
               instead -- on the platforms that need them. See docs/text-selection.md. */}
+          {content ? (
+            <>
+              <View style={styles.outputHead}>
+                <Text style={styles.label}>{content.key}</Text>
+                <BlockActions title={`${item.name} ${content.key}`} value={content.text} />
+              </View>
+              <ScrollableBlock title={`${item.name} ${content.key}`} style={styles.code}>
+                <Text style={styles.codeText}>{content.text}</Text>
+              </ScrollableBlock>
+            </>
+          ) : null}
+          {rest ? (
           <Pressable
             onPress={() => setArgsOpen(value => !value)}
             accessibilityRole="button"
@@ -180,7 +199,8 @@ export const ToolCard = React.memo(function ToolCardView({
               )}
             </View>
           </Pressable>
-          {argsOpen ? (
+          ) : null}
+          {argsOpen && rest ? (
             <>
               <View style={styles.argsActions}>
                 <BlockActions title={`${item.name} arguments`} value={args} />

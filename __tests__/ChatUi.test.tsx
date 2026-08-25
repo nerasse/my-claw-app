@@ -421,12 +421,12 @@ test('a server-published command appears on the next input without a release', a
   await unmount(tree);
 });
 
-test('a tool card starts collapsed and reveals arguments and output on tap', async () => {
+test('a tool card starts collapsed and reveals the command it ran on tap', async () => {
   const tree = await renderWithHistory();
 
-  // Collapsed: name plus a one-line argument preview, no output block.
+  // Collapsed: name plus a one-line argument preview, no body.
   expect(textsOf(tree)).toContain('echo hello');
-  expect(textsOf(tree)).not.toContain('arguments');
+  expect(textsOf(tree)).not.toContain('command');
 
   const card = tree.root.find(
     node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Tool bash'),
@@ -436,20 +436,13 @@ test('a tool card starts collapsed and reveals arguments and output on tap', asy
   await ReactTestRenderer.act(async () => {
     card.props.onPress();
   });
-  await waitFor(() => textsOf(tree).includes('arguments'));
+  await waitFor(() => textsOf(tree).includes('command'));
 
-  // The output is there straight away; the call that produced it is a fold of its own, so the
-  // serialized arguments are not (an apply_patch would otherwise repeat its whole patch here).
+  // The command IS the call: it gets a block of its own, unfolded, and there is no ARGUMENTS fold
+  // left to open -- it would hold `{}`. The output is there straight away too.
   expect(textsOf(tree).join('|')).toContain('hello');
   expect(textsOf(tree).join('|')).not.toContain('"command"');
-
-  const argsRow = tree.root.find(
-    node => node.props.accessibilityLabel === 'Arguments of bash' && typeof node.props.onPress === 'function',
-  );
-  await ReactTestRenderer.act(async () => {
-    argsRow.props.onPress();
-  });
-  await waitFor(() => textsOf(tree).join('|').includes('"command"'));
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Arguments of bash')).toHaveLength(0);
   expect(textsOf(tree)).toContain('copy');
 
   await unmount(tree);

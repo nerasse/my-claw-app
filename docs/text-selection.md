@@ -35,8 +35,8 @@ taking text out of it     -> the selection viewer, one node, raw source
   pointer already does. `CodeBlockBar` follows the same flag: on the web its strip keeps the
   language and loses the button, so no tool render in a browser carries a control that repeats
   Ctrl+C. The settings pages keep theirs -- they are ordinary scroll views, not the chat list.
-- `ScrollableBlock` caps every long block in a conversation at `BLOCK_MAX_HEIGHT` (tool arguments
-  and output, a diff, a sub-agent's task and result, a fenced block in an answer) and a `show all`
+- `ScrollableBlock` caps every long block in a conversation at `BLOCK_MAX_HEIGHT` (a tool's content
+  argument and its output, a diff, a sub-agent's task and result, a fenced block in an answer) and a `show all`
   bar unfolds it **in place**. One behaviour on every platform, and no block scrolls on its own.
   A nested scroll area was tried on the web, where the platform does allow it, and it was wrong
   twice: it disagreed with the phone, where a ScrollView inside the inverted list disputes every

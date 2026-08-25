@@ -41,10 +41,12 @@ function renderTool(item: ToolItem, props: Record<string, unknown> = {}) {
   return tree;
 }
 
+// The body is identified by its OUTPUT label, which every card has. The ARGUMENTS fold is not a
+// witness: a call whose only argument is its content (bash) has no fold at all.
 function bodyVisible(tree: ReactTestRenderer.ReactTestRenderer): boolean {
   return tree.root
     .findAllByType(Text)
-    .some(t => t.props.children === 'arguments' || t.props.children === 'output');
+    .some(t => [t.props.children].flat().join('').startsWith('output'));
 }
 
 function updateItem(tree: ReactTestRenderer.ReactTestRenderer, item: ToolItem, props: Record<string, unknown> = {}) {
@@ -157,5 +159,37 @@ describe('ToolCard arguments fold', () => {
     expect(bodyVisible(tree)).toBe(false);
     updateItem(tree, makeItem({ args: PATCH, output: 'ok', running: false }), { expandTools: true });
     expect(texts(tree).some(t => t.includes('"edits"'))).toBe(false);
+  });
+});
+
+describe('content argument block', () => {
+  function labels(tree: ReactTestRenderer.ReactTestRenderer): string[] {
+    return tree.root.findAllByType(Text).map(t => [t.props.children].flat().join(''));
+  }
+
+  it('shows the command of a bash call unfolded, with no arguments fold beside it', () => {
+    const tree = renderTool(makeItem({ running: true, output: 'done' }), { expandTools: true });
+    const shown = labels(tree);
+    expect(shown).toContain('command');
+    expect(shown).toContain('sleep 1');
+    // The command was the whole call: an ARGUMENTS fold there would offer `{}`.
+    expect(shown).not.toContain('arguments');
+  });
+
+  it('shows what a write wrote, which used to appear nowhere at all', () => {
+    const item = makeItem({ name: 'write', args: { path: '/tmp/a.ts', content: 'export const a = 1;' }, output: 'ok', running: true });
+    const tree = renderTool(item, { expandTools: true });
+    const shown = labels(tree);
+    expect(shown).toContain('content');
+    expect(shown).toContain('export const a = 1;');
+    // The path is a label: it stays in the fold.
+    expect(shown).toContain('arguments');
+  });
+
+  it('keeps a label-only tool exactly as it was', () => {
+    const tree = renderTool(makeItem({ name: 'read', args: { path: '/tmp/a.ts' }, output: 'body', running: true }), { expandTools: true });
+    const shown = labels(tree);
+    expect(shown).toContain('arguments');
+    expect(shown).not.toContain('content');
   });
 });
