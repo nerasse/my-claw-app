@@ -108,6 +108,15 @@ export interface HistoryPage {
 const NO_PAGE: HistoryPage = { nextBefore: 0, hasMore: false, loading: false };
 Object.freeze(NO_PAGE);
 
+/**
+ * An item that exists only in this window: the turn in flight. The server cannot have written it
+ * yet, so no sync result can carry it, and it always belongs after everything a sync delivers.
+ */
+function isLocalLive(item: ChatItem): boolean {
+  if (item.kind === 'text') return item.streaming === true;
+  return item.kind === 'tool' && item.running === true;
+}
+
 /** Replayed server entries as bubbles. Shared by the newest page and by every older one. */
 function itemsOf(entries: HistoryEntry[]): ChatItem[] {
   return entries.map((entry, index) => {
@@ -485,15 +494,9 @@ class ChatStoreImpl {
 
     // Only genuinely local items survive a reset: bubbles still being streamed into.
     // These exist only in memory, the server cannot have them.
-    const streaming = existing.filter(item => {
-      if (known.has(item.id)) return false;
-      if (item.kind === 'text' && item.streaming) return true;
-      // A running tool card that isn't in the server's entries yet (started after last persist).
-      if (item.kind === 'tool' && item.running) return true;
-      return false;
-    });
+    const live = existing.filter(item => !known.has(item.id) && isLocalLive(item));
 
-    this.threads.set(threadId, [...base, ...streaming]);
+    this.threads.set(threadId, [...base, ...live]);
     this.spawnCards.delete(threadId);
   }
 
@@ -509,7 +512,14 @@ class ChatStoreImpl {
 
     // Remove any existing items that the delta replaces (tool cards settling)
     const kept = existing.filter(item => !incomingIds.has(item.id));
-    this.threads.set(threadId, [...kept, ...incoming]);
+    // A delta is newer than what is persisted, but NOT newer than the turn in flight: the live
+    // items belong to a run the server has not written yet. Concatenating blind hoists a running
+    // tool card above the user bubble it answers, which is what a reload used to show -- two
+    // session.sync requests race out with the same null cursor, so the second re-delivers a page
+    // that already sits behind the live card.
+    const persisted = kept.filter(item => !isLocalLive(item));
+    const live = kept.filter(isLocalLive);
+    this.threads.set(threadId, [...persisted, ...incoming, ...live]);
     this.spawnCards.delete(threadId);
   }
 

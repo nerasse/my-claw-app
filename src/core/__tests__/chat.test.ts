@@ -876,6 +876,63 @@ describe('seedHistory during a live run', () => {
   });
 });
 
+describe('handleSyncResult: a reload mid-run', () => {
+  const T = 'thread-reload';
+
+  afterEach(() => chatStore.clearThread(T));
+
+  /**
+   * Captured against a live server: two session.sync requests race out of a reload with the same
+   * null cursor, so the second re-delivers a page the live tool card already sits behind. Appending
+   * it blind hoisted the card above the user bubble it answers.
+   */
+  test('a page re-delivered under a live tool card leaves it last', () => {
+    const page = [
+      { id: 'e-user', role: 'user' as const, text: 'run something slow', ts: '2026-01-01T00:00:00.000Z', attachments: [] },
+      { id: 'e-agent', role: 'assistant' as const, text: '', ts: '2026-01-01T00:00:03.000Z', attachments: [] },
+    ];
+    chatStore.handleSyncResult(T, page, 'e-agent', 'e-agent', true, undefined);
+    chatStore.startToolCall(T, 'call-live', 'bash', { command: 'sleep 30' });
+    // The second request, still carrying the null cursor: the same page all over again.
+    chatStore.handleSyncResult(T, page, 'e-agent', 'e-agent', true, undefined);
+
+    expect(chatStore.getItems(T).map(item => item.id)).toEqual(['e-user', 'e-agent', 'call-live']);
+  });
+
+  test('a streaming bubble stays under the entries a duplicate page re-delivers', () => {
+    const page = [
+      { id: 'e-user', role: 'user' as const, text: 'hello', ts: '2026-01-01T00:00:00.000Z', attachments: [] },
+    ];
+    chatStore.handleSyncResult(T, page, 'e-user', 'e-user', true, undefined);
+    chatStore.startStream(T, 'stream-1');
+    chatStore.appendDelta(T, 'stream-1', 'thinking');
+    chatStore.handleSyncResult(T, page, 'e-user', 'e-user', true, undefined);
+
+    expect(chatStore.getItems(T).map(item => item.id)).toEqual(['e-user', 'stream-1']);
+  });
+
+  test('a settled card is not treated as live, so a later delta still lands after it', () => {
+    chatStore.handleSyncResult(
+      T,
+      [{ id: 'call-1', role: 'tool', ts: '2026-01-01T00:00:01.000Z', name: 'bash', args: {}, output: 'done', ok: true, attachments: [] } as never],
+      'call-1',
+      'call-1',
+      true,
+      undefined,
+    );
+    chatStore.handleSyncResult(
+      T,
+      [{ id: 'e-next', role: 'assistant', text: 'and here is why', ts: '2026-01-01T00:00:02.000Z', attachments: [] }],
+      'e-next',
+      'e-next',
+      false,
+      undefined,
+    );
+
+    expect(chatStore.getItems(T).map(item => item.id)).toEqual(['call-1', 'e-next']);
+  });
+});
+
 describe('handleSyncResult: tool cards in flight', () => {
   const T = 'thread-tool-sync';
   
