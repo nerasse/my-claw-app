@@ -330,6 +330,7 @@ function DetailsFold({ payload }: { payload: StatusPayload }): React.JSX.Element
     <Fold label="details" hint="ids, context window, approvals">
       <Card>
         <Row label="context limit" value={`${short(payload.model.contextLimit)} · ${payload.model.contextNotes.join(', ')}`} />
+        {payload.model.timeout ? <Row label="request wall" value={payload.model.timeout} /> : null}
         {payload.model.configDefault ? <Row label="config default" value={payload.model.configDefault} /> : null}
         {payload.model.effort ? <Row label="effort" value={payload.model.effort} /> : null}
         {payload.model.selfHosted ? <Row label="billing" value="self-hosted, no marginal cost" /> : null}

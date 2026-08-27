@@ -542,6 +542,12 @@ export interface ModelOption {
   effortLevels?: string[];
   /** The model's own full context window: the ceiling list is built under it, never above. */
   context?: number;
+  /**
+   * Milliseconds this model declares it may go without a byte back, absent when it declares
+   * nothing and the server's transport default applies. `0` is a declaration too: no timer, the
+   * Stop button is the only wall. The edit form shows it so the field is not blank over a setting.
+   */
+  timeoutMs?: number;
   /** For a tag entry: the effort the tag pins, so a config flow can name what applies. */
   effort?: string;
   /** Whether the model accepts image input; the fallback picker only offers vision-capable ones. */
@@ -865,6 +871,12 @@ export interface StatusPayload {
     contextLimit: number;
     /** Why the window is what it is ("declared", "capped from …", …). */
     contextNotes: string[];
+    /**
+     * How long one request may go silent before the server cuts it, with where the number comes
+     * from: `120s (default)`, `900s (model)`, `none (Stop only)`. Spelled by the server, since the
+     * transport defaults are its constants. Absent on a server that predates the field.
+     */
+    timeout?: string;
   };
   context: {
     /** The provider's count on the last call; undefined until a call is recorded. */
@@ -1934,6 +1946,8 @@ export interface ModelDeclaration {
   effortLevels?: string[];
   thinkingAdaptive?: boolean;
   thinkingEnabled?: boolean;
+  /** How long a request may go silent, in milliseconds. `0` disarms the server's timer. */
+  timeoutMs?: number;
 }
 
 export function encodeModelsUpsert(entry: ModelDeclaration): string {

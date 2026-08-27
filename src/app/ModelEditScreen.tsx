@@ -19,8 +19,28 @@ function digits(value: string): number | undefined {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+/**
+ * Same parse, with zero kept. On a timeout `0` is the setting that removes the server's wall and
+ * leaves Stop as the only one, so `digits` would silently drop the one value worth typing.
+ */
+function msDigits(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
 function numberText(value: number | undefined): string {
   return value === undefined ? '' : String(value);
+}
+
+/** What the typed budget means, said back in the terms the server reports it in. */
+function timeoutNote(value: string): string {
+  const ms = msDigits(value);
+  if (value.trim() === '') return 'blank follows the server default for this backend';
+  if (ms === undefined) return 'whole milliseconds, or blank to follow the server default';
+  if (ms === 0) return 'no wall at all: only Stop ends a silent request';
+  return `cut after ${ms / 1000}s without a single byte back`;
 }
 
 /**
@@ -68,6 +88,7 @@ export function ModelEditScreen({
   const [vision, setVision] = useState(option?.vision ?? false);
   const [context, setContext] = useState(numberText(option?.context));
   const [output, setOutput] = useState('');
+  const [timeoutMs, setTimeoutMs] = useState(numberText(option?.timeoutMs));
   const [supportsEffort, setSupportsEffort] = useState((option?.effortLevels?.length ?? 0) > 0);
   const [rungs, setRungs] = useState<string[]>(option?.effortLevels ?? []);
   const [thinkingAdaptive, setThinkingAdaptive] = useState(false);
@@ -92,6 +113,8 @@ export function ModelEditScreen({
     const out = digits(output);
     if (ctx !== undefined) entry.context = ctx;
     if (out !== undefined) entry.output = out;
+    const wall = msDigits(timeoutMs);
+    if (wall !== undefined) entry.timeoutMs = wall;
     if (supportsEffort) {
       entry.supportsEffort = true;
       // Ordered by the ladder, never by tap order: the picker renders the list as it arrives.
@@ -223,6 +246,20 @@ export function ModelEditScreen({
             accessibilityLabel="Output limit"
           />
           <Text style={styles.note}>blank keeps what the provider or models.dev says</Text>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>request wall</Text>
+          <TextInput
+            style={styles.input}
+            value={timeoutMs}
+            onChangeText={setTimeoutMs}
+            placeholder="silence allowed in ms, e.g. 900000"
+            placeholderTextColor={styles.placeholder.color}
+            keyboardType="number-pad"
+            accessibilityLabel="Request timeout in milliseconds"
+          />
+          <Text style={styles.note}>{timeoutNote(timeoutMs)}</Text>
         </View>
 
         <View style={styles.category}>
