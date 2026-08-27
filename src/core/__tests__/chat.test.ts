@@ -404,6 +404,30 @@ describe('chatStore.seedHistory', () => {
     expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['send-1', 's1']);
   });
 
+  test('a command page replaces its live input and answer by their shared ids', () => {
+    chatStore.addUserMessage(THREAD, 'send-command', '/compact');
+    chatStore.addCommandResult(THREAD, 'cmd-send-command', 'fait', 'send-command');
+    chatStore.handleSyncResult(
+      THREAD,
+      [
+        { id: 'send-command', role: 'user', text: '/compact', ts: '2026-01-01T00:00:01.000Z' },
+        { id: 'cmd-send-command', role: 'assistant', text: 'fait', command: true, ts: '2026-01-01T00:00:02.000Z' },
+      ],
+      'cmd-send-command',
+      'cmd-send-command',
+      false,
+      undefined,
+    );
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['send-command', 'cmd-send-command']);
+  });
+
+  test('a duplicated command result frame is idempotent', () => {
+    chatStore.addCommandResult(THREAD, 'cmd-1', 'first');
+    chatStore.addCommandResult(THREAD, 'cmd-1', 'second');
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['cmd-1']);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'second', command: true });
+  });
+
   test('a send during a run is dropped on reset (use delta sync to preserve)', () => {
     // With sync, sends during a run should use delta mode (handleSyncResult with no reset).
     // A reset (seedHistory) drops non-streaming items.

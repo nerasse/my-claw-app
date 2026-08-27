@@ -737,6 +737,13 @@ class ChatStoreImpl {
       this.patch(threadId, pending, { text, streaming: false, ...(details ? { details } : {}) });
       return;
     }
+    // A duplicated result frame is harmless for tools because their path is upserted, but command
+    // results are text items. Treat the derived id as an idempotency key as well.
+    const existing = this.getItems(threadId).find(item => item.id === id);
+    if (existing?.kind === 'text' && existing.command) {
+      this.patch(threadId, id, { text, streaming: false, ...(details ? { details } : {}) });
+      return;
+    }
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
     this.append(threadId, {
       kind: 'text',
