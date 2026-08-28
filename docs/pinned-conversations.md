@@ -14,7 +14,7 @@ drop a dragged row ─► session.pin.order { threadIds }         ──┤
 
 The device stores nothing. `src/core/pinned.ts` derives the pinned block from the listing
 (`pinnedOf`, `isPinned`) and sends the two frames; the drawer and home screen draw what came back.
-The desktop drawer is 360pt wide, so pinned titles and their action buttons have room without
+The desktop drawer is 288pt wide, so pinned titles and their action buttons have room without
 changing the sortable contract.
 
 ## Why it moved off the device

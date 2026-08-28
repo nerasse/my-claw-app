@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import { DeviceEventEmitter } from 'react-native';
 import App from '../src/App';
 import { prefs } from '../src/core/prefs';
 
@@ -45,6 +46,11 @@ export async function waitFor(check: () => boolean, timeoutMs = 10000): Promise<
 /**
  * Settings are read before the first paint, so the theme and the restored thread are already
  * in place when the tree mounts instead of arriving one promise later.
+ *
+ * Boot now lands on home (the session list). A suite that wants to start inside a conversation
+ * says so with a stored `lastThreadId` (the way the app used to boot): the stored thread is
+ * opened through the list, exactly as the owner would, so the frames it costs are the ones the
+ * old boot sent too.
  */
 export async function renderApp(): Promise<Tree> {
   await prefs.hydrate();
@@ -52,8 +58,39 @@ export async function renderApp(): Promise<Tree> {
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(<App />);
   });
+  const last = prefs.get().lastThreadId;
+  if (last) {
+    await waitFor(() => labelsOf(tree).includes('New conversation'));
+    await ReactTestRenderer.act(async () => {
+      DeviceEventEmitter.emit('claw:ws:message', {
+        text: JSON.stringify({
+          type: 'session.list.result',
+          sessions: [
+            {
+              threadId: last,
+              title: last,
+              messageCount: 0,
+              createdAt: '2026-01-01T10:00:00.000Z',
+              lastActiveAt: '2026-01-01T10:00:00.000Z',
+            },
+          ],
+        }),
+      });
+    });
+    await pressLabel(tree, `Conversation ${last}`);
+  }
   await waitFor(() => labelsOf(tree).includes('Message to send'));
   return tree;
+}
+
+async function pressLabel(tree: Tree, label: string): Promise<void> {
+  await waitFor(() => labelsOf(tree).includes(label));
+  const targets = tree.root.findAll(
+    node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
+    { deep: true },
+  );
+  if (targets.length === 0) throw new Error(`no pressable labelled ${label}`);
+  await ReactTestRenderer.act(async () => targets[0].props.onPress());
 }
 
 export async function press(tree: Tree, label: string): Promise<void> {

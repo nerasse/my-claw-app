@@ -198,13 +198,10 @@ export function Drawer({
           <Pressable
             onPress={onNewThread}
             hitSlop={8}
-            style={styles.newConversationButton}
+            style={styles.newButton}
             accessibilityRole="button"
             accessibilityLabel="New conversation">
-            <View style={styles.newConversationButtonInner}>
-              <PlusIcon size={20} color={palette.accent} />
-              <Text style={styles.newConversationText}>New conversation</Text>
-            </View>
+            <PlusIcon size={20} color={palette.accent} />
           </Pressable>
         </View>
 
@@ -408,11 +405,12 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surface,
   },
   head: {
-    flexDirection: 'column' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     paddingBottom: space.sm,
-    gap: space.sm,
   },
   brand: { fontSize: font.screen, fontWeight: '700' as const, color: palette.text, letterSpacing: 0.2 },
   homeButton: {
@@ -420,23 +418,13 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: 'transparent' as const,
     alignSelf: 'flex-start' as const,
   },
-  newConversationButton: {
-    backgroundColor: palette.accentSoft,
+  newButton: {
+    width: 40,
+    height: 40,
     borderRadius: radius.sm,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
+    backgroundColor: palette.accentSoft,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-  },
-  newConversationButtonInner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.xs,
-  },
-  newConversationText: {
-    fontSize: font.body,
-    fontWeight: '600' as const,
-    color: palette.accent,
   },
   /** Indented onto the rows it heads: the list already pads by `sm`, the row's own main pads
    *  by `sm` again, so the heading starts where the titles under it start. */

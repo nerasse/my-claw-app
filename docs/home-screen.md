@@ -8,27 +8,33 @@ conversation list used by the side drawer:
 - conversation search;
 - Archived, Agents, Jobs, and Settings in the footer.
 
-The **New conversation** action is a full-width button at the top of the list. It opens the
-workspace picker. Selecting a workspace creates a new thread and returns to the empty composer
-hero, where the first message can be written.
+On phone and tablet the **New conversation** action sits at the top of the list (the `+` beside
+the MyClaw title). It opens the workspace picker. Selecting a workspace creates a new thread and
+returns to the empty composer hero, where the first message can be written.
 
 ## Navigation
 
 On phone and tablet layouts:
 
-- boot with no stored conversation → home;
+- boot with no deep link → home;
 - selecting a conversation → chat;
 - pressing Back from chat → home;
 - pressing Back from home → the platform handles the exit;
 - opening the side drawer keeps the same list and actions.
 
 On desktop layouts, the conversation list is a permanent left column. The column uses the same
-home header and actions, so there is no duplicate home page in the main pane. The column is 360pt
-wide, which gives session titles, workspace labels, and row actions enough room without changing
-the chat pane's behavior.
+header (`MyClaw` title and `+` action), so there is no duplicate home page in the main pane: with
+no conversation selected the main pane stays empty, and the owner picks from the column.
 
 The `MyClaw` title is the home action in every drawer shape. It is safe to press while already on
 home and does not create a new conversation.
+
+## Boot
+
+The app boots on the home screen rather than reopening the last conversation. A deep link (`/t/<id>`
+on web, `myclaw://thread/<id>` from a notification tap on Android) is the only thing that addresses
+a conversation at boot. `lastThreadId` is kept as a trace of where the owner was but is never read
+back at boot.
 
 ## Rendering contract
 

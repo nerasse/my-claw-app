@@ -4,7 +4,10 @@
 
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
+import { deviceBridge } from '../../core/nativeBridge';
 import { labelsOf, renderAppHome, textsOf, unmount, waitFor, type Tree } from '../../../test-utils/render';
+
+const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 
 function emit(frame: Record<string, unknown>): Promise<void> {
   return ReactTestRenderer.act(async () => {
@@ -54,6 +57,22 @@ test('boots on the home screen with a new conversation button and a session list
 
     await emit({ type: 'session.list.result', sessions });
     await waitFor(() => labelsOf(tree).includes('Conversation Alpha'));
+  } finally {
+    await unmount(tree);
+  }
+});
+
+test('boots on the home screen even when a last conversation was stored', async () => {
+  // A stored thread is a trace, not a destination: the app must not reopen it at boot.
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 'thread-ghost' });
+  const tree = await renderAppHome();
+  try {
+    expect(homeNodes(tree)).toHaveLength(1);
+    expect(labelsOf(tree)).toContain('New conversation');
+    expect(textsOf(tree)).not.toContain('thread-ghost');
+    // Nothing asked the server for the stored thread's history.
+    const frames = bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
+    expect(frames.some(frame => frame.includes('session.sync'))).toBe(false);
   } finally {
     await unmount(tree);
   }

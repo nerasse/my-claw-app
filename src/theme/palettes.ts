@@ -150,4 +150,4 @@ export function lineBoxFor(fontSize: number, text: string): { lineHeight?: numbe
   return PICTOGRAPHIC.test(text) ? {} : { lineHeight: lineHeightFor(fontSize) };
 }
 
-export const DRAWER_WIDTH = 360;
+export const DRAWER_WIDTH = 288;

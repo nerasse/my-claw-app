@@ -69,9 +69,9 @@ test('the ⋮ menu opens the command menu with the conversation actions', async 
 
   const texts = textsOf(tree);
   expect(texts).toContain('Model…');
-  // The drawer is mounted under the sheet and now owns the full-width home action. Its label is
-  // expected here; it is not a command-menu option.
-  expect(texts).toContain('New conversation');
+  // New conversations live on the + in the drawer (and the /new command); Files has its own
+  // header button. Duplicating them here was noise.
+  expect(labelsOf(tree)).toContain('New conversation');
   expect(texts).not.toContain('Files');
   // Settings live in the drawer, Diagnostics inside them: duplicating them here was noise.
   expect(texts).not.toContain('Diagnostics');

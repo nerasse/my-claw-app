@@ -533,12 +533,14 @@ export function AppShell(): React.JSX.Element {
   const selectThread = useCallback((threadId: string | null) => {
     activeThreadRef.current = threadId;
     setActiveThread(threadId);
-    // Keep the last conversation: reopening the app must land on it, not inside a sub-agent.
-    // Same rule for the address bar, and for the same reason: a sub-agent is a view of its
-    // parent, so a reload lands on the parent rather than on a chat with no way back.
+    // A sub-agent is a view of its parent, so it never becomes the stored last thread. The
+    // value is kept as a trace of where the owner was, but boot no longer restores it: the
+    // app opens on the home screen and the owner picks a conversation, unless a deep link
+    // (web) or a notification tap addressed one. Same rule for the address bar: a reload
+    // lands on the addressed route rather than on a chat with no way back.
     if (threadId === null || !isSubAgentThread(threadId)) {
       prefs.set('lastThreadId', threadId);
-      // The first sync is a replace: restoring the last conversation at boot must not leave a
+      // The first sync is a replace: restoring the addressed thread at boot must not leave a
       // Back step whose only effect is to unload it.
       showThread(threadId, firstRouteRef.current);
       firstRouteRef.current = false;
@@ -924,9 +926,10 @@ export function AppShell(): React.JSX.Element {
     // what the user sees on the first frame.
     prefs.hydrate().then(stored => {
       setUrl(stored.serverUrl);
-      // A link wins over the last conversation: the address is what the owner asked for, the
-      // preference is only what they were doing last time. Always null on Android.
-      const target = initialRoute().threadId ?? stored.lastThreadId;
+      // A link wins over everything: the address is what the owner asked for. With none, the
+      // app boots on the home screen (the session list) and the owner picks a conversation,
+      // instead of silently reopening the last one. Always null on Android.
+      const target = initialRoute().threadId;
       if (target) openThread(target);
       return connection.getState().then(state => {
         setStatus({ state });
@@ -2766,7 +2769,7 @@ export function AppShell(): React.JSX.Element {
         <View style={[styles.container, layout.sidePane && styles.containerSplit]}>
         {/* Wide enough for both: a page opens beside the conversation instead of over it, which
             is the difference between reading the two and remembering one. */}
-        {layout.sidePane ? <View style={styles.chatPane}>{chatScreen}</View> : null}
+        {layout.sidePane ? <View style={styles.chatPane}>{activeThread === null ? <View style={styles.pageFull} testID="home-placeholder" /> : chatScreen}</View> : null}
         {layout.sidePane && !pageOpen ? null : (
         <View
           style={
@@ -3278,7 +3281,9 @@ export function AppShell(): React.JSX.Element {
           ) : (
             layout.sidePane ? null
               : activeThread === null
-                ? (
+                ? (layout.pinnedDrawer
+                    ? <View style={styles.pageFull} testID="home-placeholder" />
+                    : (
                     <Drawer
                       home
                       open
@@ -3299,7 +3304,7 @@ export function AppShell(): React.JSX.Element {
                       onOpenArchives={() => setArchivesOpen(true)}
                       onHome={handleHome}
                     />
-                  )
+                    ))
                 : chatScreen
           )}
         </View>
