@@ -107,6 +107,7 @@ async function openThreadMenu(tree: Tree): Promise<void> {
 beforeEach(() => {
   statusStore.reset();
   chatStore.clearAll();
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 't-default' });
 });
 
 /** The four actions a conversation carries, in the order both menus must show them. */

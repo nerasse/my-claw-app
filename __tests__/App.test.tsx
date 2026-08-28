@@ -2,7 +2,15 @@
  * @format
  */
 
+import { deviceBridge } from '../src/core/nativeBridge';
 import { labelsOf, press, renderApp, textsOf, unmount } from '../test-utils/render';
+
+const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
+const THREAD = 't-default';
+
+beforeEach(() => {
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
+});
 
 test('boots on the chat screen with a composer and a drawer handle', async () => {
   const tree = await renderApp();

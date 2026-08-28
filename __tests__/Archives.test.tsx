@@ -103,7 +103,7 @@ test('a conversation can be filed away, found again and put back', async () => {
   await settleAndUnmount(tree);
 });
 
-test('archiving the open conversation lands on another one instead of an empty screen', async () => {
+test('archiving the open conversation lands on home instead of an empty chat', async () => {
   const tree = await renderApp();
   await listSessions([summary(KEPT, 'Infra maison'), summary(FILED, 'Vieux projet')]);
   await pressLabel(tree, 'Open conversations');
@@ -112,17 +112,15 @@ test('archiving the open conversation lands on another one instead of an empty s
 
   await listSessions([summary(KEPT, 'Infra maison', true), summary(FILED, 'Vieux projet')]);
 
-  // The listing reply is what picks the next thread, and it must skip the archived one.
-  // KEPT was opened at boot, so what matters is where the app lands afterwards.
+  // The archived active thread is cleared immediately. A listing refresh must leave the owner on
+  // home, not silently choose another conversation.
   await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'session.sync' && frame.threadId === FILED),
+    tree.root.findAll(
+      node => node.props.testID === 'home-screen' && node.parent?.props.home === true,
+      { deep: true },
+    ).length > 0,
   );
-  const opened = sentFrames().filter(frame => frame.type === 'session.sync');
-  expect(opened[opened.length - 1]).toEqual({
-    type: 'session.sync',
-    threadId: FILED,
-    since: null,
-  });
+  expect(sentFrames().filter(frame => frame.type === 'session.sync' && frame.threadId === FILED)).toEqual([]);
 
   await settleAndUnmount(tree);
 });

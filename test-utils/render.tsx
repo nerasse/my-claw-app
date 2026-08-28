@@ -67,3 +67,17 @@ export async function press(tree: Tree, label: string): Promise<void> {
 export async function unmount(tree: Tree): Promise<void> {
   await ReactTestRenderer.act(async () => tree.unmount());
 }
+
+/**
+ * Like `renderApp` but for the home screen: waits for the "New conversation" button instead of
+ * the composer field, because the home has no composer.
+ */
+export async function renderAppHome(): Promise<Tree> {
+  await prefs.hydrate();
+  let tree!: Tree;
+  await ReactTestRenderer.act(async () => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  await waitFor(() => tree.root.findAll(node => node.props.testID === 'home-screen').length > 0);
+  return tree;
+}

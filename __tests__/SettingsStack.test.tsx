@@ -255,10 +255,14 @@ test('only the conversation screen lets a back press fall through to Android', a
   const tree = await boot();
   await openSettings(tree);
 
-  // Settings handles it, the chat screen below does not: that last false is what Android
-  // turns into "close the app", and it must only ever happen at the root.
+  // Settings handles it, the chat screen below goes to home: that last false is what
+  // Android turns into "close the app", and it must only ever happen at the root.
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open conversations'));
+  // Back from chat goes to home (not to close the app).
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('New conversation'));
+  // Back from home closes the app.
   expect(await hardwareBack()).toBe(false);
 
   await settleAndUnmount(tree);

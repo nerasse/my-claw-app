@@ -87,6 +87,7 @@ beforeEach(() => {
   mockLinkHandlers.length = 0;
   mockAppStateHandlers.length = 0;
   mockInitialUrl = null;
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 't-default' });
   // The registration guard is module state: a previous test may have already registered.
   resetPushRegistration();
 });

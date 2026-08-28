@@ -18,7 +18,7 @@ export type Breakpoint = 'phone' | 'tablet' | 'desktop';
 
 /** Below this the phone layout is the only one that fits. */
 const TABLET_MIN = 720;
-/** A pinned drawer takes 288pt: under this the conversation would be squeezed to nothing. */
+/** A pinned drawer takes 360pt: under this the conversation would be squeezed to nothing. */
 const DESKTOP_MIN = 1080;
 /** A side pane costs another 420pt on top of the drawer and a readable conversation. */
 const WIDE_MIN = 1440;

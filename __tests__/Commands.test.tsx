@@ -57,19 +57,21 @@ beforeEach(() => {
 
 test('the ⋮ menu opens the command menu with the conversation actions', async () => {
   const tree = await renderApp();
+  // Add a message so the chat screen shows (not the hero with "New conversation" button).
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
+  });
   await waitFor(() => labelsOf(tree).includes('Commands'));
 
-  // The thread has no session yet, so conversation actions stay hidden; the app-level ones show.
+  // The thread has messages, so conversation actions show alongside app-level ones.
   await pressLabel(tree, 'Commands');
   await waitFor(() => labelsOf(tree).includes('Model…'));
 
-  // The drawer's + keeps its own label ("New conversation"): assert on the sheet's rendered
-  // text instead, which only options produce.
   const texts = textsOf(tree);
   expect(texts).toContain('Model…');
-  // New conversations live on the + in the drawer (and the /new command); Files has its own
-  // header button. Duplicating them here was noise.
-  expect(texts).not.toContain('New conversation');
+  // The drawer is mounted under the sheet and now owns the full-width home action. Its label is
+  // expected here; it is not a command-menu option.
+  expect(texts).toContain('New conversation');
   expect(texts).not.toContain('Files');
   // Settings live in the drawer, Diagnostics inside them: duplicating them here was noise.
   expect(texts).not.toContain('Diagnostics');

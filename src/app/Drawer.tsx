@@ -30,10 +30,11 @@ const keyOfThread = (item: SessionSummary): string => item.threadId;
  * The conversation list: conversations first, fixed entries (Sub-Agents, Archived, Jobs,
  * Settings) at the bottom.
  *
- * Two shapes, same panel. On a phone it is a slide-over that stays mounted, so it animates both
+ * Three shapes, same panel. On a phone it is a slide-over that stays mounted, so it animates both
  * ways and swallows no touches while closed. Wide enough and it is `pinned` instead: a column of
  * the layout, always there, no backdrop and no swipe, because hiding the list behind a button is
- * a concession to a 400pt screen and nothing else.
+ * a concession to a 400pt screen and nothing else. With no active thread it is `home`: the same
+ * list fills the phone or tablet instead of leaving an empty chat pane.
  */
 export function Drawer({
   open,
@@ -54,6 +55,8 @@ export function Drawer({
   onOpenJobs,
   archivedCount,
   onOpenArchives,
+  home,
+  onHome,
 }: {
   open: boolean;
   /** Standing column instead of a slide-over. `open` and `onClose` are then meaningless. */
@@ -76,6 +79,10 @@ export function Drawer({
   onOpenJobs: () => void;
   archivedCount: number;
   onOpenArchives: () => void;
+  /** Full-screen list on phone/tablet when no thread is open. */
+  home?: boolean;
+  /** Back to home (no-op when already home). */
+  onHome: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -87,7 +94,7 @@ export function Drawer({
   // The panel stays mounted, so opening it is a prop change, not a mount. Its search field is
   // never focused on the way in: whatever keyboard is up belongs to the composer behind it.
   // A pinned panel never "opens", so it never takes the keyboard away from the composer.
-  useDismissKeyboard(pinned ? false : open);
+  useDismissKeyboard(home || (!pinned && open));
 
   // Membership as a Set, not `unread.includes` per row: that scan ran once per visible row on
   // every render of a panel that never unmounts, i.e. on every streaming token.
@@ -180,14 +187,24 @@ export function Drawer({
   const content = (
     <>
         <View style={styles.head}>
-          <Text style={styles.brand}>MyClaw</Text>
+          <Pressable
+            onPress={onHome}
+            hitSlop={8}
+            style={styles.homeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Home">
+            <Text style={styles.brand}>MyClaw</Text>
+          </Pressable>
           <Pressable
             onPress={onNewThread}
             hitSlop={8}
-            style={styles.newButton}
+            style={styles.newConversationButton}
             accessibilityRole="button"
             accessibilityLabel="New conversation">
-            <PlusIcon size={20} color={palette.accent} />
+            <View style={styles.newConversationButtonInner}>
+              <PlusIcon size={20} color={palette.accent} />
+              <Text style={styles.newConversationText}>New conversation</Text>
+            </View>
           </Pressable>
         </View>
 
@@ -338,6 +355,17 @@ export function Drawer({
   if (pinned) {
     return <View style={[styles.panel, styles.panelPinned]}>{content}</View>;
   }
+  // Home: full-screen list on phone/tablet when no thread is open.
+  if (home) {
+    return (
+      <View
+        testID="home-screen"
+        style={[styles.homePanel, { paddingTop: insets.top + space.sm }]}
+      >
+        {content}
+      </View>
+    );
+  }
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'auto' : 'none'}>
@@ -375,22 +403,40 @@ const createStyles = (palette: Palette) => ({
     left: 0,
   },
   panelPinned: { paddingTop: space.sm },
+  homePanel: {
+    flex: 1,
+    backgroundColor: palette.surface,
+  },
   head: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
+    flexDirection: 'column' as const,
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     paddingBottom: space.sm,
+    gap: space.sm,
   },
   brand: { fontSize: font.screen, fontWeight: '700' as const, color: palette.text, letterSpacing: 0.2 },
-  newButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
+  homeButton: {
+    padding: 0,
+    backgroundColor: 'transparent' as const,
+    alignSelf: 'flex-start' as const,
+  },
+  newConversationButton: {
     backgroundColor: palette.accentSoft,
+    borderRadius: radius.sm,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+  },
+  newConversationButtonInner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.xs,
+  },
+  newConversationText: {
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    color: palette.accent,
   },
   /** Indented onto the rows it heads: the list already pads by `sm`, the row's own main pads
    *  by `sm` again, so the heading starts where the titles under it start. */

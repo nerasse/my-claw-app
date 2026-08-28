@@ -12,7 +12,7 @@ const OLD_URL = 'ws://10.10.20.10:8080/my-claw-app';
 const NEW_URL = 'ws://192.168.1.50:8080/my-claw-app';
 
 beforeEach(() => {
-  bridge.prefsGetAll.mockResolvedValue({ serverUrl: OLD_URL });
+  bridge.prefsGetAll.mockResolvedValue({ serverUrl: OLD_URL, themeMode: 'dark', lastThreadId: 't-default' });
   bridge.connect.mockClear();
 });
 

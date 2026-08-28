@@ -18,7 +18,7 @@ const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const URL = 'ws://10.10.20.10:8080/my-claw-app';
 
 beforeEach(() => {
-  bridge.prefsGetAll.mockResolvedValue({ serverUrl: URL });
+  bridge.prefsGetAll.mockResolvedValue({ serverUrl: URL, themeMode: 'dark', lastThreadId: 't-default' });
   bridge.sendMessage.mockClear();
 });
 

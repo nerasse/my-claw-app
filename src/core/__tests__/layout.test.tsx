@@ -45,7 +45,7 @@ test('a desktop pins the list and centres its menus', () => {
   expect(layout.breakpoint).toBe('desktop');
   expect(layout.pinnedDrawer).toBe(true);
   expect(layout.dialogs).toBe(true);
-  // 1280 - 288 of list - 460 of pane would leave a 532pt conversation: not yet.
+  // 1280 - 360 of list - 460 of pane would leave a 460pt conversation: not yet.
   expect(layout.sidePane).toBe(false);
 });
 

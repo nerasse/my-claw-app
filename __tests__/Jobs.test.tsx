@@ -124,6 +124,7 @@ beforeEach(() => {
   jobsStore.reset();
   chatStore.clearAll();
   bridge.sendMessage.mockResolvedValue(true);
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 't-default' });
 });
 
 test('the drawer opens the jobs page and asks for the listing', async () => {

@@ -17,7 +17,6 @@ import { statusStore } from './status';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
 import { registerForPush } from './notifications';
-import { uuid } from './utils';
 import {
   encodeAgentsConfigGet,
   encodeSessionSync,
@@ -69,8 +68,6 @@ export interface ServerFrameHandlers {
   pendingWorkspace: Map<string, string>;
   setRunTitles: (titles: Record<string, string>) => void;
   setVapidKey: (key: string) => void;
-  openThread: (threadId: string) => void;
-  selectThread: (threadId: string | null) => void;
   setLastRun: (run: string) => void;
   setLocationEnabled: (enabled: boolean) => void;
   setServerVersion: (version: string) => void;
@@ -125,8 +122,6 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     pendingWorkspace,
     setRunTitles,
     setVapidKey,
-    openThread,
-    selectThread,
     setLastRun,
     setLocationEnabled,
     setServerVersion,
@@ -339,19 +334,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // The server's run view survives a reconnect mid-run: flags it missed (or lost)
       // come back through the list, so the Stop button reappears without a new token.
       chatStore.seedRuns(frame.sessions.filter(session => session.activeRun).map(session => session.threadId));
-      // Land straight in a conversation instead of an empty screen, but never in one the
-      // owner filed away: those are only reached from the archived list.
-      if (!activeThreadId()) {
-        const first = frame.sessions.find(summary => !summary.archived);
-        if (first) openThread(first.threadId);
-        else {
-          const threadId = uuid();
-          selectThread(threadId);
-          // The drawer's agents section reads this roster: an app that boots with no
-          // conversation at all must still list the shared agents.
-          connection.send(encodeSubAgentsList(threadId)).catch(() => {});
-        }
-      }
+      // A session listing never chooses a conversation. With no stored/deep-linked thread, the
+      // shell stays on the home screen and the owner chooses from the list. This also prevents a
+      // refresh after pressing the MyClaw home action from reopening the first conversation.
       break;
     case 'session.workspace.set.result':
       if (sessionStore.has(frame.threadId)) {

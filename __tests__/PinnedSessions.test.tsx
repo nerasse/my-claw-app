@@ -70,7 +70,7 @@ async function bootWith(sessions: ReturnType<typeof summary>[]): Promise<Tree> {
 
 beforeEach(() => {
   bridge.sendMessage.mockClear();
-  bridge.prefsGetAll.mockResolvedValue({});
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 't-default' });
 });
 
 test('pinning asks the server, and the answer is what lifts the row into its own section', async () => {
@@ -218,7 +218,7 @@ test('a session that disappears takes its pin with it, with nothing to prune', a
 });
 
 test('the pins this device kept to itself are handed over once, then forgotten', async () => {
-  bridge.prefsGetAll.mockResolvedValue({ pinnedSessions: '["t-beta","t-alpha"]' });
+  bridge.prefsGetAll.mockResolvedValue({ pinnedSessions: '["t-beta","t-alpha"]', themeMode: 'dark', lastThreadId: 't-default' });
 
   const tree = await bootWith([summary('t-alpha', 'Alpha'), summary('t-beta', 'Beta')]);
   await waitFor(() => sentFrames().length === 3);

@@ -598,6 +598,12 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeWorkspacesList()).catch(() => {});
   }, []);
 
+  const handleHome = useCallback(() => {
+    selectThread(null);
+    setDrawerOpen(false);
+    setAutoFocusHero(false);
+  }, [selectThread]);
+
   /** The workspace a conversation runs in, optimistic pending value included. */
   const workspaceOf = useCallback(
     (threadId: string) =>
@@ -841,8 +847,6 @@ export function AppShell(): React.JSX.Element {
       setVapidKey: key => {
         vapidRef.current = key;
       },
-      openThread,
-      selectThread,
       setLastRun,
       setLocationEnabled,
       // The version the server announces is the other half of the verdict: same one back means
@@ -1273,6 +1277,12 @@ export function AppShell(): React.JSX.Element {
         // The runs are still in state from the page that opened the run; no refetch needed.
         setJobRuns(current => current);
       }
+      return true;
+    }
+    // chat ouvert sur téléphone → back va au home (pas à la sortie)
+    if (Platform.OS !== 'web' && !layout.pinnedDrawer && activeThreadRef.current && !settingsOpen
+        && !archivesOpen && !filesOpen && !subagentRef.current) {
+      selectThread(null);
       return true;
     }
     return false;
@@ -2750,6 +2760,7 @@ export function AppShell(): React.JSX.Element {
             onOpenJobs={openJobs}
             archivedCount={archivedSessions.length}
             onOpenArchives={() => setArchivesOpen(true)}
+            onHome={handleHome}
           />
         ) : null}
         <View style={[styles.container, layout.sidePane && styles.containerSplit]}>
@@ -3265,7 +3276,31 @@ export function AppShell(): React.JSX.Element {
               onOpenVideo={setVideoViewer}
             />
           ) : (
-            layout.sidePane ? null : chatScreen
+            layout.sidePane ? null
+              : activeThread === null
+                ? (
+                    <Drawer
+                      home
+                      open
+                      sessions={sessions}
+                      unread={unread}
+                      activeThread={activeThread}
+                      connectionState={status.state}
+                      pending={pending}
+                      subagentCount={globalAgents.length}
+                      onOpenSubAgents={() => setAgentsGlobalOpen(true)}
+                      onClose={() => {}}
+                      onOpenThread={openThreadFromDrawer}
+                      onNewThread={newThread}
+                      onThreadMenu={setThreadMenu}
+                      onOpenSettings={openSettings}
+                      onOpenJobs={openJobs}
+                      archivedCount={archivedSessions.length}
+                      onOpenArchives={() => setArchivesOpen(true)}
+                      onHome={handleHome}
+                    />
+                  )
+                : chatScreen
           )}
         </View>
         )}
@@ -3301,6 +3336,7 @@ export function AppShell(): React.JSX.Element {
           setDrawerOpen(false);
           setArchivesOpen(true);
         }}
+        onHome={handleHome}
       />
       )}
 
