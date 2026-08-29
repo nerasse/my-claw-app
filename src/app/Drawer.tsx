@@ -288,6 +288,7 @@ export function Drawer({
           {indicator}
         </View>
 
+        <View style={styles.footerRule} />
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
           {/* Always shown: an entry that appears only once it has content is an entry nobody
               finds, and the screen says plainly when there is nothing in it. */}
@@ -352,12 +353,15 @@ export function Drawer({
   if (pinned) {
     return <View style={[styles.panel, styles.panelPinned]}>{content}</View>;
   }
-  // Home: full-screen list on phone/tablet when no thread is open.
+  // Home: full-screen list on phone/tablet when no thread is open. It sits inside the shell's
+  // SafeAreaView and `container` (both already pay the top inset and its own padding), so it
+  // must not add insets.top again or the list starts a band of empty space below the status
+  // bar. Only the slide-over is absolutely positioned and has to pay the status bar itself.
   if (home) {
     return (
       <View
         testID="home-screen"
-        style={[styles.homePanel, { paddingTop: insets.top + space.sm }]}
+        style={styles.homePanel}
       >
         {content}
       </View>
@@ -374,9 +378,10 @@ export function Drawer({
         style={[
           styles.panel,
           styles.panelFloating,
-          // The panel is absolutely positioned, so the shell's safe-area padding does not
-          // apply to it: the phone's status bar and gesture bar have to be padded here.
-          { paddingTop: insets.top + space.sm, transform: [{ translateX }] },
+          // Closed, the panel sits at translateX(-DRAWER_WIDTH): shifted out of the window, but
+          // its 1pt right border still lands at x=0 and shows as a stray vertical line. Fading
+          // with the same progress that slides it hides the border when closed.
+          { opacity: progress, paddingTop: insets.top + space.sm, transform: [{ translateX }] },
         ]}
         {...panResponder.panHandlers}>
         {content}
@@ -408,7 +413,7 @@ const createStyles = (palette: Palette) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.md,
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },
@@ -426,10 +431,10 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  /** Indented onto the rows it heads: the list already pads by `sm`, the row's own main pads
+  /** Indented onto the rows it heads: the list already pads by `md`, the row's own main pads
    *  by `sm` again, so the heading starts where the titles under it start. */
   sectionLabel: {
-    paddingHorizontal: space.sm + space.sm,
+    paddingHorizontal: space.md + space.sm,
     paddingTop: space.xs,
     paddingBottom: space.xxs,
     fontSize: font.micro,
@@ -438,7 +443,7 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
   },
   listArea: { flex: 1 },
-  list: { paddingHorizontal: space.sm },
+  list: { paddingHorizontal: space.md },
   /** Just enough under the cards that the next heading is not glued to the last one. */
   pinnedSection: { paddingBottom: space.xs },
   search: {
@@ -453,12 +458,18 @@ const createStyles = (palette: Palette) => ({
     color: palette.text,
     backgroundColor: palette.surfaceAlt,
   },
-  separator: { height: 1, backgroundColor: palette.border, marginHorizontal: space.sm },
+  separator: { height: 1, backgroundColor: palette.border, marginHorizontal: 0 },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
-  footer: {
+  /** The rule above the footer rides the same inset as the list separators and the footer's own
+   *  hairlines, instead of running the full width of the panel. A borderTop on the footer would
+   *  span the panel and clash with the two other rules it stands between. */
+  footerRule: {
     borderTopWidth: 1,
     borderTopColor: palette.border,
-    paddingHorizontal: space.lg,
+    marginHorizontal: space.md,
+  },
+  footer: {
+    paddingHorizontal: space.md,
     paddingTop: space.md,
     gap: space.md,
   },
