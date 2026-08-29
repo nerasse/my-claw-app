@@ -2768,6 +2768,26 @@ export function AppShell(): React.JSX.Element {
             onHome={handleHome}
           />
         ) : null}
+        {/* The home list is a full-bleed panel: the container's md padding would paint a band
+            of bg around its surface, a frame the phone does not ask for. It belongs to the
+            shell, not to the padded column. */}
+        {!layout.pinnedDrawer && !layout.sidePane && !pageOpen && activeThread === null ? (
+          <Drawer
+            home
+            open
+            sessions={sessions}
+            unread={unread}
+            activeThread={activeThread}
+            connectionState={status.state}
+            pending={pending}
+            onClose={() => {}}
+            onOpenThread={openThreadFromDrawer}
+            onNewThread={newThread}
+            onThreadMenu={setThreadMenu}
+            onOpenMore={() => setMoreOpen(true)}
+            onHome={handleHome}
+          />
+        ) : (
         <View style={[styles.container, layout.sidePane && styles.containerSplit]}>
         {/* Wide enough for both: a page opens beside the conversation instead of over it, which
             is the difference between reading the two and remembering one. */}
@@ -3285,28 +3305,14 @@ export function AppShell(): React.JSX.Element {
               : activeThread === null
                 ? (layout.pinnedDrawer
                     ? <View style={styles.pageFull} testID="home-placeholder" />
-                    : (
-                    <Drawer
-                      home
-                      open
-                      sessions={sessions}
-                      unread={unread}
-                      activeThread={activeThread}
-                      connectionState={status.state}
-                      pending={pending}
-                      onClose={() => {}}
-                      onOpenThread={openThreadFromDrawer}
-                      onNewThread={newThread}
-                      onThreadMenu={setThreadMenu}
-                      onOpenMore={() => setMoreOpen(true)}
-                      onHome={handleHome}
-                    />
-                    ))
+                    : null
+                    )
                 : chatScreen
           )}
         </View>
         )}
         </View>
+        )}
         </View>
       </KeyboardAvoidingView>
 
