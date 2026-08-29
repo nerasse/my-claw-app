@@ -121,7 +121,8 @@ async function bootToTagsPage(tagFrame: Record<string, unknown> = tagsResult()):
     defaultModel: 'fast-1',
   });
   await press(tree, 'Open conversations');
-  await press(tree, 'Open settings');
+  await press(tree, 'More');
+  await press(tree, 'Settings');
   // Tags lives under Providers since it left the Agents page: the row is the synthetic
   // "tags" provider, and reaching it from the providers list asks for the tags catalog.
   await press(tree, 'Open providers');
@@ -224,7 +225,8 @@ test('back from the tags page returns to Providers, and the Agents page has no T
   await emit(agentsConfig());
   await emit({ type: 'model.list.result', models: [{ id: 'fast-1', label: 'Fast' }], defaultModel: 'fast-1' });
   await press(tree, 'Open conversations');
-  await press(tree, 'Open settings');
+  await press(tree, 'More');
+  await press(tree, 'Settings');
   await press(tree, 'Open agents');
   // The Agents page holds only the defaults and the agent rows since Tags left it.
   expect(labelsOf(tree)).not.toContain('Tags');

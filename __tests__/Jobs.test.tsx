@@ -75,7 +75,8 @@ function job(over: Record<string, unknown> = {}): Record<string, unknown> {
 
 async function openJobs(tree: Tree): Promise<void> {
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open jobs');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Jobs');
   await waitFor(() => labelsOf(tree).includes('Close jobs'));
 }
 

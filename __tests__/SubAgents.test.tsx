@@ -337,11 +337,12 @@ describe('the drawer Sub-Agents entry', () => {
       agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
     ]);
     await pressLabel(tree, 'Open conversations');
+    await pressLabel(tree, 'More');
 
     const texts = textsOf(tree);
     expect(texts).toContain('Agents');
     expect(texts).toContain('shared workers');
-    expect(labelsOf(tree)).toContain('Open shared agents, 2');
+    expect(labelsOf(tree)).toContain('Agents');
     // The list lives on a page, not inside the panel.
     expect(texts).not.toContain('digger-a1b2');
     expect(texts).not.toContain('secret-e5f6');
@@ -354,7 +355,8 @@ describe('the drawer Sub-Agents entry', () => {
       agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
     ]);
     await pressLabel(tree, 'Open conversations');
-    await pressLabel(tree, 'Open shared agents, 1');
+    await pressLabel(tree, 'More');
+    await pressLabel(tree, 'Agents');
 
     // The page: globals listed, a conversation's private one absent.
     expect(textsOf(tree)).toContain('public and per-workspace');
@@ -375,7 +377,8 @@ describe('the drawer Sub-Agents entry', () => {
       agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
     ]);
     await pressLabel(tree, 'Open conversations');
-    await pressLabel(tree, 'Open shared agents, 2');
+    await pressLabel(tree, 'More');
+    await pressLabel(tree, 'Agents');
 
     const texts = textsOf(tree);
     expect(texts).toContain('public');
@@ -390,9 +393,10 @@ describe('the drawer Sub-Agents entry', () => {
   it('closes on the way back, and is not a level between a sub-agent and its parent', async () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
     await pressLabel(tree, 'Open conversations');
-    await pressLabel(tree, 'Open shared agents, 1');
+    await pressLabel(tree, 'More');
+    await pressLabel(tree, 'Agents');
     await pressLabel(tree, 'Back to conversations');
-    await waitFor(() => labelsOf(tree).includes('Open shared agents, 1'));
+    await waitFor(() => labelsOf(tree).includes('More'));
     expect(textsOf(tree)).not.toContain('shared across conversations');
     await settleAndUnmount(tree);
   });

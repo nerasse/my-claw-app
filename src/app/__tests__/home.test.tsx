@@ -49,10 +49,7 @@ test('boots on the home screen with a new conversation button and a session list
   try {
     expect(homeNodes(tree)).toHaveLength(1);
     expect(labelsOf(tree)).toContain('New conversation');
-    expect(labelsOf(tree)).toContain('Open archived conversations');
-    expect(labelsOf(tree)).toContain('Open shared agents');
-    expect(labelsOf(tree)).toContain('Open jobs');
-    expect(labelsOf(tree)).toContain('Open settings');
+    expect(labelsOf(tree)).toContain('More');
     expect(textsOf(tree)).toContain('MyClaw');
 
     await emit({ type: 'session.list.result', sessions });

@@ -106,7 +106,8 @@ async function boot(workspace = 'default'): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open workspaces');
   await answerWorkspacesIfAsked();
   await waitFor(() => labelsOf(tree).includes(`Open workspace ${workspace}`));
@@ -464,7 +465,8 @@ test('the settings index has no Instructions row: the prompt files live under th
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await waitFor(() => labelsOf(tree).includes('Open workspaces'));
   expect(labelsOf(tree)).not.toContain('Open instructions');
   await settleAndUnmount(tree);
@@ -474,7 +476,8 @@ test('reached from an agent, the page is the workspace that agent reads, back to
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open agents');
   await emit({
     type: 'agents.config.result',
@@ -517,7 +520,8 @@ test('a server too old to answer says so instead of spinning', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open workspaces');
   await answerWorkspacesIfAsked();
   await waitFor(() => labelsOf(tree).includes('Open workspace default'));
@@ -574,7 +578,8 @@ async function bootPolicy(): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open workspaces');
   await answerWorkspacesIfAsked();
   await waitFor(() => labelsOf(tree).includes('Open workspace sofa'));

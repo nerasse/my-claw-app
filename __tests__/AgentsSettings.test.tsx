@@ -119,7 +119,8 @@ async function boot(): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open agents');
   await emit(agentsConfig());
   await emit({
@@ -185,7 +186,8 @@ test('staging a tag for an agent asks for neither effort nor window, and writes 
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open agents');
   await emit(agentsConfig());
   // The tag carries its own pins and the window of the model behind it, exactly as the server
@@ -350,7 +352,8 @@ test('a page the server never answers shows the unsupported notice', async () =>
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open agents');
   await waitFor(() => labelsOf(tree).includes('Back to settings'));
 

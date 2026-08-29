@@ -77,7 +77,7 @@ test('a conversation can be filed away, found again and put back', async () => {
 
   // The entry is there before anything is filed away, or nobody would ever find it.
   await waitFor(() => textsOf(tree).includes('Vieux projet'));
-  expect(labelsOf(tree)).toContain('Open archived conversations');
+  expect(labelsOf(tree)).toContain('More');
 
   await openThreadMenu(tree, 'Vieux projet');
   await pressLabel(tree, 'Archive');
@@ -87,7 +87,8 @@ test('a conversation can be filed away, found again and put back', async () => {
   // Gone from the drawer, still very much alive.
   await waitFor(() => !textsOf(tree).includes('Vieux projet'));
 
-  await pressLabel(tree, 'Open archived conversations');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Archived');
   await waitFor(() => textsOf(tree).includes('Archived'));
   expect(textsOf(tree)).toContain('Vieux projet');
 
@@ -129,7 +130,8 @@ test('archiving never sends a delete, and the archived list offers no stale acti
   const tree = await renderApp();
   await listSessions([summary(FILED, 'Vieux projet', true)]);
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open archived conversations');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Archived');
   await waitFor(() => textsOf(tree).includes('Vieux projet'));
 
   await openThreadMenu(tree, 'Vieux projet');
@@ -148,7 +150,8 @@ test('the hardware back button returns from an archived conversation to the list
   const tree = await renderApp();
   await listSessions([summary(KEPT, 'Infra maison'), summary(FILED, 'Vieux projet', true)]);
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open archived conversations');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Archived');
   await waitFor(() => textsOf(tree).includes('Vieux projet'));
 
   await pressLabel(tree, 'Conversation Vieux projet');
@@ -181,7 +184,7 @@ test('the hardware back button with the drawer open only closes the menu', async
   const tree = await renderApp();
   await listSessions([summary(KEPT, 'Infra maison')]);
   await pressLabel(tree, 'Open conversations');
-  await waitFor(() => labelsOf(tree).includes('Open archived conversations'));
+  await waitFor(() => labelsOf(tree).includes('More'));
 
   // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
   const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {

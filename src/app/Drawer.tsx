@@ -19,6 +19,8 @@ const STATE_LABEL: Record<WsState, string> = {
   disconnected: 'reconnecting',
 };
 
+export { STATE_LABEL as CONNECTION_LABEL };
+
 function Separator(): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return <View style={styles.separator} />;
@@ -45,16 +47,11 @@ export function Drawer({
   activeThread,
   connectionState,
   pending,
-  subagentCount,
-  onOpenSubAgents,
   onClose,
   onOpenThread,
   onNewThread,
   onThreadMenu,
-  onOpenSettings,
-  onOpenJobs,
-  archivedCount,
-  onOpenArchives,
+  onOpenMore,
   home,
   onHome,
 }: {
@@ -68,17 +65,12 @@ export function Drawer({
   activeThread: string | null;
   connectionState: WsState;
   pending: number;
-  /** Shared sub-agents (visibility global). The button stays, the count comes and goes. */
-  subagentCount: number;
-  onOpenSubAgents: () => void;
   onClose: () => void;
   onOpenThread: (threadId: string) => void;
   onNewThread: () => void;
   onThreadMenu: (thread: SessionSummary) => void;
-  onOpenSettings: () => void;
-  onOpenJobs: () => void;
-  archivedCount: number;
-  onOpenArchives: () => void;
+  /** The one footer entry: opens the sheet with Archived, Agents, Jobs and Settings. */
+  onOpenMore: () => void;
   /** Full-screen list on phone/tablet when no thread is open. */
   home?: boolean;
   /** Back to home (no-op when already home). */
@@ -290,52 +282,15 @@ export function Drawer({
 
         <View style={styles.footerRule} />
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
-          {/* Always shown: an entry that appears only once it has content is an entry nobody
-              finds, and the screen says plainly when there is nothing in it. */}
-          <Pressable
-            style={[styles.footerRow, styles.archivedRow]}
-            onPress={onOpenArchives}
-            accessibilityRole="button"
-            accessibilityLabel="Open archived conversations">
-            <View style={styles.footerMain}>
-              <Text style={styles.footerTitle}>Archived</Text>
-            </View>
-            {archivedCount > 0 ? <Text style={styles.footerCount}>{archivedCount}</Text> : null}
-            <Text style={styles.footerGlyph}>›</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.footerRow, styles.archivedRow]}
-            onPress={onOpenSubAgents}
-            accessibilityRole="button"
-            accessibilityLabel={`Open shared agents${subagentCount > 0 ? `, ${subagentCount}` : ''}`}>
-            <View style={styles.footerMain}>
-              <Text style={styles.footerTitle}>Agents</Text>
-              <Text style={styles.footerMeta}>shared workers</Text>
-            </View>
-            {subagentCount > 0 ? <Text style={styles.footerCount}>{subagentCount}</Text> : null}
-            <Text style={styles.footerGlyph}>›</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.footerRow, styles.jobsRow]}
-            onPress={onOpenJobs}
-            accessibilityRole="button"
-            accessibilityLabel="Open jobs">
-            <View style={styles.footerMain}>
-              <Text style={styles.footerTitle}>Jobs</Text>
-              <Text style={styles.footerMeta}>scheduled tasks</Text>
-            </View>
-            <Text style={styles.footerGlyph}>›</Text>
-          </Pressable>
-
+          {/* One entry, one tap. The sheet it opens carries the four destinations; the state
+              line stays here because connection state is the one thing a footer is for. */}
           <Pressable
             style={styles.footerRow}
-            onPress={onOpenSettings}
+            onPress={onOpenMore}
             accessibilityRole="button"
-            accessibilityLabel="Open settings">
+            accessibilityLabel="More">
             <View style={styles.footerMain}>
-              <Text style={styles.footerTitle}>Settings</Text>
+              <Text style={styles.footerTitle}>More</Text>
               <Text style={styles.footerMeta}>
                 <Text style={{ color: connectionState === 'connected' ? palette.ok : palette.textFaint }}>●</Text>{' '}
                 {STATE_LABEL[connectionState]}
@@ -474,19 +429,8 @@ const createStyles = (palette: Palette) => ({
     gap: space.md,
   },
   footerRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
-  archivedRow: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: palette.border,
-    paddingBottom: space.md,
-  },
-  jobsRow: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: palette.border,
-    paddingBottom: space.md,
-  },
   footerMain: { flex: 1, gap: 1 },
   footerTitle: { fontSize: font.body, color: palette.text },
   footerMeta: { fontSize: font.small, color: palette.textMuted },
-  footerCount: { fontSize: font.small, color: palette.textFaint, marginRight: space.sm },
   footerGlyph: { fontSize: font.screen, color: palette.textFaint },
 });

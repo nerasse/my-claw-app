@@ -88,7 +88,8 @@ async function boot(): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await pressLabel(tree, 'Open agents');
   await emit(agentsConfig());
   await waitFor(() => labelsOf(tree).includes('Open agent reviewer'));

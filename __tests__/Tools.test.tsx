@@ -123,7 +123,8 @@ test('the tools page asks for the catalog when it opens', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await waitFor(() => labelsOf(tree).includes('Open tools'));
   await pressLabel(tree, 'Open tools');
 
@@ -139,7 +140,8 @@ test('an old server answers an error instead of a spinning page', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await waitFor(() => labelsOf(tree).includes('Open tools'));
   await pressLabel(tree, 'Open tools');
 
@@ -153,7 +155,8 @@ test('the settings index asks for the catalogs so the counts are ready without a
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
 
   const asked = bridge.sendMessage.mock.calls.map(
     ([frame]) => JSON.parse(String(frame)) as { type: string },
@@ -167,7 +170,8 @@ test('the settings index shows the tool count', async () => {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(KEPT, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await emit({ type: 'tools.list.result', tools: TOOLS });
 
   await waitFor(() => textsOf(tree).some(text => text.includes('6 tools')));

@@ -6,7 +6,7 @@ conversation list used by the side drawer:
 - pinned conversations, including drag and drop reordering;
 - active conversations and unread/draft state;
 - conversation search;
-- Archived, Agents, Jobs, and Settings in the footer.
+- Archive, Agents, Jobs, and Settings live behind the single **More** entry in the footer.
 
 On phone and tablet the **New conversation** action sits at the top of the list (the `+` beside
 the MyClaw title). It opens the workspace picker. Selecting a workspace creates a new thread and

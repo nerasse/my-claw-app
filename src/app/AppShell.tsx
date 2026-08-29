@@ -201,7 +201,7 @@ import { StatusScreen } from './StatusScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
 import { JobSessionsScreen } from './JobSessionsScreen';
-import { Drawer } from './Drawer';
+import { CONNECTION_LABEL, Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ApprovalSheet } from '../components/ApprovalSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
@@ -426,6 +426,8 @@ export function AppShell(): React.JSX.Element {
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
+  /** The More sheet in the drawer footer: Archived, Agents, Jobs, Settings. */
+  const [moreOpen, setMoreOpen] = useState(false);
   const [diagSnapshot, setDiagSnapshot] = useState('');
   const [diagLogs, setDiagLogs] = useState('');
   const [diagBusy, setDiagBusy] = useState(false);
@@ -1097,6 +1099,10 @@ export function AppShell(): React.JSX.Element {
       setCommandMenuOpen(false);
       return true;
     }
+    if (moreOpen) {
+      setMoreOpen(false);
+      return true;
+    }
     if (bubbleMenu || threadMenu) {
       setBubbleMenu(null);
       setThreadMenu(null);
@@ -1302,6 +1308,7 @@ export function AppShell(): React.JSX.Element {
     fileToDelete,
     filesOpen,
     imageViewer,
+    moreOpen,
     instructionsPageEditing,
     instructionsPageOpen,
     workspaceFrom,
@@ -2755,14 +2762,9 @@ export function AppShell(): React.JSX.Element {
             pending={pending}
             onClose={() => {}}
             onOpenThread={openThreadFromDrawer}
-            subagentCount={globalAgents.length}
-            onOpenSubAgents={() => setAgentsGlobalOpen(true)}
             onNewThread={newThread}
             onThreadMenu={setThreadMenu}
-            onOpenSettings={openSettings}
-            onOpenJobs={openJobs}
-            archivedCount={archivedSessions.length}
-            onOpenArchives={() => setArchivesOpen(true)}
+            onOpenMore={() => setMoreOpen(true)}
             onHome={handleHome}
           />
         ) : null}
@@ -3292,16 +3294,11 @@ export function AppShell(): React.JSX.Element {
                       activeThread={activeThread}
                       connectionState={status.state}
                       pending={pending}
-                      subagentCount={globalAgents.length}
-                      onOpenSubAgents={() => setAgentsGlobalOpen(true)}
                       onClose={() => {}}
                       onOpenThread={openThreadFromDrawer}
                       onNewThread={newThread}
                       onThreadMenu={setThreadMenu}
-                      onOpenSettings={openSettings}
-                      onOpenJobs={openJobs}
-                      archivedCount={archivedSessions.length}
-                      onOpenArchives={() => setArchivesOpen(true)}
+                      onOpenMore={() => setMoreOpen(true)}
                       onHome={handleHome}
                     />
                     ))
@@ -3324,23 +3321,9 @@ export function AppShell(): React.JSX.Element {
         pending={pending}
         onClose={() => setDrawerOpen(false)}
         onOpenThread={openThreadFromDrawer}
-        subagentCount={globalAgents.length}
-        onOpenSubAgents={() => {
-          setDrawerOpen(false);
-          setAgentsGlobalOpen(true);
-        }}
         onNewThread={newThread}
         onThreadMenu={setThreadMenu}
-        onOpenSettings={() => {
-          setDrawerOpen(false);
-          openSettings();
-        }}
-        onOpenJobs={openJobs}
-        archivedCount={archivedSessions.length}
-        onOpenArchives={() => {
-          setDrawerOpen(false);
-          setArchivesOpen(true);
-        }}
+        onOpenMore={() => setMoreOpen(true)}
         onHome={handleHome}
       />
       )}
@@ -3620,6 +3603,51 @@ export function AppShell(): React.JSX.Element {
           preview={activeThread ? title : undefined}
           options={commandMenuOptions}
           onClose={() => setCommandMenuOpen(false)}
+        />
+      ) : null}
+
+      {moreOpen ? (
+        <ActionSheet
+          preview="More"
+          options={[
+            {
+              label: 'Archived',
+              hint: archivedSessions.length > 0 ? `${archivedSessions.length} conversations` : undefined,
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                setArchivesOpen(true);
+              },
+            },
+            {
+              label: 'Agents',
+              hint: 'shared workers',
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                setAgentsGlobalOpen(true);
+              },
+            },
+            {
+              label: 'Jobs',
+              hint: 'scheduled tasks',
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                openJobs();
+              },
+            },
+            {
+              label: 'Settings',
+              hint: `${CONNECTION_LABEL[status.state]}${pending > 0 ? ` · ${pending} pending` : ''}`,
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                openSettings();
+              },
+            },
+          ]}
+          onClose={() => setMoreOpen(false)}
         />
       ) : null}
 

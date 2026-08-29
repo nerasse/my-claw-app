@@ -27,16 +27,17 @@ test('the drawer holds the conversations and leads to the settings', async () =>
   const tree = await renderApp();
   await press(tree, 'Open conversations');
 
-  expect(labelsOf(tree)).toContain('Open settings');
+  expect(labelsOf(tree)).toContain('More');
   expect(textsOf(tree)).toContain('MyClaw');
-  expect(textsOf(tree)).toContain('Settings');
+  expect(textsOf(tree)).toContain('More');
   await unmount(tree);
 });
 
 test('the settings expose the three theme modes', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
-  await press(tree, 'Open settings');
+  await press(tree, 'More');
+  await press(tree, 'Settings');
   await press(tree, 'Open other');
 
   const labels = labelsOf(tree);
@@ -50,7 +51,8 @@ test('the settings expose the three theme modes', async () => {
 test('the token is masked by default and can be revealed or copied whole', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
-  await press(tree, 'Open settings');
+  await press(tree, 'More');
+  await press(tree, 'Settings');
   await press(tree, 'Open general');
 
   // Masked: only the last four characters are visible, never the full value.

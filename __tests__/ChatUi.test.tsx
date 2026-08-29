@@ -946,7 +946,8 @@ test('a draft belongs to its conversation, not to the screen that shows it', asy
   // On a phone the chat screen is unmounted whenever a page covers it, and the draft went with
   // it: opening Files to check one thing emptied the field.
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Settings');
   await waitFor(() => labelsOf(tree).includes('Open general'));
   await pressLabel(tree, 'Back to chat');
   await waitFor(() => labelsOf(tree).includes('Message to send'));
