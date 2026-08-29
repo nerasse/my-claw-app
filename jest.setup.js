@@ -210,6 +210,7 @@ jest.mock('./src/core/nativeBridge', () => ({
     getDeviceInfo: jest.fn(() =>
       Promise.resolve({ deviceId: 'dev-test', token: 'token-test' }),
     ),
+    adoptCredentials: jest.fn(() => Promise.resolve(true)),
     getCapabilities: jest.fn(() =>
       Promise.resolve({
         accessibility: false,

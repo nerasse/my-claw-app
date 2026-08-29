@@ -165,6 +165,7 @@ import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
+import { PairingScreen, usePairing } from './PairingScreen';
 import { OtherSettingsScreen } from './OtherSettingsScreen';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
 import { TagsScreen } from './TagsScreen';
@@ -268,6 +269,26 @@ export function AppShell(): React.JSX.Element {
   const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  /** Native pairing state; the PairingScreen drives it and this screen chooses whether to show it. */
+  const pairing = usePairing();
+  const [pairingOpen, setPairingOpen] = useState(false);
+  const unauthorizedHandled = useRef(false);
+  useEffect(() => {
+    // The server-minted credentials are stored and the chat socket is reconnecting: leave the
+    // pairing screen and show the chat.
+    if (pairing.phase === 'granted') {
+      setPairingOpen(false);
+      unauthorizedHandled.current = false;
+    }
+  }, [pairing.phase]);
+  useEffect(() => {
+    // First launch, or a server that never saw this device: the socket answered 401. Offer the
+    // pairing screen once; if the owner closes it, the switch back happens through the button.
+    if (status.state === 'disconnected' && status.reason === 'unauthorized' && !unauthorizedHandled.current) {
+      unauthorizedHandled.current = true;
+      setPairingOpen(true);
+    }
+  }, [status]);
   /** The running build's version name, read from the package once at boot. */
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
@@ -2830,6 +2851,10 @@ export function AppShell(): React.JSX.Element {
                   connection.clearOutbox();
                   setPending(0);
                 }}
+                onOpenPairing={() => {
+                  setSettingsOpen(false);
+                  setPairingOpen(true);
+                }}
                 onBack={() => setSettingsPage('index')}
               />
             ) : settingsPage === 'other' ? (
@@ -3301,13 +3326,26 @@ export function AppShell(): React.JSX.Element {
               onOpenVideo={setVideoViewer}
             />
           ) : (
-            layout.sidePane ? null
-              : activeThread === null
-                ? (layout.pinnedDrawer
-                    ? <View style={styles.pageFull} testID="home-placeholder" />
-                    : null
-                    )
-                : chatScreen
+            pairingOpen ? (
+              <PairingScreen
+                serverUrl={url}
+                onUrlChange={changeUrl}
+                pairing={pairing}
+                onClose={() => {
+                  setPairingOpen(false);
+                  setSettingsOpen(true);
+                  setSettingsPage('general');
+                }}
+              />
+            ) : (
+              layout.sidePane ? null
+                : activeThread === null
+                  ? (layout.pinnedDrawer
+                      ? <View style={styles.pageFull} testID="home-placeholder" />
+                      : null
+                      )
+                  : chatScreen
+            )
           )}
         </View>
         )}

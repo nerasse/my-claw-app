@@ -873,6 +873,12 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     promise.resolve(map)
   }
 
+  /** Replaces the locally generated credentials with the pair the server minted (CLI pairing). */
+  @ReactMethod
+  fun adoptCredentials(deviceId: String, token: String, promise: Promise) {
+    promise.resolve(DeviceCredentials.adopt(reactContext, deviceId, token))
+  }
+
   @ReactMethod
   fun prefsGetAll(promise: Promise) {
     val prefs = reactContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

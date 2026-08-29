@@ -265,7 +265,13 @@ class ClawConnectionService : Service() {
         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
           if (gen != generation) return
           Log.w(TAG, "failure (http=${response?.code ?: 0})", t)
-          onDisconnected(t.message ?: "failure")
+          // A 401 from the channel means these credentials are not in config.json: the device is
+          // unpaired. Say so, so the UI can offer pairing instead of looping on a dead address.
+          if (response?.code == 401) {
+            onDisconnected("unauthorized")
+          } else {
+            onDisconnected(t.message ?: "failure")
+          }
         }
       },
     )

@@ -119,6 +119,8 @@ export interface DeviceBridgeNative {
   clearOutbox(): Promise<void>;
   getConnectionState(): Promise<string>;
   getDeviceInfo(): Promise<DeviceInfoNative>;
+  /** A browser cannot adopt a token: pairing hands it a cookie. Always false here. */
+  adoptCredentials(deviceId: string, token: string): Promise<boolean>;
   getCapabilities(): Promise<DeviceCapabilities>;
   getCurrentLocation(): Promise<CurrentLocationNative>;
   prefsGetAll(): Promise<Record<string, string>>;
@@ -571,6 +573,8 @@ export const deviceBridge: DeviceBridgeNative = {
     return Promise.resolve();
   },
   getConnectionState: () => Promise.resolve(connection.currentState()),
+  // A browser holds no credential to adopt: pairing hands it a cookie, never a token.
+  adoptCredentials: () => Promise.resolve(false),
   getDeviceInfo: () => Promise.resolve(readDeviceInfo()),
   getCapabilities: () =>
     Promise.resolve({

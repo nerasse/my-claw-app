@@ -28,6 +28,22 @@ object DeviceCredentials {
     return id
   }
 
+  /**
+   * Adopts a device minted server-side (a CLI ticket claimed through the pairing socket). The
+   * server is the source of truth for the pair, so an id minted here is replaced: the app must
+   * present exactly what config.json holds. The token is encrypted exactly like a generated one.
+   */
+  fun adopt(context: Context, deviceId: String, token: String): Boolean {
+    if (deviceId.isBlank() || token.isBlank()) return false
+    val encrypted = encrypt(token) ?: return false
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    prefs.edit()
+      .putString(KEY_DEVICE_ID, deviceId)
+      .putString(KEY_TOKEN, encrypted)
+      .apply()
+    return true
+  }
+
   fun token(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val stored = prefs.getString(KEY_TOKEN, null)

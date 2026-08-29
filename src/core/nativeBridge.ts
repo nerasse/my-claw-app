@@ -95,6 +95,8 @@ export interface DeviceBridgeNative {
   clearOutbox(): Promise<void>;
   getConnectionState(): Promise<string>;
   getDeviceInfo(): Promise<DeviceInfoNative>;
+  /** Replaces the locally generated credentials with the pair the server minted (CLI pairing). */
+  adoptCredentials(deviceId: string, token: string): Promise<boolean>;
   getCapabilities(): Promise<DeviceCapabilities>;
   /** Captures one foreground location, waiting briefly for the best available fix. */
   getCurrentLocation(): Promise<CurrentLocationNative>;
@@ -200,6 +202,9 @@ export const deviceBridge: DeviceBridgeNative = {
     native?.getConnectionState() ?? Promise.resolve('idle'),
   getDeviceInfo: () =>
     native?.getDeviceInfo() ??
+    Promise.reject(new Error('DeviceBridge unavailable')),
+  adoptCredentials: (deviceId, token) =>
+    native?.adoptCredentials(deviceId, token) ??
     Promise.reject(new Error('DeviceBridge unavailable')),
   getCapabilities: () =>
     native?.getCapabilities() ??
