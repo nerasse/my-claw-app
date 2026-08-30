@@ -1449,6 +1449,14 @@ export function AppShell(): React.JSX.Element {
    */
   const sendChatTo = useCallback(
     async (threadId: string, text: string, attachments?: OutgoingAttachment[], location?: LocationInput) => {
+      // No default model configured: a send would resolve to an empty provider and fail with
+      // "Provider \"\" not found in config". Open the provider setup instead of posting into
+      // a conversation nobody can answer.
+      if (catalog.defaultModel === '') {
+        setSettingsPage('providers');
+        setSettingsOpen(true);
+        return;
+      }
       const id = uuid();
       chatStore.addUserMessage(
         threadId,
@@ -1486,7 +1494,7 @@ export function AppShell(): React.JSX.Element {
       );
       if (!delivered) chatStore.markSendFailed(threadId, id);
     },
-    [],
+    [catalog.defaultModel],
   );
 
   const sendChat = useCallback(

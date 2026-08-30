@@ -80,6 +80,20 @@ export async function renderApp(): Promise<Tree> {
     await pressLabel(tree, `Conversation ${last}`);
   }
   await waitFor(() => labelsOf(tree).includes('Message to send'));
+  // A real server answers resume with a model.list.result: without one, defaultModel stays '' and
+  // the new "no LLM configured" gate swallows sends. Seed one so suites that drive the composer
+  // exercise sending, not the gate. Suites that emit their own catalog still win, theirs lands
+  // later and replaceCatalog is a replacement, not a merge.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'model.list.result',
+        models: [{ id: 'test-default', label: 'Test Default' }],
+        defaultModel: 'test-default',
+      }),
+    });
+  });
+  await waitFor(() => labelsOf(tree).includes('Message to send'));
   return tree;
 }
 
