@@ -2790,7 +2790,7 @@ export function AppShell(): React.JSX.Element {
     // Every block inside the thread reaches the selection viewer through here, rather than
     // through a callback threaded down to the tool cards. See docs/text-selection.md.
     <TextSelectionContext.Provider value={openSelection}>
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar
         barStyle={dark ? 'light-content' : 'dark-content'}
         backgroundColor={palette.bg}

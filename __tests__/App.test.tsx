@@ -23,6 +23,14 @@ test('boots on the chat screen with a composer and a drawer handle', async () =>
   await unmount(tree);
 });
 
+test('keeps the chat inside the bottom system safe area', async () => {
+  const tree = await renderApp();
+  const safeAreas = tree.root.findAll(node => Array.isArray(node.props.edges), { deep: true });
+
+  expect(safeAreas.some(node => node.props.edges.includes('bottom'))).toBe(true);
+  await unmount(tree);
+});
+
 test('the drawer holds the conversations and leads to the settings', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
