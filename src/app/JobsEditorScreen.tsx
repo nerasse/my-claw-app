@@ -198,7 +198,6 @@ export function JobsEditorScreen({
           }));
           setModelPicker(false);
         }}
-        skipPinsOnTag
         effort={{ current: draft.effort }}
         // For a job an absent model is not the server default but the cron agent's: the option
         // says what it means here, and clearing is exactly how the override is removed.

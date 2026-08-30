@@ -92,7 +92,6 @@ export function TagEditorPage({
           onDirtyChange(false);
           onBack();
         }}
-        skipPinsOnTag
         effort={{ current: tag.effort ?? '' }}
         context={{ ...(tag.contextCap === undefined ? {} : { current: tag.contextCap }) }}
       />
@@ -124,7 +123,6 @@ export function TagEditorPage({
           markDirty();
           onClosePicker();
         }}
-        skipPinsOnTag
         effort={{ current: candidate?.effort ?? '' }}
         context={{ ...(candidate?.contextCap === undefined ? {} : { current: candidate.contextCap }) }}
       />

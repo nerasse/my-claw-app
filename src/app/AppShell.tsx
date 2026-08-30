@@ -209,6 +209,7 @@ import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ScreenLayer } from '../components/ScreenLayer';
 import { ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
+import { ModelTuneSheet } from '../components/ModelTuneSheet';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
@@ -462,6 +463,8 @@ export function AppShell(): React.JSX.Element {
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
+  /** Whether the effort/window sheet of the conversation is open (the tune sheet). */
+  const [tuneOpen, setTuneOpen] = useState(false);
   /** Which group of the model picker is open: its own stack, walked by the back key. */
   const [modelPicker, setModelPicker] = useState<PickerState>(pickerStart);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -1104,6 +1107,10 @@ export function AppShell(): React.JSX.Element {
       setModelOpen(false);
       return true;
     }
+    if (tuneOpen) {
+      setTuneOpen(false);
+      return true;
+    }
     if (newTagPrompt) {
       setNewTagPrompt(false);
       return true;
@@ -1338,6 +1345,7 @@ export function AppShell(): React.JSX.Element {
     jobsOpen,
     modelOpen,
     modelPicker,
+    tuneOpen,
     newTagPrompt,
     providerEdit,
     providerToDelete,
@@ -1966,6 +1974,11 @@ export function AppShell(): React.JSX.Element {
           setCommandMenuOpen(false);
           openModel();
           return true;
+        case 'effort':
+        case 'cap':
+          setCommandMenuOpen(false);
+          setTuneOpen(true);
+          return true;
         case 'new':
           setCommandMenuOpen(false);
           newThread();
@@ -2005,7 +2018,7 @@ export function AppShell(): React.JSX.Element {
           return false;
       }
     },
-    [newThread, openModel, openStatus, openSessionInstructions, sessions],
+    [newThread, openModel, openStatus, openSessionInstructions, sessions, setTuneOpen],
   );
 
   const currentModelLabel = threadModel
@@ -2043,6 +2056,16 @@ export function AppShell(): React.JSX.Element {
       onPress: () => {
         setCommandMenuOpen(false);
         openModel();
+      },
+    },
+    {
+      label: 'Effort / window…',
+      hint: currentModelLabel
+        ? `tune ${currentModelLabel}`
+        : undefined,
+      onPress: () => {
+        setCommandMenuOpen(false);
+        setTuneOpen(true);
       },
     },
     ...(streaming
@@ -3717,6 +3740,13 @@ export function AppShell(): React.JSX.Element {
           state={modelPicker}
           onStateChange={setModelPicker}
           onClose={() => setModelOpen(false)}
+        />
+      ) : null}
+
+      {tuneOpen ? (
+        <ModelTuneSheet
+          threadId={activeThread}
+          onClose={() => setTuneOpen(false)}
         />
       ) : null}
 

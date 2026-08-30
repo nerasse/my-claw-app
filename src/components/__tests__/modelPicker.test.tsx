@@ -45,6 +45,7 @@ function mount(
   activeId: string,
   models: ModelOption[] = MODELS,
   context: Parameters<typeof useModelPickerFlow>[0]['context'] = null,
+  effort: Parameters<typeof useModelPickerFlow>[0]['effort'] = null,
 ): Harness {
   let flow!: ReturnType<typeof useModelPickerFlow>;
   const harness: Harness = {
@@ -78,6 +79,7 @@ function mount(
       onCommit: choice => harness.committed.push(choice),
       onClose: () => {},
       context,
+      effort,
     });
     return flow.customContextInput ? (
       <TextInput
@@ -238,4 +240,56 @@ test('a pinned reference is named by its model and its route, never by the raw s
   expect(modelStore.catalogModel('openrouter/openai/gpt-5.6-luna@azure')).toBe('gpt-5.6-luna @ azure');
   expect(modelStore.catalogModel('zen/gpt-5.6-luna')).toBe('gpt-5.6-luna');
   expect(modelStore.catalogModel('unknown/model')).toBe('unknown/model');
+});
+
+test('a tag is indivisible: no effort step, no context step, straight to confirm', () => {
+  const TAG_MODELS: ModelOption[] = [
+    { id: 'tag:opus', label: 'opus', group: 'Tags' },
+    { id: 'tag:fast', label: 'fast', group: 'Tags' },
+    { id: 'context/model', label: 'Context model', context: 262_000 },
+  ];
+  const picker = mount('context/model', TAG_MODELS, {});
+
+  picker.press('Tags ›');
+  picker.press('opus');
+
+  expect(picker.state.stage).toBe('confirm');
+  expect(picker.labels()).toContain('Apply');
+  expect(picker.labels()).not.toContain('Effort for opus');
+  expect(picker.labels()).not.toContain('Context for opus');
+  picker.press('Apply');
+  expect(picker.committed).toEqual([{ model: 'tag:opus' }]);
+  picker.unmount();
+});
+
+test('a tag drops any effort or window staged for the previous model', () => {
+  const TAG_MODELS: ModelOption[] = [
+    { id: 'tag:opus', label: 'opus', group: 'Tags' },
+    { id: 'context/model', label: 'Context model', context: 262_000, effortLevels: ['low', 'high'] },
+  ];
+  const picker = mount('context/model', TAG_MODELS, {}, { current: '' });
+
+  // The step picks both pins for the staged model: effort first, then the window.
+  picker.press('Context model');
+  expect(picker.state.stage).toBe('effort');
+  picker.press('high');
+  expect(picker.state.stage).toBe('context');
+  picker.press('64k');
+  expect(picker.state.stage).toBe('confirm');
+  expect(picker.preview()).toContain('effort: high');
+  expect(picker.preview()).toContain('context: 64000 tokens');
+
+  picker.press('< Back');
+  picker.press('< Back');
+  picker.press('< Back');
+
+  picker.press('Tags ›');
+  picker.press('opus');
+  expect(picker.state.stage).toBe('confirm');
+  expect(picker.preview()).not.toContain('effort:');
+  expect(picker.preview()).not.toContain('context:');
+  expect(picker.committed).toEqual([]);
+  picker.press('Apply');
+  expect(picker.committed).toEqual([{ model: 'tag:opus' }]);
+  picker.unmount();
 });

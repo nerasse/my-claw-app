@@ -78,7 +78,6 @@ export function AgentModelPickerPage({
             .catch(() => {});
         }
       }}
-      skipPinsOnTag
       rootOption={
         agent
           ? {

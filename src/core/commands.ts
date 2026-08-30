@@ -15,6 +15,7 @@ const DEFAULT_COMMANDS: CommandDef[] = [
   { name: 'model', description: 'Show or change current model, or an agent default: /model <agent>' },
   { name: 'models', description: 'List available models' },
   { name: 'effort', description: 'Show or set reasoning effort' },
+  { name: 'cap', description: 'Show or set the context window: /cap <tokens|full>' },
   { name: 'compact', description: 'Compact session context' },
   { name: 'reload', description: 'Reload skills from disk' },
   { name: 'verbose', description: 'Toggle verbose tool output' },

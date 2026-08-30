@@ -196,7 +196,6 @@ export function useModelPickerFlow({
   rootOption,
   effort,
   context,
-  skipPinsOnTag = false,
   page = false,
 }: {
   /** Label used in the sheet preview when the user is not inside a group. */
@@ -216,10 +215,6 @@ export function useModelPickerFlow({
   rootOption?: PickerRootOption | null;
   effort?: PickerEffort | null;
   context?: PickerContext | null;
-  /** Config flows (agent, global, job) skip the effort and window steps when the staged model is
-   *  a tag: the tag pins both, and its pins outrank a scope's, so anything set here would be dead
-   *  config. The chat keeps both steps because a session's own choice still sits above the tag. */
-  skipPinsOnTag?: boolean;
   /** Full-page presentation: the page's own back entry replaces the in-flow "< Back" rows. */
   page?: boolean;
 }): {
@@ -264,10 +259,10 @@ export function useModelPickerFlow({
   );
   const tiers = useMemo(
     () =>
-      context && !(skipPinsOnTag && stagedIsTag)
+      context && !stagedIsTag
         ? contextTiers(stagedEntry?.context, context.cap, state.context ?? context.current)
         : EMPTY_TIERS,
-    [context, skipPinsOnTag, stagedEntry?.context, stagedIsTag, state.context],
+    [context, stagedEntry?.context, stagedIsTag, state.context],
   );
 
   const query = state.query ?? '';
@@ -323,8 +318,15 @@ export function useModelPickerFlow({
       // A subject that already pins an effort keeps the step even on a model with no levels: the
       // pin is dead weight there and must stay removable. Only the "default" row is shown then.
       const effortStep = effort && (levels.length > 0 || effortCurrent !== '');
-      // Both pins belong to the tag, so neither step is offered on top of one.
-      const tagPins = skipPinsOnTag && bare.startsWith('tag:');
+      // A tag is indivisible: both pins belong to it, so neither step is offered on top of one,
+      // and any effort or window staged for the previous model is dropped so the tag applies as
+      // it stands rather than carrying a leftover the confirmation would silently commit.
+      const tagPins = bare.startsWith('tag:');
+      if (tagPins) {
+        next.effort = undefined;
+        next.context = undefined;
+        next.contextDraft = undefined;
+      }
       const showEffort = Boolean(effortStep) && !tagPins;
       const ceilings =
         context && !tagPins
@@ -357,7 +359,6 @@ export function useModelPickerFlow({
       effort,
       effortCurrent,
       onStateChange,
-      skipPinsOnTag,
       state,
     ],
   );
@@ -541,7 +542,7 @@ export function useModelPickerFlow({
           ? 'effort: default'
           : state.effort !== undefined
             ? `effort: ${effortLabel(state.effort)}`
-            : skipPinsOnTag && stagedIsTag && stagedEntry?.effort
+            : stagedIsTag && stagedEntry?.effort
               ? `effort: ${effortLabel(stagedEntry.effort)} (tag pin)`
               : null;
       const parts = [
@@ -592,7 +593,6 @@ export function useModelPickerFlow({
     routeSort,
     stagedBare,
     stagedRoute,
-    skipPinsOnTag,
     stagedEntry,
     stagedIsTag,
     stagedLabel,
@@ -784,8 +784,9 @@ const createPageStyles = (palette: Palette) => ({
 /**
  * The model picker of the chat, built from the same list as /model on the other channels: the
  * model, then its effort, then the window this conversation may use. The staged combo is sent
- * on Apply and the server answers with the state it stored. The session's /effort sits above a
- * tag's pin, so the effort step stays even when the staged model is a tag.
+ * on Apply and the server answers with the state it stored. A tag is indivisible: picking one
+ * applies it as it stands, so the effort and window steps are skipped for it, exactly like the
+ * config flows (agent, global, job).
  */
 export function ModelSheet({
   threadId,
