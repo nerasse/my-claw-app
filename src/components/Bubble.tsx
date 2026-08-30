@@ -51,6 +51,42 @@ export const Bubble = React.memo(function BubbleView({
   // While the model is only thinking there is no text yet. The reasoning line already says so, so
   // the bare caret would be a second, redundant "working" indicator in the same bubble.
   const thinkingShown = Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
+  // Where the attachments sit: the owner's message reads as legend under its own capture (what the
+  // photo is, said after it), the agent's answer reads as a reply, then the file it produced. The
+  // live `addAgentMessage` merges the media bubble the router sends after the streamed text into
+  // the stream bubble, so this order is what a finished turn shows on screen.
+  const attachmentsEl = item.attachments.map(att => (
+    <AttachmentView
+      key={att.id}
+      att={att}
+      mediaBase={mediaBase}
+      deviceInfo={deviceInfo}
+      onOpen={onOpenAttachment}
+      // Each recording carries its own words; one blob under all of them would say the
+      // wrong thing twice.
+      transcript={item.transcripts?.[att.id]}
+      onAccent={!agent}
+    />
+  ));
+  const textEl = item.text ? (
+    agent && !item.command && !item.notice ? (
+      <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
+    ) : (
+      <Text
+        style={[
+          styles.text,
+          item.command ? styles.textCommand : item.notice ? styles.textNotice : styles.textUser,
+          lineBoxFor(font.body, item.text),
+        ]}>
+        {item.text}
+        {/* A command the server is still running says how long it has been at it; a
+            caret would only blink on text nobody is writing. */}
+        {item.streaming ? item.command ? <CommandElapsed since={item.ts} /> : '▍' : ''}
+      </Text>
+    )
+  ) : item.streaming && !thinkingShown ? (
+    <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(font.body) }]}>▍</Text>
+  ) : null;
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
       {/* Long press opens the message menu, which is where copying and selecting live: the gesture
@@ -81,38 +117,9 @@ export const Bubble = React.memo(function BubbleView({
           <ReasoningLine reasoning={item.reasoning} tokens={item.reasoningTokens} streaming={item.streaming} expandReasoning={expandReasoning} />
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
-        {item.attachments.map(att => (
-          <AttachmentView
-            key={att.id}
-            att={att}
-            mediaBase={mediaBase}
-            deviceInfo={deviceInfo}
-            onOpen={onOpenAttachment}
-            // Each recording carries its own words; one blob under all of them would say the
-            // wrong thing twice.
-            transcript={item.transcripts?.[att.id]}
-            onAccent={!agent}
-          />
-        ))}
-        {item.text ? (
-          agent && !item.command && !item.notice ? (
-            <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
-          ) : (
-            <Text
-              style={[
-                styles.text,
-                item.command ? styles.textCommand : item.notice ? styles.textNotice : styles.textUser,
-                lineBoxFor(font.body, item.text),
-              ]}>
-              {item.text}
-              {/* A command the server is still running says how long it has been at it; a
-                  caret would only blink on text nobody is writing. */}
-              {item.streaming ? item.command ? <CommandElapsed since={item.ts} /> : '▍' : ''}
-            </Text>
-          )
-        ) : item.streaming && !thinkingShown ? (
-          <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(font.body) }]}>▍</Text>
-        ) : null}
+        {!agent ? attachmentsEl : null}
+        {textEl}
+        {agent ? attachmentsEl : null}
 
         {/* Below the outcome line, folded: what a command produced too much of to state inline
             (a compaction summary). Reading it is a choice, not a wall of text in the thread. */}
