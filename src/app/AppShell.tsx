@@ -2940,6 +2940,7 @@ export function AppShell(): React.JSX.Element {
             onNewThread={newThread}
             onThreadMenu={setThreadMenu}
             onOpenMore={() => setMoreOpen(true)}
+            onOpenSettings={openSettings}
             onHome={handleHome}
           />
         ) : null}
@@ -2960,6 +2961,7 @@ export function AppShell(): React.JSX.Element {
             onNewThread={newThread}
             onThreadMenu={setThreadMenu}
             onOpenMore={() => setMoreOpen(true)}
+            onOpenSettings={openSettings}
             onHome={handleHome}
           />
         ) : (
@@ -3536,6 +3538,7 @@ export function AppShell(): React.JSX.Element {
         onNewThread={newThread}
         onThreadMenu={setThreadMenu}
         onOpenMore={() => setMoreOpen(true)}
+        onOpenSettings={openSettings}
         onHome={handleHome}
       />
       )}

@@ -4,7 +4,7 @@ import Sortable, { type SortableGridDragEndParams } from 'react-native-sortables
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { PlusIcon } from '../components/icons';
+import { GearIcon, PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { isPinned, pinnedOf, setOrder } from '../core/pinned';
@@ -52,6 +52,7 @@ export function Drawer({
   onNewThread,
   onThreadMenu,
   onOpenMore,
+  onOpenSettings,
   home,
   onHome,
 }: {
@@ -71,6 +72,8 @@ export function Drawer({
   onThreadMenu: (thread: SessionSummary) => void;
   /** The one footer entry: opens the sheet with Archived, Agents, Jobs and Settings. */
   onOpenMore: () => void;
+  /** Jump straight to Settings from the home footer. */
+  onOpenSettings: () => void;
   /** Full-screen list on phone/tablet when no thread is open. */
   home?: boolean;
   /** Back to home (no-op when already home). */
@@ -299,6 +302,13 @@ export function Drawer({
             </View>
             <Text style={styles.footerGlyph}>›</Text>
           </Pressable>
+          <Pressable
+            style={styles.settingsButton}
+            onPress={onOpenSettings}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings">
+            <GearIcon size={22} color={palette.text} />
+          </Pressable>
         </View>
     </>
   );
@@ -372,7 +382,7 @@ const createStyles = (palette: Palette) => ({
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },
-  brand: { fontSize: font.screen, fontWeight: '700' as const, color: palette.text, letterSpacing: 0.2 },
+  brand: { fontSize: 22, fontWeight: '700' as const, color: palette.text, letterSpacing: 0.2 },
   homeButton: {
     padding: 0,
     backgroundColor: 'transparent' as const,
@@ -428,9 +438,18 @@ const createStyles = (palette: Palette) => ({
     paddingTop: space.md,
     gap: space.md,
   },
-  footerRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  footerRow: { flexDirection: 'row' as const, alignItems: 'center' as const, flex: 1 },
   footerMain: { flex: 1, gap: 1 },
   footerTitle: { fontSize: font.body, color: palette.text },
   footerMeta: { fontSize: font.small, color: palette.textMuted },
   footerGlyph: { fontSize: font.screen, color: palette.textFaint },
+  settingsButton: {
+    width: 56,
+    height: 40,
+    marginLeft: space.sm,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
 });
