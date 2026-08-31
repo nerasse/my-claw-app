@@ -119,7 +119,7 @@ export interface DeviceBridgeNative {
    * Downloads the APK through the server relay into a fixed staging file.
    * Resolves when the download has completed; the install is a separate call.
    */
-  downloadApk(url: string, transferId: string, version: string): Promise<void>;
+  downloadApk(url: string, transferId: string, version: string, expectedSize: number): Promise<void>;
   /**
    * Commits the staged APK to PackageInstaller. Resolves when the session is committed;
    * the system confirmation and the outcome arrive via `claw:update:install`.
@@ -245,7 +245,8 @@ export const deviceBridge: DeviceBridgeNative = {
   getNetworkType: () => native?.getNetworkType() ?? Promise.resolve('other'),
   canInstallApk: () => native?.canInstallApk() ?? Promise.resolve(false),
   openUnknownSourcesSettings: () => native?.openUnknownSourcesSettings(),
-  downloadApk: (url, transferId, version) => native?.downloadApk(url, transferId, version) ?? Promise.resolve(),
+  downloadApk: (url, transferId, version, expectedSize) =>
+    native?.downloadApk(url, transferId, version, expectedSize) ?? Promise.resolve(),
   installStagedApk: () => native?.installStagedApk() ?? Promise.resolve(),
   stagedApkInfo: () =>
     native?.stagedApkInfo() ?? Promise.resolve({ staged: false, size: 0, version: '' }),

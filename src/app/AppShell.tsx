@@ -1767,7 +1767,7 @@ export function AppShell(): React.JSX.Element {
     async (version: string, apkSize: number) => {
       setAppUpdatePhase({ kind: 'downloading', version, apkSize, progress: 0 });
       try {
-        await appUpdateRuntime.download(mediaBase, deviceInfo, `app-update-${version}`, version);
+        await appUpdateRuntime.download(mediaBase, deviceInfo, `app-update-${version}`, version, apkSize);
         setAppUpdatePhase({ kind: 'ready', version });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'download failed';
@@ -1798,22 +1798,16 @@ export function AppShell(): React.JSX.Element {
           );
           return;
         }
-        // Android 8+ needs the "install unknown apps" opt-in before PackageInstaller will commit.
-        // Check first so the tap opens the permission screen instead of failing the session; the
-        // staged APK stays on disk, so coming back installs it directly.
-        const allowed = await appUpdateRuntime.canInstall().catch(() => false);
-        if (!allowed) {
-          setAppUpdatePhase(prev =>
-            reduceAppUpdate(prev, { type: 'failed', message: 'allow this app to install updates, then tap Install', staged: true }),
-          );
-          appUpdateRuntime.openInstallSettings();
-          return;
-        }
+        // No permission pre-check: canRequestPackageInstalls() is cached per process, so right
+        // after the owner grants it and comes back it still reads false, and refusing here blocks
+        // an install the system would accept. Android shows its own dialog when the permission is
+        // missing; only a SecurityException coming back means it was really refused.
         try {
           await appUpdateRuntime.install();
         } catch (err) {
           const message = err instanceof Error ? err.message : 'install failed';
           setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: true }));
+          if (/security|permission|unknown/i.test(message)) appUpdateRuntime.openInstallSettings();
         }
       })().catch(() => {});
       return;
@@ -1890,7 +1884,7 @@ export function AppShell(): React.JSX.Element {
       transferId = `app-update-${version}`;
       setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadStarted', version, apkSize }));
       try {
-        await appUpdateRuntime.download(mediaBase, deviceInfo, transferId, version);
+        await appUpdateRuntime.download(mediaBase, deviceInfo, transferId, version, apkSize);
         if (cancelled) return;
         setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadDone', version }));
       } catch (err) {

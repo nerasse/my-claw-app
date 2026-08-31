@@ -15,7 +15,14 @@ export interface AppUpdateRuntime {
   /** GET /app-update through the server relay, authenticated like media. */
   check(mediaBase: string, deviceInfo: DeviceInfo | null): Promise<AppUpdateCheckResult>;
   /** GET /app-update/apk into the native staging file; resolves on download completion. */
-  download(mediaBase: string, deviceInfo: DeviceInfo | null, transferId: string, version: string): Promise<void>;
+  download(
+    mediaBase: string,
+    deviceInfo: DeviceInfo | null,
+    transferId: string,
+    version: string,
+    /** What the check reported. The relay streams, so the response carries no Content-Length. */
+    expectedSize: number,
+  ): Promise<void>;
   /** What is on disk right now. The UI offers Install from this, never from what it remembers. */
   staged(): Promise<{ staged: boolean; size: number; version: string }>;
   /** Drops a staged APK that is stale or refused, so the next tap downloads instead of looping. */
@@ -48,10 +55,10 @@ export const appUpdateRuntime: AppUpdateRuntime = {
     }
   },
 
-  async download(mediaBase, deviceInfo, transferId, version) {
+  async download(mediaBase, deviceInfo, transferId, version, expectedSize) {
     if (!deviceInfo) throw new Error('no device identity');
     const url = `${mediaBase}/app-update/apk?${authQuery(deviceInfo)}`;
-    await deviceBridge.downloadApk(url, transferId, version);
+    await deviceBridge.downloadApk(url, transferId, version, expectedSize);
   },
 
   async staged() {

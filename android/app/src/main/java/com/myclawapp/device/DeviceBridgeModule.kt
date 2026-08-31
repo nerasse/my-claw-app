@@ -942,11 +942,6 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     promise.resolve(reactContext.packageManager.canRequestPackageInstalls())
   }
 
-  /** Resolves true iff the unknown-sources permission is granted (mirror of canInstallApk, but with no promise). */
-  private fun unknownSourcesAllowed(): Boolean {
-    return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || reactContext.packageManager.canRequestPackageInstalls()
-  }
-
   /** Opens the system screen that grants the app the right to install packages. */
   @ReactMethod
   fun openUnknownSourcesSettings() {
@@ -960,7 +955,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    * events flow to JS through the same transfer channel as media.
    */
   @ReactMethod
-  fun downloadApk(url: String, transferId: String, version: String, promise: Promise) {
+  fun downloadApk(url: String, transferId: String, version: String, expectedSize: Double, promise: Promise) {
     val request = Request.Builder().url(url).get().build()
     apkClient.newCall(request).enqueue(object : Callback {
       override fun onFailure(call: Call, e: IOException) {
@@ -980,8 +975,27 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
           try {
             val target = stagedApk()
             if (target.exists()) target.delete()
+            // The relay streams the APK, so the response is chunked and carries no
+            // Content-Length: contentLength() is -1 and a percentage cannot be computed from it.
+            // The size the check already reported is the authority when that happens.
+            val declared = body.contentLength()
+            val total = if (declared > 0) declared else expectedSize.toLong()
             target.outputStream().use { out ->
-              copyWithProgress(body.byteStream(), out, body.contentLength(), transferId)
+              copyWithProgress(body.byteStream(), out, total, transferId)
+            }
+            // A truncated download installs as a corrupt package and fails with a message that
+            // explains nothing. Two cheap checks: the APK magic, and the size we were promised.
+            val magic = ByteArray(2)
+            target.inputStream().use { it.read(magic) }
+            if (magic[0] != 'P'.code.toByte() || magic[1] != 'K'.code.toByte()) {
+              target.delete()
+              promise.reject("APK_CORRUPT", "the downloaded file is not an apk")
+              return
+            }
+            if (total > 0 && target.length() != total) {
+              target.delete()
+              promise.reject("APK_TRUNCATED", "download stopped at ${target.length()} of $total bytes")
+              return
             }
             // The version travels with the file: a staged APK that cannot say what it carries
             // is a staged APK the UI has to guess about, and guessing is what looped here.
@@ -1059,12 +1073,11 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       promise.reject("APK_NOT_STAGED", "no staged apk, download first")
       return
     }
-    // The commit itself throws SecurityException when the "install unknown apps" switch is off;
-    // reject early with a message the card renders raw, and let it offer the settings button.
-    if (!unknownSourcesAllowed()) {
-      promise.reject("UNKNOWN_SOURCES_DISABLED", "allow this app to install updates first")
-      return
-    }
+    // Deliberately no canRequestPackageInstalls() gate here. That value is cached per process,
+    // so after the owner grants the permission and comes back it can still read false, and the
+    // install we refuse is one the system would have accepted. Android documents the real
+    // behaviour: when the permission is missing, the package installer shows its own dialog with
+    // a link to the settings. So commit, and only treat a SecurityException as a refusal.
     mainHandler.post {
       try {
         val pkg = reactContext.packageManager.packageInstaller

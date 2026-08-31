@@ -31,10 +31,14 @@ export function AppUpdateModal({
   // Read unconditionally: a hook after an early return would make the call count change.
   const transferId = phase.kind === 'downloading' ? `app-update-${phase.version}` : null;
   const transfer = useTransferProgress(transferId);
-  // Progress is owned by the transfer channel. The reducer's own number is a fallback only.
+  // The relay streams the APK, so the response is chunked and the transfer may report a total
+  // of -1. The size the check reported is then the only one there is; without this fallback the
+  // bar sits at 0% for the whole download and the dialog claims 0 MB.
+  const expected = phase.kind === 'downloading' ? phase.apkSize : 0;
+  const total = transfer && transfer.total > 0 ? transfer.total : expected;
   const progress =
-    transfer && transfer.total > 0
-      ? Math.min(1, transfer.bytes / transfer.total)
+    transfer && total > 0
+      ? Math.min(1, transfer.bytes / total)
       : phase.kind === 'downloading'
         ? phase.progress
         : 0;
@@ -61,7 +65,7 @@ export function AppUpdateModal({
     phase.kind === 'available'
       ? `Version ${phase.version} is available (${formatMb(phase.apkSize)}).`
       : phase.kind === 'downloading'
-        ? `Version ${phase.version} · ${Math.round(progress * 100)}% of ${formatMb(transfer?.total ?? phase.apkSize)}`
+        ? `Version ${phase.version} · ${Math.round(progress * 100)}% of ${formatMb(total)}`
         : phase.kind === 'ready'
           ? `Version ${phase.version} is downloaded. Android will ask you to confirm.`
           : phase.message;

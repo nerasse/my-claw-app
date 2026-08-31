@@ -133,7 +133,7 @@ export interface DeviceBridgeNative {
   getNetworkType(): Promise<string>;
   canInstallApk(): Promise<boolean>;
   openUnknownSourcesSettings(): void;
-  downloadApk(url: string, transferId: string, version: string): Promise<void>;
+  downloadApk(url: string, transferId: string, version: string, expectedSize: number): Promise<void>;
   installStagedApk(): Promise<void>;
   stagedApkInfo(): Promise<{ staged: boolean; size: number; version: string }>;
   clearStagedApk(): Promise<void>;
