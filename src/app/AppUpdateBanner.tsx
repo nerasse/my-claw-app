@@ -27,7 +27,16 @@ export function AppUpdateBanner({
         : phase.kind === 'error'
           ? `app update failed · ${phase.message}`
           : `app update ${phase.version} available`;
-  const action = phase.kind === 'downloading' ? null : phase.kind === 'ready' ? 'Install' : 'Get it';
+  // A `ready` installs; an `error` with the APK still staged installs too (it failed while
+  // installing, or the permission check said no). All other errors just offer a re-download.
+  const action =
+    phase.kind === 'downloading'
+      ? null
+      : phase.kind === 'ready' || (phase.kind === 'error' && phase.staged)
+        ? 'Install'
+        : phase.kind === 'error'
+          ? 'Retry'
+          : 'Get it';
   return (
     <View style={styles.banner}>
       <Text style={styles.text} numberOfLines={2}>

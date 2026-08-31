@@ -87,4 +87,28 @@ describe('the app update phase', () => {
     );
     expect(phase).toEqual({ kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0.4 });
   });
+
+  it('keeps a staged APK on ready when a failed install is followed by a check', () => {
+    const phase = run(
+      [{ type: 'checked', result: { ok: true, version: '0.5.53', apkSize: 45_000_000 }, current: '0.5.52' }],
+      { kind: 'error', message: 'install failed', staged: true },
+    );
+    expect(phase).toEqual({ kind: 'ready', version: '0.5.53' });
+  });
+
+  it('marks a failure after install as staged so the next tap installs again', () => {
+    const phase = run(
+      [{ type: 'failed', message: 'install failed' }],
+      { kind: 'installing', version: '0.5.53' },
+    );
+    expect(phase).toEqual({ kind: 'error', message: 'install failed', staged: true });
+  });
+
+  it('does not mark a failed download as staged', () => {
+    const phase = run(
+      [{ type: 'failed', message: 'download failed' }],
+      { kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0.5 },
+    );
+    expect(phase).toEqual({ kind: 'error', message: 'download failed', staged: false });
+  });
 });

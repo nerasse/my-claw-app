@@ -234,6 +234,7 @@ jest.mock('./src/core/nativeBridge', () => ({
     openUnknownSourcesSettings: jest.fn(),
     downloadApk: jest.fn(() => Promise.resolve()),
     installStagedApk: jest.fn(() => Promise.resolve()),
+    drainInstallResult: jest.fn(),
     cancelNotification: jest.fn(() => Promise.resolve()),
     prefsSet: jest.fn(() => Promise.resolve()),
     pickFile: jest.fn(() => Promise.resolve([])),

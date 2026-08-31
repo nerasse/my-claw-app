@@ -18,10 +18,12 @@ export interface AppUpdateRuntime {
   download(mediaBase: string, deviceInfo: DeviceInfo | null, transferId: string): Promise<void>;
   /** Commits the staged APK; the system confirmation and outcome arrive via onInstallStatus. */
   install(): Promise<void>;
-  /** Android 8+ opt-in; if false the system settings must be opened first. */
+  /** True if Install can be offered right now; false means the settings permission screen must come first. */
   canInstall(): Promise<boolean>;
   /** Opens the system "install unknown apps" screen. */
   openInstallSettings(): void;
+  /** Delivers an install result parked at cold start; call once the status listener is subscribed. */
+  drainInstallResult(): void;
   /** Whether the auto-download policy allows a download right now. */
   canAutoDownload(pref: boolean): Promise<boolean>;
   /** Listens for the install status event; returns an unsubscribe. */
@@ -58,6 +60,10 @@ export const appUpdateRuntime: AppUpdateRuntime = {
 
   openInstallSettings() {
     deviceBridge.openUnknownSourcesSettings();
+  },
+
+  drainInstallResult() {
+    deviceBridge.drainInstallResult();
   },
 
   async canAutoDownload(pref) {

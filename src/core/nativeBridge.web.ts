@@ -135,6 +135,7 @@ export interface DeviceBridgeNative {
   openUnknownSourcesSettings(): void;
   downloadApk(url: string, transferId: string): Promise<void>;
   installStagedApk(): Promise<void>;
+  drainInstallResult(): void;
   cancelNotification(id: number): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
   clipboardHasImage(): Promise<boolean>;
@@ -630,6 +631,7 @@ export const deviceBridge: DeviceBridgeNative = {
   openUnknownSourcesSettings: () => {},
   downloadApk: () => Promise.resolve(),
   installStagedApk: () => Promise.resolve(),
+  drainInstallResult: () => {},
   cancelNotification: () => Promise.resolve(),
   pickFile: () =>
     new Promise(resolve => {

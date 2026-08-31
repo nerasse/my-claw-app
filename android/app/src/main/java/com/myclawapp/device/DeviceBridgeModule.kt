@@ -928,7 +928,11 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     }
   }
 
-  /** Android 8+ requires the "install unknown apps" opt-in before a PackageInstaller session can commit. */
+  /**
+   * Android 8+ requires the "install unknown apps" opt-in before a PackageInstaller session can
+   * commit. The caller checks before showing Install; this also lets the settings card show the
+   * right hint (and skip straight to the permission screen).
+   */
   @ReactMethod
   fun canInstallApk(promise: Promise) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -936,6 +940,11 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       return
     }
     promise.resolve(reactContext.packageManager.canRequestPackageInstalls())
+  }
+
+  /** Resolves true iff the unknown-sources permission is granted (mirror of canInstallApk, but with no promise). */
+  private fun unknownSourcesAllowed(): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || reactContext.packageManager.canRequestPackageInstalls()
   }
 
   /** Opens the system screen that grants the app the right to install packages. */
@@ -1002,6 +1011,12 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       promise.reject("APK_NOT_STAGED", "no staged apk, download first")
       return
     }
+    // The commit itself throws SecurityException when the "install unknown apps" switch is off;
+    // reject early with a message the card renders raw, and let it offer the settings button.
+    if (!unknownSourcesAllowed()) {
+      promise.reject("UNKNOWN_SOURCES_DISABLED", "allow this app to install updates first")
+      return
+    }
     mainHandler.post {
       try {
         val pkg = reactContext.packageManager.packageInstaller
@@ -1022,20 +1037,32 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
               input.copyTo(out)
             }
           }
-          InstallResultReceiver.register(reactContext)
-          session.commit(sender.intentSender)
-          promise.resolve(null)
+          // A late write (or a purge) between the previous check and this non-destructive guard
+          // must not produce a 0-byte session: a corrupt stage aborts with a clear error.
+          if (file.length() == 0L) {
+            promise.reject("APK_CORRUPT", "staged apk is empty, download again")
+          } else {
+            session.commit(sender.intentSender)
+            promise.resolve(null)
+          }
         } finally {
           session.close()
         }
+      } catch (e: SecurityException) {
+        promise.reject("UNKNOWN_SOURCES_DISABLED", "allow this app to install updates first")
       } catch (e: Exception) {
         promise.reject("APK_INSTALL_FAILED", e.message ?: "apk install failed")
       }
     }
   }
 
-  /**
-   * Android's own record of why our previous processes died. It is the only source that can tell
+  /** If an install result was parked at cold start, delivers it now that JS is subscribed. */
+  @ReactMethod
+  fun drainInstallResult() {
+    InstallResultReceiver.drainPending()
+  }
+
+  /** Android's own record of why our previous processes died. It is the only source that can tell
    * a crash from an ANR, an OOM kill, or the battery optimiser stopping the foreground service —
    * four causes that produce the same visible symptom. It survives reboots, unlike logcat's ring
    * buffer, and needs no adb, which is the point: the phone is not always on a network where adb

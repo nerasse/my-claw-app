@@ -125,6 +125,8 @@ export interface DeviceBridgeNative {
    * the system confirmation and the outcome arrive via `claw:update:install`.
    */
   installStagedApk(): Promise<void>;
+  /** Delivers an install result that arrived before JS subscribed (cold start after install). */
+  drainInstallResult(): void;
   /**
    * Dismisses one posted notification by the id it was posted with (docs/notifications.md).
    * Native because the notification is rendered by a service that may have run while this JS
@@ -241,6 +243,7 @@ export const deviceBridge: DeviceBridgeNative = {
   openUnknownSourcesSettings: () => native?.openUnknownSourcesSettings(),
   downloadApk: (url, transferId) => native?.downloadApk(url, transferId) ?? Promise.resolve(),
   installStagedApk: () => native?.installStagedApk() ?? Promise.resolve(),
+  drainInstallResult: () => native?.drainInstallResult(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   clipboardHasImage: () => native?.clipboardHasImage() ?? Promise.resolve(false),

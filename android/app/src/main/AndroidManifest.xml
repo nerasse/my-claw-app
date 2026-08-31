@@ -71,5 +71,16 @@
         android:exported="false"
         android:foregroundServiceType="dataSync"
         android:stopWithTask="false" />
+
+      <!-- The update install result: PackageInstaller answers a broadcast PendingIntent, and a
+           receiver declared here is the one reliable delivery path across API levels. It is
+           exported=false because the intent is created by this app only. -->
+      <receiver
+        android:name=".device.InstallResultReceiver"
+        android:exported="false">
+        <intent-filter>
+          <action android:name="com.myclawapp.device.INSTALL_RESULT" />
+        </intent-filter>
+      </receiver>
     </application>
 </manifest>

@@ -16,6 +16,9 @@ object DeviceBus {
     reactContext = null
   }
 
+  /** True when a JS runtime is attached; guards the cold-start buffer in InstallResultReceiver. */
+  fun hasRuntime(): Boolean = reactContext != null
+
   fun emit(event: String, payload: WritableMap? = null) {
     val context = reactContext ?: return
     val emitter = context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java) ?: return

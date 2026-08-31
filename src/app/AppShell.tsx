@@ -425,6 +425,11 @@ export function AppShell(): React.JSX.Element {
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: 'idle' });
   /** The app update card: check, download, install. See core/appUpdate.ts. */
   const [appUpdatePhase, setAppUpdatePhase] = useState<AppUpdatePhase>({ kind: 'idle' });
+  /** Mirror of appUpdatePhase for async callbacks: a stale closure must not re-download. */
+  const appUpdatePhaseRef = useRef<AppUpdatePhase>({ kind: 'idle' });
+  useEffect(() => {
+    appUpdatePhaseRef.current = appUpdatePhase;
+  }, [appUpdatePhase]);
   /** Only moves while a server update runs, so nothing else in the tree redraws on a clock. */
   const [updateNow, setUpdateNow] = useState(0);
   /** Only the two settings screens read it: a re-render there is enough. */
@@ -1728,20 +1733,36 @@ export function AppShell(): React.JSX.Element {
   }, []);
 
   const runAppUpdate = useCallback(() => {
-    // The APK is staged only when the phase is `ready`. A tap in `available` (or after an error)
-    // downloads now, whatever the network policy says: the owner asked. `ready` installs.
-    if (appUpdatePhase.kind === 'ready') {
-      setAppUpdatePhase({ kind: 'installing', version: appUpdatePhase.version });
+    // A stale closure must never re-download what the auto-download already staged: read the
+    // ref, and ignore taps that land while a transfer or an install is already in flight.
+    const state = appUpdatePhaseRef.current;
+    if (state.kind === 'downloading' || state.kind === 'installing') return;
+    if (state.kind === 'ready' || (state.kind === 'error' && state.staged)) {
+      // Android 8+ needs the "install unknown apps" opt-in before PackageInstaller will commit.
+      // Check first so the tap shows the permission screen instead of failing the session;
+      // the staged APK stays on disk, so returning after the grant installs directly.
+      setAppUpdatePhase({ kind: 'installing', version: state.kind === 'ready' ? state.version : '' });
       appUpdateRuntime
-        .install()
+        .canInstall()
+        .then(ok => {
+          if (!ok) {
+            setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message: 'unknown sources permission needed' }));
+            appUpdateRuntime.openInstallSettings();
+            return;
+          }
+          appUpdateRuntime.install().catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : 'install failed';
+            setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message }));
+          });
+        })
         .catch(() => {
-          setAppUpdatePhase({ kind: 'error', message: 'install failed' });
+          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message: 'install failed' }));
         });
       return;
     }
-    if (appUpdatePhase.kind === 'available' || appUpdatePhase.kind === 'error') {
-      const version = appUpdatePhase.kind === 'available' ? appUpdatePhase.version : appVersion ?? '0.0.0';
-      const apkSize = appUpdatePhase.kind === 'available' ? appUpdatePhase.apkSize : 0;
+    if (state.kind === 'available' || state.kind === 'error') {
+      const version = state.kind === 'available' ? state.version : '<latest>';
+      const apkSize = state.kind === 'available' ? state.apkSize : 0;
       setAppUpdatePhase({ kind: 'downloading', version, apkSize, progress: 0 });
       appUpdateRuntime
         .download(mediaBase, deviceInfo, `app-update-${version}`)
@@ -1749,8 +1770,8 @@ export function AppShell(): React.JSX.Element {
           // The version may be unknown after an error; the download itself carries the file.
           setAppUpdatePhase({ kind: 'ready', version });
         })
-        .catch(err => {
-          setAppUpdatePhase({ kind: 'error', message: err instanceof Error ? err.message : 'download failed' });
+        .catch((err: unknown) => {
+          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message: err instanceof Error ? err.message : 'download failed' }));
         });
       return;
     }
@@ -1760,10 +1781,10 @@ export function AppShell(): React.JSX.Element {
       .check(mediaBase, deviceInfo)
       .then(result => {
         const current = appVersion ?? '';
-        setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'checked', result, current }));
+        setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'checked', result, current }));
       })
       .catch(() => {});
-  }, [appUpdatePhase, mediaBase, deviceInfo, appVersion]);
+  }, [mediaBase, deviceInfo, appVersion]);
 
   const openAppUpdateInstallSettings = useCallback(() => {
     appUpdateRuntime.openInstallSettings();
@@ -1791,22 +1812,32 @@ export function AppShell(): React.JSX.Element {
   // data when the owner allows it), and follow the install status the system reports.
   useEffect(() => {
     if (status.state !== 'connected') return;
+    // The running build's version is what a check compares against. Until it is known (the
+    // bridge answers within the first frames) comparing against an empty string would read
+    // every release as newer and auto-download the APK at every boot.
+    if (appVersion === null || appVersion === '') return;
     let cancelled = false;
     let transferId: string | null = null;
 
     const maybeAutoDownload = async (version: string, apkSize: number) => {
       if (transferId) return;
+      // Already staged or installing: nothing to download. The check may fire again while the
+      // APK sits on disk, and re-downloading it is what turned Install back into Get it.
+      const atStart = appUpdatePhaseRef.current;
+      if (atStart.kind === 'ready' || atStart.kind === 'installing' || atStart.kind === 'downloading') return;
       const allowed = await appUpdateRuntime.canAutoDownload(updateOnMobileData);
       if (!allowed) return;
+      const stillIdle = appUpdatePhaseRef.current;
+      if (stillIdle.kind === 'ready' || stillIdle.kind === 'installing' || stillIdle.kind === 'downloading') return;
       transferId = `app-update-${version}`;
-      setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'downloadStarted', version, apkSize }));
+      setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadStarted', version, apkSize }));
       try {
         await appUpdateRuntime.download(mediaBase, deviceInfo, transferId);
         if (cancelled) return;
-        setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'downloadDone', version }));
+        setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadDone', version }));
       } catch (err) {
         if (cancelled) return;
-        setAppUpdatePhase(phase => reduceAppUpdate(phase, {
+        setAppUpdatePhase(prev => reduceAppUpdate(prev, {
           type: 'failed',
           message: err instanceof Error ? err.message : 'download failed',
         }));
@@ -1818,15 +1849,33 @@ export function AppShell(): React.JSX.Element {
     const check = async () => {
       const result = await appUpdateRuntime.check(mediaBase, deviceInfo);
       if (cancelled) return;
-      setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'checked', result, current: appVersion ?? '' }));
-      const next = reduceAppUpdate({ kind: 'idle' }, { type: 'checked', result, current: appVersion ?? '' });
-      if (next.kind === 'available') {
-        maybeAutoDownload(next.version, next.apkSize);
+      // The reducer refuses to reset an in-flight download/install; mirror that here for the
+      // auto-download branch, which runs off its own computed state.
+      setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'checked', result, current: appVersion ?? '' }));
+      const afterCheck = appUpdatePhaseRef.current;
+      if (afterCheck.kind !== 'ready' && afterCheck.kind !== 'installing' && afterCheck.kind !== 'downloading') {
+        // The reducer is the one judge of what a check means here: an error that still has the
+        // APK staged becomes `ready` (install, no download); anything else becomes `available`
+        // and may auto-download on wifi.
+        const after = reduceAppUpdate(afterCheck, { type: 'checked', result, current: appVersion ?? '' });
+        if (after.kind === 'available') {
+          maybeAutoDownload(after.version, after.apkSize);
+        }
       }
     };
 
     check();
     const timer = setInterval(() => check(), 4 * 60 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [status.state, mediaBase, deviceInfo, appVersion, updateOnMobileData]);
+
+  // The install outcome listener lives outside the connection gate: the answer can arrive right
+  // after a cold start, while the socket is still reconnecting, and dropping it would strand the
+  // UI on "installing…" forever. Subscribe once, and drain whatever was parked before JS ran.
+  useEffect(() => {
     const offInstall = appUpdateRuntime.onInstallStatus((installStatus, message) => {
       if (installStatus === 'success') {
         setAppUpdatePhase({ kind: 'installing', version: '' });
@@ -1834,13 +1883,9 @@ export function AppShell(): React.JSX.Element {
         setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'failed', message: message ?? 'install failed' }));
       }
     });
-
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-      offInstall();
-    };
-  }, [status.state, mediaBase, deviceInfo, appVersion, updateOnMobileData]);
+    appUpdateRuntime.drainInstallResult();
+    return offInstall;
+  }, []);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
     // No optimistic write: the server answers with the state it actually stored, including what

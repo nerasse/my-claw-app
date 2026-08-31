@@ -23,7 +23,7 @@ export type AppUpdatePhase =
   | { kind: 'downloading'; version: string; apkSize: number; progress: number }
   | { kind: 'ready'; version: string }
   | { kind: 'installing'; version: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; staged?: boolean };
 
 export type AppUpdateEvent =
   | { type: 'checked'; result: AppUpdateCheckResult; current: string }
@@ -48,6 +48,11 @@ export function reduceAppUpdate(phase: AppUpdatePhase, event: AppUpdateEvent): A
       if (!latest || compareVersions(latest, current) <= 0) {
         return { kind: 'uptodate', version: current };
       }
+      // An APK that failed to install is still staged: a later tick must not send the user back
+      // to `available` (and re-download). The staged file is the latest release, so `ready`.
+      if (phase.kind === 'error' && phase.staged) {
+        return { kind: 'ready', version: latest };
+      }
       return { kind: 'available', version: latest, apkSize: result.apkSize ?? 0 };
     }
     case 'downloadStarted':
@@ -64,7 +69,10 @@ export function reduceAppUpdate(phase: AppUpdatePhase, event: AppUpdateEvent): A
       // Installing replaces the running process; the next render (after reopen) compares again.
       return { kind: 'installing', version: event.version };
     case 'failed':
-      return { kind: 'error', message: event.message };
+      // `staged` preserves whether an APK was already on disk when the failure happened, so a
+      // later tap can install (staged) instead of re-downloading (not): the install path is the
+      // same file PackageInstaller just declined. Installing implies on-disk too.
+      return { kind: 'error', message: event.message, staged: phase.kind === 'ready' || phase.kind === 'installing' };
   }
 }
 
