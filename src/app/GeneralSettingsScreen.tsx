@@ -15,6 +15,7 @@ import {
   appUpdateLabel,
   type AppUpdatePhase,
 } from '../core/appUpdate';
+import { appUpdateSupported } from '../core/appUpdateRuntime';
 import { font, radius, scaleFont, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -390,6 +391,9 @@ export function GeneralSettingsScreen({
           </View>
         </View>
 
+        {/* A browser cannot install an APK over itself: the card would offer a 45 MB download
+            that leads nowhere. Web updates by reloading what the server serves. */}
+        {appUpdateSupported ? (
         <View style={styles.categoryItem}>
           <Text style={styles.section}>app update</Text>
           <View style={styles.card}>
@@ -427,6 +431,7 @@ export function GeneralSettingsScreen({
             ) : null}
           </View>
         </View>
+        ) : null}
       </ScrollView>
     </View>
   );

@@ -162,7 +162,7 @@ import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
 import { reduceUpdate, type UpdatePhase } from '../core/serverUpdate';
 import { reduceAppUpdate, type AppUpdatePhase } from '../core/appUpdate';
-import { appUpdateRuntime } from '../core/appUpdateRuntime';
+import { appUpdateRuntime, appUpdateSupported } from '../core/appUpdateRuntime';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
@@ -445,12 +445,14 @@ export function AppShell(): React.JSX.Element {
           : null;
     setAppUpdateDismissed(version);
   }, []);
-  /** Shown for a decision only: an update to fetch, one ready to install, or a failure that explains itself. */
+  /** Shown for a decision only: an update to fetch, one ready to install, or a failure that explains itself.
+   *  Never in a browser, which has nothing to install an APK with. */
   const appUpdateDialogOpen =
-    (appUpdatePhase.kind === 'available' && appUpdatePhase.version !== appUpdateDismissed) ||
+    appUpdateSupported &&
+    ((appUpdatePhase.kind === 'available' && appUpdatePhase.version !== appUpdateDismissed) ||
     (appUpdatePhase.kind === 'ready' && appUpdatePhase.version !== appUpdateDismissed) ||
     (appUpdatePhase.kind === 'downloading' && appUpdatePhase.version !== appUpdateDismissed) ||
-    (appUpdatePhase.kind === 'error' && (appUpdatePhase.staged ?? 'error') !== appUpdateDismissed);
+      (appUpdatePhase.kind === 'error' && (appUpdatePhase.staged ?? 'error') !== appUpdateDismissed));
   /** Only moves while a server update runs, so nothing else in the tree redraws on a clock. */
   const [updateNow, setUpdateNow] = useState(0);
   /** Only the two settings screens read it: a re-render there is enough. */
@@ -1781,6 +1783,7 @@ export function AppShell(): React.JSX.Element {
   );
 
   const runAppUpdate = useCallback(() => {
+    if (!appUpdateSupported) return;
     // A stale closure must never re-download what the auto-download already staged: read the
     // ref, and ignore taps that land while a transfer or an install is already in flight.
     const state = appUpdatePhaseRef.current;
@@ -1863,6 +1866,7 @@ export function AppShell(): React.JSX.Element {
   // App self-update: check at launch, then every four hours, auto-download on wifi (or on mobile
   // data when the owner allows it), and follow the install status the system reports.
   useEffect(() => {
+    if (!appUpdateSupported) return;
     if (status.state !== 'connected') return;
     // The running build's version is what a check compares against. Until it is known (the
     // bridge answers within the first frames) comparing against an empty string would read
