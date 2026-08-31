@@ -385,7 +385,7 @@ const createStyles = (palette: Palette) => ({
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },
-  brand: { fontSize: 22, fontWeight: '700' as const, color: palette.text, letterSpacing: 0.2 },
+  brand: { fontSize: 27, fontWeight: '800' as const, color: palette.text, letterSpacing: 0.2 },
   homeButton: {
     padding: 0,
     backgroundColor: 'transparent' as const,

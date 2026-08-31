@@ -204,7 +204,7 @@ import { StatusScreen } from './StatusScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
 import { JobSessionsScreen } from './JobSessionsScreen';
-import { Drawer } from './Drawer';
+import { CONNECTION_LABEL, Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ApprovalSheet } from '../components/ApprovalSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
@@ -3996,6 +3996,15 @@ export function AppShell(): React.JSX.Element {
                 setMoreOpen(false);
                 setDrawerOpen(false);
                 openJobs();
+              },
+            },
+            {
+              label: 'Settings',
+              hint: `${CONNECTION_LABEL[status.state]}${pending > 0 ? ` · ${pending} pending` : ''}`,
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                openSettings();
               },
             },
           ]}
