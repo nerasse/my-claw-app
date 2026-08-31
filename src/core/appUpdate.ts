@@ -36,6 +36,12 @@ export type AppUpdateEvent =
 export function reduceAppUpdate(phase: AppUpdatePhase, event: AppUpdateEvent): AppUpdatePhase {
   switch (event.type) {
     case 'checked': {
+      // A check that lands while a transfer or an install is in flight must not reset it: the
+      // four-hour tick would otherwise erase the `downloading` state mid-download, and the
+      // `downloadDone` that follows would be dropped because the phase is no longer downloading.
+      if (phase.kind === 'downloading' || phase.kind === 'ready' || phase.kind === 'installing') {
+        return phase;
+      }
       const { result, current } = event;
       if (!result.ok) return { kind: 'error', message: result.error ?? 'check failed' };
       const latest = result.version ?? '';
@@ -51,8 +57,11 @@ export function reduceAppUpdate(phase: AppUpdatePhase, event: AppUpdateEvent): A
       return { ...phase, progress: event.progress };
     case 'downloadDone':
       if (phase.kind !== 'downloading') return phase;
+      // The APK is staged on disk. `ready` is what the install tap needs; it survives the
+      // component remounting because the staging file does.
       return { kind: 'ready', version: event.version };
     case 'installStarted':
+      // Installing replaces the running process; the next render (after reopen) compares again.
       return { kind: 'installing', version: event.version };
     case 'failed':
       return { kind: 'error', message: event.message };

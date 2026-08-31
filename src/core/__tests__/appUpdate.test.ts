@@ -79,4 +79,12 @@ describe('the app update phase', () => {
     );
     expect(phase).toEqual({ kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0 });
   });
+
+  it('does not let a periodic check reset an in-flight download', () => {
+    const phase = run(
+      [{ type: 'checked', result: { ok: true, version: '0.5.53', apkSize: 45_000_000 }, current: '0.5.52' }],
+      { kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0.4 },
+    );
+    expect(phase).toEqual({ kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0.4 });
+  });
 });

@@ -83,6 +83,16 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       .build()
   }
 
+  // The app-update relay streams a 45 MB APK through the server and Forgejo; a read window of a
+  // minute is a timeout on any network that is not instant, and a dead download with no error
+  // message on screen is the worst kind. Ten minutes of no bytes is a real stall.
+  private val apkClient: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+      .connectTimeout(15, TimeUnit.SECONDS)
+      .readTimeout(10, TimeUnit.MINUTES)
+      .build()
+  }
+
   // Storage Access Framework picker, wired like the (removed from RN) GuardedResultAsyncTask
   // flow: launch ACTION_GET_CONTENT, copy the results to the cache, resolve the promise.
   private val filePickListener: ActivityEventListener = object : BaseActivityEventListener() {
@@ -936,14 +946,14 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   /**
-   * Downloads the APK through the server relay (the phone never sees the Forgejo token), then
-   * hands it to Android's PackageInstaller. One system confirmation follows; the receiver below
-   * reports the status back to JS.
+   * Downloads the APK through the server relay into a fixed staging file. The phone never sees
+   * the Forgejo token; the file at findStagedApk() is what installStagedApk() commits. Progress
+   * events flow to JS through the same transfer channel as media.
    */
   @ReactMethod
-  fun downloadAndInstallApk(url: String, transferId: String, promise: Promise) {
+  fun downloadApk(url: String, transferId: String, promise: Promise) {
     val request = Request.Builder().url(url).get().build()
-    uploadClient.newCall(request).enqueue(object : Callback {
+    apkClient.newCall(request).enqueue(object : Callback {
       override fun onFailure(call: Call, e: IOException) {
         promise.reject("APK_DOWNLOAD_FAILED", e.message ?: "apk download failed")
       }
@@ -959,13 +969,15 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
             return
           }
           try {
-            val target = File(reactContext.cacheDir, "update_${System.currentTimeMillis()}.apk")
+            val target = stagedApk()
+            if (target.exists()) target.delete()
             target.outputStream().use { out ->
               copyWithProgress(body.byteStream(), out, body.contentLength(), transferId)
             }
-            mainHandler.post {
-              commitApk(target, promise)
-            }
+            val map = Arguments.createMap()
+            map.putString("path", target.absolutePath)
+            map.putDouble("size", target.length().toDouble())
+            promise.resolve(map)
           } catch (e: Exception) {
             promise.reject("APK_SAVE_FAILED", e.message ?: "apk save failed")
           }
@@ -974,31 +986,51 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     })
   }
 
-  private fun commitApk(file: File, promise: Promise) {
-    val pkg = reactContext.packageManager.packageInstaller
-    val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-    val sender = PendingIntent.getBroadcast(
-      reactContext,
-      4242,
-      Intent(reactContext, InstallResultReceiver::class.java).setAction(InstallResultReceiver.ACTION_INSTALL_RESULT).setPackage(reactContext.packageName),
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
-    try {
-      val sessionId = pkg.createSession(params)
-      val session = pkg.openSession(sessionId)
+  /** Where the staged APK lives: one fixed name so the install step never guesses. */
+  private fun stagedApk(): File = File(reactContext.cacheDir, "update-staged.apk")
+
+  /**
+   * Commits the staged APK through PackageInstaller. The confirmation is Android's own (one
+   * system screen); the outcome is emitted on claw:update:install by InstallResultReceiver.
+   * This promise resolves once the session is committed, not when the install finishes: the
+   * app is being replaced, so after success the process dies and only the reopen matters.
+   */
+  @ReactMethod
+  fun installStagedApk(promise: Promise) {
+    val file = stagedApk()
+    if (!file.exists() || file.length() == 0L) {
+      promise.reject("APK_NOT_STAGED", "no staged apk, download first")
+      return
+    }
+    mainHandler.post {
       try {
-        file.inputStream().use { input ->
-          session.openWrite("base.apk", 0, file.length()).use { out ->
-            input.copyTo(out)
+        val pkg = reactContext.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        val sender = PendingIntent.getBroadcast(
+          reactContext,
+          4242,
+          Intent(reactContext, InstallResultReceiver::class.java)
+            .setAction(InstallResultReceiver.ACTION_INSTALL_RESULT)
+            .setPackage(reactContext.packageName),
+          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val sessionId = pkg.createSession(params)
+        val session = pkg.openSession(sessionId)
+        try {
+          file.inputStream().use { input ->
+            session.openWrite("base.apk", 0, file.length()).use { out ->
+              input.copyTo(out)
+            }
           }
+          InstallResultReceiver.register(reactContext)
+          session.commit(sender.intentSender)
+          promise.resolve(null)
+        } finally {
+          session.close()
         }
-        InstallResultReceiver.register(reactContext)
-        session.commit(sender.intentSender)
-      } finally {
-        session.close()
+      } catch (e: Exception) {
+        promise.reject("APK_INSTALL_FAILED", e.message ?: "apk install failed")
       }
-    } catch (e: Exception) {
-      promise.reject("APK_INSTALL_FAILED", e.message ?: "apk install failed")
     }
   }
 

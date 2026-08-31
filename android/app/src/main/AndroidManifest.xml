@@ -71,9 +71,5 @@
         android:exported="false"
         android:foregroundServiceType="dataSync"
         android:stopWithTask="false" />
-
-      <receiver
-        android:name=".device.InstallResultReceiver"
-        android:exported="false" />
     </application>
 </manifest>

@@ -14,8 +14,10 @@ const INSTALL_EVENT = 'claw:update:install';
 export interface AppUpdateRuntime {
   /** GET /app-update through the server relay, authenticated like media. */
   check(mediaBase: string, deviceInfo: DeviceInfo | null): Promise<AppUpdateCheckResult>;
-  /** GET /app-update/apk; resolves when download completes, rejects on failure. */
+  /** GET /app-update/apk into the native staging file; resolves on download completion. */
   download(mediaBase: string, deviceInfo: DeviceInfo | null, transferId: string): Promise<void>;
+  /** Commits the staged APK; the system confirmation and outcome arrive via onInstallStatus. */
+  install(): Promise<void>;
   /** Android 8+ opt-in; if false the system settings must be opened first. */
   canInstall(): Promise<boolean>;
   /** Opens the system "install unknown apps" screen. */
@@ -43,7 +45,11 @@ export const appUpdateRuntime: AppUpdateRuntime = {
   async download(mediaBase, deviceInfo, transferId) {
     if (!deviceInfo) throw new Error('no device identity');
     const url = `${mediaBase}/app-update/apk?${authQuery(deviceInfo)}`;
-    await deviceBridge.downloadAndInstallApk(url, transferId);
+    await deviceBridge.downloadApk(url, transferId);
+  },
+
+  async install() {
+    await deviceBridge.installStagedApk();
   },
 
   async canInstall() {

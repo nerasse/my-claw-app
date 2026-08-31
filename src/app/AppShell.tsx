@@ -210,6 +210,7 @@ import { ApprovalSheet } from '../components/ApprovalSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ScreenLayer } from '../components/ScreenLayer';
+import { AppUpdateBanner } from './AppUpdateBanner';
 import { ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { ModelTuneSheet } from '../components/ModelTuneSheet';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -1727,15 +1728,29 @@ export function AppShell(): React.JSX.Element {
   }, []);
 
   const runAppUpdate = useCallback(() => {
-    // The download is already done by the auto-download loop when the phase is `ready`: tap
-    // installs the staged APK. Otherwise (available, idle, up to date) re-check and, if needed,
-    // let the loop start the download on wifi.
+    // The APK is staged only when the phase is `ready`. A tap in `available` (or after an error)
+    // downloads now, whatever the network policy says: the owner asked. `ready` installs.
     if (appUpdatePhase.kind === 'ready') {
       setAppUpdatePhase({ kind: 'installing', version: appUpdatePhase.version });
       appUpdateRuntime
-        .download(mediaBase, deviceInfo, `app-update-install-${appUpdatePhase.version}`)
+        .install()
         .catch(() => {
           setAppUpdatePhase({ kind: 'error', message: 'install failed' });
+        });
+      return;
+    }
+    if (appUpdatePhase.kind === 'available' || appUpdatePhase.kind === 'error') {
+      const version = appUpdatePhase.kind === 'available' ? appUpdatePhase.version : appVersion ?? '0.0.0';
+      const apkSize = appUpdatePhase.kind === 'available' ? appUpdatePhase.apkSize : 0;
+      setAppUpdatePhase({ kind: 'downloading', version, apkSize, progress: 0 });
+      appUpdateRuntime
+        .download(mediaBase, deviceInfo, `app-update-${version}`)
+        .then(() => {
+          // The version may be unknown after an error; the download itself carries the file.
+          setAppUpdatePhase({ kind: 'ready', version });
+        })
+        .catch(err => {
+          setAppUpdatePhase({ kind: 'error', message: err instanceof Error ? err.message : 'download failed' });
         });
       return;
     }
@@ -2909,6 +2924,7 @@ export function AppShell(): React.JSX.Element {
         {/* A row with one child on a phone, two on a desktop: the conversation list stops being
             an overlay and becomes a column, and the pages beside it lose nothing. */}
         <View style={styles.shell}>
+        <AppUpdateBanner phase={appUpdatePhase} onPress={runAppUpdate} />
         {layout.pinnedDrawer ? (
           <Drawer
             pinned
@@ -3492,7 +3508,11 @@ export function AppShell(): React.JSX.Element {
                       ? <View style={styles.pageFull} testID="home-placeholder" />
                       : null
                       )
-                  : chatScreen
+                  : (
+                      <View style={styles.chatWrap}>
+                        {chatScreen}
+                      </View>
+                    )
             )
           )}
         </View>
@@ -4233,6 +4253,7 @@ const createStyles = (palette: Palette) => ({
   },
   containerSplit: { flexDirection: 'row' as const },
   chatPane: { flex: 1, minWidth: 0 },
+  chatWrap: { flex: 1, minWidth: 0 },
   pageFull: { flex: 1 },
   pagePane: {
     width: 460,

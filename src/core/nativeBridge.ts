@@ -116,11 +116,15 @@ export interface DeviceBridgeNative {
   /** Opens Android's "install unknown apps" settings screen for this app. */
   openUnknownSourcesSettings(): void;
   /**
-   * Downloads the APK through the server relay and hands it to PackageInstaller.
-   * Resolves when the download has completed (the install itself is async and reported
-   * through the `claw:update:install` event).
+   * Downloads the APK through the server relay into a fixed staging file.
+   * Resolves when the download has completed; the install is a separate call.
    */
-  downloadAndInstallApk(url: string, transferId: string): Promise<void>;
+  downloadApk(url: string, transferId: string): Promise<void>;
+  /**
+   * Commits the staged APK to PackageInstaller. Resolves when the session is committed;
+   * the system confirmation and the outcome arrive via `claw:update:install`.
+   */
+  installStagedApk(): Promise<void>;
   /**
    * Dismisses one posted notification by the id it was posted with (docs/notifications.md).
    * Native because the notification is rendered by a service that may have run while this JS
@@ -235,8 +239,8 @@ export const deviceBridge: DeviceBridgeNative = {
   getNetworkType: () => native?.getNetworkType() ?? Promise.resolve('other'),
   canInstallApk: () => native?.canInstallApk() ?? Promise.resolve(false),
   openUnknownSourcesSettings: () => native?.openUnknownSourcesSettings(),
-  downloadAndInstallApk: (url, transferId) =>
-    native?.downloadAndInstallApk(url, transferId) ?? Promise.resolve(),
+  downloadApk: (url, transferId) => native?.downloadApk(url, transferId) ?? Promise.resolve(),
+  installStagedApk: () => native?.installStagedApk() ?? Promise.resolve(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   clipboardHasImage: () => native?.clipboardHasImage() ?? Promise.resolve(false),
