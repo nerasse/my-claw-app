@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppUpdatePhase } from '../core/appUpdate';
+import { useTransferProgress } from '../core/nativeBridge';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -25,6 +26,18 @@ export function AppUpdateModal({
   onDismiss: () => void;
 }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
+  // The download emits transfer progress on the native channel; the modal reads it straight,
+  // same as the media viewers, instead of the reducer remembering a percentage it never saw.
+  // Read unconditionally: a hook after an early return would make the call count change.
+  const transferId = phase.kind === 'downloading' ? `app-update-${phase.version}` : null;
+  const transfer = useTransferProgress(transferId);
+  // Progress is owned by the transfer channel. The reducer's own number is a fallback only.
+  const progress =
+    transfer && transfer.total > 0
+      ? Math.min(1, transfer.bytes / transfer.total)
+      : phase.kind === 'downloading'
+        ? phase.progress
+        : 0;
   if (
     phase.kind !== 'available' &&
     phase.kind !== 'ready' &&
@@ -48,7 +61,7 @@ export function AppUpdateModal({
     phase.kind === 'available'
       ? `Version ${phase.version} is available (${formatMb(phase.apkSize)}).`
       : phase.kind === 'downloading'
-        ? `Version ${phase.version} · ${Math.round(phase.progress * 100)}%`
+        ? `Version ${phase.version} · ${Math.round(progress * 100)}% of ${formatMb(transfer?.total ?? phase.apkSize)}`
         : phase.kind === 'ready'
           ? `Version ${phase.version} is downloaded. Android will ask you to confirm.`
           : phase.message;
@@ -70,7 +83,7 @@ export function AppUpdateModal({
         {currentVersion ? <Text style={styles.meta}>You are on {currentVersion}</Text> : null}
         {busy ? (
           <View style={styles.track}>
-            <View style={[styles.fill, { width: `${Math.round(phase.progress * 100)}%` }]} />
+            <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }]} />
           </View>
         ) : null}
         <View style={styles.actions}>
