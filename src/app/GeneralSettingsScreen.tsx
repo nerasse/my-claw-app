@@ -10,6 +10,11 @@ import {
   updateLabel,
   type UpdatePhase,
 } from '../core/serverUpdate';
+import {
+  appUpdateHint,
+  appUpdateLabel,
+  type AppUpdatePhase,
+} from '../core/appUpdate';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -58,8 +63,11 @@ export function GeneralSettingsScreen({
   uiPrefs,
   onUiPrefsChange,
   updatePhase,
+  appUpdatePhase,
   now,
   onUpdateServer,
+  onAppUpdate,
+  onAppUpdateInstallSettings,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
@@ -84,9 +92,15 @@ export function GeneralSettingsScreen({
   onUiPrefsChange: (prefs: { expandTools?: boolean; expandReasoning?: boolean }) => void;
   /** Everything the update button knows, decided in core/serverUpdate.ts. */
   updatePhase: UpdatePhase;
+  /** Everything the app update card knows, decided in core/appUpdate.ts. */
+  appUpdatePhase: AppUpdatePhase;
   /** Ticks once a second while an update runs, and only then: the clock has one owner. */
   now: number;
   onUpdateServer: () => void;
+  /** Starts the app update: download if needed, then install. */
+  onAppUpdate: () => void;
+  /** Opens Android's "install unknown apps" settings screen. */
+  onAppUpdateInstallSettings: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // the server field is never focused on the way in.
@@ -100,6 +114,7 @@ export function GeneralSettingsScreen({
    */
   const elsewhere = busy && Boolean(status.url) && status.url !== url.trim();
   const busyUpdating = updateBusy(updatePhase);
+  const appUpdating = appUpdatePhase.kind === 'downloading' || appUpdatePhase.kind === 'installing' || appUpdatePhase.kind === 'checking';
   const [showToken, setShowToken] = useState(false);
 
   return (
@@ -321,6 +336,39 @@ export function GeneralSettingsScreen({
               <Text style={styles.hint} numberOfLines={3}>
                 {updatePhase.detail}
               </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.categoryItem}>
+          <Text style={styles.section}>app update</Text>
+          <View style={styles.card}>
+            <Pressable
+              style={[styles.button, (!connected || appUpdating) && styles.buttonOff]}
+              disabled={!connected || appUpdating}
+              onPress={onAppUpdate}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !connected || appUpdating, busy: appUpdating }}
+              accessibilityLabel="Update the app">
+              <Text style={styles.buttonText}>{appUpdateLabel(appUpdatePhase)}</Text>
+            </Pressable>
+            <Text style={styles.hint}>{appUpdateHint(appUpdatePhase, connected)}</Text>
+            {appUpdatePhase.kind === 'error' ? (
+              <Text style={styles.hint} numberOfLines={3}>{appUpdatePhase.message}</Text>
+            ) : null}
+            {appUpdatePhase.kind === 'available' ? (
+              <Text style={styles.hint} numberOfLines={3}>
+                {appVersion ? `current ${appVersion}` : ''} · tap Install, the system asks for confirmation
+              </Text>
+            ) : null}
+            {appUpdatePhase.kind === 'error' && appUpdatePhase.message.includes('unknown') ? (
+              <Pressable
+                style={[styles.button, styles.buttonGhost]}
+                onPress={onAppUpdateInstallSettings}
+                accessibilityRole="button"
+                accessibilityLabel="Allow unknown apps">
+                <Text style={[styles.buttonText, styles.buttonGhostText]}>Allow installs from this app</Text>
+              </Pressable>
             ) : null}
           </View>
         </View>

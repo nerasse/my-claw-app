@@ -11,7 +11,7 @@ beforeEach(() => {
 describe('prefs.hydrate', () => {
   test('falls back to defaults when nothing is stored', async () => {
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false });
     expect(prefs.isHydrated()).toBe(true);
   });
 
@@ -22,13 +22,13 @@ describe('prefs.hydrate', () => {
       lastThreadId: 'thread-9',
     });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9' });
+    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9', updateOnMobileData: false });
   });
 
   test('ignores a corrupted theme mode and an empty url', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ themeMode: 'neon', serverUrl: '   ', lastThreadId: '' });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false });
   });
 
   test('a broken bridge leaves the app on defaults instead of throwing', async () => {

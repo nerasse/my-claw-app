@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { ThemeMode } from '../core/prefs';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -17,11 +17,16 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
  */
 export function OtherSettingsScreen({
   themeMode,
+  updateOnMobileData,
+  onUpdateOnMobileDataChange,
   onThemeModeChange,
   onOpenDiagnostics,
   onBack,
 }: {
   themeMode: ThemeMode;
+  /** Auto-download the app update on mobile data (off = wifi only). */
+  updateOnMobileData: boolean;
+  onUpdateOnMobileDataChange: (value: boolean) => void;
   onThemeModeChange: (mode: ThemeMode) => void;
   onOpenDiagnostics: () => void;
   onBack: () => void;
@@ -66,6 +71,21 @@ export function OtherSettingsScreen({
             <Text style={styles.hint}>
               {themeMode === 'system' ? `follows the phone · currently ${dark ? 'dark' : 'light'}` : 'forced choice'}
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.categoryItem}>
+          <Text style={styles.section}>updates</Text>
+          <View style={styles.card}>
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Download app update on mobile data</Text>
+              <Switch
+                value={updateOnMobileData}
+                onValueChange={onUpdateOnMobileDataChange}
+                accessibilityLabel="Download app update on mobile data"
+              />
+            </View>
+            <Text style={styles.hint}>off = wifi only · the update downloads on its own when newer</Text>
           </View>
         </View>
 
@@ -145,4 +165,11 @@ const createStyles = (palette: Palette) => ({
   buttonGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: palette.border },
   buttonText: { color: palette.accentText, fontSize: font.meta, fontWeight: '600' as const },
   buttonGhostText: { color: palette.text },
+  switchRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: space.md,
+  },
+  switchLabel: { flex: 1, fontSize: font.meta, color: palette.text },
 });

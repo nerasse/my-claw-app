@@ -2,13 +2,19 @@ package com.myclawapp.device
 
 import android.app.Activity
 import android.app.DownloadManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageInstaller
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -16,6 +22,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -64,6 +71,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   private var locationListener: LocationListener? = null
   private var bestLocation: Location? = null
   private val locationHandler = Handler(Looper.getMainLooper())
+  private val mainHandler = Handler(Looper.getMainLooper())
   private val locationTimeout = Runnable { finishLocation() }
 
   // Uploads can be slow on mobile data; only the connect timeout stays short.
@@ -895,6 +903,103 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     if (value == null) editor.remove(key) else editor.putString(key, value)
     editor.apply()
     promise.resolve(null)
+  }
+
+  /** "wifi" | "mobile" | "other". Drives the auto-download policy: 45 MB on mobile data is a choice, not a default. */
+  @ReactMethod
+  fun getNetworkType(promise: Promise) {
+    try {
+      val cm = reactContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+      val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+      val networkType = if (caps == null) "other" else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) "wifi" else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) "mobile" else "other"
+      promise.resolve(networkType)
+    } catch (e: Exception) {
+      promise.resolve("other")
+    }
+  }
+
+  /** Android 8+ requires the "install unknown apps" opt-in before a PackageInstaller session can commit. */
+  @ReactMethod
+  fun canInstallApk(promise: Promise) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+      promise.resolve(true)
+      return
+    }
+    promise.resolve(reactContext.packageManager.canRequestPackageInstalls())
+  }
+
+  /** Opens the system screen that grants the app the right to install packages. */
+  @ReactMethod
+  fun openUnknownSourcesSettings() {
+    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${reactContext.packageName}"))
+    reactContext.currentActivity?.startActivity(intent)
+  }
+
+  /**
+   * Downloads the APK through the server relay (the phone never sees the Forgejo token), then
+   * hands it to Android's PackageInstaller. One system confirmation follows; the receiver below
+   * reports the status back to JS.
+   */
+  @ReactMethod
+  fun downloadAndInstallApk(url: String, transferId: String, promise: Promise) {
+    val request = Request.Builder().url(url).get().build()
+    uploadClient.newCall(request).enqueue(object : Callback {
+      override fun onFailure(call: Call, e: IOException) {
+        promise.reject("APK_DOWNLOAD_FAILED", e.message ?: "apk download failed")
+      }
+
+      override fun onResponse(call: Call, response: Response) {
+        response.use {
+          if (!it.isSuccessful) {
+            promise.reject("APK_DOWNLOAD_FAILED", "server answered ${it.code}")
+            return
+          }
+          val body = it.body ?: run {
+            promise.reject("APK_DOWNLOAD_FAILED", "empty response")
+            return
+          }
+          try {
+            val target = File(reactContext.cacheDir, "update_${System.currentTimeMillis()}.apk")
+            target.outputStream().use { out ->
+              copyWithProgress(body.byteStream(), out, body.contentLength(), transferId)
+            }
+            mainHandler.post {
+              commitApk(target, promise)
+            }
+          } catch (e: Exception) {
+            promise.reject("APK_SAVE_FAILED", e.message ?: "apk save failed")
+          }
+        }
+      }
+    })
+  }
+
+  private fun commitApk(file: File, promise: Promise) {
+    val pkg = reactContext.packageManager.packageInstaller
+    val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+    val sender = PendingIntent.getBroadcast(
+      reactContext,
+      4242,
+      Intent(reactContext, InstallResultReceiver::class.java).setAction(InstallResultReceiver.ACTION_INSTALL_RESULT).setPackage(reactContext.packageName),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    try {
+      val sessionId = pkg.createSession(params)
+      val session = pkg.openSession(sessionId)
+      try {
+        file.inputStream().use { input ->
+          session.openWrite("base.apk", 0, file.length()).use { out ->
+            input.copyTo(out)
+          }
+        }
+        InstallResultReceiver.register(reactContext)
+        session.commit(sender.intentSender)
+      } finally {
+        session.close()
+      }
+    } catch (e: Exception) {
+      promise.reject("APK_INSTALL_FAILED", e.message ?: "apk install failed")
+    }
   }
 
   /**

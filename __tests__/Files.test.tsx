@@ -68,6 +68,12 @@ function sentFrames(): string[] {
   return bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
 }
 
+/** The URLs globalThis.fetch was called with. */
+function fetchCalls(): string[] {
+  const mock = globalThis.fetch as jest.Mock;
+  return (mock.mock?.calls ?? []).map(args => String(args[0]));
+}
+
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -147,7 +153,10 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
 
   await press(tree, 'Open file photo.png');
   await waitFor(() => labelsOf(tree).includes('Save image to gallery'));
-  expect(globalThis.fetch).not.toHaveBeenCalled();
+  // The viewer reads nothing over the network: the image was already fetched by the media URL's
+  // own progress flow. (The app self-update check may have fired its one /app-update fetch, so
+  // the assertion is on media fetches only.)
+  expect(fetchCalls().filter(u => u.includes('/media/'))).toEqual([]);
 
   // No download card underneath: that second layer stole the taps and its own cross was
   // unreachable behind the image.
@@ -385,7 +394,8 @@ test('a file without a preview still offers a download', async () => {
   await press(tree, 'Open file clip.mp3');
   await waitFor(() => labelsOf(tree).includes('Save file to downloads'));
   await waitFor(() => textsOf(tree).includes('no preview for this file type'));
-  expect(globalThis.fetch).not.toHaveBeenCalled();
+  // The viewer reads nothing over the network (apart from the app self-update check at boot).
+  expect(fetchCalls().filter(u => u.includes('/media/'))).toEqual([]);
 
   // The download button of the card also opens the system save-as dialog.
   await press(tree, 'Save file to downloads');

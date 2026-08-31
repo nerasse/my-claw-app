@@ -130,6 +130,10 @@ export interface DeviceBridgeNative {
     exits: { reason: string; at: number; status: number; description: string }[];
   }>;
   getAppVersion(): Promise<string>;
+  getNetworkType(): Promise<string>;
+  canInstallApk(): Promise<boolean>;
+  openUnknownSourcesSettings(): void;
+  downloadAndInstallApk(url: string, transferId: string): Promise<void>;
   cancelNotification(id: number): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
   clipboardHasImage(): Promise<boolean>;
@@ -620,6 +624,10 @@ export const deviceBridge: DeviceBridgeNative = {
   },
   getExitInfo: () => Promise.resolve({ versionName: '', exits: [] }),
   getAppVersion: () => Promise.resolve('web'),
+  getNetworkType: () => Promise.resolve('other'),
+  canInstallApk: () => Promise.resolve(false),
+  openUnknownSourcesSettings: () => {},
+  downloadAndInstallApk: () => Promise.resolve(),
   cancelNotification: () => Promise.resolve(),
   pickFile: () =>
     new Promise(resolve => {

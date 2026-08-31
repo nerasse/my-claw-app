@@ -7,6 +7,8 @@ export interface Prefs {
   themeMode: ThemeMode;
   serverUrl: string;
   lastThreadId: string | null;
+  /** Auto-download the app update on mobile data; off by default (wifi only). */
+  updateOnMobileData: boolean;
 }
 
 export { DEFAULT_SERVER_URL };
@@ -15,6 +17,7 @@ const DEFAULTS: Prefs = {
   themeMode: 'system',
   serverUrl: DEFAULT_SERVER_URL,
   lastThreadId: null,
+  updateOnMobileData: false,
 };
 
 const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
@@ -54,6 +57,7 @@ class PrefsStore {
         themeMode,
         serverUrl: raw.serverUrl?.trim() ? raw.serverUrl : DEFAULTS.serverUrl,
         lastThreadId: raw.lastThreadId?.trim() ? raw.lastThreadId : null,
+        updateOnMobileData: raw.updateOnMobileData === 'true',
       };
     } catch {
       this.current = DEFAULTS;

@@ -109,6 +109,18 @@ export interface DeviceBridgeNative {
   }>;
   /** The running build's version name ("0.2.78"). */
   getAppVersion(): Promise<string>;
+  /** "wifi" | "mobile" | "other", for the auto-download policy. */
+  getNetworkType(): Promise<string>;
+  /** Android 8+ opt-in for sideloaded installs; false until the user grants it. */
+  canInstallApk(): Promise<boolean>;
+  /** Opens Android's "install unknown apps" settings screen for this app. */
+  openUnknownSourcesSettings(): void;
+  /**
+   * Downloads the APK through the server relay and hands it to PackageInstaller.
+   * Resolves when the download has completed (the install itself is async and reported
+   * through the `claw:update:install` event).
+   */
+  downloadAndInstallApk(url: string, transferId: string): Promise<void>;
   /**
    * Dismisses one posted notification by the id it was posted with (docs/notifications.md).
    * Native because the notification is rendered by a service that may have run while this JS
@@ -220,6 +232,11 @@ export const deviceBridge: DeviceBridgeNative = {
   getExitInfo: () =>
     native?.getExitInfo() ?? Promise.resolve({ versionName: '', exits: [] }),
   getAppVersion: () => native?.getAppVersion() ?? Promise.resolve(''),
+  getNetworkType: () => native?.getNetworkType() ?? Promise.resolve('other'),
+  canInstallApk: () => native?.canInstallApk() ?? Promise.resolve(false),
+  openUnknownSourcesSettings: () => native?.openUnknownSourcesSettings(),
+  downloadAndInstallApk: (url, transferId) =>
+    native?.downloadAndInstallApk(url, transferId) ?? Promise.resolve(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   clipboardHasImage: () => native?.clipboardHasImage() ?? Promise.resolve(false),

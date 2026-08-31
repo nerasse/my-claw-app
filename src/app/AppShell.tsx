@@ -161,6 +161,8 @@ import { deviceBridge } from '../core/nativeBridge';
 import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
 import { reduceUpdate, type UpdatePhase } from '../core/serverUpdate';
+import { reduceAppUpdate, type AppUpdatePhase } from '../core/appUpdate';
+import { appUpdateRuntime } from '../core/appUpdateRuntime';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
@@ -420,8 +422,19 @@ export function AppShell(): React.JSX.Element {
   const [uiPrefs, setUiPrefs] = useState<UiPrefsResultFrame | null>(null);
   /** Everything the update button knows. A phase, not booleans: see core/serverUpdate.ts. */
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>({ kind: 'idle' });
-  /** Only moves while an update runs, so nothing else in the tree redraws on a clock. */
+  /** The app update card: check, download, install. See core/appUpdate.ts. */
+  const [appUpdatePhase, setAppUpdatePhase] = useState<AppUpdatePhase>({ kind: 'idle' });
+  /** Only moves while a server update runs, so nothing else in the tree redraws on a clock. */
   const [updateNow, setUpdateNow] = useState(0);
+  /** Only the two settings screens read it: a re-render there is enough. */
+  const [updateOnMobileData, setUpdateOnMobileData] = useState(prefs.get().updateOnMobileData);
+  // The toggle on the Other page and the auto-download policy read the same value; subscribe so
+  // a change propagated by another window (or a hydrate) re-renders both.
+  useEffect(() => {
+    const apply = () => setUpdateOnMobileData(prefs.get().updateOnMobileData);
+    apply();
+    return prefs.subscribe(apply);
+  }, []);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -1702,6 +1715,34 @@ export function AppShell(): React.JSX.Element {
     });
   }, []);
 
+  const runAppUpdate = useCallback(() => {
+    // The download is already done by the auto-download loop when the phase is `ready`: tap
+    // installs the staged APK. Otherwise (available, idle, up to date) re-check and, if needed,
+    // let the loop start the download on wifi.
+    if (appUpdatePhase.kind === 'ready') {
+      setAppUpdatePhase({ kind: 'installing', version: appUpdatePhase.version });
+      appUpdateRuntime
+        .download(mediaBase, deviceInfo, `app-update-install-${appUpdatePhase.version}`)
+        .catch(() => {
+          setAppUpdatePhase({ kind: 'error', message: 'install failed' });
+        });
+      return;
+    }
+    // Idle or up-to-date: re-check right now.
+    setAppUpdatePhase({ kind: 'checking' });
+    appUpdateRuntime
+      .check(mediaBase, deviceInfo)
+      .then(result => {
+        const current = appVersion ?? '';
+        setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'checked', result, current }));
+      })
+      .catch(() => {});
+  }, [appUpdatePhase, mediaBase, deviceInfo, appVersion]);
+
+  const openAppUpdateInstallSettings = useCallback(() => {
+    appUpdateRuntime.openInstallSettings();
+  }, []);
+
   // One clock, owned here, alive only while an update runs. It drives both the label's counter
   // and the two deadlines the phase depends on (nothing restarted, or nothing came back).
   useEffect(() => {
@@ -1719,6 +1760,61 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     setUpdatePhase(phase => reduceUpdate(phase, { type: 'socket', connected: status.state === 'connected' }));
   }, [status.state]);
+
+  // App self-update: check at launch, then every four hours, auto-download on wifi (or on mobile
+  // data when the owner allows it), and follow the install status the system reports.
+  useEffect(() => {
+    if (status.state !== 'connected') return;
+    let cancelled = false;
+    let transferId: string | null = null;
+
+    const maybeAutoDownload = async (version: string, apkSize: number) => {
+      if (transferId) return;
+      const allowed = await appUpdateRuntime.canAutoDownload(updateOnMobileData);
+      if (!allowed) return;
+      transferId = `app-update-${version}`;
+      setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'downloadStarted', version, apkSize }));
+      try {
+        await appUpdateRuntime.download(mediaBase, deviceInfo, transferId);
+        if (cancelled) return;
+        setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'downloadDone', version }));
+      } catch (err) {
+        if (cancelled) return;
+        setAppUpdatePhase(phase => reduceAppUpdate(phase, {
+          type: 'failed',
+          message: err instanceof Error ? err.message : 'download failed',
+        }));
+      } finally {
+        transferId = null;
+      }
+    };
+
+    const check = async () => {
+      const result = await appUpdateRuntime.check(mediaBase, deviceInfo);
+      if (cancelled) return;
+      setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'checked', result, current: appVersion ?? '' }));
+      const next = reduceAppUpdate({ kind: 'idle' }, { type: 'checked', result, current: appVersion ?? '' });
+      if (next.kind === 'available') {
+        maybeAutoDownload(next.version, next.apkSize);
+      }
+    };
+
+    check();
+    const timer = setInterval(() => check(), 4 * 60 * 60 * 1000);
+    const offInstall = appUpdateRuntime.onInstallStatus((installStatus, message) => {
+      if (installStatus === 'success') {
+        setAppUpdatePhase({ kind: 'installing', version: '' });
+      } else if (installStatus === 'failure') {
+        setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'failed', message: message ?? 'install failed' }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      offInstall();
+    };
+  }, [status.state, mediaBase, deviceInfo, appVersion, updateOnMobileData]);
 
   const changeVoiceMode = useCallback((mode: VoiceMode) => {
     // No optimistic write: the server answers with the state it actually stored, including what
@@ -2869,8 +2965,11 @@ export function AppShell(): React.JSX.Element {
                 uiPrefs={uiPrefs}
                 onUiPrefsChange={changeUiPrefs}
                 updatePhase={updatePhase}
+                appUpdatePhase={appUpdatePhase}
                 now={updateNow}
                 onUpdateServer={runServerUpdate}
+                onAppUpdate={runAppUpdate}
+                onAppUpdateInstallSettings={openAppUpdateInstallSettings}
                 status={status}
                 serverVersion={serverVersion}
                 appVersion={appVersion}
@@ -2891,6 +2990,11 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'other' ? (
               <OtherSettingsScreen
                 themeMode={themeControl.mode}
+                updateOnMobileData={updateOnMobileData}
+                onUpdateOnMobileDataChange={value => {
+                  prefs.set('updateOnMobileData', value);
+                  setUpdateOnMobileData(value);
+                }}
                 onThemeModeChange={themeControl.setMode}
                 onOpenDiagnostics={openDiagnostics}
                 onBack={() => setSettingsPage('index')}
