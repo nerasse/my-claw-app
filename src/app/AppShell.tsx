@@ -1863,17 +1863,22 @@ export function AppShell(): React.JSX.Element {
     setUpdatePhase(phase => reduceUpdate(phase, { type: 'socket', connected: status.state === 'connected' }));
   }, [status.state]);
 
-  // App self-update: check at launch, then every four hours, auto-download on wifi (or on mobile
+  // App self-update: check at launch, then every hour, auto-download on wifi (or on mobile
   // data when the owner allows it), and follow the install status the system reports.
+  //
+  // The check is a plain fetch on the server relay; it does not need the chat socket. Gating it
+  // on `connected` made every cold start wait for the WS handshake on top of the bridge answers
+  // (identity + version), which is a few seconds the update modal had no reason to add. The
+  // connection is only a guard against checking with no server at all, and the WS state settles
+  // within a second of the fetch being possible. A failed fetch retries with backoff.
   useEffect(() => {
     if (!appUpdateSupported) return;
-    if (status.state !== 'connected') return;
-    // The running build's version is what a check compares against. Until it is known (the
-    // bridge answers within the first frames) comparing against an empty string would read
-    // every release as newer and auto-download the APK at every boot.
+    if (status.state === 'idle') return;
     if (appVersion === null || appVersion === '') return;
     let cancelled = false;
     let transferId: string | null = null;
+    let retryDelay = 5_000;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const maybeAutoDownload = async (version: string, apkSize: number) => {
       if (transferId) return;
@@ -1904,30 +1909,52 @@ export function AppShell(): React.JSX.Element {
       }
     };
 
+    const scheduleRetry = () => {
+      if (cancelled) return;
+      retryDelay = Math.min(retryDelay * 2, 60_000);
+      retryTimer = setTimeout(() => check(), retryDelay);
+    };
+
     const check = async () => {
       const result = await appUpdateRuntime.check(mediaBase, deviceInfo);
       if (cancelled) return;
+      // A check that cannot reach the relay is not worth an error card at every boot: retry
+      // quietly with backoff, and only surface something once the relay answered. The manual
+      // button path still reports a real failure the reducer turns into an error phase.
+      if (!result.ok) {
+        scheduleRetry();
+        return;
+      }
+      retryDelay = 5_000;
       // An APK downloaded before the app was last closed is still on disk: offer the install
       // rather than spending 45 MB again. Only the file itself can say so.
       const disk = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
       if (cancelled) return;
+      const current = appVersion ?? '';
       if (disk.staged && result.ok && disk.version && disk.version === result.version) {
-        setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'stagedFound', version: disk.version }));
-        return;
+        // A staged file for the version we already run is a leftover of an install that
+        // succeeded while the JS side never heard it (the process was replaced first). Offering
+        // it would send the user to install what they already have. Drop it and carry on.
+        if (disk.version === current) {
+          await appUpdateRuntime.clearStaged().catch(() => {});
+        } else {
+          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'stagedFound', version: disk.version }));
+          return;
+        }
       }
       // Staged, but for a version the server has since replaced: it is dead weight.
-      if (disk.staged && result.ok && disk.version !== result.version) {
+      if (disk.staged && result.ok && disk.version && disk.version !== result.version) {
         await appUpdateRuntime.clearStaged().catch(() => {});
       }
       // The reducer refuses to reset an in-flight download/install; mirror that here for the
       // auto-download branch, which runs off its own computed state.
-      setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'checked', result, current: appVersion ?? '' }));
+      setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'checked', result, current }));
       const afterCheck = appUpdatePhaseRef.current;
       if (afterCheck.kind !== 'ready' && afterCheck.kind !== 'installing' && afterCheck.kind !== 'downloading') {
         // The reducer is the one judge of what a check means here: an error that still has the
         // APK staged becomes `ready` (install, no download); anything else becomes `available`
         // and may auto-download on wifi.
-        const after = reduceAppUpdate(afterCheck, { type: 'checked', result, current: appVersion ?? '' });
+        const after = reduceAppUpdate(afterCheck, { type: 'checked', result, current });
         if (after.kind === 'available') {
           maybeAutoDownload(after.version, after.apkSize);
         }
@@ -1935,10 +1962,11 @@ export function AppShell(): React.JSX.Element {
     };
 
     check();
-    const timer = setInterval(() => check(), 4 * 60 * 60 * 1000);
+    const timer = setInterval(() => check(), 60 * 60 * 1000);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [status.state, mediaBase, deviceInfo, appVersion, updateOnMobileData]);
 

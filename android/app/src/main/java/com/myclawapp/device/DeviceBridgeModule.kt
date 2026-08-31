@@ -60,6 +60,21 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     private const val PREFS_NAME = "claw_prefs"
     private const val FILE_PICK_REQUEST_CODE = 4201
     private const val FILE_SAVE_REQUEST_CODE = 4202
+
+    /**
+     * Deletes the staged APK-plus-marker. Called by the JS bridge and by [InstallResultReceiver]
+     * on an install success, where the JS half of the flow is already dead: the process being
+     * replaced cannot run a promise, so the receiver does it itself. Pure file deletion, safe to
+     * call whenever: a superseded APK the next download overwrites in place anyway.
+     */
+    fun dropStagedApk(context: Context) {
+      try {
+        File(context.filesDir, "update-staged.apk").delete()
+        File(context.filesDir, "update-staged.version").delete()
+      } catch (_: Exception) {
+        // Nothing to do: the next download overwrites in place anyway.
+      }
+    }
   }
 
   private var pendingFilePromise: Promise? = null
@@ -1051,12 +1066,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   /** Drops the staged APK and its marker: a failed or superseded download must not linger. */
   @ReactMethod
   fun clearStagedApk(promise: Promise) {
-    try {
-      stagedApk().delete()
-      versionMarker().delete()
-    } catch (_: Exception) {
-      // Nothing to do: the next download overwrites in place anyway.
-    }
+    dropStagedApk(reactContext)
     promise.resolve(null)
   }
 

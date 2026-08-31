@@ -34,9 +34,9 @@ class InstallResultReceiver : BroadcastReceiver() {
     /** Emits an install result immediately when the JS runtime is up, otherwise parks it for
      * `drainInstallResult` (the answer can arrive before the runtime exists at cold start, or
      * before the JS listener is subscribed — the drain is issued right after the subscribe). */
-    fun park(status: String, message: String?) {
+    fun park(context: Context, status: String, message: String?) {
       if (DeviceBus.hasRuntime()) {
-        emit(status, message)
+        emit(context, status, message)
       } else {
         pendingStatus = status
         pendingMessage = message
@@ -49,10 +49,19 @@ class InstallResultReceiver : BroadcastReceiver() {
       pendingStatus = null
       val message = pendingMessage
       pendingMessage = null
-      emit(status, message)
+      emit(null, status, message)
     }
 
-    private fun emit(status: String, message: String?) {
+    private fun emit(context: Context?, status: String, message: String?) {
+      if (status == "success" && context != null) {
+        // The JS listener that would drop the staged APK dies with the process being replaced:
+        // this receiver is the one place that still runs before the swap. Clear it now, or the
+        // next launch finds a staged APK for the version it already runs and offers to install
+        // it again. This is synchronous on purpose: after the process is gone nothing runs.
+        // (When the result was parked and is drained by a later process, the JS listener runs
+        // and clears the staging file itself.)
+        DeviceBridgeModule.dropStagedApk(context)
+      }
       DeviceBus.emit("claw:update:install", Arguments.createMap().apply {
         putString("status", status)
         if (message != null) putString("message", message)
@@ -66,7 +75,7 @@ class InstallResultReceiver : BroadcastReceiver() {
       PackageInstaller.STATUS_PENDING_USER_ACTION -> {
         val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
         if (confirm == null) {
-          park("failure", "the system did not return a confirmation screen")
+          park(context, "failure", "the system did not return a confirmation screen")
           return
         }
         // Starting an activity from a receiver is a background start, which Android 10+ drops
@@ -81,11 +90,12 @@ class InstallResultReceiver : BroadcastReceiver() {
         }
       }
       PackageInstaller.STATUS_SUCCESS -> {
-        park("success", null)
+        park(context, "success", null)
       }
       else -> {
         // The user declined the dialog, or the package failed verification.
         park(
+          context,
           "failure",
           intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "install failed",
         )
