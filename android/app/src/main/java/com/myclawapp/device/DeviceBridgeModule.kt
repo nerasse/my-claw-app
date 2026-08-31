@@ -1082,13 +1082,21 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       try {
         val pkg = reactContext.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        // MUTABLE is not a choice: commit() rejects an immutable status receiver outright
+        // ("The commit() status receiver should come from a mutable PendingIntent") because the
+        // system fills EXTRA_STATUS and, for the confirmation screen, EXTRA_INTENT into it. The
+        // flag only exists from S; before that a PendingIntent is mutable by default. Keeping the
+        // intent explicit (component + package) also satisfies Android 14, which refuses a mutable
+        // PendingIntent built on an implicit intent.
+        val mutability =
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         val sender = PendingIntent.getBroadcast(
           reactContext,
           4242,
           Intent(reactContext, InstallResultReceiver::class.java)
             .setAction(InstallResultReceiver.ACTION_INSTALL_RESULT)
             .setPackage(reactContext.packageName),
-          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+          PendingIntent.FLAG_UPDATE_CURRENT or mutability,
         )
         val sessionId = pkg.createSession(params)
         val session = pkg.openSession(sessionId)
