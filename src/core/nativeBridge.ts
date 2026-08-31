@@ -119,12 +119,16 @@ export interface DeviceBridgeNative {
    * Downloads the APK through the server relay into a fixed staging file.
    * Resolves when the download has completed; the install is a separate call.
    */
-  downloadApk(url: string, transferId: string): Promise<void>;
+  downloadApk(url: string, transferId: string, version: string): Promise<void>;
   /**
    * Commits the staged APK to PackageInstaller. Resolves when the session is committed;
    * the system confirmation and the outcome arrive via `claw:update:install`.
    */
   installStagedApk(): Promise<void>;
+  /** What is actually on disk: the UI asks rather than remembering a download it may have lost. */
+  stagedApkInfo(): Promise<{ staged: boolean; size: number; version: string }>;
+  /** Drops the staged APK, so a failed or superseded download is not offered for install. */
+  clearStagedApk(): Promise<void>;
   /** Delivers an install result that arrived before JS subscribed (cold start after install). */
   drainInstallResult(): void;
   /**
@@ -241,8 +245,11 @@ export const deviceBridge: DeviceBridgeNative = {
   getNetworkType: () => native?.getNetworkType() ?? Promise.resolve('other'),
   canInstallApk: () => native?.canInstallApk() ?? Promise.resolve(false),
   openUnknownSourcesSettings: () => native?.openUnknownSourcesSettings(),
-  downloadApk: (url, transferId) => native?.downloadApk(url, transferId) ?? Promise.resolve(),
+  downloadApk: (url, transferId, version) => native?.downloadApk(url, transferId, version) ?? Promise.resolve(),
   installStagedApk: () => native?.installStagedApk() ?? Promise.resolve(),
+  stagedApkInfo: () =>
+    native?.stagedApkInfo() ?? Promise.resolve({ staged: false, size: 0, version: '' }),
+  clearStagedApk: () => native?.clearStagedApk() ?? Promise.resolve(),
   drainInstallResult: () => native?.drainInstallResult(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),

@@ -91,24 +91,59 @@ describe('the app update phase', () => {
   it('keeps a staged APK on ready when a failed install is followed by a check', () => {
     const phase = run(
       [{ type: 'checked', result: { ok: true, version: '0.5.53', apkSize: 45_000_000 }, current: '0.5.52' }],
-      { kind: 'error', message: 'install failed', staged: true },
+      { kind: 'error', message: 'install failed', staged: '0.5.53' },
     );
     expect(phase).toEqual({ kind: 'ready', version: '0.5.53' });
   });
 
+  it('re-offers a download when the staged APK is for an older release than the one published', () => {
+    const phase = run(
+      [{ type: 'checked', result: { ok: true, version: '0.5.54', apkSize: 45_000_000 }, current: '0.5.52' }],
+      { kind: 'error', message: 'install failed', staged: '0.5.53' },
+    );
+    expect(phase).toEqual({ kind: 'available', version: '0.5.54', apkSize: 45_000_000 });
+  });
+
   it('marks a failure after install as staged so the next tap installs again', () => {
     const phase = run(
-      [{ type: 'failed', message: 'install failed' }],
+      [{ type: 'failed', message: 'install failed', staged: true }],
       { kind: 'installing', version: '0.5.53' },
     );
-    expect(phase).toEqual({ kind: 'error', message: 'install failed', staged: true });
+    expect(phase).toEqual({ kind: 'error', message: 'install failed', staged: '0.5.53' });
+  });
+
+  it('leaves a failure unstaged when the device says the file is gone', () => {
+    const phase = run(
+      [{ type: 'failed', message: 'the downloaded file is gone, download it again', staged: false }],
+      { kind: 'installing', version: '0.5.53' },
+    );
+    expect(phase).toEqual({
+      kind: 'error',
+      message: 'the downloaded file is gone, download it again',
+      staged: undefined,
+    });
   });
 
   it('does not mark a failed download as staged', () => {
     const phase = run(
-      [{ type: 'failed', message: 'download failed' }],
+      [{ type: 'failed', message: 'download failed', staged: false }],
       { kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0.5 },
     );
-    expect(phase).toEqual({ kind: 'error', message: 'download failed', staged: false });
+    expect(phase).toEqual({ kind: 'error', message: 'download failed', staged: undefined });
+  });
+
+  it('offers the install for an APK found on disk at launch', () => {
+    const phase = run([{ type: 'stagedFound', version: '0.5.53' }]);
+    expect(phase).toEqual({ kind: 'ready', version: '0.5.53' });
+  });
+
+  it('does not let a staged file interrupt a download in flight', () => {
+    const phase = run([{ type: 'stagedFound', version: '0.5.53' }], {
+      kind: 'downloading',
+      version: '0.5.53',
+      apkSize: 45_000_000,
+      progress: 0.3,
+    });
+    expect(phase).toEqual({ kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0.3 });
   });
 });

@@ -960,7 +960,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    * events flow to JS through the same transfer channel as media.
    */
   @ReactMethod
-  fun downloadApk(url: String, transferId: String, promise: Promise) {
+  fun downloadApk(url: String, transferId: String, version: String, promise: Promise) {
     val request = Request.Builder().url(url).get().build()
     apkClient.newCall(request).enqueue(object : Callback {
       override fun onFailure(call: Call, e: IOException) {
@@ -983,6 +983,13 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
             target.outputStream().use { out ->
               copyWithProgress(body.byteStream(), out, body.contentLength(), transferId)
             }
+            // The version travels with the file: a staged APK that cannot say what it carries
+            // is a staged APK the UI has to guess about, and guessing is what looped here.
+            try {
+              versionMarker().writeText(version)
+            } catch (_: Exception) {
+              // A missing marker only costs the version label, never the install itself.
+            }
             val map = Arguments.createMap()
             map.putString("path", target.absolutePath)
             map.putDouble("size", target.length().toDouble())
@@ -995,8 +1002,49 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     })
   }
 
-  /** Where the staged APK lives: one fixed name so the install step never guesses. */
-  private fun stagedApk(): File = File(reactContext.cacheDir, "update-staged.apk")
+  /**
+   * Where the staged APK lives. Not in cacheDir: the system reclaims that directory under disk
+   * pressure, and a download that vanishes between "ready" and the install tap is exactly what
+   * turned Install into a button that flashes and does nothing. filesDir is ours until we delete it.
+   */
+  private fun stagedApk(): File = File(reactContext.filesDir, "update-staged.apk")
+
+  /**
+   * What is actually on disk, asked rather than remembered: the UI must never offer Install for
+   * a file the system has since reclaimed. `version` is what the download recorded next to it.
+   */
+  @ReactMethod
+  fun stagedApkInfo(promise: Promise) {
+    val file = stagedApk()
+    val map = Arguments.createMap()
+    val staged = file.exists() && file.length() > 0L
+    map.putBoolean("staged", staged)
+    map.putDouble("size", if (staged) file.length().toDouble() else 0.0)
+    map.putString("version", if (staged) stagedVersion() else "")
+    promise.resolve(map)
+  }
+
+  /** The version marker written beside the APK, so a staged file always knows what it carries. */
+  private fun versionMarker(): File = File(reactContext.filesDir, "update-staged.version")
+
+  private fun stagedVersion(): String =
+    try {
+      if (versionMarker().exists()) versionMarker().readText().trim() else ""
+    } catch (e: Exception) {
+      ""
+    }
+
+  /** Drops the staged APK and its marker: a failed or superseded download must not linger. */
+  @ReactMethod
+  fun clearStagedApk(promise: Promise) {
+    try {
+      stagedApk().delete()
+      versionMarker().delete()
+    } catch (_: Exception) {
+      // Nothing to do: the next download overwrites in place anyway.
+    }
+    promise.resolve(null)
+  }
 
   /**
    * Commits the staged APK through PackageInstaller. The confirmation is Android's own (one
@@ -1035,16 +1083,13 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
           file.inputStream().use { input ->
             session.openWrite("base.apk", 0, file.length()).use { out ->
               input.copyTo(out)
+              // Documented requirement: without fsync the bytes are not guaranteed to have
+              // reached the session, and the commit fails on a package it considers truncated.
+              session.fsync(out)
             }
           }
-          // A late write (or a purge) between the previous check and this non-destructive guard
-          // must not produce a 0-byte session: a corrupt stage aborts with a clear error.
-          if (file.length() == 0L) {
-            promise.reject("APK_CORRUPT", "staged apk is empty, download again")
-          } else {
-            session.commit(sender.intentSender)
-            promise.resolve(null)
-          }
+          session.commit(sender.intentSender)
+          promise.resolve(null)
         } finally {
           session.close()
         }

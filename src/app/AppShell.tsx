@@ -210,7 +210,7 @@ import { ApprovalSheet } from '../components/ApprovalSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ScreenLayer } from '../components/ScreenLayer';
-import { AppUpdateBanner } from './AppUpdateBanner';
+import { AppUpdateModal } from './AppUpdateModal';
 import { ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { ModelTuneSheet } from '../components/ModelTuneSheet';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -430,6 +430,27 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     appUpdatePhaseRef.current = appUpdatePhase;
   }, [appUpdatePhase]);
+  /**
+   * The version the owner said "later" to. The dialog is modal, so it has to be dismissible;
+   * dismissing one version must not hide the next one, and Settings always shows the card.
+   */
+  const [appUpdateDismissed, setAppUpdateDismissed] = useState<string | null>(null);
+  const dismissAppUpdate = useCallback(() => {
+    const phase = appUpdatePhaseRef.current;
+    const version =
+      phase.kind === 'available' || phase.kind === 'downloading' || phase.kind === 'ready'
+        ? phase.version
+        : phase.kind === 'error'
+          ? phase.staged ?? 'error'
+          : null;
+    setAppUpdateDismissed(version);
+  }, []);
+  /** Shown for a decision only: an update to fetch, one ready to install, or a failure that explains itself. */
+  const appUpdateDialogOpen =
+    (appUpdatePhase.kind === 'available' && appUpdatePhase.version !== appUpdateDismissed) ||
+    (appUpdatePhase.kind === 'ready' && appUpdatePhase.version !== appUpdateDismissed) ||
+    (appUpdatePhase.kind === 'downloading' && appUpdatePhase.version !== appUpdateDismissed) ||
+    (appUpdatePhase.kind === 'error' && (appUpdatePhase.staged ?? 'error') !== appUpdateDismissed);
   /** Only moves while a server update runs, so nothing else in the tree redraws on a clock. */
   const [updateNow, setUpdateNow] = useState(0);
   /** Only the two settings screens read it: a re-render there is enough. */
@@ -1741,47 +1762,75 @@ export function AppShell(): React.JSX.Element {
     });
   }, []);
 
+  /** Downloads the APK for `version`, then offers the install. Shared by the tap and the auto path. */
+  const downloadAppUpdate = useCallback(
+    async (version: string, apkSize: number) => {
+      setAppUpdatePhase({ kind: 'downloading', version, apkSize, progress: 0 });
+      try {
+        await appUpdateRuntime.download(mediaBase, deviceInfo, `app-update-${version}`, version);
+        setAppUpdatePhase({ kind: 'ready', version });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'download failed';
+        // A download that failed left nothing usable behind: drop it, so the next tap downloads
+        // instead of offering an install for a file that is not there.
+        await appUpdateRuntime.clearStaged().catch(() => {});
+        setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: false }));
+      }
+    },
+    [mediaBase, deviceInfo],
+  );
+
   const runAppUpdate = useCallback(() => {
     // A stale closure must never re-download what the auto-download already staged: read the
     // ref, and ignore taps that land while a transfer or an install is already in flight.
     const state = appUpdatePhaseRef.current;
     if (state.kind === 'downloading' || state.kind === 'installing') return;
-    if (state.kind === 'ready' || (state.kind === 'error' && state.staged)) {
-      // Android 8+ needs the "install unknown apps" opt-in before PackageInstaller will commit.
-      // Check first so the tap shows the permission screen instead of failing the session;
-      // the staged APK stays on disk, so returning after the grant installs directly.
-      setAppUpdatePhase({ kind: 'installing', version: state.kind === 'ready' ? state.version : '' });
-      appUpdateRuntime
-        .canInstall()
-        .then(ok => {
-          if (!ok) {
-            setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message: 'unknown sources permission needed' }));
-            appUpdateRuntime.openInstallSettings();
-            return;
-          }
-          appUpdateRuntime.install().catch((err: unknown) => {
-            const message = err instanceof Error ? err.message : 'install failed';
-            setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message }));
-          });
-        })
-        .catch(() => {
-          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message: 'install failed' }));
-        });
+    const wanted = state.kind === 'ready' ? state.version : state.kind === 'error' ? state.staged : undefined;
+    if (wanted) {
+      setAppUpdatePhase({ kind: 'installing', version: wanted });
+      (async () => {
+        // The file is the authority, not the phase: a staged APK the system reclaimed used to
+        // leave Install on screen forever, and every tap flashed back to the same button.
+        const disk = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
+        if (!disk.staged) {
+          setAppUpdatePhase(prev =>
+            reduceAppUpdate(prev, { type: 'failed', message: 'the downloaded file is gone, download it again', staged: false }),
+          );
+          return;
+        }
+        // Android 8+ needs the "install unknown apps" opt-in before PackageInstaller will commit.
+        // Check first so the tap opens the permission screen instead of failing the session; the
+        // staged APK stays on disk, so coming back installs it directly.
+        const allowed = await appUpdateRuntime.canInstall().catch(() => false);
+        if (!allowed) {
+          setAppUpdatePhase(prev =>
+            reduceAppUpdate(prev, { type: 'failed', message: 'allow this app to install updates, then tap Install', staged: true }),
+          );
+          appUpdateRuntime.openInstallSettings();
+          return;
+        }
+        try {
+          await appUpdateRuntime.install();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'install failed';
+          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: true }));
+        }
+      })().catch(() => {});
       return;
     }
-    if (state.kind === 'available' || state.kind === 'error') {
-      const version = state.kind === 'available' ? state.version : '<latest>';
-      const apkSize = state.kind === 'available' ? state.apkSize : 0;
-      setAppUpdatePhase({ kind: 'downloading', version, apkSize, progress: 0 });
-      appUpdateRuntime
-        .download(mediaBase, deviceInfo, `app-update-${version}`)
-        .then(() => {
-          // The version may be unknown after an error; the download itself carries the file.
-          setAppUpdatePhase({ kind: 'ready', version });
-        })
-        .catch((err: unknown) => {
-          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message: err instanceof Error ? err.message : 'download failed' }));
-        });
+    if (state.kind === 'available') {
+      downloadAppUpdate(state.version, state.apkSize).catch(() => {});
+      return;
+    }
+    if (state.kind === 'error') {
+      // Nothing staged: find out what the server has, then fetch it.
+      setAppUpdatePhase({ kind: 'checking' });
+      (async () => {
+        const result = await appUpdateRuntime.check(mediaBase, deviceInfo);
+        const next = reduceAppUpdate({ kind: 'idle' }, { type: 'checked', result, current: appVersion ?? '' });
+        if (next.kind === 'available') await downloadAppUpdate(next.version, next.apkSize);
+        else setAppUpdatePhase(next);
+      })().catch(() => {});
       return;
     }
     // Idle or up-to-date: re-check right now.
@@ -1793,7 +1842,7 @@ export function AppShell(): React.JSX.Element {
         setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'checked', result, current }));
       })
       .catch(() => {});
-  }, [mediaBase, deviceInfo, appVersion]);
+  }, [mediaBase, deviceInfo, appVersion, downloadAppUpdate]);
 
   const openAppUpdateInstallSettings = useCallback(() => {
     appUpdateRuntime.openInstallSettings();
@@ -1841,14 +1890,16 @@ export function AppShell(): React.JSX.Element {
       transferId = `app-update-${version}`;
       setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadStarted', version, apkSize }));
       try {
-        await appUpdateRuntime.download(mediaBase, deviceInfo, transferId);
+        await appUpdateRuntime.download(mediaBase, deviceInfo, transferId, version);
         if (cancelled) return;
         setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadDone', version }));
       } catch (err) {
         if (cancelled) return;
+        await appUpdateRuntime.clearStaged().catch(() => {});
         setAppUpdatePhase(prev => reduceAppUpdate(prev, {
           type: 'failed',
           message: err instanceof Error ? err.message : 'download failed',
+          staged: false,
         }));
       } finally {
         transferId = null;
@@ -1858,6 +1909,18 @@ export function AppShell(): React.JSX.Element {
     const check = async () => {
       const result = await appUpdateRuntime.check(mediaBase, deviceInfo);
       if (cancelled) return;
+      // An APK downloaded before the app was last closed is still on disk: offer the install
+      // rather than spending 45 MB again. Only the file itself can say so.
+      const disk = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
+      if (cancelled) return;
+      if (disk.staged && result.ok && disk.version && disk.version === result.version) {
+        setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'stagedFound', version: disk.version }));
+        return;
+      }
+      // Staged, but for a version the server has since replaced: it is dead weight.
+      if (disk.staged && result.ok && disk.version !== result.version) {
+        await appUpdateRuntime.clearStaged().catch(() => {});
+      }
       // The reducer refuses to reset an in-flight download/install; mirror that here for the
       // auto-download branch, which runs off its own computed state.
       setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'checked', result, current: appVersion ?? '' }));
@@ -1887,9 +1950,27 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     const offInstall = appUpdateRuntime.onInstallStatus((installStatus, message) => {
       if (installStatus === 'success') {
+        // The process is about to be replaced. Drop the staged APK so a reopen does not find a
+        // file for the version it is already running and offer to install it again.
+        appUpdateRuntime.clearStaged().catch(() => {});
         setAppUpdatePhase({ kind: 'installing', version: '' });
-      } else if (installStatus === 'failure') {
-        setAppUpdatePhase(phase => reduceAppUpdate(phase, { type: 'failed', message: message ?? 'install failed' }));
+        return;
+      }
+      if (installStatus === 'failure') {
+        // Declining the system dialog lands here too, and the APK is still on disk: keep it, so
+        // the next tap installs rather than spending the download again.
+        appUpdateRuntime
+          .staged()
+          .catch(() => ({ staged: false, size: 0, version: '' }))
+          .then(disk => {
+            setAppUpdatePhase(phase =>
+              reduceAppUpdate(phase, {
+                type: 'failed',
+                message: message ?? 'install cancelled',
+                staged: disk.staged,
+              }),
+            );
+          });
       }
     });
     appUpdateRuntime.drainInstallResult();
@@ -2978,7 +3059,6 @@ export function AppShell(): React.JSX.Element {
         {/* A row with one child on a phone, two on a desktop: the conversation list stops being
             an overlay and becomes a column, and the pages beside it lose nothing. */}
         <View style={styles.shell}>
-        <AppUpdateBanner phase={appUpdatePhase} onPress={runAppUpdate} />
         {layout.pinnedDrawer ? (
           <Drawer
             pinned
@@ -3872,6 +3952,18 @@ export function AppShell(): React.JSX.Element {
           preview={activeThread ? title : undefined}
           options={commandMenuOptions}
           onClose={() => setCommandMenuOpen(false)}
+        />
+      ) : null}
+
+      {/* The update dialog sits with the other overlays, absolutely positioned over the shell.
+          It used to be a strip declared as the first child of `shell`, which is a row: it
+          rendered as a vertical band down the left edge and squeezed the whole app. */}
+      {appUpdateDialogOpen ? (
+        <AppUpdateModal
+          phase={appUpdatePhase}
+          currentVersion={appVersion}
+          onPrimary={runAppUpdate}
+          onDismiss={dismissAppUpdate}
         />
       ) : null}
 

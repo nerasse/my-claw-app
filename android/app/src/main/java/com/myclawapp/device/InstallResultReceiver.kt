@@ -65,11 +65,19 @@ class InstallResultReceiver : BroadcastReceiver() {
     when (status) {
       PackageInstaller.STATUS_PENDING_USER_ACTION -> {
         val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-        if (confirm != null) {
+        if (confirm == null) {
+          park("failure", "the system did not return a confirmation screen")
+          return
+        }
+        // Starting an activity from a receiver is a background start, which Android 10+ drops
+        // silently: the tap then "flashes" and no installer ever appears. Go through the live
+        // activity when there is one, and only fall back to the receiver context.
+        val activity = DeviceBus.currentActivity()
+        if (activity != null) {
+          activity.startActivity(confirm)
+        } else {
           confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
           context.startActivity(confirm)
-        } else {
-          park("pending", null)
         }
       }
       PackageInstaller.STATUS_SUCCESS -> {

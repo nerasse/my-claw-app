@@ -413,10 +413,10 @@ export function GeneralSettingsScreen({
             ) : null}
             {appUpdatePhase.kind === 'error' && appUpdatePhase.staged ? (
               <Text style={styles.hint} numberOfLines={3}>
-                the update file is still stored · tap Install to try again
+                {appUpdatePhase.staged} is downloaded · tap Install to try again
               </Text>
             ) : null}
-            {(appUpdatePhase.kind === 'error' && (appUpdatePhase.staged || appUpdatePhase.message.includes('unknown'))) ? (
+            {(appUpdatePhase.kind === 'error' && (appUpdatePhase.staged || appUpdatePhase.message.includes('install'))) ? (
               <Pressable
                 style={[styles.button, styles.buttonGhost]}
                 onPress={onAppUpdateInstallSettings}

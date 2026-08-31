@@ -23,7 +23,8 @@ export type AppUpdatePhase =
   | { kind: 'downloading'; version: string; apkSize: number; progress: number }
   | { kind: 'ready'; version: string }
   | { kind: 'installing'; version: string }
-  | { kind: 'error'; message: string; staged?: boolean };
+  /** `staged` is the version sitting on disk, when one is: the tap installs it instead of downloading. */
+  | { kind: 'error'; message: string; staged?: string };
 
 export type AppUpdateEvent =
   | { type: 'checked'; result: AppUpdateCheckResult; current: string }
@@ -31,7 +32,14 @@ export type AppUpdateEvent =
   | { type: 'progress'; version: string; progress: number }
   | { type: 'downloadDone'; version: string }
   | { type: 'installStarted'; version: string }
-  | { type: 'failed'; message: string };
+  /** An APK found on disk at launch: the install can be offered without downloading again. */
+  | { type: 'stagedFound'; version: string }
+  /**
+   * `staged` is what the device answered about the file, never what the UI assumed. An install
+   * that failed because the APK was gone must send `false`, or the button offers Install for a
+   * file that does not exist and every tap flashes back to the same screen.
+   */
+  | { type: 'failed'; message: string; staged: boolean };
 
 export function reduceAppUpdate(phase: AppUpdatePhase, event: AppUpdateEvent): AppUpdatePhase {
   switch (event.type) {
@@ -48,9 +56,10 @@ export function reduceAppUpdate(phase: AppUpdatePhase, event: AppUpdateEvent): A
       if (!latest || compareVersions(latest, current) <= 0) {
         return { kind: 'uptodate', version: current };
       }
-      // An APK that failed to install is still staged: a later tick must not send the user back
-      // to `available` (and re-download). The staged file is the latest release, so `ready`.
-      if (phase.kind === 'error' && phase.staged) {
+      // An APK that failed to install is still on disk: a later tick must not send the user back
+      // to `available` (and re-download). Only the version the file actually carries qualifies;
+      // a staged 0.6.4 against a published 0.6.5 has to download the new one.
+      if (phase.kind === 'error' && phase.staged === latest) {
         return { kind: 'ready', version: latest };
       }
       return { kind: 'available', version: latest, apkSize: result.apkSize ?? 0 };
@@ -68,11 +77,31 @@ export function reduceAppUpdate(phase: AppUpdatePhase, event: AppUpdateEvent): A
     case 'installStarted':
       // Installing replaces the running process; the next render (after reopen) compares again.
       return { kind: 'installing', version: event.version };
+    case 'stagedFound':
+      // Only from idle-ish states: a download in flight owns the phase, and a finished one has
+      // already produced its own `ready`.
+      if (phase.kind === 'downloading' || phase.kind === 'installing' || phase.kind === 'ready') return phase;
+      return { kind: 'ready', version: event.version };
     case 'failed':
-      // `staged` preserves whether an APK was already on disk when the failure happened, so a
-      // later tap can install (staged) instead of re-downloading (not): the install path is the
-      // same file PackageInstaller just declined. Installing implies on-disk too.
-      return { kind: 'error', message: event.message, staged: phase.kind === 'ready' || phase.kind === 'installing' };
+      // `staged` carries the version still on disk (empty when nothing is), so the next tap knows
+      // whether it installs or downloads. It is measured, never inferred.
+      return { kind: 'error', message: event.message, staged: event.staged ? versionOf(phase) : undefined };
+  }
+}
+
+/** The version a phase is about, when it has one: what a failure hands back as `staged`. */
+function versionOf(phase: AppUpdatePhase): string | undefined {
+  switch (phase.kind) {
+    case 'available':
+    case 'downloading':
+    case 'ready':
+    case 'installing':
+    case 'uptodate':
+      return phase.version;
+    case 'error':
+      return phase.staged;
+    default:
+      return undefined;
   }
 }
 

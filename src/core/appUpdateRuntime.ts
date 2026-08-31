@@ -15,7 +15,11 @@ export interface AppUpdateRuntime {
   /** GET /app-update through the server relay, authenticated like media. */
   check(mediaBase: string, deviceInfo: DeviceInfo | null): Promise<AppUpdateCheckResult>;
   /** GET /app-update/apk into the native staging file; resolves on download completion. */
-  download(mediaBase: string, deviceInfo: DeviceInfo | null, transferId: string): Promise<void>;
+  download(mediaBase: string, deviceInfo: DeviceInfo | null, transferId: string, version: string): Promise<void>;
+  /** What is on disk right now. The UI offers Install from this, never from what it remembers. */
+  staged(): Promise<{ staged: boolean; size: number; version: string }>;
+  /** Drops a staged APK that is stale or refused, so the next tap downloads instead of looping. */
+  clearStaged(): Promise<void>;
   /** Commits the staged APK; the system confirmation and outcome arrive via onInstallStatus. */
   install(): Promise<void>;
   /** True if Install can be offered right now; false means the settings permission screen must come first. */
@@ -44,10 +48,18 @@ export const appUpdateRuntime: AppUpdateRuntime = {
     }
   },
 
-  async download(mediaBase, deviceInfo, transferId) {
+  async download(mediaBase, deviceInfo, transferId, version) {
     if (!deviceInfo) throw new Error('no device identity');
     const url = `${mediaBase}/app-update/apk?${authQuery(deviceInfo)}`;
-    await deviceBridge.downloadApk(url, transferId);
+    await deviceBridge.downloadApk(url, transferId, version);
+  },
+
+  async staged() {
+    return deviceBridge.stagedApkInfo();
+  },
+
+  async clearStaged() {
+    await deviceBridge.clearStagedApk();
   },
 
   async install() {
