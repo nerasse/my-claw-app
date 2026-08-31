@@ -117,8 +117,7 @@ test('the settings index and every page under it drop the keyboard', async () =>
   const tree = await boot();
   await pressLabel(tree, 'Open conversations');
   dismiss.mockClear();
-  await pressLabel(tree, 'More');
-  await pressLabel(tree, 'Settings');
+  await pressLabel(tree, 'Open settings');
   await waitFor(() => labelsOf(tree).includes('Open general'));
   expect(dismiss).toHaveBeenCalled();
 

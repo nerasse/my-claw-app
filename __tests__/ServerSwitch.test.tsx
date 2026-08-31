@@ -25,8 +25,7 @@ function announce(state: string, url: string): Promise<void> {
 async function openSettings(tree: Tree): Promise<void> {
   // Settings are reached from the drawer: connected shows no status control in the header.
   await press(tree, 'Open conversations');
-  await press(tree, 'More');
-  await press(tree, 'Settings');
+  await press(tree, 'Open settings');
   await press(tree, 'Open general');
   await waitFor(() => labelsOf(tree).includes('Server address'));
 }

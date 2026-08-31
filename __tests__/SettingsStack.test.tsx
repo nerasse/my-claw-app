@@ -72,8 +72,7 @@ async function settleAndUnmount(tree: Tree): Promise<void> {
 
 async function openSettings(tree: Tree): Promise<void> {
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'More');
-  await pressLabel(tree, 'Settings');
+  await pressLabel(tree, 'Open settings');
 }
 
 /** The server answers the Agents page with at least the defaults row usable. */

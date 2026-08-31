@@ -64,8 +64,7 @@ function labelOfUpdateButton(tree: Tree): string {
 
 async function openGeneral(tree: Tree): Promise<void> {
   await press(tree, 'Open conversations');
-  await press(tree, 'More');
-  await press(tree, 'Settings');
+  await press(tree, 'Open settings');
   await press(tree, 'Open general');
   await waitFor(() => labelsOf(tree).includes('Update the server now'));
 }

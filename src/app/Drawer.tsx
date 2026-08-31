@@ -285,30 +285,33 @@ export function Drawer({
 
         <View style={styles.footerRule} />
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
-          {/* One entry, one tap. The sheet it opens carries the four destinations; the state
-              line stays here because connection state is the one thing a footer is for. */}
-          <Pressable
-            style={styles.footerRow}
-            onPress={onOpenMore}
-            accessibilityRole="button"
-            accessibilityLabel="More">
-            <View style={styles.footerMain}>
-              <Text style={styles.footerTitle}>More</Text>
-              <Text style={styles.footerMeta}>
-                <Text style={{ color: connectionState === 'connected' ? palette.ok : palette.textFaint }}>●</Text>{' '}
-                {STATE_LABEL[connectionState]}
-                {pending > 0 ? ` · ${pending} pending` : ''}
-              </Text>
-            </View>
-            <Text style={styles.footerGlyph}>›</Text>
-          </Pressable>
-          <Pressable
-            style={styles.settingsButton}
-            onPress={onOpenSettings}
-            accessibilityRole="button"
-            accessibilityLabel="Open settings">
-            <GearIcon size={22} color={palette.text} />
-          </Pressable>
+          {/* One row: More opens the sheet with the remaining destinations (Archived, Agents,
+              Jobs); the gear jumps straight to Settings. The state line stays here because
+              connection state is the one thing a footer is for. */}
+          <View style={styles.footerBar}>
+            <Pressable
+              style={styles.footerMore}
+              onPress={onOpenMore}
+              accessibilityRole="button"
+              accessibilityLabel="More">
+              <View style={styles.footerMain}>
+                <Text style={styles.footerTitle}>More</Text>
+                <Text style={styles.footerMeta}>
+                  <Text style={{ color: connectionState === 'connected' ? palette.ok : palette.textFaint }}>●</Text>{' '}
+                  {STATE_LABEL[connectionState]}
+                  {pending > 0 ? ` · ${pending} pending` : ''}
+                </Text>
+              </View>
+              <Text style={styles.footerGlyph}>›</Text>
+            </Pressable>
+            <Pressable
+              style={styles.settingsButton}
+              onPress={onOpenSettings}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings">
+              <GearIcon size={22} color={palette.text} />
+            </Pressable>
+          </View>
         </View>
     </>
   );
@@ -436,9 +439,17 @@ const createStyles = (palette: Palette) => ({
   footer: {
     paddingHorizontal: space.md,
     paddingTop: space.md,
-    gap: space.md,
   },
-  footerRow: { flexDirection: 'row' as const, alignItems: 'center' as const, flex: 1 },
+  footerBar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+  },
+  footerMore: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
   footerMain: { flex: 1, gap: 1 },
   footerTitle: { fontSize: font.body, color: palette.text },
   footerMeta: { fontSize: font.small, color: palette.textMuted },

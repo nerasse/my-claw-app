@@ -204,7 +204,7 @@ import { StatusScreen } from './StatusScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
 import { JobSessionsScreen } from './JobSessionsScreen';
-import { CONNECTION_LABEL, Drawer } from './Drawer';
+import { Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ApprovalSheet } from '../components/ApprovalSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
@@ -701,6 +701,15 @@ export function AppShell(): React.JSX.Element {
     setSettingsOpen(true);
     setAutoFocusHero(false);
   }, []);
+
+  /** From the drawer footer: the gear jumps to Settings, so the drawer goes away first.
+   * The sheet used to do the same for its Settings row; the direct button must too, or the
+   * back key would close the drawer before leaving the settings stack.
+   */
+  const openSettingsFromDrawer = useCallback(() => {
+    setDrawerOpen(false);
+    openSettings();
+  }, [openSettings]);
 
   /** The status page is asked on every opening: the report is a snapshot, not a live gauge. */
   const openStatus = useCallback((threadId: string) => {
@@ -2985,7 +2994,7 @@ export function AppShell(): React.JSX.Element {
             onNewThread={newThread}
             onThreadMenu={setThreadMenu}
             onOpenMore={() => setMoreOpen(true)}
-            onOpenSettings={openSettings}
+            onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
           />
         ) : null}
@@ -3006,7 +3015,7 @@ export function AppShell(): React.JSX.Element {
             onNewThread={newThread}
             onThreadMenu={setThreadMenu}
             onOpenMore={() => setMoreOpen(true)}
-            onOpenSettings={openSettings}
+            onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
           />
         ) : (
@@ -3583,7 +3592,7 @@ export function AppShell(): React.JSX.Element {
         onNewThread={newThread}
         onThreadMenu={setThreadMenu}
         onOpenMore={() => setMoreOpen(true)}
-        onOpenSettings={openSettings}
+        onOpenSettings={openSettingsFromDrawer}
         onHome={handleHome}
       />
       )}
@@ -3895,15 +3904,6 @@ export function AppShell(): React.JSX.Element {
                 setMoreOpen(false);
                 setDrawerOpen(false);
                 openJobs();
-              },
-            },
-            {
-              label: 'Settings',
-              hint: `${CONNECTION_LABEL[status.state]}${pending > 0 ? ` · ${pending} pending` : ''}`,
-              onPress: () => {
-                setMoreOpen(false);
-                setDrawerOpen(false);
-                openSettings();
               },
             },
           ]}

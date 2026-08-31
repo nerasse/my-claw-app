@@ -98,8 +98,7 @@ async function settleAndUnmount(tree: Tree): Promise<void> {
 
 async function openSettings(tree: Tree): Promise<void> {
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'More');
-  await pressLabel(tree, 'Settings');
+  await pressLabel(tree, 'Open settings');
 }
 
 async function openSkills(tree: Tree): Promise<void> {

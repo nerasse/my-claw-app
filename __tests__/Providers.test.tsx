@@ -138,8 +138,7 @@ async function bootToProviders(): Promise<Tree> {
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'More');
-  await pressLabel(tree, 'Settings');
+  await pressLabel(tree, 'Open settings');
   await pressLabel(tree, 'Open providers');
   await emit(providersConfig());
   await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
@@ -159,8 +158,7 @@ test('the provider pages ask for the snapshot themselves, with no detour through
   const tree = await renderApp();
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
-  await pressLabel(tree, 'More');
-  await pressLabel(tree, 'Settings');
+  await pressLabel(tree, 'Open settings');
 
   // The index rows carry live counts from that same snapshot, so the index asks on entry.
   await waitFor(() => sentFrames().some(f => f.type === 'agents.config.get'));

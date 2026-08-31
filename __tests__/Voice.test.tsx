@@ -375,8 +375,7 @@ test('a voice bubble plays, pauses, and never lets two notes run at once', async
 test('the settings expose the transcription engine and say where the audio goes', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
-  await press(tree, 'More');
-  await press(tree, 'Settings');
+  await press(tree, 'Open settings');
   await press(tree, 'Open general');
 
   await waitFor(() =>
