@@ -15,7 +15,7 @@ import {
   appUpdateLabel,
   type AppUpdatePhase,
 } from '../core/appUpdate';
-import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { font, radius, scaleFont, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 const VOICE_OPTIONS: Array<{ mode: VoiceMode; label: string }> = [
@@ -23,6 +23,18 @@ const VOICE_OPTIONS: Array<{ mode: VoiceMode; label: string }> = [
   { mode: 'cloud', label: 'Cloud' },
   { mode: 'local', label: 'Local' },
 ];
+
+/** The scales offered as a picker, and the label each one shows. 1 = the design size. */
+const SCALE_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 0.85, label: '85%' },
+  { value: 1, label: '100%' },
+  { value: 1.15, label: '115%' },
+  { value: 1.3, label: '130%' },
+];
+
+function scaleLabel(scale: number): string {
+  return `${Math.round(scale * 100)}%`;
+}
 
 /**
  * Says where the voice goes, not just which switch is on. "Local" is about the server's machine,
@@ -62,6 +74,8 @@ export function GeneralSettingsScreen({
   onVoiceModeChange,
   uiPrefs,
   onUiPrefsChange,
+  chatFontScale,
+  onChatFontScaleChange,
   updatePhase,
   appUpdatePhase,
   now,
@@ -90,6 +104,9 @@ export function GeneralSettingsScreen({
   /** Server-owned display prefs; null until uiPrefs.get is answered. */
   uiPrefs: UiPrefsResultFrame | null;
   onUiPrefsChange: (prefs: { expandTools?: boolean; expandReasoning?: boolean }) => void;
+  /** Thread typography scale: 1 = the design sizes. Live, so the picker shows the current one. */
+  chatFontScale: number;
+  onChatFontScaleChange: (scale: number) => void;
   /** Everything the update button knows, decided in core/serverUpdate.ts. */
   updatePhase: UpdatePhase;
   /** Everything the app update card knows, decided in core/appUpdate.ts. */
@@ -280,6 +297,39 @@ export function GeneralSettingsScreen({
                 accessibilityRole="switch"
               />
             </View>
+          </View>
+        </View>
+
+        <View style={styles.categoryItem}>
+          <Text style={styles.section}>chat</Text>
+          <View style={styles.card}>
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabel}>
+                <Text style={styles.switchTitle}>Message size</Text>
+                <Text style={styles.hint}>Messages, tools and reasoning (read: everything a conversation draws). 100% is the design size; the reasoning stays one step under the answer whatever this is.</Text>
+              </View>
+            </View>
+            <View style={styles.segment}>
+              {SCALE_OPTIONS.map(option => {
+                const selected = Math.abs(chatFontScale - option.value) < 0.001;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[styles.segmentItem, selected && styles.segmentItemActive]}
+                    onPress={() => onChatFontScaleChange(option.value)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Message size ${option.label}`}>
+                    <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.hint}>
+              {`current ${scaleLabel(chatFontScale)} · ${Math.round(scaleFont(font.body, chatFontScale))}pt body`}
+            </Text>
           </View>
         </View>
 

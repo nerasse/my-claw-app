@@ -5,7 +5,7 @@ import { isDangerousHtml } from '../core/markdownSafe';
 import { CodeBlockBar } from './CodeBlockBar';
 import { ScrollableBlock } from './ScrollableBlock';
 import { MarkdownTable } from './MarkdownTable';
-import { font, lineBoxFor, lineHeightFor, space, useTheme, type Palette } from '../theme';
+import { font, lineBoxFor, lineHeightFor, space, useChatFontScale, useTheme, type Palette } from '../theme';
 
 /**
  * How loud the prose is allowed to be.
@@ -18,10 +18,14 @@ import { font, lineBoxFor, lineHeightFor, space, useTheme, type Palette } from '
  */
 export type MarkdownTone = 'body' | 'aside';
 
-function toneOf(palette: Palette, tone: MarkdownTone): { size: number; color: string } {
+function toneOf(palette: Palette, tone: MarkdownTone, scale: number): { size: number; color: string } {
   return tone === 'aside'
-    ? { size: font.small, color: palette.textMuted }
-    : { size: font.body, color: palette.text };
+    ? { size: scaleFont(scale, font.small), color: palette.textMuted }
+    : { size: scaleFont(scale, font.body), color: palette.text };
+}
+
+function scaleFont(scale: number, size: number): number {
+  return Math.round(size * scale);
 }
 
 /** Monospace runs sit one step under their prose, and never under the smallest size we ship. */
@@ -33,8 +37,8 @@ function codeSizeFor(size: number): number {
  * @param prose The message being rendered: a run carrying an emoji must not pin its line box,
  * or the glyph is clamped away on the first or last line. See lineBoxFor.
  */
-export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 'body'): MarkedStyles {
-  const { size, color } = toneOf(palette, tone);
+export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 'body', scale = 1): MarkedStyles {
+  const { size, color } = toneOf(palette, tone, scale);
   const box = lineBoxFor(size, prose);
   // The library flattens every style over its own regular base (16px, #333333); a span that
   // only states its emphasis inherits that base. Restate the full body so bold and italic
@@ -168,16 +172,17 @@ export class WrappingRenderer extends Renderer {
  */
 export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: MarkdownTone }): React.JSX.Element {
   const { palette } = useTheme();
-  const mdStyles = useMemo(() => markedStyles(palette, text, tone), [palette, text, tone]);
+  const scale = useChatFontScale();
+  const mdStyles = useMemo(() => markedStyles(palette, text, tone, scale), [palette, text, tone, scale]);
   const renderer = useMemo(() => {
-    const { size, color } = toneOf(palette, tone);
+    const { size, color } = toneOf(palette, tone, scale);
     const codeSize = codeSizeFor(size);
     return new WrappingRenderer(
       { color, fontSize: codeSize, lineHeight: lineHeightFor(codeSize) },
       { fontSize: size, color, ...lineBoxFor(size, text) },
       tone,
     );
-  }, [palette, text, tone]);
+  }, [palette, text, tone, scale]);
   const elements = useMarkdown(text, { styles: mdStyles, renderer });
   return <View style={styles.wrap}>{elements}</View>;
 }

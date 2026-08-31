@@ -7,7 +7,7 @@ import { formatDuration, summarizeArgs } from '../core/utils';
 import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, splitDiff } from './DiffView';
-import { font, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, lineHeightFor, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * One executed tool, collapsed to a single dense line and expanded on tap to show the
@@ -230,7 +230,7 @@ export const ToolCard = React.memo(function ToolCardView({
   );
 });
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   card: {
     alignSelf: 'stretch' as const,
     backgroundColor: palette.surface,
@@ -244,18 +244,18 @@ const createStyles = (palette: Palette) => ({
   cardOpen: { backgroundColor: palette.codeBg },
   cardError: { borderColor: palette.danger },
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
-  chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
-  name: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
-  preview: { flex: 1, fontSize: font.small, color: palette.textMuted },
+  chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
+  name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
+  preview: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.textMuted },
   // A path, a command or a pattern: read in the prose face they look like a sentence that lost
   // its spaces.
-  previewMono: { fontFamily: 'monospace', fontSize: font.micro },
+  previewMono: { fontFamily: 'monospace', fontSize: scaleFont(font.micro, scale) },
   spacer: { flex: 1 },
-  duration: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
-  failed: { fontSize: font.micro, color: palette.danger, fontWeight: '600' as const },
+  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
+  failed: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
-  label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, marginTop: 2 },
   // Right-aligned under the fold's own row: the buttons belong to the block below them, and a
   // row that is empty on web (BlockActions renders nothing there) must not leave a gap.
@@ -272,8 +272,8 @@ const createStyles = (palette: Palette) => ({
   },
   codeText: {
     fontFamily: 'monospace',
-    fontSize: font.small,
-    lineHeight: lineHeightFor(font.small),
+    fontSize: scaleFont(font.small, scale),
+    lineHeight: lineHeightFor(scaleFont(font.small, scale)),
     color: palette.text,
   },
 });

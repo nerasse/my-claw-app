@@ -10,7 +10,7 @@ import { ReasoningLine } from './ReasoningLine';
 import { LocationView } from './LocationView';
 import { chatSelectable } from '../core/platform';
 import { contextMenuProps } from '../core/webProps';
-import { font, lineBoxFor, lineHeightFor, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, lineBoxFor, lineHeightFor, radius, scaleFont, space, useChatFontScale, useThemedStyles, type Palette } from '../theme';
 
 function clock(ts: number): string {
   const date = new Date(ts);
@@ -47,7 +47,9 @@ export const Bubble = React.memo(function BubbleView({
   expandReasoning?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const scale = useChatFontScale();
   const agent = item.role === 'agent';
+  const bodySize = scaleFont(font.body, scale);
   // While the model is only thinking there is no text yet. The reasoning line already says so, so
   // the bare caret would be a second, redundant "working" indicator in the same bubble.
   const thinkingShown = Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
@@ -76,7 +78,7 @@ export const Bubble = React.memo(function BubbleView({
         style={[
           styles.text,
           item.command ? styles.textCommand : item.notice ? styles.textNotice : styles.textUser,
-          lineBoxFor(font.body, item.text),
+          lineBoxFor(bodySize, item.text),
         ]}>
         {item.text}
         {/* A command the server is still running says how long it has been at it; a
@@ -85,10 +87,11 @@ export const Bubble = React.memo(function BubbleView({
       </Text>
     )
   ) : item.streaming && !thinkingShown ? (
-    <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(font.body) }]}>▍</Text>
+    <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(bodySize) }]}>▍</Text>
   ) : null;
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
+      <View style={[styles.stack, agent ? styles.stackAgent : styles.stackUser]}>
       {/* Long press opens the message menu, which is where copying and selecting live: the gesture
           would otherwise start a selection the platform cannot finish, and would throw the thread
           to the other end doing it. See docs/text-selection.md. Not where the platform selects
@@ -150,30 +153,41 @@ export const Bubble = React.memo(function BubbleView({
         ) : null}
 
         {showTime ? <Text style={[styles.time, agent ? styles.timeAgent : styles.timeUser]}>{clock(item.ts)}</Text> : null}
+      </Pressable>
 
+      {/* The ⋯ row sits under the bubble on the side the author reads from: right for the agent,
+          left for the owner. It no longer steals width from the message, so the bubble fills the
+          column like a tool card. */}
+      <View style={[styles.menuRow, agent ? styles.menuRowAgent : styles.menuRowUser]}>
         <Pressable
           hitSlop={12}
-          style={[styles.menu, agent ? styles.menuAgent : styles.menuUser]}
+          style={styles.menu}
           onPress={() => onMenu(item)}
           accessibilityRole="button"
           accessibilityLabel="Message actions">
           <Text style={styles.menuGlyph}>⋯</Text>
         </Pressable>
-      </Pressable>
+      </View>
+      </View>
     </View>
   );
 });
 
-const createStyles = (palette: Palette) => ({
-  row: { width: '100%' as const, flexDirection: 'row' as const, marginBottom: space.md },
-  rowGrouped: { marginBottom: space.xs },
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
+  row: { width: '100%' as const, flexDirection: 'row' as const, marginBottom: space.xs },
+  rowGrouped: { marginBottom: 1 },
   rowUser: { justifyContent: 'flex-end' as const },
   rowAgent: { justifyContent: 'flex-start' as const },
+  // The bubble and its ⋯ row share one column: the bubble fills the width, the button sits
+  // below it on its author's side instead of eating the message's margin.
+  stack: { width: '100%' as const },
+  stackAgent: { alignItems: 'flex-start' as const },
+  stackUser: { alignItems: 'flex-end' as const },
   bubble: {
-    maxWidth: '88%' as const,
+    width: '100%' as const,
     borderRadius: radius.md,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   bubbleUser: { backgroundColor: palette.accent, borderBottomRightRadius: radius.sm },
   bubbleAgent: { backgroundColor: palette.surfaceAlt, borderBottomLeftRadius: radius.sm },
@@ -181,28 +195,27 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: palette.danger,
-    maxWidth: '95%' as const,
   },
   bubbleCommand: {
     backgroundColor: palette.accentSoft,
     borderWidth: 1,
     borderColor: palette.border,
-    maxWidth: '95%' as const,
   },
   // The line box is stated at the call site: a message carrying an emoji must not pin it.
-  text: { fontSize: font.body, color: palette.text },
+  text: { fontSize: scaleFont(font.body, scale), color: palette.text },
   textUser: { color: palette.accentText },
   // Command output keeps its line breaks: /status is a table, not prose.
-  textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: font.small },
-  textNotice: { color: palette.text, fontSize: font.small },
-  error: { fontSize: font.small, color: palette.danger, marginTop: 2 },
-  queued: { fontSize: font.small, color: palette.textFaint, marginTop: 2 },
+  textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: scaleFont(font.small, scale) },
+  textNotice: { color: palette.text, fontSize: scaleFont(font.small, scale) },
+  error: { fontSize: scaleFont(font.small, scale), color: palette.danger, marginTop: 2 },
+  queued: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, marginTop: 2 },
   queuedUser: { color: palette.accentText, opacity: 0.7 },
-  time: { fontSize: font.micro, alignSelf: 'flex-end' as const, marginTop: 1 },
+  time: { fontSize: scaleFont(font.micro, scale), alignSelf: 'flex-end' as const, marginTop: 1 },
   timeAgent: { color: palette.textFaint },
   timeUser: { color: palette.accentText, opacity: 0.7 },
-  menu: { position: 'absolute' as const, bottom: -2, width: 24, height: 24, alignItems: 'center' as const, justifyContent: 'center' as const },
-  menuAgent: { right: -24 },
-  menuUser: { left: -24 },
-  menuGlyph: { fontSize: 16, lineHeight: 18, color: palette.textFaint },
+  menuRow: { width: '100%' as const, flexDirection: 'row' as const, marginTop: 1 },
+  menuRowAgent: { justifyContent: 'flex-end' as const },
+  menuRowUser: { justifyContent: 'flex-start' as const },
+  menu: { width: 24, height: 22, alignItems: 'center' as const, justifyContent: 'center' as const },
+  menuGlyph: { fontSize: scaleFont(font.body, scale), lineHeight: scaleFont(font.body, scale) + 2, color: palette.textFaint },
 });

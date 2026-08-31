@@ -522,12 +522,15 @@ test('the stored dark mode paints the shell dark', async () => {
 
 test('bubbles stay compact: agent text sits in a tight bubble', async () => {
   const tree = await renderWithHistory();
-  // Bubbles are the nodes carrying a maxWidth constraint; the composer field is not a bubble.
+  // A bubble fills its column now (like a tool card), so the width constraint that used to mark
+  // one is gone; the compactness contract is still the vertical padding of the bubble plate.
+  // The bubble is the node whose style carries a width of 100% inside the thread plus the
+  // surfaceAlt (agent) plate; match on the agent bubble colour to stay out of the drawer.
   const bubbles = tree.root.findAll(
     node =>
       Array.isArray(node.props.style) &&
       node.props.style.some(
-        (entry: unknown) => entry && typeof entry === 'object' && 'maxWidth' in (entry as object),
+        (entry: unknown) => entry && typeof entry === 'object' && 'width' in (entry as object) && (entry as { width?: unknown }).width === '100%',
       ),
     { deep: true },
   );

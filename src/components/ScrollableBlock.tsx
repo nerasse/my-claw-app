@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
-import { font, space, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * How tall a block inside a tool card is allowed to grow before it is folded. Roughly fourteen
@@ -68,7 +68,7 @@ export function ScrollableBlock({
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   clip: { maxHeight: BLOCK_MAX_HEIGHT, overflow: 'hidden' as const },
   more: {
     flexDirection: 'row' as const,
@@ -77,6 +77,6 @@ const createStyles = (palette: Palette) => ({
     gap: 4,
     paddingVertical: space.xs,
   },
-  moreLabel: { fontSize: font.micro, color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
-  moreChevron: { fontSize: font.micro, color: palette.accent },
+  moreLabel: { fontSize: scaleFont(font.micro, scale), color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
+  moreChevron: { fontSize: scaleFont(font.micro, scale), color: palette.accent },
 });

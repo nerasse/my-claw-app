@@ -6,7 +6,7 @@ import type { DeviceInfo } from '../core/device';
 import { viewerFor } from '../core/utils';
 import { VoiceNote } from './VoiceNote';
 import { PlayPauseIcon } from './icons';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 export function AttachmentView({
   att,
@@ -117,7 +117,7 @@ export function AttachmentView({
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   imageWrap: { marginBottom: space.xs },
   image: {
     width: 190,
@@ -142,7 +142,7 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  caption: { fontSize: font.small, color: palette.textFaint, maxWidth: 190, marginTop: 2 },
+  caption: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, maxWidth: 190, marginTop: 2 },
   captionOnAccent: { color: palette.onAccentMuted },
   chip: {
     alignSelf: 'flex-start' as const,
@@ -154,6 +154,6 @@ const createStyles = (palette: Palette) => ({
   },
   chipGone: { opacity: 0.6 },
   chipOnAccent: { backgroundColor: palette.onAccentTrack },
-  chipText: { fontSize: font.body, fontWeight: '500' as const, color: palette.text },
+  chipText: { fontSize: scaleFont(font.body, scale), fontWeight: '500' as const, color: palette.text },
   chipTextOnAccent: { color: palette.accentText },
 });

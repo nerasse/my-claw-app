@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
 import { chatSelectable } from '../core/platform';
-import { font, space, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * A long aside folded into one muted line, expanded on tap. Two things use it: what the model
@@ -76,12 +76,12 @@ export function CollapsibleAside({
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: space.sm },
   // The toggle takes the row and yields it: a long label must not push the copy button out.
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1 },
-  chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
-  label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.3 },
+  chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
   // A left rule marks it as an aside rather than part of the answer.
   body: {
     borderLeftWidth: 2,

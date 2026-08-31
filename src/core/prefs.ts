@@ -9,6 +9,12 @@ export interface Prefs {
   lastThreadId: string | null;
   /** Auto-download the app update on mobile data; off by default (wifi only). */
   updateOnMobileData: boolean;
+  /**
+   * Thread typography scale. 1 = the design sizes (font.body 14, aside 11, meta 12...). What the
+   * chat reads at, and every element of a bubble moves with it: the reasoning stays one step
+   * under the answer whatever this is set to.
+   */
+  chatFontScale: number;
 }
 
 export { DEFAULT_SERVER_URL };
@@ -18,9 +24,19 @@ const DEFAULTS: Prefs = {
   serverUrl: DEFAULT_SERVER_URL,
   lastThreadId: null,
   updateOnMobileData: false,
+  chatFontScale: 1,
 };
 
 const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
+
+/** The scale range offered in settings, and what a stored value is clamped to on load. */
+export const CHAT_SCALE_MIN = 0.85;
+export const CHAT_SCALE_MAX = 1.3;
+
+export function clampChatScale(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULTS.chatFontScale;
+  return Math.min(CHAT_SCALE_MAX, Math.max(CHAT_SCALE_MIN, value));
+}
 
 type Listener = (prefs: Prefs) => void;
 
@@ -58,6 +74,7 @@ class PrefsStore {
         serverUrl: raw.serverUrl?.trim() ? raw.serverUrl : DEFAULTS.serverUrl,
         lastThreadId: raw.lastThreadId?.trim() ? raw.lastThreadId : null,
         updateOnMobileData: raw.updateOnMobileData === 'true',
+        chatFontScale: clampChatScale(Number(raw.chatFontScale)),
       };
     } catch {
       this.current = DEFAULTS;

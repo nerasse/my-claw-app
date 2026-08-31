@@ -7,6 +7,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Bubble } from '../Bubble';
+import { ChatFontScaleContext } from '../../theme';
 import type { TextItem } from '../../core/chat';
 
 /** Flatten children into the strings they render, whichever nesting shape ReactMemo gave them. */
@@ -23,18 +24,20 @@ function flattenTexts(node: ReactTestRenderer.ReactTestInstance, out: string[]):
   }
 }
 
-function render(item: TextItem) {
+function render(item: TextItem, scale = 1) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <Bubble
-        item={item}
-        mediaBase="http://host:8080"
-        deviceInfo={null}
-        grouped={false}
-        showTime={false}
-        onMenu={() => {}}
-      />,
+      <ChatFontScaleContext.Provider value={scale}>
+        <Bubble
+          item={item}
+          mediaBase="http://host:8080"
+          deviceInfo={null}
+          grouped={false}
+          showTime={false}
+          onMenu={() => {}}
+        />
+      </ChatFontScaleContext.Provider>,
     );
   });
   return tree;
@@ -77,5 +80,105 @@ describe('Bubble layout', () => {
     // The capture sits above its caption: the photo is the message, the words append to it.
     expect(file).toBeGreaterThan(-1);
     expect(at).toBeGreaterThan(file);
+  });
+
+  it('fills the row: a bubble takes the whole column, like a tool card', () => {
+    const tree = render({
+      kind: 'text',
+      attachments: [],
+      id: 'a1',
+      role: 'agent',
+      text: 'coucou',
+      streaming: false,
+      ts: 1,
+    });
+    const widths = tree.root
+      .findAll(
+        node =>
+          node.props.style &&
+          (Array.isArray(node.props.style) ? node.props.style : [node.props.style]).some(
+            (entry: unknown) => entry && typeof entry === 'object' && 'width' in (entry as object) && (entry as { width?: unknown }).width === '100%',
+          ),
+        { deep: true },
+      )
+      .map(node => node.props.style);
+    expect(widths.length).toBeGreaterThan(0);
+  });
+
+  it('lays the message menu under the bubble, on the author side', () => {
+    // Agent (system): the ⋯ row is right-aligned.
+    const agentTree = render({
+      kind: 'text',
+      attachments: [],
+      id: 'a1',
+      role: 'agent',
+      text: 'coucou',
+      streaming: false,
+      ts: 1,
+    });
+    const agentMenuRow = agentTree.root.findAll(
+      node =>
+        node.props.style &&
+        (Array.isArray(node.props.style) ? node.props.style : [node.props.style]).some(
+          (entry: unknown) => entry && typeof entry === 'object' && 'justifyContent' in (entry as object) && (entry as { justifyContent?: unknown }).justifyContent === 'flex-end',
+        ),
+      { deep: true },
+    );
+    expect(agentMenuRow.length).toBeGreaterThan(0);
+
+    // User: left-aligned.
+    const userTree = render({
+      kind: 'text',
+      attachments: [],
+      id: 'u1',
+      role: 'user',
+      text: 'coucou',
+      streaming: false,
+      ts: 1,
+    });
+    const userMenuRow = userTree.root.findAll(
+      node =>
+        node.props.style &&
+        (Array.isArray(node.props.style) ? node.props.style : [node.props.style]).some(
+          (entry: unknown) => entry && typeof entry === 'object' && 'justifyContent' in (entry as object) && (entry as { justifyContent?: unknown }).justifyContent === 'flex-start',
+        ),
+      { deep: true },
+    );
+    expect(userMenuRow.length).toBeGreaterThan(0);
+  });
+
+  it('a larger scale raises the message body size', () => {
+    // A user message renders through the plain Text path (markdown is the agent's), so the
+    // body size is directly inspectable there.
+    const userItem = (id: string): TextItem => ({
+      kind: 'text',
+      attachments: [],
+      id,
+      role: 'user',
+      text: 'coucou',
+      streaming: false,
+      ts: 1,
+    });
+    const atDefault = render(userItem('a1'));
+    const atLarge = render(userItem('a2'), 1.15);
+    const fontSizeOf = (tree: ReactTestRenderer.ReactTestRenderer) => {
+      const text = tree.root.findAll(
+        node =>
+          String(node.props.children).includes('coucou') &&
+          node.props.style &&
+          (Array.isArray(node.props.style) ? node.props.style : [node.props.style]).some(
+            (entry: unknown) => entry && typeof entry === 'object' && 'fontSize' in (entry as object),
+          ),
+        { deep: true },
+      )[0];
+      if (!text) return null;
+      const flat = (Array.isArray(text.props.style) ? text.props.style : [text.props.style]).filter(Boolean);
+      const sizes = flat.map((entry: unknown) => entry as { fontSize?: unknown }).map(e => e.fontSize).filter((v): v is number => typeof v === 'number');
+      return Math.max(...sizes);
+    };
+    const base = fontSizeOf(atDefault);
+    const scaled = fontSizeOf(atLarge);
+    expect(base).toBe(14); // font.body at scale 1
+    expect(scaled).toBe(16); // Math.round(14 * 1.15)
   });
 });

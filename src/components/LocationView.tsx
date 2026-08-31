@@ -1,7 +1,7 @@
 import React from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import type { LocationData } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 export function locationMapUrl(location: LocationData): string {
   const zoom = location.accuracyMeters <= 25 ? 18 : location.accuracyMeters <= 100 ? 16 : 13;
@@ -36,7 +36,7 @@ export function LocationView({ location, onAccent }: { location: LocationData; o
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   card: {
     alignSelf: 'stretch' as const,
     backgroundColor: palette.accentSoft,
@@ -46,9 +46,9 @@ const createStyles = (palette: Palette) => ({
     gap: space.xs,
   },
   cardOnAccent: { backgroundColor: palette.onAccentTrack },
-  title: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text },
-  address: { fontSize: font.body, color: palette.text },
-  meta: { fontSize: font.small, color: palette.textMuted },
+  title: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text },
+  address: { fontSize: scaleFont(font.body, scale), color: palette.text },
+  meta: { fontSize: scaleFont(font.small, scale), color: palette.textMuted },
   metaOnAccent: { color: palette.onAccentMuted },
   textOnAccent: { color: palette.accentText },
   button: {
@@ -60,7 +60,7 @@ const createStyles = (palette: Palette) => ({
     paddingVertical: space.xs,
   },
   buttonOnAccent: { borderColor: palette.onAccentMuted },
-  buttonText: { fontSize: font.small, color: palette.accent },
+  buttonText: { fontSize: scaleFont(font.small, scale), color: palette.accent },
   buttonTextOnAccent: { color: palette.accentText },
-  attribution: { fontSize: font.micro, color: palette.textFaint },
+  attribution: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
 });

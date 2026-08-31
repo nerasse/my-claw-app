@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { prefs, type ThemeMode } from '../core/prefs';
 import { applyWebTheme } from '../core/webTheme';
-import { ThemeContext, useResolvedTheme } from './index';
+import { ChatFontScaleContext, ThemeContext, useResolvedTheme } from './index';
 
 export interface ThemeControl {
   mode: ThemeMode;
@@ -14,14 +14,22 @@ export function useThemeControl(): ThemeControl {
   return useContext(ThemeControlContext);
 }
 
+const DEFAULT_CHAT_SCALE = 1;
+
 /**
  * Owns the theme choice: the stored mode resolved against the phone setting. Sits above every
  * screen so a switch repaints the whole app, including the drawer and the sheets.
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [mode, setMode] = useState<ThemeMode>(prefs.get().themeMode);
+  const [chatScale, setChatScale] = useState<number>(prefs.get().chatFontScale ?? DEFAULT_CHAT_SCALE);
 
-  useEffect(() => prefs.subscribe(next => setMode(next.themeMode)), []);
+  useEffect(() =>
+    prefs.subscribe(next => {
+      setMode(next.themeMode);
+      setChatScale(next.chatFontScale ?? DEFAULT_CHAT_SCALE);
+    }),
+  []);
 
   const theme = useResolvedTheme(mode);
   // The cursor, the hover states, the focus ring, the scrollbars and the selection colour live
@@ -37,7 +45,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
 
   return (
     <ThemeControlContext.Provider value={control}>
-      <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>
+      <ThemeContext.Provider value={theme}>
+        <ChatFontScaleContext.Provider value={chatScale}>{children}</ChatFontScaleContext.Provider>
+      </ThemeContext.Provider>
     </ThemeControlContext.Provider>
   );
 }

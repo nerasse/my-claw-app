@@ -5,7 +5,7 @@ import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatDuration } from '../core/utils';
 import { requestToolOutput } from '../core/toolOutput';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * A `spawn` or `send` call: not a tool result to read, a sub-agent to go and see.
@@ -156,7 +156,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   );
 });
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   card: {
     alignSelf: 'stretch' as const,
     backgroundColor: palette.surfaceAlt,
@@ -173,15 +173,15 @@ const createStyles = (palette: Palette) => ({
   cardError: { borderColor: palette.danger },
   head: { flexDirection: 'row' as const, alignItems: 'center' as const },
   identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
-  chevron: { fontSize: font.micro, color: palette.textFaint, width: 8 },
-  name: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 1 },
-  kind: { fontSize: font.micro, color: palette.textFaint, flexShrink: 1 },
+  chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
+  name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 1 },
+  kind: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, flexShrink: 1 },
   spacer: { flex: 1 },
-  duration: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
-  stateRunning: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
-  stateOk: { fontSize: font.micro, color: palette.accent, fontWeight: '600' as const },
-  stateBad: { fontSize: font.micro, color: palette.danger, fontWeight: '600' as const },
-  stateFaint: { fontSize: font.micro, color: palette.textFaint, fontWeight: '600' as const },
+  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
+  stateRunning: { fontSize: scaleFont(font.micro, scale), color: palette.accent, fontWeight: '600' as const },
+  stateOk: { fontSize: scaleFont(font.micro, scale), color: palette.accent, fontWeight: '600' as const },
+  stateBad: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
+  stateFaint: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontWeight: '600' as const },
   spinner: { transform: [{ scale: 0.8 }] },
   // The door carries the brief as its own label: one row that says both what was asked and that
   // there is somewhere to go, instead of a line of prose above a button repeating the name.
@@ -196,11 +196,11 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.border,
     backgroundColor: palette.surface,
   },
-  doorLabel: { flex: 1, fontSize: font.small, color: palette.text },
-  doorChevron: { fontSize: font.meta, color: palette.accent },
-  brief: { fontSize: font.small, color: palette.textMuted, paddingHorizontal: space.xs },
+  doorLabel: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.text },
+  doorChevron: { fontSize: scaleFont(font.meta, scale), color: palette.accent },
+  brief: { fontSize: scaleFont(font.small, scale), color: palette.textMuted, paddingHorizontal: space.xs },
   body: { gap: 3, paddingBottom: 2 },
-  label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   blockHead: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -208,7 +208,7 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'space-between' as const,
     marginTop: 2,
   },
-  codeText: { fontSize: font.small, color: palette.text },
+  codeText: { fontSize: scaleFont(font.small, scale), color: palette.text },
   code: {
     backgroundColor: palette.bg,
     borderRadius: 5,

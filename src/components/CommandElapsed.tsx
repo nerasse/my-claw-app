@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native';
-import { font, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, useThemedStyles, type Palette } from '../theme';
 
 /** `47s`, then `1m 47s`: the shape the server already uses when it reports a run's duration. */
 export function formatElapsed(ms: number): string {
@@ -27,8 +27,8 @@ export function CommandElapsed({ since, onAccent = false }: { since: number; onA
   );
 }
 
-const createStyles = (palette: Palette) => ({
-  elapsed: { fontSize: font.small, color: palette.textFaint },
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
+  elapsed: { fontSize: scaleFont(font.small, scale), color: palette.textFaint },
   /** On the owner's own bubble, whose background is the accent: the faint grey vanishes there. */
   elapsedAccent: { color: palette.accentText, opacity: 0.7 },
 });

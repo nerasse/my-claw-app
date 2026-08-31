@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { PlayPauseIcon } from './icons';
 import { formatDuration, usePlaybackOf, voicePlayback } from '../core/voice';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /** Fixed bar count: the shape is decorative, and reading a real waveform would cost a decode. */
 const BARS = 28;
@@ -110,7 +110,7 @@ function barHeight(seed: string, index: number): number {
   return 5 + (hash % 15);
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -141,7 +141,7 @@ const createStyles = (palette: Palette) => ({
   barPlayed: { backgroundColor: palette.accent },
   barPlayedOnAccent: { backgroundColor: palette.accentText },
   time: {
-    fontSize: font.micro,
+    fontSize: scaleFont(font.micro, scale),
     color: palette.textFaint,
     fontVariant: ['tabular-nums' as const],
     minWidth: 30,

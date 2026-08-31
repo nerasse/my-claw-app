@@ -435,6 +435,17 @@ export function AppShell(): React.JSX.Element {
     apply();
     return prefs.subscribe(apply);
   }, []);
+  /** Thread typography scale from the settings bag; a change repaints the chat live. */
+  const [chatFontScale, setChatFontScale] = useState(prefs.get().chatFontScale);
+  useEffect(() => {
+    const apply = () => setChatFontScale(prefs.get().chatFontScale);
+    apply();
+    return prefs.subscribe(apply);
+  }, []);
+  const changeChatFontScale = useCallback((scale: number) => {
+    prefs.set('chatFontScale', scale);
+    setChatFontScale(scale);
+  }, []);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -2964,6 +2975,8 @@ export function AppShell(): React.JSX.Element {
                 onVoiceModeChange={changeVoiceMode}
                 uiPrefs={uiPrefs}
                 onUiPrefsChange={changeUiPrefs}
+                chatFontScale={chatFontScale}
+                onChatFontScaleChange={changeChatFontScale}
                 updatePhase={updatePhase}
                 appUpdatePhase={appUpdatePhase}
                 now={updateNow}

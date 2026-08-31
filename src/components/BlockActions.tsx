@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { CopyButton } from './CopyButton';
 import { useOpenSelection } from '../core/textSelection';
 import { blockActionsSupported } from '../core/platform';
-import { font, space, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * What a block of text inside the thread offers: take all of it, or go and pick a piece.
@@ -37,7 +37,7 @@ export function BlockActions({ title, value }: { title: string; value: string })
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
-  select: { fontSize: font.micro, color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
+  select: { fontSize: scaleFont(font.micro, scale), color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
 });

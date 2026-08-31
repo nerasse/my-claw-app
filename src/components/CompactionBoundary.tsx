@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { CollapsibleAside } from './CollapsibleAside';
-import { font, space, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 function turns(count: number): string {
   return `${count} ${count === 1 ? 'turn' : 'turns'}`;
@@ -45,9 +45,9 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
   );
 });
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: { width: '100%' as const, marginBottom: space.md, paddingHorizontal: space.sm },
   rule: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   line: { flex: 1, height: 1, backgroundColor: palette.border },
-  label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.3 },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
 });

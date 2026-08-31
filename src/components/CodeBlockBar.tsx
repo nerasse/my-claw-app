@@ -1,8 +1,8 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { CopyButton } from './CopyButton';
 import { blockActionsSupported } from '../core/platform';
-import { font, space, useTheme } from '../theme';
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * The strip over a fenced block: what it is on the left, how to take it on the right.
@@ -16,10 +16,10 @@ import { font, space, useTheme } from '../theme';
  * across nodes and copies with a keystroke, so this was a control repeating a shortcut.
  */
 export function CodeBlockBar({ value, language }: { value: string; language?: string }): React.JSX.Element {
-  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.bar}>
-      <Text style={[styles.language, { color: palette.textFaint }]} numberOfLines={1}>
+      <Text style={styles.language} numberOfLines={1}>
         {language ?? ''}
       </Text>
       {blockActionsSupported ? (
@@ -29,8 +29,8 @@ export function CodeBlockBar({ value, language }: { value: string; language?: st
   );
 }
 
-const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginBottom: space.xs },
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
+  bar: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: space.sm, marginBottom: space.xs },
   // Shrinks so a long language tag never pushes the button off the block.
-  language: { fontSize: font.micro, textTransform: 'uppercase', letterSpacing: 0.4, flexShrink: 1 },
+  language: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, textTransform: 'uppercase' as const, letterSpacing: 0.4, flexShrink: 1 },
 });

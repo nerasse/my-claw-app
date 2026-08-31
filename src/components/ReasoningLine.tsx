@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { CollapsibleAside } from './CollapsibleAside';
-import { font, space, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /** "1.2k" rather than "1234": this is a progress hint, not an accounting figure. */
 function compactCount(tokens: number): string {
@@ -57,7 +57,7 @@ export function ReasoningLine({
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2 },
-  label: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.3 },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
 });

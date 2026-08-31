@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import type { Palette } from '../theme';
-import { useThemedStyles } from '../theme';
+import { scaleFont, useThemedStyles } from '../theme';
 
 /**
  * Minimal unified-diff renderer, opencode-v2 style: added lines green, removed lines red,
@@ -129,19 +129,19 @@ export const DiffView: React.FC<{ parts: DiffParts }> = ({ parts }) => {
   );
 };
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   plain: {
     fontFamily: 'monospace',
-    fontSize: 12,
+    fontSize: scaleFont(12, scale),
     color: palette.textMuted,
     paddingHorizontal: 10,
     paddingTop: 6,
   },
   line: {
     fontFamily: 'monospace',
-    fontSize: 12,
+    fontSize: scaleFont(12, scale),
     paddingHorizontal: 10,
-    lineHeight: 17,
+    lineHeight: scaleFont(17, scale),
   },
   add: {
     color: palette.diffAdd,

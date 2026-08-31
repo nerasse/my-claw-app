@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { VoicePlayer } from './VoicePlayer';
 import type { AttachmentMeta } from '../core/protocol';
-import { font, space, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /** A sent voice note: the shared player, plus what the server heard in it. */
 export function VoiceNote({
@@ -32,14 +32,14 @@ export function VoiceNote({
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   wrap: { marginBottom: space.xs, gap: 3, minWidth: 210 },
   /**
    * The transcript sits inside the bubble instead of arriving as its own message: what was said
    * and the recording of it are one thing, and a separate echo pushed the conversation apart.
    */
   transcript: {
-    fontSize: font.small,
+    fontSize: scaleFont(font.small, scale),
     color: palette.textMuted,
     fontStyle: 'italic' as const,
     maxWidth: 260,
