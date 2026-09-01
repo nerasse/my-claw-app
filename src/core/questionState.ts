@@ -168,14 +168,16 @@ function questionPick(state: QuestionBodyState, request: QuestionAskLike, answer
   if (questionSingle(request)) {
     return { state: next, answers: questionAnswers(next, request.questions.length) };
   }
-  next = questionSetTab(next, state.tab + 1);
   return { state: next };
 }
 
-/** An option was picked (or toggled): moves to the next step for multi-question flows. */
+/**
+ * An option was picked. Single-question flows submit on the spot; multi-question flows only
+ * record the selection -- advancing is the owner's own tap on Next, so a pick never jumps
+ * ahead of the step he is reading.
+ */
 export function questionSelectOption(state: QuestionBodyState, request: QuestionAskLike, option: { label: string }): QuestionStep {
-  const picked = questionPick(state, request, option.label);
-  return picked;
+  return questionPick(state, request, option.label);
 }
 
 /** "Type your own answer" tapped: opens the editor. */
@@ -225,7 +227,9 @@ export function questionSubmit(request: QuestionAskLike, state: QuestionBodyStat
   return questionAnswers(state, request.questions.length);
 }
 
-/** Whether the current step can move on: single needs a pick, multi needs at least one. */
+/** Whether the current step can move on: single needs a pick, multi needs at least one.
+ *  Only advisory: a recap can send even when a question was skipped (it shows "not answered"),
+ *  so the Next button is never hard-disabled. */
 export function questionCanProceed(request: QuestionAskLike, state: QuestionBodyState): boolean {
   if (questionConfirm(request, state)) return true;
   const info = questionInfo(request, state);

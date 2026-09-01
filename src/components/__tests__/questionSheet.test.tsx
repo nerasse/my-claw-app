@@ -86,9 +86,12 @@ describe('QuestionSheet', () => {
     expect(onReply).toHaveBeenCalledWith([['only']]);
   });
 
-  it('multi-question: picking advances and the recap sends everything', () => {
+  it('multi-question: picking records it, Next advances, recap sends everything', () => {
     const { tree, onReply } = render();
     press(tree, 'fr');
+    // Still on the first question: the pick waits for Next.
+    expect(hasText(tree, 'FR ou EN ?')).toBe(true);
+    press(tree, 'Next');
     expect(hasText(tree, 'Combien ?')).toBe(true);
     press(tree, '1');
     press(tree, '2');

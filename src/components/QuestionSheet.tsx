@@ -6,7 +6,6 @@ import {
   createQuestionBodyState,
   questionAnswered,
   questionBack,
-  questionCanProceed,
   questionConfirm,
   questionCustom,
   questionInfo,
@@ -58,7 +57,6 @@ export function QuestionSheet({
   const confirm = questionConfirm(request, state);
   const steps = questionSteps(request);
   const custom = info ? questionCustom(request, state) : false;
-  const canProceed = questionCanProceed(request, state);
   const answersSoFar = useMemo(() => safeAnswers(state.answers), [state.answers]);
 
   const send = (answers: string[][]) => {
@@ -78,7 +76,7 @@ export function QuestionSheet({
   };
 
   const next = () => {
-    if (!canProceed || state.submitting) return;
+    if (state.submitting) return;
     const step = questionNext(state, request);
     setState(step.state);
     if (step.answers) send(step.answers);
@@ -147,10 +145,22 @@ export function QuestionSheet({
                     key={index}
                     onPress={() => tapOption(option.label)}
                     style={[styles.option, hit ? styles.optionHit : null]}>
-                    <Text style={[styles.optionLabel, hit ? styles.optionLabelHit : null]}>
-                      {info.multiple ? (hit ? '☑ ' : '☐ ') : hit ? '✓ ' : '· '}
-                      {option.label}
-                    </Text>
+                    <View style={styles.optionRow}>
+                      {/* A drawn box, not a glyph: U+2610/2611 do not exist in every device font
+                          and render as tofu (the screenshot's "c"/"oc"). */}
+                      {info.multiple ? (
+                        <View style={[styles.checkBox, hit ? styles.checkBoxHit : null]}>
+                          {hit ? <Text style={styles.checkMark}>✓</Text> : null}
+                        </View>
+                      ) : hit ? (
+                        <Text style={styles.radioMark}>●</Text>
+                      ) : (
+                        <View style={styles.radioRing} />
+                      )}
+                      <Text style={[styles.optionLabel, hit ? styles.optionLabelHit : null]}>
+                        {option.label}
+                      </Text>
+                    </View>
                     {option.description ? (
                       <Text style={styles.optionDescription}>{option.description}</Text>
                     ) : null}
@@ -165,9 +175,14 @@ export function QuestionSheet({
                     setState(prev => ({ ...prev, editing: true }));
                   }}
                   style={[styles.option, state.editing ? styles.optionHit : null]}>
-                  <Text style={[styles.customLabel, state.editing ? styles.optionLabelHit : null]}>
-                    Type your own answer
-                  </Text>
+                  <View style={styles.optionRow}>
+                    <View style={[styles.checkBox, state.editing ? styles.checkBoxHit : null]}>
+                      {state.editing ? <Text style={styles.checkMark}>✓</Text> : null}
+                    </View>
+                    <Text style={[styles.customLabel, state.editing ? styles.optionLabelHit : null]}>
+                      Type your own answer
+                    </Text>
+                  </View>
                 </Pressable>
               ) : null}
 
@@ -196,8 +211,8 @@ export function QuestionSheet({
               )}
               <Pressable
                 onPress={next}
-                disabled={state.submitting || !canProceed}
-                style={[styles.navButton, styles.navPrimary, !canProceed ? styles.navDisabled : null]}
+                disabled={state.submitting}
+                style={[styles.navButton, styles.navPrimary]}
                 accessibilityRole="button">
                 <Text style={styles.navPrimaryLabel}>{state.submitting ? 'Sending…' : 'Next'}</Text>
               </Pressable>
@@ -245,9 +260,36 @@ const createStyles = (palette: Palette) =>
       backgroundColor: palette.surfaceAlt,
       marginBottom: space.xs,
     },
+    optionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+    },
     optionHit: { backgroundColor: palette.surface },
-    optionLabel: { fontSize: font.body, color: palette.text },
+    optionLabel: { fontSize: font.body, color: palette.text, flexShrink: 1 },
     optionLabelHit: { color: palette.accent },
+    // The drawn checkbox: a bordered square, filled when picked. No Unicode glyph, no tofu.
+    checkBox: {
+      width: 20,
+      height: 20,
+      borderRadius: 4,
+      borderWidth: 1.5,
+      borderColor: palette.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.surface,
+    },
+    checkBoxHit: { borderColor: palette.accent, backgroundColor: palette.accent },
+    checkMark: { fontSize: 13, color: palette.surface, fontWeight: '700' as const, lineHeight: 15 },
+    // Single-pick: a filled dot when chosen, an empty ring otherwise. Same reasoning.
+    radioRing: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      borderColor: palette.border,
+    },
+    radioMark: { fontSize: 16, color: palette.accent, lineHeight: 18 },
     optionDescription: { fontSize: font.small, color: palette.textMuted, marginTop: 2 },
     customLabel: { fontSize: font.body, color: palette.textMuted },
     customInput: {

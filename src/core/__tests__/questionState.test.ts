@@ -24,9 +24,12 @@ describe('questionState', () => {
     expect(step.answers).toEqual([['a']]);
   });
 
-  test('a multi-question flow advances through questions to the recap', () => {
+  test('a multi-question flow records the pick, and Next advances to the recap', () => {
     let state = createQuestionBodyState(request.id);
     state = questionSelectOption(state, request, { label: 'fr' }).state;
+    expect(state.tab).toBe(0, 'a pick never jumps ahead on its own');
+    expect(state.answers[0]).toEqual(['fr']);
+    state = questionNext(state, request).state;
     expect(state.tab).toBe(1);
     state = questionToggle(state, '1');
     state = questionToggle(state, '2');
@@ -36,6 +39,14 @@ describe('questionState', () => {
     // On the recap, Next submits.
     const submit = questionNext(next.state, request);
     expect(submit.answers).toEqual([['fr'], ['1', '2']]);
+  });
+
+  test('a pick can be changed on the same step before Next', () => {
+    let state = createQuestionBodyState(request.id);
+    state = questionSelectOption(state, request, { label: 'fr' }).state;
+    state = questionSelectOption(state, request, { label: 'en' }).state;
+    expect(state.answers[0]).toEqual(['en']);
+    expect(state.tab).toBe(0);
   });
 
   test('questionSubmit builds the full answer array even when some are missing', () => {
