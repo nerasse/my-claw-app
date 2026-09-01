@@ -21,6 +21,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   item,
   active,
   unread,
+  question,
   pinned,
   onOpen,
   onMenu,
@@ -28,6 +29,8 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   item: SessionSummary;
   active: boolean;
   unread: boolean;
+  /** A run in this conversation is blocked on a question: it is answerable from here. */
+  question?: boolean;
   /** Pinned rows read as cards and reorder; the whole row is the grab area. */
   pinned: boolean;
   onOpen: (threadId: string) => void;
@@ -56,12 +59,15 @@ export const ThreadRow = React.memo(function ThreadRowRow({
         onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${item.hasDraft ? ', unsent draft' : ''}${pinned ? ', hold to reorder' : ''}`}>
+        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${question ? ', a question is waiting' : ''}${item.hasDraft ? ', unsent draft' : ''}${pinned ? ', hold to reorder' : ''}`}>
         <View style={styles.titleRow}>
           {unread ? <View style={styles.dot} /> : null}
           <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
             {item.title}
           </Text>
+          {/* A blocked run is not "activity", it is a run waiting on this person: it earns a
+              mark of its own, or the only place the question exists is the thread it is in. */}
+          {question ? <Text style={styles.question}>?</Text> : null}
           <Text style={styles.date}>{formatDate(item.lastActiveAt)}</Text>
         </View>
         {item.messageCount > 0 ? <Text style={styles.meta}>{item.messageCount} messages</Text> : null}
@@ -95,6 +101,18 @@ const createStyles = (palette: Palette) => ({
   titleUnread: { fontWeight: '700' as const },
   date: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   meta: { fontSize: font.small, color: palette.textFaint },
+  question: {
+    fontSize: font.micro,
+    fontWeight: '700' as const,
+    color: palette.surface,
+    backgroundColor: palette.accent,
+    borderRadius: radius.pill,
+    minWidth: 16,
+    textAlign: 'center' as const,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    overflow: 'hidden' as const,
+  },
   draft: { alignSelf: 'flex-start' as const, fontSize: font.micro, color: palette.accent },
   /** The named workspace a conversation runs in; the default one stays unlabelled. */
   workspace: {

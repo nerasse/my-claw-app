@@ -3,6 +3,7 @@ import { chatStore } from './chat';
 import { subAgentCallersStore, subAgentStore } from './subagents';
 import { sessionStore } from './sessions';
 import { commandStore } from './commands';
+import { questionStore } from './questionStore';
 import { acknowledgeDiagnostics } from './diagnostics';
 import { devicesStore } from './devices';
 import { modelStore } from './model';
@@ -103,8 +104,6 @@ export interface ServerFrameHandlers {
   setRunsError: (message: string | null) => void;
   setApprovals: (update: (current: ApprovalRequestFrame[]) => ApprovalRequestFrame[]) => void;
   setApprovalHistory: (frame: ApprovalHistoryResultFrame) => void;
-  /** The questions sheet queue: one entry per `question.ask` not yet resolved. */
-  setQuestions: (update: (current: QuestionAskFrame[]) => QuestionAskFrame[]) => void;
   /** A question landed on the thread on screen: the device rings once, the push does the rest. */
   onQuestionAskOnActiveThread?: (frame: QuestionAskFrame) => void;
   /** The raw config editor's state belongs to its page, so its transitions stay in the shell. */
@@ -161,7 +160,6 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setRunsError,
     setApprovals,
     setApprovalHistory,
-    setQuestions,
     onQuestionAskOnActiveThread,
     onConfigResult,
     onConfigSaved,
@@ -606,15 +604,20 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       setApprovalHistory(frame);
       break;
     case 'question.ask':
-      // One sheet per ask; the same id is never pushed twice (a reconnect replays the journal).
-      setQuestions(current =>
-        current.some(entry => entry.id === frame.id) ? current : [...current, frame],
-      );
+      // The store owns it, not this screen: the form is drawn in the conversation and has to
+      // outlive every screen the owner walks through to answer it. The same id twice is the live
+      // turn journal replaying an ask, and is ignored.
+      questionStore.ask(frame);
       if (frame.threadId === activeThreadId()) onQuestionAskOnActiveThread?.(frame);
       break;
+    case 'question.pending':
+      // The server's whole list, at connect: what was pushed while the socket was down is gained
+      // here, and a card kept from a run that no longer exists is dropped.
+      questionStore.reset(frame.entries);
+      break;
     case 'question.resolved':
-      // Answered or canceled: drop it wherever it sits in the queue.
-      setQuestions(current => current.filter(entry => entry.id !== frame.id));
+      // Answered or canceled, here or on another surface.
+      questionStore.resolve(frame.id);
       break;
     case 'error':
       // Where the user asked is where the refusal belongs: a rejected delete used to be

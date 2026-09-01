@@ -44,6 +44,7 @@ export function Drawer({
   focusSearch = 0,
   sessions,
   unread,
+  questionThreads,
   activeThread,
   connectionState,
   pending,
@@ -63,6 +64,8 @@ export function Drawer({
   focusSearch?: number;
   sessions: SessionSummary[];
   unread: string[];
+  /** Conversations whose run is blocked on a question, badged in the list. */
+  questionThreads: string[];
   activeThread: string | null;
   connectionState: WsState;
   pending: number;
@@ -94,6 +97,7 @@ export function Drawer({
   // Membership as a Set, not `unread.includes` per row: that scan ran once per visible row on
   // every render of a panel that never unmounts, i.e. on every streaming token.
   const unreadIds = useMemo(() => new Set(unread), [unread]);
+  const questionIds = useMemo(() => new Set(questionThreads), [questionThreads]);
 
   // Pins and their order come from the server, on the summaries themselves: nothing to merge and
   // nothing to prune, since a thread that is gone from the listing takes its rank with it.
@@ -125,12 +129,13 @@ export function Drawer({
         item={item}
         active={item.threadId === activeThread}
         unread={unreadIds.has(item.threadId)}
+        question={questionIds.has(item.threadId)}
         pinned={false}
         onOpen={onOpenThread}
         onMenu={onThreadMenu}
       />
     ),
-    [activeThread, onOpenThread, onThreadMenu, unreadIds],
+    [activeThread, onOpenThread, onThreadMenu, questionIds, unreadIds],
   );
 
   const renderPinned = useCallback(
@@ -139,12 +144,13 @@ export function Drawer({
         item={item}
         active={item.threadId === activeThread}
         unread={unreadIds.has(item.threadId)}
+        question={questionIds.has(item.threadId)}
         pinned
         onOpen={onOpenThread}
         onMenu={onThreadMenu}
       />
     ),
-    [activeThread, onOpenThread, onThreadMenu, unreadIds],
+    [activeThread, onOpenThread, onThreadMenu, questionIds, unreadIds],
   );
 
   useEffect(() => {

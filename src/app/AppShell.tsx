@@ -25,6 +25,7 @@ import {
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
+import { useQuestionThreads } from '../core/questionStore';
 import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
@@ -98,7 +99,6 @@ import {
   type AgentFileFieldsOut,
   type ApprovalRequestFrame,
   type ApprovalHistoryResultFrame,
-  type QuestionAskFrame,
   type FileScopeMode,
   type JobEntry,
   type SubAgentEntry,
@@ -210,7 +210,6 @@ import { JobSessionsScreen } from './JobSessionsScreen';
 import { CONNECTION_LABEL, Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ApprovalSheet } from '../components/ApprovalSheet';
-import { QuestionSheet } from '../components/QuestionSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ScreenLayer } from '../components/ScreenLayer';
@@ -577,8 +576,15 @@ export function AppShell(): React.JSX.Element {
   // A run can ask several times in a row; each answer clears one, in order.
   const [approvals, setApprovals] = useState<ApprovalRequestFrame[]>([]);
   const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryResultFrame | null>(null);
-  // The questions sheet queue, same shape as approvals: one ask at a time, answered in order.
-  const [questions, setQuestions] = useState<QuestionAskFrame[]>([]);
+  // Which conversations hold a question waiting, for the badge in the thread list. The questions
+  // themselves are read by the conversation that draws them, not here: a pending ask must not
+  // re-render the shell of every page.
+  const questionThreads = useQuestionThreads();
+  const replyToQuestion = useCallback((id: string, answers: string[][]) => {
+    connection.send(encodeQuestionReply(id, answers));
+    // The card stays where it is, marked sending: the `question.resolved` frame is what drops it,
+    // on this window and on every other one. Dropping it here would flicker ahead of the server.
+  }, []);
 
   const itemCount = useChatItemCount(activeThread);
   const historyPage = useHistoryPage(activeThread);
@@ -982,9 +988,8 @@ export function AppShell(): React.JSX.Element {
       setRunsError,
       setApprovals,
       setApprovalHistory,
-      setQuestions,
       onQuestionAskOnActiveThread: () => {
-        // The sheet is opening on the thread the owner is looking at: ring once. A question on
+        // The card is appearing in the thread the owner is looking at: ring once. A question on
         // any other thread, or a device behind, is the push's business (server-side skipDevice
         // keeps a foreground device on the right thread silent on the tray and loud here).
         playAlertSound().catch(() => {});
@@ -3067,7 +3072,7 @@ export function AppShell(): React.JSX.Element {
             onOpenFile={setFileViewer}
             onOpenMenu={() => setCommandMenuOpen(true)}
             onCommandEntered={dispatchCommand}
-            questionPending={questions.some(q => q.threadId === activeThread)}
+            onQuestionReply={replyToQuestion}
             onTagCommand={dispatchTagCommand}
             streaming={streaming}
             onStop={() => {
@@ -3106,6 +3111,7 @@ export function AppShell(): React.JSX.Element {
             focusSearch={searchFocus}
             sessions={sessions}
             unread={unread}
+            questionThreads={questionThreads}
             activeThread={activeThread}
             connectionState={status.state}
             pending={pending}
@@ -3127,6 +3133,7 @@ export function AppShell(): React.JSX.Element {
             open
             sessions={sessions}
             unread={unread}
+            questionThreads={questionThreads}
             activeThread={activeThread}
             connectionState={status.state}
             pending={pending}
@@ -3704,6 +3711,7 @@ export function AppShell(): React.JSX.Element {
         focusSearch={searchFocus}
         sessions={sessions}
         unread={unread}
+        questionThreads={questionThreads}
         activeThread={activeThread}
         connectionState={status.state}
         pending={pending}
@@ -4155,23 +4163,6 @@ export function AppShell(): React.JSX.Element {
           // Dismissing is not an answer: the call stays pending server-side until it times out
           // and is journalled as expired. Denying is a button, never a tap on the backdrop.
           onDismiss={() => setApprovals(current => current.slice(1))}
-        />
-      ) : null}
-
-      {questions.length > 0 ? (
-        <QuestionSheet
-          request={questions[0]!}
-          pending={questions.length - 1}
-          onReply={answers => {
-            connection.send(encodeQuestionReply(questions[0]!.id, answers));
-            // The reply leaves the sheet where it was; the resolved frame drops the entry
-            // everywhere (this window inclu). Dropping it here would just flicker before the
-            // server answers.
-            setQuestions(current => current.slice(1));
-          }}
-          // Dismissing is not an answer: the question waits until answered, stopped, or
-          // superseded by a typed message.
-          onDismiss={() => setQuestions(current => current.slice(1))}
         />
       ) : null}
 

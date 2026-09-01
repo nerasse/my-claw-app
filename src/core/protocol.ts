@@ -459,14 +459,27 @@ export interface QuestionInfoFrame {
   custom?: boolean;
 }
 
-/** A `question` tool call asking the owner: one sheet, N questions, answered as a batch. */
+/** A `question` tool call asking the owner: N questions on one card, answered as a batch. */
 export interface QuestionAskFrame {
   type: 'question.ask';
   id: string;
   threadId: string;
   questions: QuestionInfoFrame[];
+  /** The running tool card the form is drawn inside, already the card id (`t-<callId>`). */
   replyToId?: string;
   ts: string;
+}
+
+/**
+ * Every question of this owner still waiting, sent at connect.
+ *
+ * Authoritative: the whole pending set is replaced with `entries`. Nothing pushed while a socket
+ * was down is replayed, so this is what a reopened app is told; and an empty list is meaningful,
+ * it clears a card kept from a server that died holding the question.
+ */
+export interface QuestionPendingFrame {
+  type: 'question.pending';
+  entries: Omit<QuestionAskFrame, 'type'>[];
 }
 
 /** The owner answered: one array of selected labels per question, in order. */
@@ -1624,6 +1637,7 @@ export type ServerFrame =
   | ApprovalResolvedFrame
   | ApprovalHistoryResultFrame
   | QuestionAskFrame
+  | QuestionPendingFrame
   | QuestionResolvedFrame
   | AgentsConfigResultFrame
   | InstructionsListResultFrame
@@ -1732,6 +1746,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'approval.resolved',
   'approval.history.result',
   'question.ask',
+  'question.pending',
   'question.resolved',
   'error',
 ]);
@@ -1953,7 +1968,7 @@ export function encodeApprovalResponse(id: string, decision: ApprovalDecision): 
   return JSON.stringify({ type: 'approval.response', id, decision });
 }
 
-/** The owner answered a question sheet: one array of selections per question, in order. */
+/** The owner answered a question card: one array of selections per question, in order. */
 export function encodeQuestionReply(id: string, answers: string[][]): string {
   return JSON.stringify({ type: 'question.reply', id, answers });
 }

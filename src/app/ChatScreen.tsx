@@ -5,9 +5,11 @@ import { Bubble } from '../components/Bubble';
 import { CompactionBoundary } from '../components/CompactionBoundary';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
+import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import { isSubAgentTool, useChatItems, type ChatItem, type TextItem } from '../core/chat';
+import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
@@ -63,7 +65,7 @@ export function ChatScreen({
   onTagCommand,
   streaming,
   onStop,
-  questionPending,
+  onQuestionReply,
   onNewThread,
   subagentCount,
   onAgentsPress,
@@ -103,8 +105,8 @@ export function ChatScreen({
   /** A run is answering on this thread (streaming or between tools): the composer offers Stop. */
   streaming: boolean;
   onStop: () => void;
-  /** A question sheet is asking on this thread: the composer's hint says it. */
-  questionPending?: boolean;
+  /** The owner answered the questions of one ask: sent as one batch. */
+  onQuestionReply: (id: string, answers: string[][]) => void;
   /** Wire /new: starts a fresh conversation, like the + button. */
   onNewThread: () => void;
   /** Sub-agents this conversation reaches. 0 hides the counter entirely. */
@@ -154,6 +156,26 @@ export function ChatScreen({
   // Subscribed here rather than handed down: a growing bubble must not re-render the shell that
   // holds every page of the app, only the conversation showing it.
   const items = useChatItems(threadId);
+  // The questions waiting on this conversation, from the store rather than a prop: the form is a
+  // row of the list, so it must survive this screen being unmounted and remounted.
+  const questions = useThreadQuestions(threadId);
+  const questionPending = questions.length > 0;
+  // Keyed by the tool card the ask belongs to. A run blocked on a question stopped right there,
+  // so drawing the form on that card puts it where the thread actually stops.
+  const questionByCard = useMemo(() => {
+    const map = new Map<string, (typeof questions)[number]>();
+    for (const ask of questions) if (ask.replyToId) map.set(ask.replyToId, ask);
+    return map;
+  }, [questions]);
+  // An ask with no card to sit on: a provider that sent no tool call id, or a card that is not in
+  // the page this screen holds. Rather than lose the question, those are drawn under the thread --
+  // the list is inverted, so its header is the bottom of the screen. Nothing is scanned while no
+  // question is pending, which is almost always.
+  const questionsLoose = useMemo(() => {
+    if (questions.length === 0) return questions;
+    const ids = new Set(items.map(item => item.id));
+    return questions.filter(ask => !ask.replyToId || !ids.has(ask.replyToId));
+  }, [questions, items]);
   const [draft, setDraft] = useState(() => draftTextOf(threadId));
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
@@ -539,6 +561,19 @@ export function ChatScreen({
       // row index is mapped back into it.
       const chronological = reversed.length - 1 - index;
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
+      // A `question` card with an ask still pending is the form itself. Once answered or
+      // canceled the ask leaves the store and the card falls back to its settled rendering,
+      // which is the record of what was asked -- no second card, no state to reconcile.
+      if (item.kind === 'tool' && item.name === 'question') {
+        const ask = questionByCard.get(item.id);
+        if (ask) {
+          return (
+            <View style={toolColumn}>
+              <QuestionCard request={ask} onReply={onQuestionReply} />
+            </View>
+          );
+        }
+      }
       if (item.kind === 'tool' && isSubAgentTool(item.name)) {
         return (
           <View style={toolColumn}>
@@ -572,7 +607,7 @@ export function ChatScreen({
         </View>
       );
     },
-    [toolColumn, deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const locationLabel = location
@@ -742,6 +777,15 @@ export function ChatScreen({
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               renderItem={renderItem}
+              ListHeaderComponent={
+                questionsLoose.length > 0 ? (
+                  <View style={styles.looseQuestions}>
+                    {questionsLoose.map(ask => (
+                      <QuestionCard key={ask.id} request={ask} onReply={onQuestionReply} />
+                    ))}
+                  </View>
+                ) : null
+              }
               onEndReached={onLoadOlder}
               onEndReachedThreshold={0.4}
               ListFooterComponent={
@@ -778,6 +822,24 @@ export function ChatScreen({
         </View>
 
         <View style={column}>
+        {questionPending ? (
+          // A card can be far up a long thread, and the only hint otherwise is a placeholder in
+          // the composer. The run is blocked on the answer, so the form is the last thing in the
+          // thread: the bottom of the list is where it is.
+          <Pressable
+            style={styles.questionPill}
+            onPress={() => {
+              setAtBottom(true);
+              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Go to the pending question">
+            <Text style={styles.questionPillText}>
+              {questions.length > 1 ? `${questions.length} questions waiting` : 'A question is waiting'}
+            </Text>
+            <Text style={styles.questionPillGlyph}>↓</Text>
+          </Pressable>
+        ) : null}
         <Composer
           value={draft}
           onChange={changeDraft}
@@ -946,6 +1008,23 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingBottom: space.xl,
   },
+  looseQuestions: { paddingTop: space.sm, gap: space.sm },
+  questionPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: space.sm,
+    marginHorizontal: space.sm,
+    marginBottom: space.xs,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: palette.accent,
+    backgroundColor: palette.surface,
+  },
+  questionPillText: { fontSize: font.small, color: palette.accent },
+  questionPillGlyph: { fontSize: font.small, color: palette.accent },
   jump: {
     position: 'absolute' as const,
     right: 0,
