@@ -63,6 +63,7 @@ export function ChatScreen({
   onTagCommand,
   streaming,
   onStop,
+  questionPending,
   onNewThread,
   subagentCount,
   onAgentsPress,
@@ -102,6 +103,8 @@ export function ChatScreen({
   /** A run is answering on this thread (streaming or between tools): the composer offers Stop. */
   streaming: boolean;
   onStop: () => void;
+  /** A question sheet is asking on this thread: the composer's hint says it. */
+  questionPending?: boolean;
   /** Wire /new: starts a fresh conversation, like the + button. */
   onNewThread: () => void;
   /** Sub-agents this conversation reaches. 0 hides the counter entirely. */
@@ -715,6 +718,7 @@ export function ChatScreen({
             uploadProgress={uploadProgress}
             streaming={streaming}
             onStop={onStop}
+            questionPending={questionPending}
             onRecallLast={recallLast}
           />
         </View>
@@ -797,6 +801,7 @@ export function ChatScreen({
           uploadError={uploadError}
           streaming={streaming}
           onStop={onStop}
+          questionPending={questionPending}
           onRecallLast={recallLast}
         />
         </View>

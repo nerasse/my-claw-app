@@ -43,6 +43,7 @@ const FAMILY: Record<string, Family> = {
   stt: 'voice',
   tts: 'voice',
   voice_mode: 'voice',
+  question: 'agent',
 };
 
 /**
@@ -76,6 +77,7 @@ const KEYS: Record<string, readonly string[]> = {
   tts: ['text'],
   voice_mode: ['feature'],
   delegate_browser_task: ['instructions'],
+  question: ['header'],
 };
 
 /**

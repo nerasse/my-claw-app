@@ -20,6 +20,8 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -1162,6 +1164,26 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("CANCEL_NOTIFICATION_FAILED", e.message, e)
+    }
+  }
+
+  /**
+   * One notification-ding for an incoming question sheet, played by the system's own sound so
+   * no asset ships in the APK. The sheet on screen is the surface; a device that is not looking
+   * at the thread gets the tray through the push instead (server-side skipDevice), never this.
+   */
+  @ReactMethod
+  fun playAlertSound(promise: Promise) {
+    try {
+      // MediaPlayer is used the same way VoiceAudio plays a note: one shot, release on
+      // completion so a second question is not silenced by a leaked player.
+      val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+      val player = MediaPlayer.create(reactContext, uri)
+      player?.setOnCompletionListener { it.release() }
+      player?.start()
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("ALERT_SOUND_FAILED", e.message, e)
     }
   }
 

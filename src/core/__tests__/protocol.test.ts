@@ -11,6 +11,7 @@ import {
   encodeCommandsList,
   encodeFileDelete,
   encodeFilesList,
+  encodeQuestionReply,
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
@@ -38,6 +39,8 @@ describe('parseServerFrame', () => {
       { type: 'uiPrefs.result', expandTools: true, expandReasoning: false },
       { type: 'files.list.result', threadId: 't', files: [{ id: 'f1', filename: 'a.pdf', type: 'file', mimeType: 'application/pdf', sizeBytes: 4, ts: 'iso' }], totalBytes: 4 },
       { type: 'approval.request', id: 'a', threadId: 't', toolName: 'bash', args: {}, expiresAt: 1 },
+      { type: 'question.ask', id: 'q1', threadId: 't', questions: [{ header: 'h', question: 'q', options: [{ label: 'a' }] }], ts: 'iso' },
+      { type: 'question.resolved', id: 'q1', threadId: 't', reason: 'answered' },
       { type: 'agents.config.result', defaultModel: 'm', defaultEffort: '', effortLevels: [], providers: [], agents: [] },
       {
         type: 'session.instructions.result',
@@ -82,6 +85,10 @@ describe('parseServerFrame', () => {
   test('encodes uiPrefs frames', () => {
     expect(JSON.parse(encodeUiPrefsGet())).toEqual({ type: 'uiPrefs.get' });
     expect(JSON.parse(encodeUiPrefsSet({ expandTools: true }))).toEqual({ type: 'uiPrefs.set', prefs: { expandTools: true } });
+  });
+
+  test('encodes question.reply', () => {
+    expect(JSON.parse(encodeQuestionReply('q1', [['fr']]))).toEqual({ type: 'question.reply', id: 'q1', answers: [['fr']] });
   });
 
   test('keeps the tool payload intact', () => {

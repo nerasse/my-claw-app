@@ -166,6 +166,13 @@ export const ToolCard = React.memo(function ToolCardView({
 
       {open ? (
         <View style={styles.body}>
+          {item.name === 'question' ? (
+            <QuestionHistoryBody
+              args={item.args}
+              output={item.output}
+              ok={item.ok !== false}
+            />
+          ) : null}
           {/* Neither block is selectable in place: a selection inside the chat list focuses its
               text view and Android scrolls the inverted thread to it. Both carry the buttons
               instead -- on the platforms that need them. See docs/text-selection.md. */}
@@ -230,7 +237,55 @@ export const ToolCard = React.memo(function ToolCardView({
   );
 });
 
+/**
+ * The history face of a `question` card: the questions asked, with the answers that came back.
+ *
+ * The args carry the questions (header, question, options) and the output carries the answers
+ * in opencode's format (`"Qt"="a, b"`). A reopened thread therefore reads as the exchange it
+ * was: what was asked, what was picked, or that it was canceled. Folds into the same card
+ * instead of a second one, because the settled tool entry is the single record of the ask.
+ */
+function QuestionHistoryBody({ args, output, ok }: { args: Record<string, unknown>; output: string; ok: boolean }) {
+  const styles = useThemedStyles(createStyles);
+  const questions = Array.isArray(args.questions) ? args.questions : [];
+  const answered = ok && !/canceled/i.test(output);
+
+  return (
+    <View style={styles.qHistory}>
+      {questions.length === 0 ? (
+        <Text style={styles.qEmpty}>question asked</Text>
+      ) : (
+        questions.map((raw, index) => {
+          const q = raw as { header?: unknown; question?: unknown; options?: unknown };
+          return (
+            <View key={index} style={styles.qRow}>
+              <Text style={styles.qHeader}>{String(q.header ?? `Question ${index + 1}`)}</Text>
+              <Text style={styles.qText}>{String(q.question ?? '')}</Text>
+              {Array.isArray(q.options) && q.options.length > 0 ? (
+                <Text style={styles.qOptions}>
+                  {q.options.map((o) => String((o as { label?: unknown })?.label ?? '')).join(' · ')}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })
+      )}
+      <Text style={answered ? styles.qAnswer : styles.qCanceled}>
+        {answered ? output : 'User canceled the questions'}
+      </Text>
+    </View>
+  );
+}
+
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
+  qHistory: { gap: space.sm, marginBottom: space.xs },
+  qRow: { gap: 2 },
+  qHeader: { fontSize: scaleFont(font.small, scale), fontWeight: '600' as const, color: palette.text },
+  qText: { fontSize: scaleFont(font.body, scale), color: palette.text },
+  qOptions: { fontSize: scaleFont(font.micro, scale), color: palette.textMuted },
+  qAnswer: { fontSize: scaleFont(font.small, scale), color: palette.accent },
+  qCanceled: { fontSize: scaleFont(font.small, scale), color: palette.danger },
+  qEmpty: { fontSize: scaleFont(font.small, scale), color: palette.textMuted },
   card: {
     alignSelf: 'stretch' as const,
     backgroundColor: palette.surface,

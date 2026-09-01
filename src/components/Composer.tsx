@@ -48,6 +48,7 @@ export function Composer({
   onRecordingError,
   streaming,
   onStop,
+  questionPending,
   onRecallLast,
 }: {
   value: string;
@@ -57,6 +58,9 @@ export function Composer({
   onSend: () => void;
   /** Shown above the field when something is worth knowing (offline, queued frames). */
   hint?: string;
+  /** A question sheet is asking on this thread: the field says so instead of pretending.
+   *  Typing here cancels the question (the message becomes the answer, server-side). */
+  questionPending?: boolean;
   /** Large centered variant for empty conversations: the empty state is an invitation to type. */
   hero?: boolean;
   /** Auto-focus only when the user just created the thread, never at boot. */
@@ -322,7 +326,7 @@ export function Composer({
             onBlur={() => onFocusChange?.(false)}
             onSubmitEditing={submitOrSelect}
             onKeyPress={onKeyPress}
-            placeholder={hero ? 'Ask anything' : 'message'}
+            placeholder={hero ? (questionPending ? 'Answer the pending questions' : 'Ask anything') : questionPending ? 'Answer the pending questions' : 'message'}
             placeholderTextColor={palette.textFaint}
             autoFocus={autoFocus}
             multiline

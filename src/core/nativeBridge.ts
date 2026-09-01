@@ -137,6 +137,8 @@ export interface DeviceBridgeNative {
    * context did not exist.
    */
   cancelNotification(id: number): Promise<void>;
+  /** Plays the system notification sound once, for an incoming question sheet. */
+  playAlertSound(): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
   /**
    * Whether the clipboard holds an image, read from the clip description alone.
@@ -253,6 +255,7 @@ export const deviceBridge: DeviceBridgeNative = {
   clearStagedApk: () => native?.clearStagedApk() ?? Promise.resolve(),
   drainInstallResult: () => native?.drainInstallResult(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
+  playAlertSound: () => native?.playAlertSound() ?? Promise.resolve(),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   clipboardHasImage: () => native?.clipboardHasImage() ?? Promise.resolve(false),
   clipboardImage: () => native?.clipboardImage() ?? Promise.resolve(null),

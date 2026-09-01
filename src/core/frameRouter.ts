@@ -29,6 +29,7 @@ import {
   type JobEntry,
   type JobRunEntry,
   type McpEntry,
+  type QuestionAskFrame,
   type ServerFrame,
   type SessionFileMeta,
   type SkillEntry,
@@ -102,6 +103,10 @@ export interface ServerFrameHandlers {
   setRunsError: (message: string | null) => void;
   setApprovals: (update: (current: ApprovalRequestFrame[]) => ApprovalRequestFrame[]) => void;
   setApprovalHistory: (frame: ApprovalHistoryResultFrame) => void;
+  /** The questions sheet queue: one entry per `question.ask` not yet resolved. */
+  setQuestions: (update: (current: QuestionAskFrame[]) => QuestionAskFrame[]) => void;
+  /** A question landed on the thread on screen: the device rings once, the push does the rest. */
+  onQuestionAskOnActiveThread?: (frame: QuestionAskFrame) => void;
   /** The raw config editor's state belongs to its page, so its transitions stay in the shell. */
   onConfigResult: (frame: ConfigResultFrame) => void;
   onConfigSaved: (frame: ConfigSavedFrame) => void;
@@ -156,6 +161,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setRunsError,
     setApprovals,
     setApprovalHistory,
+    setQuestions,
+    onQuestionAskOnActiveThread,
     onConfigResult,
     onConfigSaved,
     onConfigError,
@@ -597,6 +604,17 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'approval.history.result':
       setApprovalHistory(frame);
+      break;
+    case 'question.ask':
+      // One sheet per ask; the same id is never pushed twice (a reconnect replays the journal).
+      setQuestions(current =>
+        current.some(entry => entry.id === frame.id) ? current : [...current, frame],
+      );
+      if (frame.threadId === activeThreadId()) onQuestionAskOnActiveThread?.(frame);
+      break;
+    case 'question.resolved':
+      // Answered or canceled: drop it wherever it sits in the queue.
+      setQuestions(current => current.filter(entry => entry.id !== frame.id));
       break;
     case 'error':
       // Where the user asked is where the refusal belongs: a rejected delete used to be

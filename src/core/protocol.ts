@@ -446,6 +446,44 @@ export interface ApprovalResolvedFrame {
   reason: 'expired' | 'cancelled' | 'answered-elsewhere';
 }
 
+export interface QuestionOptionFrame {
+  label: string;
+  description?: string;
+}
+
+export interface QuestionInfoFrame {
+  header: string;
+  question: string;
+  options: QuestionOptionFrame[];
+  multiple?: boolean;
+  custom?: boolean;
+}
+
+/** A `question` tool call asking the owner: one sheet, N questions, answered as a batch. */
+export interface QuestionAskFrame {
+  type: 'question.ask';
+  id: string;
+  threadId: string;
+  questions: QuestionInfoFrame[];
+  replyToId?: string;
+  ts: string;
+}
+
+/** The owner answered: one array of selected labels per question, in order. */
+export interface QuestionReplyFrame {
+  type: 'question.reply';
+  id: string;
+  answers: string[][];
+}
+
+/** The question is closed without an answer: stopped, or a message typed instead. */
+export interface QuestionResolvedFrame {
+  type: 'question.resolved';
+  id: string;
+  threadId: string;
+  reason: 'answered' | 'canceled';
+}
+
 export interface ApprovalHistoryEntry {
   id: string;
   threadId: string;
@@ -1585,6 +1623,8 @@ export type ServerFrame =
   | ApprovalRequestFrame
   | ApprovalResolvedFrame
   | ApprovalHistoryResultFrame
+  | QuestionAskFrame
+  | QuestionResolvedFrame
   | AgentsConfigResultFrame
   | InstructionsListResultFrame
   | InstructionsFileFrame
@@ -1691,6 +1731,8 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'approval.request',
   'approval.resolved',
   'approval.history.result',
+  'question.ask',
+  'question.resolved',
   'error',
 ]);
 
@@ -1909,6 +1951,11 @@ export function encodeDraftSet(threadId: string, text: string): string {
 
 export function encodeApprovalResponse(id: string, decision: ApprovalDecision): string {
   return JSON.stringify({ type: 'approval.response', id, decision });
+}
+
+/** The owner answered a question sheet: one array of selections per question, in order. */
+export function encodeQuestionReply(id: string, answers: string[][]): string {
+  return JSON.stringify({ type: 'question.reply', id, answers });
 }
 
 export function encodeApprovalHistory(options: { threadId?: string; limit?: number; before?: string } = {}): string {
