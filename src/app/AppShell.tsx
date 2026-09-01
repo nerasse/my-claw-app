@@ -26,6 +26,7 @@ import {
   type TextItem,
 } from '../core/chat';
 import { useQuestionThreads } from '../core/questionStore';
+import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
@@ -36,6 +37,7 @@ import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnosti
 import {
   encodeApprovalResponse,
   encodeQuestionReply,
+  encodeUndoCancel,
   encodeApprovalHistory,
   encodeAgentsConfigGet,
   encodeInstructionsGet,
@@ -210,6 +212,7 @@ import { JobSessionsScreen } from './JobSessionsScreen';
 import { CONNECTION_LABEL, Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ApprovalSheet } from '../components/ApprovalSheet';
+import { UndoSheet } from '../components/UndoSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { ScreenLayer } from '../components/ScreenLayer';
@@ -580,6 +583,7 @@ export function AppShell(): React.JSX.Element {
   // themselves are read by the conversation that draws them, not here: a pending ask must not
   // re-render the shell of every page.
   const questionThreads = useQuestionThreads();
+  const undoPrompts = useUndoPrompts(activeThread);
   const replyToQuestion = useCallback((id: string, answers: string[][]) => {
     connection.send(encodeQuestionReply(id, answers));
     // The card stays where it is, marked sending: the `question.resolved` frame is what drops it,
@@ -993,6 +997,9 @@ export function AppShell(): React.JSX.Element {
         // any other thread, or a device behind, is the push's business (server-side skipDevice
         // keeps a foreground device on the right thread silent on the tray and loud here).
         playAlertSound().catch(() => {});
+      },
+      onUndoPromptOnActiveThread: () => {
+        // The sheet is opening on the thread on screen: no ring, it is already the owner's focus.
       },
       onConfigResult: frame => {
         setConfigEditor({
@@ -4163,6 +4170,20 @@ export function AppShell(): React.JSX.Element {
           // Dismissing is not an answer: the call stays pending server-side until it times out
           // and is journalled as expired. Denying is a button, never a tap on the backdrop.
           onDismiss={() => setApprovals(current => current.slice(1))}
+        />
+      ) : null}
+
+      {undoPrompts.length > 0 ? (
+        <UndoSheet
+          id={undoPrompts[undoPrompts.length - 1]!.id}
+          turnPreview={undoPrompts[undoPrompts.length - 1]!.turnPreview}
+          diff={undoPrompts[undoPrompts.length - 1]!.diff}
+          onClose={() => {
+            // Dismissing is a cancel: nothing runs, the server resolves the prompt.
+            const last = undoPrompts[undoPrompts.length - 1]!;
+            connection.send(encodeUndoCancel(last.id)).catch(() => {});
+            undoStore.resolve(last.id);
+          }}
         />
       ) : null}
 

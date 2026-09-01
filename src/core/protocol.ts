@@ -497,6 +497,38 @@ export interface QuestionResolvedFrame {
   reason: 'answered' | 'canceled';
 }
 
+/** A `/undo` without an argument: the server asks which mode instead of guessing. */
+export interface UndoPromptFrame {
+  type: 'undo.prompt';
+  id: string;
+  threadId: string;
+  turnPreview: string;
+  /** Precomputed file diff, per depot. Empty = nothing to restore. */
+  diff: Array<{ root: string; additions: number; deletions: number }>;
+  ts: string;
+}
+
+/** The owner picked a mode in the undo sheet. */
+export interface UndoChooseFrame {
+  type: 'undo.choose';
+  id: string;
+  mode: 'soft' | 'hard';
+}
+
+/** The owner dismissed the undo sheet: the prompt resolves as canceled, nothing happens. */
+export interface UndoCancelFrame {
+  type: 'undo.cancel';
+  id: string;
+}
+
+/** The undo sheet was dismissed, or the pending request expired. */
+export interface UndoResolvedFrame {
+  type: 'undo.resolved';
+  id: string;
+  threadId: string;
+  reason: 'chosen' | 'canceled';
+}
+
 export interface ApprovalHistoryEntry {
   id: string;
   threadId: string;
@@ -862,6 +894,10 @@ export interface CommandResultFrame {
   status?: StatusPayload;
   /** An aside too long for the bubble (a compaction summary), folded away like reasoning. */
   details?: string;
+  /** The server's leaf diverged from the client's (branch switch, undo, retry): refresh the thread. */
+  reset?: 'branch-switch';
+  /** Text to prefill in the composer (the retried/undone user message). */
+  compose?: string;
 }
 
 /**
@@ -1639,6 +1675,8 @@ export type ServerFrame =
   | QuestionAskFrame
   | QuestionPendingFrame
   | QuestionResolvedFrame
+  | UndoPromptFrame
+  | UndoResolvedFrame
   | AgentsConfigResultFrame
   | InstructionsListResultFrame
   | InstructionsFileFrame
@@ -1748,6 +1786,8 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'question.ask',
   'question.pending',
   'question.resolved',
+  'undo.prompt',
+  'undo.resolved',
   'error',
 ]);
 
@@ -1971,6 +2011,16 @@ export function encodeApprovalResponse(id: string, decision: ApprovalDecision): 
 /** The owner answered a question card: one array of selections per question, in order. */
 export function encodeQuestionReply(id: string, answers: string[][]): string {
   return JSON.stringify({ type: 'question.reply', id, answers });
+}
+
+/** The owner picked a mode in the undo sheet. */
+export function encodeUndoChoose(id: string, mode: 'soft' | 'hard'): string {
+  return JSON.stringify({ type: 'undo.choose', id, mode });
+}
+
+/** The owner dismissed the undo sheet. */
+export function encodeUndoCancel(id: string): string {
+  return JSON.stringify({ type: 'undo.cancel', id });
 }
 
 export function encodeApprovalHistory(options: { threadId?: string; limit?: number; before?: string } = {}): string {

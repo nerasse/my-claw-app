@@ -4,6 +4,7 @@ import { subAgentCallersStore, subAgentStore } from './subagents';
 import { sessionStore } from './sessions';
 import { commandStore } from './commands';
 import { questionStore } from './questionStore';
+import { undoStore } from './undoStore';
 import { acknowledgeDiagnostics } from './diagnostics';
 import { devicesStore } from './devices';
 import { modelStore } from './model';
@@ -18,10 +19,14 @@ import { statusStore } from './status';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
 import { registerForPush } from './notifications';
+
+/** Same page size the shell requests on open: a branch switch refreshes the thread with it. */
+const HISTORY_LIMIT = 50;
 import {
   encodeAgentsConfigGet,
   encodeSessionSync,
   encodeModelGet,
+  encodeSessionHistory,
   encodeSubAgentsList,
   type ApprovalRequestFrame,
   type ApprovalHistoryResultFrame,
@@ -31,6 +36,7 @@ import {
   type JobRunEntry,
   type McpEntry,
   type QuestionAskFrame,
+  type UndoPromptFrame,
   type ServerFrame,
   type SessionFileMeta,
   type SkillEntry,
@@ -106,6 +112,7 @@ export interface ServerFrameHandlers {
   setApprovalHistory: (frame: ApprovalHistoryResultFrame) => void;
   /** A question landed on the thread on screen: the device rings once, the push does the rest. */
   onQuestionAskOnActiveThread?: (frame: QuestionAskFrame) => void;
+  onUndoPromptOnActiveThread?: (frame: UndoPromptFrame) => void;
   /** The raw config editor's state belongs to its page, so its transitions stay in the shell. */
   onConfigResult: (frame: ConfigResultFrame) => void;
   onConfigSaved: (frame: ConfigSavedFrame) => void;
@@ -161,6 +168,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setApprovals,
     setApprovalHistory,
     onQuestionAskOnActiveThread,
+    onUndoPromptOnActiveThread,
     onConfigResult,
     onConfigSaved,
     onConfigError,
@@ -535,6 +543,18 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
           frame.details,
         );
         noteActivity(frame.threadId, frame.text);
+        // A branch switch (undo, retry, branches) moved the server's leaf: the thread must be
+        // refetched or the old bubbles stay on screen over the new branch. The refresh goes
+        // through the same path a fresh open uses -- a full page replaces the thread.
+        if (frame.reset === 'branch-switch') {
+          connection.send(encodeSessionHistory(frame.threadId, HISTORY_LIMIT, 0)).catch(() => {});
+        }
+        // The server hands back the user message being retried/undone: prefill the composer.
+        // A draft already on screen wins, exactly like a remote draft arriving from another
+        // device -- the owner is typing, do not clobber it.
+        if (frame.compose) {
+          applyRemoteDraft(frame.threadId, frame.compose);
+        }
       }
       break;
     case 'status.result':
@@ -618,6 +638,16 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'question.resolved':
       // Answered or canceled, here or on another surface.
       questionStore.resolve(frame.id);
+      break;
+    case 'undo.prompt':
+      // The server asks which mode a bare `/undo` should use. The store owns it: the sheet
+      // must survive every screen the owner walks through before choosing.
+      undoStore.prompt(frame);
+      if (frame.threadId === activeThreadId()) onUndoPromptOnActiveThread?.(frame);
+      break;
+    case 'undo.resolved':
+      // Chosen (here or on another surface) or dismissed: close the sheet.
+      undoStore.resolve(frame.id);
       break;
     case 'error':
       // Where the user asked is where the refusal belongs: a rejected delete used to be

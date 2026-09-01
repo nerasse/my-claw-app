@@ -12,6 +12,8 @@ import {
   encodeFileDelete,
   encodeFilesList,
   encodeQuestionReply,
+  encodeUndoCancel,
+  encodeUndoChoose,
   encodeSessionArchive,
   encodeSessionDelete,
   encodeSessionHistory,
@@ -21,6 +23,14 @@ import {
   encodeUiPrefsSet,
   parseServerFrame,
 } from '../protocol';
+
+describe('undo encoders', () => {
+  test('encodeUndoChoose and encodeUndoCancel round-trip', () => {
+    expect(JSON.parse(encodeUndoChoose('u1', 'soft'))).toEqual({ type: 'undo.choose', id: 'u1', mode: 'soft' });
+    expect(JSON.parse(encodeUndoChoose('u1', 'hard'))).toEqual({ type: 'undo.choose', id: 'u1', mode: 'hard' });
+    expect(JSON.parse(encodeUndoCancel('u1'))).toEqual({ type: 'undo.cancel', id: 'u1' });
+  });
+});
 
 describe('parseServerFrame', () => {
   test('accepts every frame the server can send', () => {
@@ -41,6 +51,8 @@ describe('parseServerFrame', () => {
       { type: 'approval.request', id: 'a', threadId: 't', toolName: 'bash', args: {}, expiresAt: 1 },
       { type: 'question.ask', id: 'q1', threadId: 't', questions: [{ header: 'h', question: 'q', options: [{ label: 'a' }] }], ts: 'iso' },
       { type: 'question.resolved', id: 'q1', threadId: 't', reason: 'answered' },
+      { type: 'undo.prompt', id: 'u1', threadId: 't', turnPreview: 'x', diff: [], ts: 'iso' },
+      { type: 'undo.resolved', id: 'u1', threadId: 't', reason: 'chosen' },
       { type: 'agents.config.result', defaultModel: 'm', defaultEffort: '', effortLevels: [], providers: [], agents: [] },
       {
         type: 'session.instructions.result',
