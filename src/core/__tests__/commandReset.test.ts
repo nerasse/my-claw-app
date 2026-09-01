@@ -11,7 +11,9 @@ import { routeServerFrame, type ServerFrameHandlers } from '../frameRouter';
 import { clearAllDrafts, draftTextOf } from '../drafts';
 import type { ServerFrame } from '../protocol';
 
-const handlers = {} as ServerFrameHandlers;
+const handlers = {
+  activeThreadId: () => null,
+} as unknown as ServerFrameHandlers;
 const THREAD = 't1';
 
 function route(frame: ServerFrame): void {
