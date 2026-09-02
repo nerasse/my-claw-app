@@ -60,3 +60,32 @@ it('a plain command result does not refetch nor prefill', () => {
   expect(mockSend).not.toHaveBeenCalled();
   expect(draftTextOf(THREAD)).toBe('');
 });
+
+it('a dropInput result removes the optimistic command bubble', () => {
+  chatStore.addUserMessage(THREAD, 'send-1', '/undo');
+  route({
+    type: 'chat.command.result',
+    threadId: THREAD,
+    replyToId: 'send-1',
+    text: 'Undo: conversation rembobinée',
+    dropInput: true,
+  });
+  const items = chatStore.getItems(THREAD);
+  expect(items.find(item => item.id === 'send-1')).toBeUndefined();
+  expect(items.find(item => item.id === 'cmd-send-1')).toMatchObject({
+    role: 'agent',
+    text: 'Undo: conversation rembobinée',
+    command: true,
+  });
+});
+
+it('a dropInput result without replyToId drops nothing', () => {
+  chatStore.addUserMessage(THREAD, 'keep-1', '/undo');
+  route({
+    type: 'chat.command.result',
+    threadId: THREAD,
+    text: 'Undo: conversation rembobinée',
+    dropInput: true,
+  });
+  expect(chatStore.getItems(THREAD).find(item => item.id === 'keep-1')).toBeDefined();
+});

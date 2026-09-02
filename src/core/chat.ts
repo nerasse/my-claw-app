@@ -1011,6 +1011,14 @@ class ChatStoreImpl {
   }
 
   /**
+   * Drops one bubble outright (a quiet command's optimistic input). Public because the router
+   * decides it from the result frame, not the send: the input was never shown on any surface.
+   */
+  dropBubble(threadId: string, id: string): void {
+    this.removeItem(threadId, id);
+  }
+
+  /**
    * A token is not a frame.
    *
    * A fast model delivers hundreds of deltas a second, and each one used to notify every reader

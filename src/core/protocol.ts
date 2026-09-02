@@ -898,6 +898,8 @@ export interface CommandResultFrame {
   reset?: 'branch-switch';
   /** Text to prefill in the composer (the retried/undone user message). */
   compose?: string;
+  /** The command's input bubble is noise (undo, retry, branches): drop the optimistic one. */
+  dropInput?: boolean;
 }
 
 /**

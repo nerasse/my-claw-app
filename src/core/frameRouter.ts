@@ -542,6 +542,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         });
         setStatusOpen(true);
       } else {
+        // A quiet command (undo, retry, branches) never showed its input on any surface: drop
+        // the optimistic bubble this device drew at send, so the result is the whole story.
+        if (frame.dropInput && frame.replyToId) {
+          chatStore.dropBubble(frame.threadId, frame.replyToId);
+        }
         chatStore.addCommandResult(
           frame.threadId,
           // Derived from the send, not from the clock: the server replays that bubble under the
