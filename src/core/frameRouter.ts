@@ -37,6 +37,7 @@ import {
   type McpEntry,
   type QuestionAskFrame,
   type UndoPromptFrame,
+  type RunEndFrame,
   type ServerFrame,
   type SessionFileMeta,
   type SkillEntry,
@@ -112,6 +113,8 @@ export interface ServerFrameHandlers {
   setApprovalHistory: (frame: ApprovalHistoryResultFrame) => void;
   /** A question landed on the thread on screen: the device rings once, the push does the rest. */
   onQuestionAskOnActiveThread?: (frame: QuestionAskFrame) => void;
+  /** A run ended on the thread on screen, done or failed: the device rings once, the push covers the rest. */
+  onRunEndOnActiveThread?: (frame: RunEndFrame) => void;
   onUndoPromptOnActiveThread?: (frame: UndoPromptFrame) => void;
   /** The raw config editor's state belongs to its page, so its transitions stay in the shell. */
   onConfigResult: (frame: ConfigResultFrame) => void;
@@ -168,6 +171,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setApprovals,
     setApprovalHistory,
     onQuestionAskOnActiveThread,
+    onRunEndOnActiveThread,
     onUndoPromptOnActiveThread,
     onConfigResult,
     onConfigSaved,
@@ -225,6 +229,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'chat.run.end': {
       chatStore.endRun(frame.threadId);
       chatStore.clearQueued(frame.threadId);
+      // The run just finished on the thread on screen: one ring, exactly like a question hitting
+      // the open thread. A run ending on any other thread (or the device in the background) is
+      // the push's business -- server-side skipDevice keeps the tray silent for the foreground
+      // device on that thread, so the ring and the banner never double up.
+      if (frame.threadId === activeThreadId()) onRunEndOnActiveThread?.(frame);
       // A run may have spawned sub-agents; the roster is refetched at its end rather than
       // pushed, which keeps the counter honest without a live push path.
       const parent = subagentParent() ?? activeThreadId();

@@ -998,6 +998,12 @@ export function AppShell(): React.JSX.Element {
         // keeps a foreground device on the right thread silent on the tray and loud here).
         playAlertSound().catch(() => {});
       },
+      onRunEndOnActiveThread: () => {
+        // The run finished on the thread on screen: the same ring a question plays. The push
+        // skips this device (foreground on that thread), so the ring stands in for the
+        // notification here -- the tray and the sound never double up.
+        playAlertSound().catch(() => {});
+      },
       onUndoPromptOnActiveThread: () => {
         // The sheet is opening on the thread on screen: no ring, it is already the owner's focus.
       },
