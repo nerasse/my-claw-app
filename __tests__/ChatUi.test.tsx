@@ -626,7 +626,9 @@ describe('reading a conversation from its newest message', () => {
       node =>
         node.props.data &&
         Array.isArray(node.props.data) &&
-        node.props.data.some((item: { id: string }) => item.id === 'h-0'),
+        node.props.data.some((row: { kind: string; item?: { id: string }; run?: { id: string } }) =>
+          row.kind === 'item' ? row.item?.id === 'h-0' : row.run?.id === 'h-0',
+      ),
     );
   }
 
@@ -640,7 +642,9 @@ describe('reading a conversation from its newest message', () => {
     // aims at an estimated content height and stops short of the last message, so the fix is to
     // not need it at all rather than to time it better.
     expect(list.props.inverted).toBe(true);
-    expect(list.props.data.map((item: { id: string }) => item.id)).toEqual(['h-2', 'h-1', 'h-0']);
+    const rowId = (row: { kind: string; item?: { id: string }; run?: { id: string } }): string | undefined =>
+      row.kind === 'item' ? row.item?.id : row.run?.id;
+    expect(list.props.data.map(rowId)).toEqual(['h-2', 'h-1', 'h-0']);
     expect(toEnd).not.toHaveBeenCalled();
     expect(toOffset).not.toHaveBeenCalled();
 
@@ -692,12 +696,16 @@ describe('reading a conversation from its newest message', () => {
 });
 
 describe('paging back through a long conversation', () => {
+  // The list now carries rows, not raw bubbles: a row is either a bubble or a run group holding
+  // several. Matching on the FlatList itself, whatever the shape of its data is.
   function chatList(tree: Tree): ReactTestRenderer.ReactTestInstance {
     return tree.root.find(
       node =>
         node.props.data &&
         Array.isArray(node.props.data) &&
-        node.props.data.some((item: { id: string }) => item.id === 'h-0'),
+        node.props.data.some((row: { kind: string; item?: { id: string }; run?: { id: string } }) =>
+          row.kind === 'item' ? row.item?.id === 'h-0' : row.run?.id === 'h-0',
+      ),
     );
   }
 
@@ -739,10 +747,10 @@ describe('paging back through a long conversation', () => {
 
     // Older messages go in front, and the inverted list therefore appends them at its own end:
     // nothing the reader was looking at moves.
-    await waitFor(() =>
-      chatList(tree).props.data.some((item: { id: string }) => item.id === 'older-1'),
-    );
-    expect(chatList(tree).props.data.map((item: { id: string }) => item.id)).toEqual([
+    const rowId = (row: { kind: string; item?: { id: string }; run?: { id: string } }): string =>
+      row.kind === 'item' ? row.item!.id : row.run!.id;
+    await waitFor(() => chatList(tree).props.data.some((row: { kind: string; item?: { id: string }; run?: { id: string } }) => rowId(row) === 'older-1'));
+    expect(chatList(tree).props.data.map(rowId)).toEqual([
       'h-2',
       'h-1',
       'h-0',

@@ -281,6 +281,15 @@ export interface SpawnEndFrame {
   ts: string;
 }
 
+/** The run an entry belongs to -- the server folds `run_start`/`run_end` markers (docs/run-grouping.md). */
+export interface RunMeta {
+  /** The id of the run's `run_start` entry: the grouping key. */
+  id: string;
+  status: 'running' | 'done' | 'aborted' | 'error';
+  startTs: string;
+  endTs?: string;
+}
+
 export type HistoryEntry =
   | {
       id: string;
@@ -311,8 +320,10 @@ export type HistoryEntry =
        * summary alone, and the turns it stands for are still replayed above it in full.
        */
       summaryOf?: number;
+      /** The run this entry belongs to, when it sits inside one. */
+      run?: RunMeta;
     }
-  | ({ role: 'tool'; ts: string } & ToolCallPayload);
+  | ({ role: 'tool'; ts: string } & ToolCallPayload & { run?: RunMeta });
 
 /**
  * A prompt sent from one of the owner's other windows.

@@ -3,12 +3,14 @@ import { ActivityIndicator, FlatList, Linking, Pressable, Text, View } from 'rea
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary } from '../components/CompactionBoundary';
+import { RunGroup } from '../components/RunGroup';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import { isSubAgentTool, useChatItems, type ChatItem, type TextItem } from '../core/chat';
+import { buildRows, type ChatRow } from '../core/runRows';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
 import type { DeviceInfo } from '../core/device';
@@ -40,7 +42,7 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
 
-const keyOfItem = (item: ChatItem): string => item.id;
+const keyOfRow = (row: ChatRow): string => (row.kind === 'item' ? row.item.id : `run:${row.run.id}`);
 
 export function ChatScreen({
   threadId,
@@ -152,7 +154,7 @@ export function ChatScreen({
     () => ({ maxWidth: layout.toolWidth, width: '100%' as const, alignSelf: 'center' as const }),
     [layout.toolWidth],
   );
-  const listRef = useRef<FlatList<ChatItem>>(null);
+  const listRef = useRef<FlatList<ChatRow>>(null);
   // Subscribed here rather than handed down: a growing bubble must not re-render the shell that
   // holds every page of the app, only the conversation showing it.
   const items = useChatItems(threadId);
@@ -553,13 +555,21 @@ export function ChatScreen({
 
   // Newest first, because the list is inverted. Reversing the data rather than the reading of it
   // keeps every index the list hands back pointing at the right bubble.
-  const reversed = useMemo(() => [...items].reverse(), [items]);
+  // Item index by id, so a free row knows where it sits in the chronological list for grouping.
+  const itemIndexById = useMemo(() => new Map(items.map((item, index) => [item.id, index])), [items]);
 
-  const renderItem = useCallback(
-    ({ item, index }: { item: ChatItem; index: number }) => {
-      // Grouping is a property of reading order, so it is still computed oldest-first and the
-      // row index is mapped back into it.
-      const chronological = reversed.length - 1 - index;
+  // A finished run's work folds under one row (its header), which is why the list is built from
+  // rows and not from raw items: a collapsed group is one row, an open one renders its children
+  // inside it -- docs/run-grouping.md.
+  const rows = useMemo(() => buildRows(items), [items]);
+  const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
+
+  /**
+   * Draws one bubble or card. `groupedFlag`/`showTimeFlag` are passed in rather than read from
+   * the global index so the same code serves free rows and the children of a run group.
+   */
+  const renderItemContent = useCallback(
+    (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean) => {
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
       // A `question` card with an ask still pending is the form itself. Once answered or
       // canceled the ask leaves the store and the card falls back to its settled rendering,
@@ -598,8 +608,8 @@ export function ChatScreen({
           item={item}
           mediaBase={mediaBase}
           deviceInfo={deviceInfo}
-          grouped={grouped[chronological] ?? false}
-          showTime={!(grouped[chronological + 1] ?? false)}
+          grouped={groupedFlag}
+          showTime={showTimeFlag}
           onMenu={onBubbleMenu}
           onOpenAttachment={openAttachment}
           expandReasoning={uiPrefs?.expandReasoning ?? false}
@@ -607,7 +617,31 @@ export function ChatScreen({
         </View>
       );
     },
-    [toolColumn, deviceInfo, grouped, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, reversed.length, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, subagentDoors, spawnLive, threadId, uiPrefs],
+  );
+
+  const renderRow = useCallback(
+    (row: ChatRow) => {
+      if (row.kind === 'item') {
+        // Grouping is a property of reading order, so it is still computed oldest-first and the
+        // item index is looked up rather than derived from the row position.
+        const chronological = itemIndexById.get(row.item.id) ?? 0;
+        return renderItemContent(row.item, grouped[chronological] ?? false, !(grouped[chronological + 1] ?? false));
+      }
+      // The children group among themselves: the first of a block is not grouped against the row
+      // before it, and the time shows on the last one, exactly like free bubbles do.
+      return (
+        <RunGroup
+          run={row.run}
+          items={row.items}
+          renderItem={(item, index, children) => {
+            const childGrouped = isGrouped(children, index);
+            return renderItemContent(item, childGrouped, !isGrouped(children, index + 1));
+          }}
+        />
+      );
+    },
+    [grouped, itemIndexById, renderItemContent],
   );
 
   const locationLabel = location
@@ -772,11 +806,11 @@ export function ChatScreen({
               ref={listRef}
               {...scrollProps}
               inverted
-              data={reversed}
-              keyExtractor={keyOfItem}
+              data={reversedRows}
+              keyExtractor={keyOfRow}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
-              renderItem={renderItem}
+              renderItem={({ item: row }) => renderRow(row)}
               ListHeaderComponent={
                 questionsLoose.length > 0 ? (
                   <View style={styles.looseQuestions}>

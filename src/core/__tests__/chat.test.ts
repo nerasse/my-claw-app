@@ -1041,3 +1041,81 @@ describe('handleSyncResult: tool cards in flight', () => {
     expect(items.find(i => i.id === 'call-2')).toMatchObject({ kind: 'tool', running: true });
   });
 });
+
+describe('chatStore run grouping', () => {
+  const runEntry = (id: string, status: 'running' | 'done' | 'aborted' | 'error', ts = '2026-01-01T00:00:00.000Z'): HistoryEntry =>
+    ({
+      id,
+      role: 'assistant',
+      text: 'x',
+      ts,
+      run: { id, status, startTs: ts, ...(status === 'running' ? {} : { endTs: '2026-01-01T00:01:00.000Z' }) },
+    }) as HistoryEntry;
+
+  test('items created during a run carry the open run and seal on end', () => {
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1');
+    chatStore.addToolCall(THREAD, { id: 'c1', name: 'bash', args: {}, ok: true, output: 'o', truncated: false });
+    // The synthetic run is live until the server's id lands.
+    const before = chatStore.getItems(THREAD);
+    expect(before.every(i => i.run?.id.startsWith('live-'))).toBe(true);
+    expect(before.every(i => i.run?.status === 'running')).toBe(true);
+
+    chatStore.endRun(THREAD, 'done');
+    const after = chatStore.getItems(THREAD);
+    expect(after.every(i => i.run?.status === 'done')).toBe(true);
+    expect(after.every(i => i.run?.endTs !== undefined)).toBe(true);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+  });
+
+  test('a sync page adopts the server run id, renaming synthetic items', () => {
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1');
+    chatStore.handleSyncResult(THREAD, [runEntry('run-1', 'running')], 'run-1', null, true);
+    const items = chatStore.getItems(THREAD);
+    expect(items[0]).toMatchObject({ run: { id: 'run-1', status: 'running' } });
+    expect(items.every(i => i.run?.id === 'run-1')).toBe(true);
+  });
+
+  test('incoming terminal entries win over a stale live running state', () => {
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1');
+    chatStore.handleSyncResult(THREAD, [runEntry('run-1', 'error')], 'run-1', null, false);
+    const items = chatStore.getItems(THREAD);
+    expect(items[0]).toMatchObject({ run: { id: 'run-1', status: 'error' } });
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+  });
+
+  test('a history page without activeRun settles a trailing running run as done', () => {
+    chatStore.seedHistory(THREAD, [runEntry('run-1', 'done'), runEntry('run-2', 'running')], false);
+    const items = chatStore.getItems(THREAD);
+    // The server marked the last run running, but no run is active: its end was lost, so it
+    // closes as done and the finished run before it stays untouched.
+    expect(items[0]).toMatchObject({ run: { id: 'run-1', status: 'done' } });
+    expect(items[1]).toMatchObject({ run: { status: 'done' } });
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+  });
+
+  test('a history page opened mid-run keeps the run open and adopts its id', () => {
+    chatStore.seedHistory(THREAD, [runEntry('run-1', 'running')], true);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(true);
+    // Frames that follow paint under the same run.
+    chatStore.startStream(THREAD, 's1');
+    expect(chatStore.getItems(THREAD)[1]).toMatchObject({ run: { id: 'run-1' } });
+  });
+
+  test('seedRuns settles the open run of a thread the server no longer lists', () => {
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1');
+    chatStore.seedRuns([]);
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ run: { status: 'done' } });
+  });
+
+  test('an abort seals its run as aborted', () => {
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1');
+    chatStore.endRun(THREAD, 'aborted');
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ run: { status: 'aborted' } });
+  });
+});

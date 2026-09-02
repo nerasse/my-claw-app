@@ -227,7 +227,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       chatStore.startRun(frame.threadId);
       break;
     case 'chat.run.end': {
-      chatStore.endRun(frame.threadId);
+      chatStore.endRun(frame.threadId, frame.reason);
       chatStore.clearQueued(frame.threadId);
       // The run just finished on the thread on screen: one ring, exactly like a question hitting
       // the open thread. A run ending on any other thread (or the device in the background) is

@@ -1,6 +1,17 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import type { AttachmentMeta, HistoryEntry, LocationData, SpawnAction, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
+import type { AttachmentMeta, HistoryEntry, LocationData, RunMeta, SpawnAction, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
 import { agentOfCard, indexRoster } from './subagents';
+
+export type RunStatus = 'running' | 'done' | 'aborted' | 'error';
+
+/** The run an item belongs to, client-side: timestamps in ms, the server speaks ISO. */
+export interface RunInfo {
+  /** The id of the run's `run_start` entry: the grouping key. */
+  id: string;
+  status: RunStatus;
+  startTs: number;
+  endTs?: number;
+}
 
 export interface TextItem {
   kind: 'text';
@@ -41,12 +52,16 @@ export interface TextItem {
    * the owner did not write this.
    */
   summaryOf?: number;
+  /** The run this bubble belongs to, when it sits inside one -- docs/run-grouping.md. */
+  run?: RunInfo;
   ts: number;
 }
 
 export interface ToolItem extends ToolCallPayload {
   kind: 'tool';
   ts: number;
+  /** The run this card belongs to, when it sits inside one -- docs/run-grouping.md. */
+  run?: RunInfo;
 }
 
 export type ChatItem = TextItem | ToolItem;
@@ -117,6 +132,16 @@ function isLocalLive(item: ChatItem): boolean {
   return item.kind === 'tool' && item.running === true;
 }
 
+/** The server speaks ISO strings; the store thinks in milliseconds. */
+function runInfoOf(run: RunMeta): RunInfo {
+  return {
+    id: run.id,
+    status: run.status,
+    startTs: new Date(run.startTs).getTime() || Date.now(),
+    ...(run.endTs ? { endTs: new Date(run.endTs).getTime() || Date.now() } : {}),
+  };
+}
+
 /** Replayed server entries as bubbles. Shared by the newest page and by every older one. */
 function itemsOf(entries: HistoryEntry[]): ChatItem[] {
   return entries.map((entry, index) => {
@@ -135,6 +160,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
         // Without it the card rebuilt as a finished, successful, empty-output call.
         ...(entry.running && (!entry.spawn || entry.spawn.status === 'running') ? { running: true } : {}),
         ...(entry.spawn ? { spawn: entry.spawn } : {}),
+        ...(entry.run ? { run: runInfoOf(entry.run) } : {}),
         ts,
       };
     }
@@ -153,6 +179,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.details ? { details: entry.details } : {}),
       ...(entry.error ? { error: entry.error } : {}),
       ...(entry.summaryOf ? { summaryOf: entry.summaryOf } : {}),
+      ...(entry.run ? { run: runInfoOf(entry.run) } : {}),
       ts,
     };
   });
@@ -173,6 +200,12 @@ class ChatStoreImpl {
   private lastStream = new Map<string, string>();
   /** Threads with a run in flight on the server: drives the Stop button across the whole run. */
   private activeRuns = new Set<string>();
+  /**
+   * The run currently being answered, per thread. Live frames attach to it; sync entries carry
+   * the server's id, which replaces the synthetic one when it arrives -- docs/run-grouping.md.
+   */
+  private openRuns = new Map<string, { info: RunInfo; synthetic: boolean }>();
+  private syntheticSeq = 0;
   /** Placeholder bubble per thread while a slow command runs, keyed by thread -> bubble id. */
   private pendingCommands = new Map<string, string>();
   private unread = new Set<string>();
@@ -409,15 +442,113 @@ class ChatStoreImpl {
     return this.activeRuns.has(threadId);
   }
 
+  /** The run live frames of a thread belong to, if any. */
+  private liveRun(threadId: string): RunInfo | undefined {
+    return this.openRuns.get(threadId)?.info;
+  }
+
   startRun(threadId: string): void {
     if (this.activeRuns.has(threadId)) return;
     this.activeRuns.add(threadId);
+    // The frame arrives before any entry does (the trigger turn is written inside the run), so
+    // live-created items need a run to belong to right away. The synthetic id is replaced by the
+    // server's when the first synced entry of the run lands.
+    if (!this.openRuns.has(threadId)) {
+      this.syntheticSeq += 1;
+      this.openRuns.set(threadId, {
+        info: { id: `live-${this.syntheticSeq}`, status: 'running', startTs: Date.now() },
+        synthetic: true,
+      });
+    } else {
+      this.openRuns.get(threadId)!.info.status = 'running';
+    }
     this.emit();
   }
 
-  endRun(threadId: string): void {
-    if (!this.activeRuns.delete(threadId)) return;
+  endRun(threadId: string, reason: RunStatus = 'done'): void {
+    if (!this.activeRuns.delete(threadId) && !this.openRuns.has(threadId)) return;
+    const open = this.openRuns.get(threadId);
+    this.openRuns.delete(threadId);
+    if (open) {
+      // Everything the run painted closes at once: the header the renderer builds reads the
+      // status off the items, so patching them is what folds the run under one collapsed row.
+      this.sealRun(threadId, open.info.id, reason, Date.now());
+    }
     this.emit();
+  }
+
+  /** Marks every item of a run with its terminal state. */
+  private sealRun(threadId: string, runId: string, status: RunStatus, endTs: number): void {
+    const items = this.threads.get(threadId);
+    if (!items) return;
+    let changed = false;
+    this.threads.set(
+      threadId,
+      items.map(item => {
+        if (item.run?.id !== runId || item.run.status === status) return item;
+        changed = true;
+        return { ...item, run: { ...item.run, status, endTs } };
+      }),
+    );
+    if (changed) this.emitSoon();
+  }
+
+  /**
+   * Reconciles the open-run bookkeeping with a page of entries from the server.
+   *
+   * Two jobs. When the entries carry the real run id of the turn in flight, the synthetic run
+   * live frames created under is renamed to it, so one run never renders as two groups. And when
+   * the server says no run is active, a trailing run whose end was lost (disconnect, crash)
+   * settles as done instead of spinning forever as an open group.
+   */
+  private reconcileRuns(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
+    const open = this.openRuns.get(threadId);
+    if (activeRun === true) {
+      // The last running run among the incoming entries is the one in flight. Prefer the real id
+      // when one exists; a page that predates the run (or a run so fresh its entries are not
+      // written) keeps what the live frames established.
+      const incoming = [...entries].reverse().find(entry => entry.run?.status === 'running');
+      if (incoming?.run) {
+        const real = runInfoOf(incoming.run);
+        if (open) {
+          if (open.synthetic && open.info.id !== real.id) {
+            this.renameRun(threadId, open.info.id, real);
+          }
+          this.openRuns.set(threadId, { info: real, synthetic: false });
+        } else {
+          this.openRuns.set(threadId, { info: real, synthetic: false });
+        }
+      } else if (!open) {
+        // activeRun said yes but nothing carries the run yet: the frame-to-entry gap. Open a
+        // synthetic run so frames keep attaching, exactly like chat.run.start does.
+        this.syntheticSeq += 1;
+        this.openRuns.set(threadId, {
+          info: { id: `live-${this.syntheticSeq}`, status: 'running', startTs: Date.now() },
+          synthetic: true,
+        });
+      }
+    } else if (activeRun === false) {
+      this.openRuns.delete(threadId);
+      // A trailing run still marked running is dead (its end frame or marker was lost): settle it
+      // as done so the group closes instead of rendering as an eternal open run. Only the last
+      // run can be running, so the search goes from the end.
+      const items = this.threads.get(threadId) ?? EMPTY_ITEMS;
+      const running = [...items].reverse().find(item => item.run?.status === 'running');
+      if (running?.run) this.sealRun(threadId, running.run.id, 'done', running.run.endTs ?? Date.now());
+    }
+  }
+
+  /** Re-keys the items of one run under the server's id. */
+  private renameRun(threadId: string, fromId: string, into: RunInfo): void {
+    const items = this.threads.get(threadId);
+    if (!items) return;
+    const matched = items.filter(item => item.run?.id === fromId).length;
+    if (matched === 0) return;
+    this.threads.set(
+      threadId,
+      items.map(item => (item.run?.id === fromId ? { ...item, run: into } : item)),
+    );
+    this.emitSoon();
   }
 
   /**
@@ -426,7 +557,17 @@ class ChatStoreImpl {
    */
   seedRuns(threadIds: string[]): void {
     const next = new Set(threadIds);
-    if (next.size === this.activeRuns.size && [...next].every(id => this.activeRuns.has(id))) return;
+    const removed = [...this.activeRuns].filter(id => !next.has(id));
+    if (next.size === this.activeRuns.size && removed.length === 0) {
+      if ([...next].every(id => this.activeRuns.has(id))) return;
+    }
+    // A run the server no longer lists is over even if its end frame was lost: settle the open
+    // run of those threads the way endRun would.
+    for (const threadId of removed) {
+      const open = this.openRuns.get(threadId);
+      if (open) this.sealRun(threadId, open.info.id, 'done', Date.now());
+      this.openRuns.delete(threadId);
+    }
     this.activeRuns = next;
     this.emit();
   }
@@ -476,6 +617,11 @@ class ChatStoreImpl {
       // Delta: append entries, replacing any with matching ids (live tool cards settling).
       this.appendSyncEntries(threadId, entries);
     }
+
+    // The run bookkeeping follows the entries: adopt the server's run id for the turn in flight,
+    // or settle a trailing run whose end never arrived. After the page is applied, so the
+    // settle sees the entries it is the verdict on.
+    this.reconcileRuns(threadId, entries, activeRun);
 
     // Update sync cursors: head is the last entry in the file, leaf is the branch tip.
     // If truncated, we don't have head yet -- keep asking until we do.
@@ -557,6 +703,11 @@ class ChatStoreImpl {
     
     // The newest page replaces the thread, same as a sync reset.
     this.resetThread(threadId, entries);
+
+    // Same reconciliation as a sync result, after the page is in: a history page opened mid-run
+    // must adopt the real run id immediately, or the frames that follow would paint under a
+    // second, synthetic run.
+    this.reconcileRuns(threadId, entries, activeRun);
     
     // Update sync state from the entries we received.
     const lastEntry = entries[entries.length - 1];
@@ -658,6 +809,7 @@ class ChatStoreImpl {
         attachments: [],
         streaming: true,
         command: true,
+        ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
         ts: parent ? parent.ts + 1 : Date.now(),
       });
     }
@@ -775,6 +927,7 @@ class ChatStoreImpl {
       text: '',
       attachments: [],
       streaming: true,
+      ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
       ts: parent ? parent.ts + 1 : Date.now(),
     });
   }
@@ -870,6 +1023,7 @@ class ChatStoreImpl {
       attachments,
       streaming: false,
       ...(notice ? { notice: true } : {}),
+      ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
       ts: parent ? parent.ts + 1 : Date.now(),
     });
   }
@@ -888,7 +1042,7 @@ class ChatStoreImpl {
       });
       return;
     }
-    this.append(threadId, { kind: 'tool', ...payload, running: false, ts: Date.now() });
+    this.append(threadId, { kind: 'tool', ...payload, running: false, ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}), ts: Date.now() });
   }
 
   /** A tool started executing: open the card with a spinner and empty output, pending the
@@ -904,6 +1058,7 @@ class ChatStoreImpl {
       ok: false,
       truncated: false,
       running: true,
+      ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
       ts: Date.now(),
     });
   }
@@ -941,6 +1096,7 @@ class ChatStoreImpl {
     this.spawnStatus.delete(threadId);
     this.syncState.delete(threadId);
     this.activeRuns.delete(threadId);
+    this.openRuns.delete(threadId);
     this.lastStream.delete(threadId);
     this.pendingCommands.delete(threadId);
     if (this.unread.delete(threadId)) this.refreshUnread();
@@ -956,6 +1112,7 @@ class ChatStoreImpl {
     this.reasoning.clear();
     this.lastStream.clear();
     this.activeRuns.clear();
+    this.openRuns.clear();
     this.pendingCommands.clear();
     this.unread.clear();
     this.unreadSnapshot = EMPTY_THREADS;
