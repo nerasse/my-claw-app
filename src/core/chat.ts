@@ -111,16 +111,30 @@ function textOf(entry: HistoryEntry): string {
 }
 
 /**
+ * Well past what a day of chatting holds, low enough that a session carried to its end cannot
+ * pin tens of thousands of bubbles in memory: past the cap the oldest items are dropped
+ * (unloading), and because paging asks by the id of the oldest held item, they come back when
+ * the reader scrolls there again.
+ */
+export const MAX_HELD_ITEMS = 6000;
+export const TRIM_TO_ITEMS = 4000;
+
+/**
  * How far back a thread has been read. `loading` is held here rather than in the screen so a
  * remount mid-request cannot fire a second one for the same page.
+ *
+ * `oldestId` is the id of the thread's oldest held item: paging asks for the page just before
+ * it, which stays exact when the session grows between loads and when the client trims its
+ * oldest items (docs/session-log.md).
  */
 export interface HistoryPage {
   nextBefore: number;
   hasMore: boolean;
   loading: boolean;
+  oldestId: string | null;
 }
 
-const NO_PAGE: HistoryPage = { nextBefore: 0, hasMore: false, loading: false };
+const NO_PAGE: HistoryPage = { nextBefore: 0, hasMore: false, loading: false, oldestId: null };
 Object.freeze(NO_PAGE);
 
 /**
@@ -212,6 +226,12 @@ class ChatStoreImpl {
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
   private pages = new Map<string, HistoryPage>();
+  /**
+   * Whether dropping the oldest held items is safe right now: the reader is on the newest
+   * message, so nothing they can see is going away. Set from the scroll handler; while the
+   * reader is up in the history the trim waits.
+   */
+  private trimAllowed = new Map<string, boolean>();
   /**
    * Sync cursors per thread: `since` is the id of the last entry received (for delta requests),
    * `leaf` is the branch tip the client is showing. Updated after every sync.
@@ -416,9 +436,19 @@ class ChatStoreImpl {
   }
 
   /** Records where the newest page left off, so scrolling up knows what to ask for. */
-  setPage(threadId: string, page: { nextBefore: number; hasMore: boolean }): void {
-    this.pages.set(threadId, { ...page, loading: false });
+  setPage(threadId: string, page: { nextBefore: number; hasMore: boolean; oldestId?: string | null }): void {
+    const held = this.threads.get(threadId);
+    const oldestId = page.oldestId !== undefined ? page.oldestId : (held?.[0]?.id ?? null);
+    this.pages.set(threadId, { ...page, oldestId, loading: false });
     this.emit();
+  }
+
+  /**
+   * The thread's oldest held item, if any. When it changes (a page prepended, the oldest items
+   * trimmed), the paging cursor must follow, or the next request would repeat or skip entries.
+   */
+  private firstItemId(threadId: string): string | null {
+    return this.threads.get(threadId)?.[0]?.id ?? null;
   }
 
   /** Latched before the request leaves, cleared when its page lands or the send fails. */
@@ -427,6 +457,36 @@ class ChatStoreImpl {
     if (current.loading === loading) return;
     this.pages.set(threadId, { ...current, loading });
     this.emit();
+  }
+
+  /**
+   * Whether the thread's oldest items may be dropped. True only while the reader is at the
+   * newest message (offset 0 of the inverted list): dropping is invisible to them, and the
+   * cursor follows (see `pageCursorFollows`).
+   */
+  setTrimAllowed(threadId: string, allowed: boolean): void {
+    if (this.trimAllowed.get(threadId) === allowed) return;
+    this.trimAllowed.set(threadId, allowed);
+    if (allowed) {
+      // A trim may have been waiting: apply and let the list breathe.
+      this.threads.set(threadId, this.trimToCap(threadId, this.threads.get(threadId) ?? EMPTY_ITEMS, true));
+      this.pageCursorFollows(threadId);
+      this.emit();
+    }
+  }
+
+  /** Drops the oldest items past the cap, when the reader is not looking at them. */
+  private trimToCap(threadId: string, items: ChatItem[], force = false): ChatItem[] {
+    if (items.length <= MAX_HELD_ITEMS) return items;
+    if (!force && this.trimAllowed.get(threadId) !== true) return items;
+    return items.slice(items.length - TRIM_TO_ITEMS);
+  }
+
+  /** The paging cursor names the oldest held item: keep it exact through prepends and trims. */
+  private pageCursorFollows(threadId: string): void {
+    const page = this.pages.get(threadId);
+    if (!page) return;
+    this.pages.set(threadId, { ...page, oldestId: this.firstItemId(threadId) });
   }
 
   hasThread(threadId: string): boolean {
@@ -606,6 +666,8 @@ class ChatStoreImpl {
     activeRun?: boolean,
     reset?: 'unknown-cursor' | 'branch-switch',
     truncated?: boolean,
+    hasMore?: boolean,
+    nextBefore?: number,
   ): void {
     if (activeRun === true) this.activeRuns.add(threadId);
     else if (activeRun === false) this.activeRuns.delete(threadId);
@@ -626,6 +688,16 @@ class ChatStoreImpl {
     // Update sync cursors: head is the last entry in the file, leaf is the branch tip.
     // If truncated, we don't have head yet -- keep asking until we do.
     this.setSyncState(threadId, truncated ? this.getSyncState(threadId).since : head, leaf, truncated);
+
+    // A fresh page (open or reset) replaces the held thread, so the paging cursor is whatever
+    // the server serves with it: that is what tells the client there is older work and where
+    // to ask. Without the fields (old server, or a delta), the held cursor stands -- except on
+    // a reset, where the old window is gone and a stale cursor would page from the wrong place.
+    if (nextBefore !== undefined) {
+      this.setPage(threadId, { nextBefore, hasMore: hasMore === true });
+    } else if (reset) {
+      this.pages.delete(threadId);
+    }
     this.emit();
   }
 
@@ -665,7 +737,8 @@ class ChatStoreImpl {
     // that already sits behind the live card.
     const persisted = kept.filter(item => !isLocalLive(item));
     const live = kept.filter(isLocalLive);
-    this.threads.set(threadId, [...persisted, ...incoming, ...live]);
+    this.threads.set(threadId, this.trimToCap(threadId, [...persisted, ...incoming, ...live]));
+    this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
   }
 
@@ -728,7 +801,8 @@ class ChatStoreImpl {
     const known = new Set(existing.map(item => item.id));
     const older = itemsOf(entries).filter(item => !known.has(item.id));
     if (older.length === 0) return;
-    this.threads.set(threadId, [...older, ...existing]);
+    this.threads.set(threadId, this.trimToCap(threadId, [...older, ...existing]));
+    this.pageCursorFollows(threadId);
     this.emit();
   }
 

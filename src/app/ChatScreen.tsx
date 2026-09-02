@@ -9,7 +9,7 @@ import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
-import { isSubAgentTool, useChatItems, type ChatItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, type ChatItem, type TextItem } from '../core/chat';
 import { buildRows, type ChatRow } from '../core/runRows';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
@@ -656,7 +656,10 @@ export function ChatScreen({
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
     const nearBottom = event.nativeEvent.contentOffset.y <= 120;
     if (nearBottom !== atBottom) setAtBottom(nearBottom);
-  }, [atBottom]);
+    // Only while the reader is on the newest message may the store drop its oldest items:
+    // that is what keeps a long session light without ever taking a visible bubble away.
+    chatStore.setTrimAllowed(threadId, nearBottom);
+  }, [atBottom, threadId]);
   const { scrollProps, indicator } = useScrollIndicator({ onScroll: handleScroll, inverted: true });
 
   return (

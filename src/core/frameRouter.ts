@@ -423,6 +423,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         frame.activeRun,
         frame.reset,
         frame.truncated,
+        frame.hasMore,
+        frame.nextBefore,
       );
       const rosterSync = subAgentStore.get(frame.threadId);
       if (rosterSync.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, rosterSync.agents);

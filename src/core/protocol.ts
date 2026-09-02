@@ -1976,9 +1976,19 @@ export function encodeLogsTail(query: LogsTailQuery = {}): string {
   return JSON.stringify({ type: 'logs.tail', ...query });
 }
 
-/** `before` is the server's cursor, counted back from the newest message; 0 is the newest page. */
-export function encodeSessionHistory(threadId: string, limit = 50, before = 0): string {
-  return JSON.stringify({ type: 'session.history', threadId, limit, ...(before ? { before } : {}) });
+/**
+ * `before` is the server's count cursor, counted back from the newest message (0 = newest page);
+ * `beforeId` is the id of the client's oldest held item, which the server prefers where
+ * supported -- it survives growth and trimming (docs/session-log.md).
+ */
+export function encodeSessionHistory(threadId: string, limit = 50, before = 0, beforeId?: string): string {
+  return JSON.stringify({
+    type: 'session.history',
+    threadId,
+    limit,
+    ...(before ? { before } : {}),
+    ...(beforeId ? { beforeId } : {}),
+  });
 }
 
 /**
@@ -2536,6 +2546,10 @@ export interface SessionSyncResultFrame {
   reset?: 'unknown-cursor' | 'branch-switch';
   /** Whether entries were truncated by the limit. */
   truncated?: boolean;
+  /** True when the served window was the newest page (fresh open or reset): older work exists. */
+  hasMore?: boolean;
+  /** Count of entries before that window; where the next older page starts. */
+  nextBefore?: number;
 }
 
 /**

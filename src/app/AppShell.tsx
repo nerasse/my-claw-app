@@ -791,10 +791,13 @@ export function AppShell(): React.JSX.Element {
     const page = chatStore.getPage(threadId);
     if (!page.hasMore || page.loading) return;
     chatStore.setPageLoading(threadId, true);
-    // Resolved false, never rejected: a `.catch` here never ran, and the pagination stayed
-    // locked on a spinner that nothing could clear.
+    // The id cursor is preferred: the count drifts when the session grows between two loads,
+    // and the client trims its oldest items past its cap -- the id names the oldest held item
+    // and the page is the one before it. Both are sent; old servers use the count, new ones
+    // answer the id. Resolved false, never rejected: a `.catch` here never ran, and the
+    // pagination stayed locked on a spinner that nothing could clear.
     connection
-      .send(encodeSessionHistory(threadId, HISTORY_LIMIT, page.nextBefore))
+      .send(encodeSessionHistory(threadId, HISTORY_LIMIT, page.nextBefore, page.oldestId ?? undefined))
       .then((delivered) => {
         if (!delivered) chatStore.setPageLoading(threadId, false);
       });

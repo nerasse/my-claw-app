@@ -730,7 +730,7 @@ describe('paging back through a long conversation', () => {
       list.props.onEndReached({ distanceFromEnd: 0 });
       list.props.onEndReached({ distanceFromEnd: 0 });
     });
-    expect(sentHistoryRequests()).toEqual([{ type: 'session.history', threadId: THREAD, limit: 50, before: 3 }]);
+    expect(sentHistoryRequests()).toEqual([{ type: 'session.history', threadId: THREAD, limit: 50, before: 3, beforeId: 'h-0' }]);
 
     await ReactTestRenderer.act(async () => {
       DeviceEventEmitter.emit('claw:ws:message', {
