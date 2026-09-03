@@ -38,20 +38,33 @@ export function ScrollableBlock({
   const styles = useThemedStyles(createStyles);
   // Measured, not guessed from the character count: a wrapped line and a font size are the
   // renderer's business, and a block that fits must not offer to be unfolded.
-  const [clipped, setClipped] = useState(false);
+  const [natural, setNatural] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const clipped = natural > BLOCK_MAX_HEIGHT;
 
   const onLayout = (event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
-    setClipped(current => (current === height >= BLOCK_MAX_HEIGHT ? current : height >= BLOCK_MAX_HEIGHT));
+    setNatural(current => (current === height ? current : height));
   };
 
   return (
     <View>
-      {/* The measured child stays mounted whether it is clipped or not: its natural height is
-          what decides the bar, so it has to be measured at that height either way. */}
-      <View style={[style, expanded ? null : styles.clip]}>
-        <View onLayout={onLayout}>{children}</View>
+      <View style={[style, clipped && !expanded ? styles.clip : null]}>{children}</View>
+      {/* The height that decides the bar is measured here and nowhere else, because a node cannot
+          be measured inside the box that caps it: under a `maxHeight` ancestor the layout pass
+          reports the capped height, never the natural one, so the block was cut and the bar that
+          undoes it never appeared -- the reader was left with text no gesture could reach. This
+          copy hangs outside the cap (absolute, so it adds no height of its own) and is the only
+          thing that sees the content at full size. It carries `style` so its padding, border and
+          width match the real block and both wrap identically. */}
+      <View
+        style={[style, styles.probe]}
+        pointerEvents="none"
+        aria-hidden
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        onLayout={onLayout}>
+        {children}
       </View>
       {clipped ? (
         <Pressable
@@ -70,6 +83,17 @@ export function ScrollableBlock({
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   clip: { maxHeight: BLOCK_MAX_HEIGHT, overflow: 'hidden' as const },
+  // Invisible, untouchable, and out of the flow: it exists to be measured. `userSelect` keeps a
+  // drag on the web from picking up its text and copying the block twice.
+  probe: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    top: 0,
+    opacity: 0,
+    zIndex: -1,
+    userSelect: 'none' as const,
+  },
   more: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

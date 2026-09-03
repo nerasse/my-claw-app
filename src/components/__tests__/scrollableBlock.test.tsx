@@ -24,9 +24,14 @@ function render() {
   return tree;
 }
 
+/** The node the component measures its content with. */
+function probe(tree: ReactTestRenderer.ReactTestRenderer) {
+  return tree.root.findAll(n => typeof n.props.onLayout === 'function', { deep: true })[0]!;
+}
+
 /** Reports a measured height for the inner content node, the way a real layout pass would. */
 function measure(tree: ReactTestRenderer.ReactTestRenderer, height: number) {
-  const node = tree.root.findAll(n => typeof n.props.onLayout === 'function', { deep: true })[0]!;
+  const node = probe(tree);
   ReactTestRenderer.act(() => {
     node.props.onLayout({ nativeEvent: { layout: { height, width: 300, x: 0, y: 0 } } });
   });
@@ -56,6 +61,7 @@ function clipped(tree: ReactTestRenderer.ReactTestRenderer) {
 
 it('caps the block instead of nesting a scroll area in the thread', () => {
   const tree = render();
+  measure(tree, BLOCK_MAX_HEIGHT + 400);
   expect(clipped(tree)).toBe(true);
   // Nothing scrollable of its own, on any platform: three nested scroll areas is a trap, and the
   // gesture is disputed with the inverted list on a touchscreen.
@@ -64,6 +70,29 @@ it('caps the block instead of nesting a scroll area in the thread', () => {
       .findAllByType(View)
       .some(n => [n.props.style].flat(2).some(s => s && (s.overflow === 'scroll' || s.overflowY))),
   ).toBe(false);
+});
+
+it('measures the content outside the cap, not inside it', () => {
+  // The regression this guards is silent and total: a node under the `maxHeight` ancestor is
+  // reported at the capped height by the layout pass, so the block stayed cut and the bar that
+  // undoes it was never offered. Nothing crashed, the text was simply unreachable.
+  const tree = render();
+  measure(tree, BLOCK_MAX_HEIGHT + 400);
+
+  for (let node = probe(tree).parent; node; node = node.parent) {
+    const capped = [node.props.style]
+      .flat(2)
+      .some(s => s && (s.maxHeight === BLOCK_MAX_HEIGHT || s.overflow === 'hidden'));
+    expect(capped).toBe(false);
+  }
+});
+
+it('leaves a block that fits uncapped', () => {
+  // The cap is applied only once the content is known to overflow it, so a short block is never
+  // held down by a box it does not need.
+  const tree = render();
+  measure(tree, BLOCK_MAX_HEIGHT - 40);
+  expect(clipped(tree)).toBe(false);
 });
 
 it('offers the fold only once the block is actually cut', () => {
