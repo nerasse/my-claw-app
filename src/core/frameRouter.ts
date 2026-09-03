@@ -313,6 +313,13 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // better than an empty block.
       if (frame.found) chatStore.setToolOutput(frame.threadId, frame.id, frame.output);
       break;
+    case 'chat.run.items':
+      // The work a folded row stood for, spliced in where the row was. A range the branch no
+      // longer holds is answered `found: false`, and the row says so instead of spinning for
+      // good -- docs/run-hydration.md.
+      if (frame.found) chatStore.hydrateRun(frame.threadId, frame.fromId, frame.messages);
+      else chatStore.setRunHydration(frame.threadId, frame.fromId, 'failed');
+      break;
     case 'chat.spawn.start':
       // A sub-agent spawned mid-run: mark the spawn card (or open a standalone one) as running.
       chatStore.startSpawn(frame.threadId, frame.id, {

@@ -251,6 +251,21 @@ export interface ToolFullFrame {
   found: boolean;
 }
 
+/**
+ * The work a folded run row stood for -- docs/run-hydration.md.
+ *
+ * `found` false is a range the current branch no longer holds (a compaction dropped the turn, a
+ * rewind changed branch): the group says so and stays collapsed rather than emptying itself.
+ */
+export interface RunItemsFrame {
+  type: 'chat.run.items';
+  threadId: string;
+  /** Echo of the row id asked for: what the client replaces with these items. */
+  fromId: string;
+  messages: HistoryEntry[];
+  found: boolean;
+}
+
 /** A sub-agent spawned mid-run. Annotates the `spawn` tool card (by id) with its sub-agent
  *  identity and a running state, or opens a standalone spawn card for a programmatic spawn. */
 export interface SpawnStartFrame {
@@ -290,7 +305,31 @@ export interface RunMeta {
   endTs?: string;
 }
 
+/**
+ * A finished run's work, standing in for the items it folds -- docs/run-hydration.md.
+ *
+ * Sent in place of those items, at the position the first of them held, and only because this
+ * client asked for it (`fold` on the request). Everything the collapsed header draws is here and
+ * nothing else: the work itself is fetched with `session.run.items` when the reader opens the
+ * group. On a real session this turns the page a thread opens on from 594 KB into 86 KB.
+ */
+export interface RunSummaryEntry {
+  /** `run-<first folded entry id>`: the row id, and a paging cursor like any other row's. */
+  id: string;
+  role: 'run';
+  ts: string;
+  run: RunMeta;
+  /** Tool calls the row stands for: the header counts them without holding a card. */
+  toolCount: number;
+  firstTool?: string;
+  /** Rows the fold hides, so the group can draw a skeleton the size of what is coming. */
+  itemCount: number;
+  /** The last entry the row stands for: with `id`, the exact range hydration asks for. */
+  lastId: string;
+}
+
 export type HistoryEntry =
+  | RunSummaryEntry
   | {
       id: string;
       role: 'user' | 'assistant';
@@ -1655,6 +1694,7 @@ export type ServerFrame =
   | ToolStartFrame
   | ToolDeltaFrame
   | ToolFullFrame
+  | RunItemsFrame
   | SpawnStartFrame
   | SpawnEndFrame
   | ChatHistoryFrame
@@ -1745,6 +1785,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.tool.start',
   'chat.tool.delta',
   'chat.tool.full.result',
+  'chat.run.items',
   'chat.spawn.start',
   'chat.spawn.end',
   'chat.history',
@@ -1988,7 +2029,29 @@ export function encodeSessionHistory(threadId: string, limit = 50, before = 0, b
     limit,
     ...(before ? { before } : {}),
     ...(beforeId ? { beforeId } : {}),
+    fold: FOLD_RUNS,
   });
+}
+
+/**
+ * Whether this build accepts a finished run as a header instead of its work --
+ * docs/run-hydration.md.
+ *
+ * Set on every page request rather than announced once, and set here rather than at the call
+ * sites: understanding `role: 'run'` is a property of the bundle, not of the caller. Six places
+ * ask for a sync and two for a history page, and one of them forgetting would quietly serve a
+ * megabyte where the others serve tens of kilobytes. A server that predates the field ignores it.
+ */
+const FOLD_RUNS = true;
+
+/**
+ * Asks for the work a folded run row stands for -- docs/run-hydration.md.
+ *
+ * The range the row carries, not its run id: a run cut by a page boundary folds into one row per
+ * page, and asking by run would splice back items this client already holds.
+ */
+export function encodeRunItems(threadId: string, fromId: string, untilId: string): string {
+  return JSON.stringify({ type: 'session.run.items', threadId, fromId, untilId });
 }
 
 /**
@@ -2564,5 +2627,7 @@ export function encodeSessionSync(threadId: string, since?: string | null, leaf?
     threadId,
     ...(since !== undefined ? { since } : {}),
     ...(leaf ? { leaf } : {}),
+    // Only the window that replaces the thread is ever folded server-side; a delta is never.
+    fold: FOLD_RUNS,
   });
 }

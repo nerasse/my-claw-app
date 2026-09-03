@@ -1,4 +1,4 @@
-import { buildRows, isHoisted } from '../runRows';
+import { buildRows, isHoisted, type ChatRow } from '../runRows';
 import type { ChatItem } from '../chat';
 
 /** A finished run's items, status, timeline. */
@@ -37,6 +37,27 @@ const agentText = (id: string, text: string, runId?: string, extra: Partial<Chat
 
 const userText = (id: string): ChatItem =>
   ({ kind: 'text', id, role: 'user', text: 'q', attachments: [], streaming: false, ts: 1 }) as ChatItem;
+
+/** A folded run row, as the server sends it in place of the work -- docs/run-hydration.md. */
+const folded = (id: string, runId: string, itemCount = 12, lastId = `${id}-last`): ChatItem =>
+  ({
+    kind: 'run',
+    id: `run-${id}`,
+    run: run(runId),
+    toolCount: itemCount,
+    firstTool: 'bash',
+    itemCount,
+    lastId,
+    hydration: 'idle',
+    ts: 5,
+  }) as ChatItem;
+
+/** One label per row, so an assertion reads as the sequence a reader would see. */
+const labelOfRow = (row: ChatRow): string => {
+  if (row.kind === 'group') return `g:${row.run.id}`;
+  if (row.kind === 'folded') return `f:${row.run.id}:${row.summaries.reduce((n, s) => n + s.itemCount, 0)}`;
+  return row.item.id;
+};
 
 describe('buildRows', () => {
   test('a finished run folds its work under one group, answer stays outside', () => {
@@ -105,7 +126,7 @@ describe('buildRows', () => {
       tool('t3', 'r2'),
       agentText('a2', 'answer two', 'r2'),
     ]);
-    expect(rows.map(r => (r.kind === 'group' ? `g:${r.run.id}` : r.item.id))).toEqual(['u1', 'g:r1', 'a1', 'u2', 'g:r2', 'a2']);
+    expect(rows.map(labelOfRow)).toEqual(['u1', 'g:r1', 'a1', 'u2', 'g:r2', 'a2']);
   });
 
   test('an aborted run folds its work and keeps the partial answer outside', () => {
@@ -141,5 +162,41 @@ describe('isHoisted', () => {
     expect(isHoisted({ ...(userText('b') as ChatItem & { summaryOf?: number }), summaryOf: 3 } as unknown as ChatItem)).toBe(true);
     expect(isHoisted(tool('t'))).toBe(false);
     expect(isHoisted(agentText('a', 'text'))).toBe(false);
+  });
+});
+describe('folded runs: the work never travelled', () => {
+  test('a folded row is a group row of its own', () => {
+    const rows = buildRows([userText('u'), folded('a', 'r1'), agentText('ans', 'answer', 'r1')]);
+    // The answer stays outside, exactly as it does when the items are held: the server hoists it
+    // for the same reason this list does.
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12', 'ans']);
+  });
+
+  test('two adjacent rows of the same run merge into one group', () => {
+    // A run cut by a page boundary folds once per page. The reader must see one group, not the
+    // same run twice with its work split at an arbitrary count.
+    const rows = buildRows([userText('u'), folded('older', 'r1', 40), folded('newer', 'r1', 12)]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:52']);
+    const group = rows[1];
+    expect(group?.kind === 'folded' ? group.summaries.length : 0).toBe(2);
+  });
+
+  test('rows of different runs stay apart', () => {
+    const rows = buildRows([folded('a', 'r1'), folded('b', 'r2')]);
+    expect(rows.map(labelOfRow)).toEqual(['f:r1:12', 'f:r2:12']);
+  });
+
+  test('a bubble between two rows of one run keeps them apart', () => {
+    // The owner injected a turn mid-run: it splits the group, and merging across it would put
+    // work from both sides of the question under one header.
+    const rows = buildRows([folded('a', 'r1'), userText('steer'), folded('b', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['f:r1:12', 'steer', 'f:r1:12']);
+  });
+
+  test('a folded row closes a group of held items', () => {
+    // Half the run hydrated, half still folded: the two must not merge into one row, and the
+    // held half must not swallow the header.
+    const rows = buildRows([tool('t1', 'r1'), tool('t2', 'r1'), folded('rest', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['g:r1', 'f:r1:12']);
   });
 });

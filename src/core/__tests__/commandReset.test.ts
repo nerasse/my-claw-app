@@ -36,7 +36,7 @@ it('a branch-switch command result refetches the thread history', () => {
   });
   // The refresh is the same ask a fresh open uses.
   const sends = mockSend.mock.calls.map(call => JSON.parse(call[0]));
-  expect(sends).toContainEqual({ type: 'session.history', threadId: THREAD, limit: 50 });
+  expect(sends).toContainEqual({ type: 'session.history', threadId: THREAD, limit: 50, fold: true });
 });
 
 it('a compose fills the composer draft for the thread', () => {

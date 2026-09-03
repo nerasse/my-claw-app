@@ -730,7 +730,7 @@ describe('paging back through a long conversation', () => {
       list.props.onEndReached({ distanceFromEnd: 0 });
       list.props.onEndReached({ distanceFromEnd: 0 });
     });
-    expect(sentHistoryRequests()).toEqual([{ type: 'session.history', threadId: THREAD, limit: 50, before: 3, beforeId: 'h-0' }]);
+    expect(sentHistoryRequests()).toEqual([{ type: 'session.history', threadId: THREAD, limit: 50, before: 3, beforeId: 'h-0', fold: true }]);
 
     await ReactTestRenderer.act(async () => {
       DeviceEventEmitter.emit('claw:ws:message', {
@@ -894,7 +894,7 @@ test('Session files from a drawer conversation opens that conversation and its f
   // The files screen opened over the conversation it belongs to: history and files were asked
   // for the drawer's thread, not for the one that happened to be on screen.
   const sent = bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
-  expect(sent).toContain(JSON.stringify({ type: 'session.sync', threadId: 'other-thread', since: null }));
+  expect(sent).toContain(JSON.stringify({ type: 'session.sync', threadId: 'other-thread', since: null, fold: true }));
   expect(sent).toContain(JSON.stringify({ type: 'files.list', threadId: 'other-thread' }));
   await unmount(tree);
 });

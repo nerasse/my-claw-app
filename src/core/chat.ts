@@ -64,7 +64,34 @@ export interface ToolItem extends ToolCallPayload {
   run?: RunInfo;
 }
 
-export type ChatItem = TextItem | ToolItem;
+/**
+ * A finished run's work, standing in for the items it folds -- docs/run-hydration.md.
+ *
+ * Sent by the server in place of those items, and drawn as a collapsed group with nothing under
+ * it until the reader opens one. That is what makes a long conversation cheap to open: the page
+ * carries the headers, and the work of a group is fetched only if it is looked at.
+ *
+ * The row is a real item at a real position: it holds the id paging cursors point at, and
+ * `hydrateRun` replaces it in place with what it stood for.
+ */
+export interface RunSummaryItem {
+  kind: 'run';
+  /** `run-<first folded entry id>`, as the server minted it. */
+  id: string;
+  /** Required here, unlike on a bubble: this row *is* its run. */
+  run: RunInfo;
+  toolCount: number;
+  firstTool?: string;
+  /** Rows the fold hides: the size of the skeleton drawn while they load. */
+  itemCount: number;
+  /** The last entry the row stands for; with `id`, the range hydration asks for. */
+  lastId: string;
+  /** `idle` until the group is opened; `failed` when the branch no longer holds the range. */
+  hydration: 'idle' | 'loading' | 'failed';
+  ts: number;
+}
+
+export type ChatItem = TextItem | ToolItem | RunSummaryItem;
 
 /** A `spawn` tool call, reduced to what the shell needs to offer a door to the sub-agent. */
 export interface SpawnCard {
@@ -107,7 +134,8 @@ Object.freeze(EMPTY_ITEMS);
 Object.freeze(EMPTY_THREADS);
 
 function textOf(entry: HistoryEntry): string {
-  return entry.role === 'tool' ? '' : entry.text;
+  if (entry.role === 'tool' || entry.role === 'run') return '';
+  return entry.text;
 }
 
 /**
@@ -175,6 +203,21 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
         ...(entry.running && (!entry.spawn || entry.spawn.status === 'running') ? { running: true } : {}),
         ...(entry.spawn ? { spawn: entry.spawn } : {}),
         ...(entry.run ? { run: runInfoOf(entry.run) } : {}),
+        ts,
+      };
+    }
+    if (entry.role === 'run') {
+      // A folded run: everything the header draws, and nothing else. The items arrive later, on
+      // `chat.run.items`, and take this row's place.
+      return {
+        kind: 'run',
+        id: entry.id,
+        run: runInfoOf(entry.run),
+        toolCount: entry.toolCount,
+        ...(entry.firstTool ? { firstTool: entry.firstTool } : {}),
+        itemCount: entry.itemCount,
+        lastId: entry.lastId,
+        hydration: 'idle',
         ts,
       };
     }
@@ -803,6 +846,47 @@ class ChatStoreImpl {
     if (older.length === 0) return;
     this.threads.set(threadId, this.trimToCap(threadId, [...older, ...existing]));
     this.pageCursorFollows(threadId);
+    this.emit();
+  }
+
+  /**
+   * The work a folded row stood for, spliced in where the row was -- docs/run-hydration.md.
+   *
+   * In place, and not appended: the row holds a position in the thread, and the items belong at
+   * that position. Ids already held are dropped, the same way `prependHistory` guards against a
+   * page overlapping the one before it -- a second tap while the first answer was in flight would
+   * otherwise double the whole group.
+   */
+  hydrateRun(threadId: string, rowId: string, entries: HistoryEntry[]): void {
+    const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    const at = existing.findIndex(item => item.id === rowId);
+    if (at < 0) return;
+    const known = new Set(existing.map(item => item.id));
+    known.delete(rowId);
+    const items = itemsOf(entries).filter(item => !known.has(item.id));
+    if (items.length === 0) {
+      // Nothing to show and nothing to blame: the row would sit there claiming work that never
+      // arrives, so it says it failed rather than spinning for good.
+      this.setRunHydration(threadId, rowId, 'failed');
+      return;
+    }
+    this.threads.set(threadId, [...existing.slice(0, at), ...items, ...existing.slice(at + 1)]);
+    // The row may have been the oldest item held: the paging cursor now names the first item it
+    // stood for, or scrolling up would ask for a row that no longer exists.
+    this.pageCursorFollows(threadId);
+    this.emit();
+  }
+
+  /** Where a row is in its round trip: latched before the ask leaves, cleared by the splice. */
+  setRunHydration(threadId: string, rowId: string, hydration: RunSummaryItem['hydration']): void {
+    const existing = this.threads.get(threadId);
+    if (!existing) return;
+    const at = existing.findIndex(item => item.id === rowId);
+    const row = at < 0 ? undefined : existing[at];
+    if (!row || row.kind !== 'run' || row.hydration === hydration) return;
+    const next = existing.slice();
+    next[at] = { ...row, hydration };
+    this.threads.set(threadId, next);
     this.emit();
   }
 

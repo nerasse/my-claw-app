@@ -1,12 +1,17 @@
-import type { ChatItem, RunInfo } from './chat';
+import type { ChatItem, RunInfo, RunSummaryItem } from './chat';
 
 /**
  * One row of the chat list. A finished run's work collapses into a group row (its header), the
  * free bubbles around it stay rows of their own.
+ *
+ * `folded` is the same group, held by the server instead of by this list: the work never arrived,
+ * only a header standing for it -- docs/run-hydration.md. It is a distinct kind because it draws
+ * from counts rather than from children, and because opening it has to fetch something.
  */
 export type ChatRow =
   | { kind: 'item'; item: ChatItem }
-  | { kind: 'group'; run: RunInfo; items: ChatItem[] };
+  | { kind: 'group'; run: RunInfo; items: ChatItem[] }
+  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[] };
 
 /**
  * Bubbles that never belong inside a run group: the owner's own turns (which split the group
@@ -29,6 +34,9 @@ export function isHoisted(item: ChatItem): boolean {
  * Splits a thread into rows, folding every finished run's work under one group per segment.
  *
  * Rules, in the order a reader meets them:
+ * - A folded row (the server sent a header instead of the work) is a `folded` row. Two adjacent
+ *   ones of the same run merge: a run cut by a page boundary folds once per page, and the reader
+ *   must see one group, not the same run twice with its work split at an arbitrary count.
  * - An item with no run, and every item of a run still `running`, is a plain row: nothing is
  *   grouped while the run answers.
  * - Inside a terminal run, hoisted bubbles (see `isHoisted`) stay rows and cut the group into
@@ -65,6 +73,15 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
   };
 
   for (const item of items) {
+    if (item.kind === 'run') {
+      // The work of this run never travelled, so there is nothing to accumulate: the header is
+      // the row. It still ends whatever group was open, exactly like any other break.
+      closeRun();
+      const last = rows[rows.length - 1];
+      if (last?.kind === 'folded' && last.run.id === item.run.id) last.summaries.push(item);
+      else rows.push({ kind: 'folded', run: item.run, summaries: [item] });
+      continue;
+    }
     const itemRun = item.run;
     // Same terminal run as the one being folded: keep accumulating, hoisting the bubbles that
     // must stay readable (which cuts the group into segments around them).

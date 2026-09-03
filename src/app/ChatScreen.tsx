@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Linking, Pressable, Text, View } from 'rea
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary } from '../components/CompactionBoundary';
-import { RunGroup } from '../components/RunGroup';
+import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
@@ -11,6 +11,7 @@ import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import { chatStore, isSubAgentTool, useChatItems, type ChatItem, type TextItem } from '../core/chat';
 import { buildRows, type ChatRow } from '../core/runRows';
+import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
 import type { DeviceInfo } from '../core/device';
@@ -42,7 +43,13 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
 
-const keyOfRow = (row: ChatRow): string => (row.kind === 'item' ? row.item.id : `run:${row.run.id}`);
+const keyOfRow = (row: ChatRow): string => {
+  if (row.kind === 'item') return row.item.id;
+  // Not the run id alone: while one segment of a run is hydrated and the next is not, a group row
+  // and a folded row of the same run sit side by side, and two rows sharing a key drop one.
+  if (row.kind === 'folded') return `fold:${row.summaries[0]?.id ?? row.run.id}`;
+  return `run:${row.run.id}:${row.items[0]?.id ?? ''}`;
+};
 
 export function ChatScreen({
   threadId,
@@ -598,11 +605,16 @@ export function ChatScreen({
           </View>
         );
       }
-      return item.kind === 'tool' ? (
-        <View style={toolColumn}>
-          <ToolCard item={item} threadId={threadId} expandTools={uiPrefs?.expandTools ?? false} />
-        </View>
-      ) : (
+      if (item.kind === 'tool') {
+        return (
+          <View style={toolColumn}>
+            <ToolCard item={item} threadId={threadId} expandTools={uiPrefs?.expandTools ?? false} />
+          </View>
+        );
+      }
+      // A folded row is drawn by the list, not here: it is a row of its own, never a child.
+      if (item.kind === 'run') return null;
+      return (
         <View style={toolColumn}>
         <Bubble
           item={item}
@@ -628,6 +640,17 @@ export function ChatScreen({
         const chronological = itemIndexById.get(row.item.id) ?? 0;
         return renderItemContent(row.item, grouped[chronological] ?? false, !(grouped[chronological + 1] ?? false));
       }
+      // The work never travelled: the header draws from counts, and opening it fetches the items
+      // that take its place -- docs/run-hydration.md.
+      if (row.kind === 'folded') {
+        return (
+          <FoldedRunGroup
+            run={row.run}
+            summaries={row.summaries}
+            onOpen={summaries => requestRunItems(threadId, summaries)}
+          />
+        );
+      }
       // The children group among themselves: the first of a block is not grouped against the row
       // before it, and the time shows on the last one, exactly like free bubbles do.
       return (
@@ -641,7 +664,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent],
+    [grouped, itemIndexById, renderItemContent, threadId],
   );
 
   const locationLabel = location
