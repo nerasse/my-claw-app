@@ -24,12 +24,19 @@ import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme'
  */
 export function CollapsibleAside({
   label,
+  trailing,
   body,
   showHint,
   hideHint,
   defaultOpen = false,
 }: {
   label: string;
+  /**
+   * Drawn right after the label, inside the toggle. A node rather than more text because what
+   * goes here ticks (the thinking counter) and has to redraw itself alone, without the aside or
+   * the thread around it re-rendering on every second.
+   */
+  trailing?: React.ReactNode;
   body: string;
   showHint: string;
   hideHint: string;
@@ -64,6 +71,7 @@ export function CollapsibleAside({
           accessibilityHint={open ? hideHint : showHint}>
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
           <Text style={styles.label}>{label}</Text>
+          {trailing}
         </Pressable>
         {open && !chatSelectable ? <BlockActions title={label} value={body} /> : null}
       </View>

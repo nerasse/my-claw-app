@@ -31,6 +31,14 @@ export interface TextItem {
    * to show and nothing to expand.
    */
   reasoningTokens?: number;
+  /**
+   * When the first thinking delta landed, and how long the thinking lasted once the answer
+   * started. Measured here rather than reported by the server: the wire carries no thinking
+   * duration, and the two instants that bound it are exactly the two frames the client already
+   * receives. It follows that a thread rehydrated from server history comes back without them.
+   */
+  reasoningStartedAt?: number;
+  reasoningMs?: number;
   /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
   command?: boolean;
   /**
@@ -252,6 +260,8 @@ class ChatStoreImpl {
   private streams = new Map<string, string>();
   /** Accumulated reasoning per open bubble, the counterpart of `streams` for the text. */
   private reasoning = new Map<string, string>();
+  /** When each open bubble started thinking. Dropped once the span is sealed onto the item. */
+  private reasoningStart = new Map<string, number>();
   /** The id of the bubble a thread's answer is streaming into; the media delivery that ends
    *  the answer lands on it instead of opening a second bubble. */
   private lastStream = new Map<string, string>();
@@ -1172,6 +1182,9 @@ class ChatStoreImpl {
   appendDelta(threadId: string, id: string, text: string): void {
     const current = this.streams.get(id);
     if (current === undefined) return;
+    // The first token of the answer is what ends the thinking: past it the counter has to hold a
+    // number instead of climbing, or it would keep counting the writing as thinking.
+    this.sealReasoning(threadId, id);
     this.streams.set(id, current + text);
     this.patch(threadId, id, { text: current + text }, true);
   }
@@ -1182,6 +1195,13 @@ class ChatStoreImpl {
    */
   appendReasoning(threadId: string, id: string, text: string): void {
     if (!this.streams.has(id)) return;
+    if (!this.reasoningStart.has(id)) {
+      const startedAt = Date.now();
+      this.reasoningStart.set(id, startedAt);
+      // Unthrottled, unlike the body below: this is what puts the counter on screen, and it must
+      // not wait for the next batched delta to appear.
+      this.patch(threadId, id, { reasoningStartedAt: startedAt });
+    }
     const current = this.reasoning.get(id) ?? '';
     const next = current + text;
     this.reasoning.set(id, next);
@@ -1194,12 +1214,26 @@ class ChatStoreImpl {
     this.patch(threadId, id, { reasoningTokens: tokens });
   }
 
+  /**
+   * Turns the running span into a fixed duration on the item. Idempotent: it is called on every
+   * text delta and returns at once when there is nothing open to seal.
+   */
+  private sealReasoning(threadId: string, id: string): void {
+    const startedAt = this.reasoningStart.get(id);
+    if (startedAt === undefined) return;
+    this.reasoningStart.delete(id);
+    this.patch(threadId, id, { reasoningMs: Date.now() - startedAt });
+  }
+
   endStream(threadId: string, id: string): void {
     if (!this.streams.has(id)) return;
+    // A bubble that thought and then said nothing still has a duration to show.
+    this.sealReasoning(threadId, id);
     const finalText = this.streams.get(id) ?? '';
     const thought = this.reasoning.get(id) ?? '';
     this.streams.delete(id);
     this.reasoning.delete(id);
+    this.reasoningStart.delete(id);
     // A bubble carrying only reasoning is not empty: it explains a tool call that produced no
     // prose, which is exactly what the owner asked to be able to read.
     if (!finalText.trim() && !thought.trim() && !this.hasReasoningTokens(threadId, id)) {
@@ -1230,6 +1264,10 @@ class ChatStoreImpl {
     }
     this.streams.delete(id);
     this.reasoning.delete(id);
+    // An interrupted turn keeps whatever thinking it had done: seal before dropping the start,
+    // or a stopped run loses the duration it had already earned.
+    this.sealReasoning(threadId, id);
+    this.reasoningStart.delete(id);
     this.patch(threadId, id, { streaming: false, error });
   }
 
@@ -1354,6 +1392,7 @@ class ChatStoreImpl {
     this.syncState.clear();
     this.streams.clear();
     this.reasoning.clear();
+    this.reasoningStart.clear();
     this.lastStream.clear();
     this.activeRuns.clear();
     this.openRuns.clear();

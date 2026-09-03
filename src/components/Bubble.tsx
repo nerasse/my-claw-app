@@ -122,7 +122,14 @@ export const Bubble = React.memo(function BubbleView({
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
-          <ReasoningLine reasoning={item.reasoning} tokens={item.reasoningTokens} streaming={item.streaming} expandReasoning={expandReasoning} />
+          <ReasoningLine
+            reasoning={item.reasoning}
+            tokens={item.reasoningTokens}
+            startedAt={item.reasoningStartedAt}
+            durationMs={item.reasoningMs}
+            streaming={item.streaming}
+            expandReasoning={expandReasoning}
+          />
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
         {!agent ? attachmentsEl : null}

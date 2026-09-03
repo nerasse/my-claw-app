@@ -10,20 +10,31 @@ export function formatElapsed(ms: number): string {
 }
 
 /**
- * How long the server has been busy on a command. A `/compact` runs for one to two minutes with
- * nothing on the wire between the "running" notice and the result, so the bubble would otherwise
- * sit on the same words for the whole operation, which reads as a frozen app. The state lives
- * here so the tick redraws this line alone and not the thread around it.
+ * Milliseconds since `since`, refreshed every second.
+ *
+ * A hook rather than a shared component, because the caller owns the typography: the same counter
+ * sits under a command at body size and beside the reasoning label at micro size. Whoever calls
+ * it is the only thing the tick redraws, never the thread around it.
  */
-export function CommandElapsed({ since, onAccent = false }: { since: number; onAccent?: boolean }): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
+export function useElapsed(since: number): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
+  return now - since;
+}
+
+/**
+ * How long the server has been busy on a command. A `/compact` runs for one to two minutes with
+ * nothing on the wire between the "running" notice and the result, so the bubble would otherwise
+ * sit on the same words for the whole operation, which reads as a frozen app.
+ */
+export function CommandElapsed({ since, onAccent = false }: { since: number; onAccent?: boolean }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const elapsed = useElapsed(since);
   return (
-    <Text style={[styles.elapsed, onAccent ? styles.elapsedAccent : null]}>{` ${formatElapsed(now - since)}`}</Text>
+    <Text style={[styles.elapsed, onAccent ? styles.elapsedAccent : null]}>{` ${formatElapsed(elapsed)}`}</Text>
   );
 }
 

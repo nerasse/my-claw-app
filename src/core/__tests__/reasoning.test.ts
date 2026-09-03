@@ -93,3 +93,62 @@ test('a reopened conversation replays the reasoning it stored', () => {
   const reply = items[1];
   expect(reply?.kind === 'text' ? reply.reasoning : undefined).toBe('comparing the decimal parts');
 });
+
+describe('the thinking is timed', () => {
+  test('the span opens on the first thought and closes on the first word of the answer', () => {
+    const before = Date.now();
+    chatStore.startStream(THREAD, 's1');
+    expect(first().reasoningStartedAt).toBeUndefined();
+
+    chatStore.appendReasoning(THREAD, 's1', 'weighing');
+    const startedAt = first().reasoningStartedAt;
+    expect(startedAt).toBeGreaterThanOrEqual(before);
+    // Still climbing: nothing has sealed it, which is what makes the counter run.
+    expect(first().reasoningMs).toBeUndefined();
+
+    chatStore.appendDelta(THREAD, 's1', 'answer');
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test('the answer does not keep re-timing the thinking on every token', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'thought');
+    chatStore.appendDelta(THREAD, 's1', 'one');
+    const sealed = first().reasoningMs;
+    chatStore.appendDelta(THREAD, 's1', ' two');
+    chatStore.appendDelta(THREAD, 's1', ' three');
+    expect(first().reasoningMs).toBe(sealed);
+  });
+
+  test('a turn that thought and then said nothing still reports a duration', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'thought');
+    chatStore.endStream(THREAD, 's1');
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test('an interrupted turn keeps the thinking it had already done', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'thought');
+    chatStore.abortStream(THREAD, 's1', 'stopped');
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test('a turn that never thought carries no span at all', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'answer');
+    chatStore.endStream(THREAD, 's1');
+    expect(first().reasoningStartedAt).toBeUndefined();
+    expect(first().reasoningMs).toBeUndefined();
+  });
+
+  test('the next bubble times its own thinking, not the previous one', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'first');
+    chatStore.endStream(THREAD, 's1');
+
+    chatStore.startStream(THREAD, 's2');
+    const [, second] = chatStore.getItems(THREAD);
+    expect(second?.kind === 'text' && second.reasoningStartedAt).toBeFalsy();
+  });
+});
