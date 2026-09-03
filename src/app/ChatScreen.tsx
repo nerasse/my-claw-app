@@ -9,7 +9,7 @@ import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
-import { chatStore, isSubAgentTool, useChatItems, type ChatItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, type ChatItem, type RunInfo, type TextItem } from '../core/chat';
 import { buildRows, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
@@ -572,6 +572,29 @@ export function ChatScreen({
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
 
   /**
+   * Which run groups the reader has opened, by run id.
+   *
+   * Here rather than inside `RunGroup` because the row is remounted under their fingers: a folded
+   * group whose work arrives becomes a group of real items, with a different list key, and state
+   * held in the component meant the group they just opened snapped shut the moment it filled. The
+   * run id is the one identity that survives that -- and it is also why the two halves of a run
+   * cut by an injection open together, which reads right: it is one turn.
+   */
+  const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(() => new Set());
+  // This screen is not remounted when the reader changes thread, so the set has to be emptied by
+  // hand. Two reasons beyond the leak: a group is folded again every time a thread is opened, and
+  // a folded row marked open by a previous visit would draw a skeleton nobody ever asked to fill
+  // -- the fetch fires on the press, not on the render.
+  useEffect(() => setExpandedRuns(new Set()), [threadId]);
+  const toggleRun = useCallback((run: RunInfo) => {
+    setExpandedRuns(current => {
+      const next = new Set(current);
+      if (!next.delete(run.id)) next.add(run.id);
+      return next;
+    });
+  }, []);
+
+  /**
    * Draws one bubble or card. `groupedFlag`/`showTimeFlag` are passed in rather than read from
    * the global index so the same code serves free rows and the children of a run group.
    */
@@ -647,6 +670,8 @@ export function ChatScreen({
           <FoldedRunGroup
             run={row.run}
             summaries={row.summaries}
+            open={expandedRuns.has(row.run.id)}
+            onToggle={toggleRun}
             onOpen={summaries => requestRunItems(threadId, summaries)}
           />
         );
@@ -657,6 +682,8 @@ export function ChatScreen({
         <RunGroup
           run={row.run}
           items={row.items}
+          open={expandedRuns.has(row.run.id)}
+          onToggle={toggleRun}
           renderItem={(item, index, children) => {
             const childGrouped = isGrouped(children, index);
             return renderItemContent(item, childGrouped, !isGrouped(children, index + 1));
@@ -664,7 +691,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, threadId],
+    [grouped, itemIndexById, renderItemContent, threadId, expandedRuns, toggleRun],
   );
 
   const locationLabel = location

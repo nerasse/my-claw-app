@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
@@ -27,45 +27,60 @@ function durationOf(run: RunInfo): string {
 }
 
 /**
+ * Past this many children, an open group also gets a bar at its bottom.
+ *
+ * A run is easily three hundred cards: with the only control at the top, closing one means
+ * scrolling all the way back up through the work you just finished reading, which is the one
+ * thing the fold exists to avoid. Below the threshold the body is about a screen, the header is
+ * still in reach, and a second bar would just be chrome.
+ */
+const FOOTER_FROM_ITEMS = 5;
+
+/**
  * A finished run, folded under one header -- docs/run-grouping.md.
  *
  * The header is the whole row when collapsed: the tool cards, thinking phases and interim prose
  * between the question and the answer only render once the reader opens it. Closed by default,
- * every time (a reopened thread starts with every group folded); the owner's tap is the only
- * thing that opens one, and the open state lives here so a re-render never loses it.
+ * every time (a reopened thread starts with every group folded).
+ *
+ * The open state is **not** held here. It belongs to the screen, keyed by run id, because this
+ * row is remounted under the reader's fingers: a folded group whose work arrives is replaced by
+ * a group of real items (docs/run-hydration.md), and a `useState` here meant the group they just
+ * opened snapped shut the moment its items landed.
  */
 export const RunGroup = React.memo(function RunGroupView({
   run,
   items,
+  open,
+  onToggle,
   renderItem,
 }: {
   run: RunInfo;
   items: ChatItem[];
+  open: boolean;
+  onToggle: (run: RunInfo) => void;
   /** Renders one child, with its own grouping and time flags, at its index in `items`. */
   renderItem: (item: ChatItem, index: number, children: ChatItem[]) => React.ReactNode;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [open, setOpen] = useState(false);
 
   const toolCount = items.reduce((n, item) => (item.kind === 'tool' ? n + 1 : n), 0);
   const firstTool = items.find(item => item.kind === 'tool')?.name;
   const summary = headline(toolCount, firstTool, durationOf(run));
+  const toggle = (): void => onToggle(run);
 
   return (
     <View style={styles.wrap}>
-      <Header
-        run={run}
-        summary={summary}
-        open={open}
-        onPress={() => setOpen(current => !current)}
-        styles={styles}
-      />
+      <Bar run={run} summary={summary} open={open} onPress={toggle} styles={styles} />
       {open ? (
         <View style={styles.body}>
           {items.map((item, index) => (
             <View key={item.id}>{renderItem(item, index, items)}</View>
           ))}
         </View>
+      ) : null}
+      {open && items.length >= FOOTER_FROM_ITEMS ? (
+        <Bar run={run} summary={summary} open onPress={toggle} styles={styles} footer />
       ) : null}
     </View>
   );
@@ -85,15 +100,18 @@ export const RunGroup = React.memo(function RunGroupView({
 export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   run,
   summaries,
+  open,
+  onToggle,
   onOpen,
 }: {
   run: RunInfo;
   summaries: RunSummaryItem[];
-  /** Fires on the first open only: the rows are replaced by their items when the answer lands. */
+  open: boolean;
+  onToggle: (run: RunInfo) => void;
+  /** Fires when the group is opened: the rows are replaced by their items when the answer lands. */
   onOpen: (summaries: RunSummaryItem[]) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [open, setOpen] = useState(false);
 
   const toolCount = summaries.reduce((n, row) => n + row.toolCount, 0);
   const itemCount = summaries.reduce((n, row) => n + row.itemCount, 0);
@@ -103,13 +121,13 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
 
   return (
     <View style={styles.wrap}>
-      <Header
+      <Bar
         run={run}
         summary={summary}
         open={open}
         onPress={() => {
-          setOpen(current => !current);
           if (!open) onOpen(summaries);
+          onToggle(run);
         }}
         styles={styles}
       />
@@ -133,27 +151,35 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   );
 });
 
-function Header({
+/**
+ * The group's control, drawn identically at its top and at its bottom.
+ *
+ * Same bar both ends on purpose: whichever one the reader reaches, it says what the group is and
+ * closes it. Only the chevron differs, and it points the way the content is.
+ */
+function Bar({
   run,
   summary,
   open,
   onPress,
   styles,
+  footer = false,
 }: {
   run: RunInfo;
   summary: string;
   open: boolean;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
+  footer?: boolean;
 }): React.JSX.Element {
   return (
     <Pressable
       onPress={onPress}
-      style={styles.header}
+      style={[styles.header, footer && styles.footer]}
       accessibilityRole="button"
       accessibilityLabel={open ? 'Hide the run work' : 'Show the run work'}
       accessibilityState={{ expanded: open }}>
-      <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+      <Text style={styles.chevron}>{open ? (footer ? '▴' : '▾') : '▸'}</Text>
       <Text style={styles.summary} numberOfLines={1}>
         {summary}
       </Text>
@@ -175,6 +201,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
+  footer: { marginTop: space.xs },
   chevron: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, marginRight: 6 },
   summary: {
     flex: 1,
