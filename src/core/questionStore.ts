@@ -23,6 +23,15 @@ export interface QuestionDraft {
   custom: string[];
   /** Which questions have their custom field open. */
   editing: boolean[];
+  /**
+   * The page of the form being shown: question `n`, then the recap at `questions.length`.
+   *
+   * Here rather than in the card for the same reason as the answers. The list unmounts a row
+   * that scrolls off, and going to read something before answering is the whole point of asking
+   * in the conversation: a page held in the component sends the owner back to question 1 every
+   * time he looks away.
+   */
+  page: number;
   /** A reply is in flight: the card is read-only until the resolve lands. */
   submitting: boolean;
 }
@@ -41,6 +50,7 @@ export const EMPTY_DRAFT: QuestionDraft = Object.freeze({
   answers: Object.freeze([]) as unknown as string[][],
   custom: Object.freeze([]) as unknown as string[],
   editing: Object.freeze([]) as unknown as boolean[],
+  page: 0,
   submitting: false,
 }) as QuestionDraft;
 

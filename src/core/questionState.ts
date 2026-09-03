@@ -1,10 +1,15 @@
 /**
  * Pure transitions over one ask's draft answers.
  *
- * The form is flat: the N questions are drawn one under the other inside the conversation, each
- * with its options and its own free-text field, and one button sends the batch. The stepper this
- * replaces (one question per step, then a recap) only existed because a modal sheet is narrow --
- * and that sheet is what made a question block the whole app.
+ * The form is a wizard: one question per page inside the conversation, then a recap that is the
+ * only place the batch can be sent. A single question skips both -- no pager, no recap, just the
+ * question and Send.
+ *
+ * This is a stepper again, and the flat form it replaces was itself a reaction to one. The
+ * difference is where it lives: the original stepper was a modal sheet, and paging was the only
+ * way to fit anything in it; the flat form fixed the modal, not the wall of six questions it
+ * left in the middle of a conversation. Paging inside the card keeps both -- the thread stays
+ * readable underneath, and one question is on screen at a time.
  *
  * Every function is pure and returns the same object when nothing changes, so the store can skip
  * the notification and React can bail out of the render.
@@ -111,4 +116,73 @@ export function draftAnsweredCount(draft: QuestionDraft, request: QuestionAskLik
 
 export function draftSubmitting(draft: QuestionDraft): QuestionDraft {
   return draft.submitting ? draft : { ...draft, submitting: true };
+}
+
+/**
+ * How many pages the form has: one per question, plus the recap.
+ *
+ * A lone question has no recap. Reviewing one answer that is one tap above the button is
+ * ceremony, and the page it would add is a page nobody asked for.
+ */
+export function pageCount(request: QuestionAskLike): number {
+  const total = request.questions.length;
+  return total > 1 ? total + 1 : 1;
+}
+
+/** Whether the form pages at all: two questions or more. */
+export function isPaged(request: QuestionAskLike): boolean {
+  return request.questions.length > 1;
+}
+
+/** The page currently shown, clamped: an ask can be re-sent with fewer questions. */
+export function draftPage(draft: QuestionDraft, request: QuestionAskLike): number {
+  const last = pageCount(request) - 1;
+  return Math.min(Math.max(draft.page ?? 0, 0), last);
+}
+
+/** Whether that page is the recap rather than a question. */
+export function isRecapPage(request: QuestionAskLike, page: number): boolean {
+  return isPaged(request) && page >= request.questions.length;
+}
+
+/** Moves to a page, clamped to the form. Out of range is a no-op, never a crash. */
+export function draftGoto(draft: QuestionDraft, request: QuestionAskLike, page: number): QuestionDraft {
+  const last = pageCount(request) - 1;
+  const next = Math.min(Math.max(page, 0), last);
+  if (next === draftPage(draft, request)) return draft;
+  // Leaving a question closes its field: the text is kept, and coming back to a page whose
+  // keyboard pops open on its own is how an owner loses sight of what he is answering.
+  return { ...draft, page: next, editing: draft.editing.map(() => false) };
+}
+
+/** One step forward or back, for the buttons and the arrow keys alike. */
+export function draftStep(draft: QuestionDraft, request: QuestionAskLike, delta: number): QuestionDraft {
+  return draftGoto(draft, request, draftPage(draft, request) + delta);
+}
+
+/**
+ * Whether picking an option on this question should carry the owner forward on its own.
+ *
+ * Single choice only: a pick is the whole answer, and the tap that would follow is a tap that
+ * only exists to say "yes, that one". A multiple-choice question is still being built after the
+ * first tick, and moving would throw away the second one.
+ */
+export function advancesOnPick(question: QuestionInfoFrame | undefined): boolean {
+  return question?.multiple !== true;
+}
+
+/** One line of the recap: what was asked, and what is going to be sent for it. */
+export interface AnswerSummary {
+  header: string;
+  /** The answers joined for display; empty when the question is going out unanswered. */
+  text: string;
+  answered: boolean;
+}
+
+export function draftSummary(draft: QuestionDraft, request: QuestionAskLike): AnswerSummary[] {
+  return draftAnswers(draft, request).map((answer, index) => ({
+    header: request.questions[index]?.header ?? `Question ${index + 1}`,
+    text: answer.join(', '),
+    answered: answer.length > 0,
+  }));
 }

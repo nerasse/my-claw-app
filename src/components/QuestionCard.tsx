@@ -1,20 +1,34 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { QuestionAskFrame, QuestionInfoFrame } from '../core/protocol';
 import { questionStore, useQuestionDraft, type QuestionDraft } from '../core/questionStore';
+import { useQuestionKeys } from '../core/questionKeys';
 import {
+  advancesOnPick,
   draftAnsweredCount,
   draftAnswers,
   draftEditing,
+  draftGoto,
   draftHas,
+  draftPage,
   draftSelect,
+  draftStep,
   draftSubmitting,
+  draftSummary,
   draftText,
   draftToggleCustom,
   draftWriteCustom,
+  isPaged,
+  isRecapPage,
   questionAllowsCustom,
 } from '../core/questionState';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+
+/** How long a picked option stays on screen before the form moves on. */
+const AUTO_NEXT_MS = 250;
+
+/** Lines of an answer shown in the recap before it is cut. */
+const RECAP_LINES = 3;
 
 /**
  * The questions of one `question` tool call, drawn inside the conversation.
@@ -23,11 +37,11 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
  * the run stopped, and it is a row of the chat like any other: the owner can scroll the history,
  * open a file, walk to another conversation and come back, and the form is still here with what
  * was already picked -- the draft lives in `questionStore`, not in this component, because the
- * list unmounts rows that scroll away.
+ * list unmounts rows that scroll away. That includes which page he was on.
  *
- * All the questions at once rather than a stepper: there is no reason to hide question 3 while
- * answering question 2 when the whole thread is readable underneath. Send is always allowed --
- * a question left blank is sent as unanswered, which is a legitimate answer to give a model.
+ * One question per page, then a recap that is the only place Send lives: six questions at once
+ * were a wall in the middle of a conversation, and an answer sent without being seen as a whole
+ * is an answer nobody checked. A lone question skips both -- it is the page, and it sends.
  */
 export function QuestionCard({
   request,
@@ -38,47 +52,196 @@ export function QuestionCard({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const draft = useQuestionDraft(request.id);
-  const answered = draftAnsweredCount(draft, request);
   const total = request.questions.length;
+  const paged = isPaged(request);
+  const page = draftPage(draft, request);
+  const recap = isRecapPage(request, page);
+  const answered = draftAnsweredCount(draft, request);
+
+  /**
+   * The pending auto-advance. One at a time and cleared on unmount: two quick picks would
+   * otherwise stack two hops, and a timer surviving the card would page a form the owner has
+   * already scrolled away from.
+   */
+  const hop = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHop = useCallback(() => {
+    if (hop.current === null) return;
+    clearTimeout(hop.current);
+    hop.current = null;
+  }, []);
+  useEffect(() => cancelHop, [cancelHop]);
+
+  const step = useCallback(
+    (delta: number) => {
+      cancelHop();
+      questionStore.patch(request.id, current => draftStep(current, request, delta));
+    },
+    [cancelHop, request],
+  );
+
+  const goto = useCallback(
+    (target: number) => {
+      cancelHop();
+      questionStore.patch(request.id, current => draftGoto(current, request, target));
+    },
+    [cancelHop, request],
+  );
+
+  /** A pick on a single-choice question carries the owner forward on its own. */
+  const onPicked = useCallback(
+    (question: QuestionInfoFrame) => {
+      if (!paged || !advancesOnPick(question)) return;
+      cancelHop();
+      hop.current = setTimeout(() => {
+        hop.current = null;
+        questionStore.patch(request.id, current => draftStep(current, request, 1));
+      }, AUTO_NEXT_MS);
+    },
+    [cancelHop, paged, request],
+  );
 
   const send = useCallback(() => {
     if (draft.submitting) return;
+    cancelHop();
     const answers = draftAnswers(draft, request);
     questionStore.patch(request.id, draftSubmitting);
     onReply(request.id, answers);
-  }, [draft, onReply, request]);
+  }, [cancelHop, draft, onReply, request]);
+
+  // Web only, and only while the form actually pages: bare Left/Right walk it, unless the caret
+  // is in a field. A phone binds nothing.
+  useQuestionKeys(paged && !draft.submitting, {
+    onPrev: () => step(-1),
+    onNext: () => step(1),
+  });
+
+  const title = !paged ? 'Question' : recap ? 'Review' : `Question ${page + 1} of ${total}`;
 
   return (
     <View style={styles.card}>
       <View style={styles.head}>
-        <Text style={styles.title}>{total > 1 ? `${total} questions` : 'Question'}</Text>
+        <Text style={styles.title}>{title}</Text>
         <Text style={styles.waiting}>waiting for you</Text>
       </View>
 
-      {request.questions.map((question, index) => (
+      {recap ? (
+        <Recap request={request} draft={draft} onEdit={goto} styles={styles} />
+      ) : (
         <QuestionBlock
-          key={index}
+          // Keyed by page: the free-text field of question 2 must not be re-seeded with the text
+          // of question 1 (`defaultValue` is read once, at mount).
+          key={page}
           id={request.id}
-          question={question}
-          index={index}
+          question={request.questions[page] as QuestionInfoFrame}
+          index={page}
           draft={draft}
+          onPicked={onPicked}
           styles={styles}
         />
-      ))}
+      )}
 
       <View style={styles.foot}>
+        {paged && page > 0 ? (
+          <Pressable
+            onPress={() => step(-1)}
+            disabled={draft.submitting}
+            style={styles.walk}
+            accessibilityRole="button"
+            accessibilityLabel="Previous question">
+            <Text style={styles.walkLabel}>‹ Back</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.walkSpacer} />
+        )}
+
         <Text style={styles.progress}>
-          {answered}/{total} answered
+          {recap || !paged ? `${answered}/${total} answered` : ''}
         </Text>
-        <Pressable
-          onPress={send}
-          disabled={draft.submitting}
-          style={[styles.send, draft.submitting ? styles.sendBusy : null]}
-          accessibilityRole="button"
-          accessibilityLabel="Send the answers">
-          <Text style={styles.sendLabel}>{draft.submitting ? 'Sending…' : 'Send'}</Text>
-        </Pressable>
+
+        {recap || !paged ? (
+          <Pressable
+            onPress={send}
+            disabled={draft.submitting}
+            style={[styles.send, draft.submitting ? styles.sendBusy : null]}
+            accessibilityRole="button"
+            accessibilityLabel="Send the answers">
+            <Text style={styles.sendLabel}>{draft.submitting ? 'Sending…' : 'Send'}</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => step(1)}
+            disabled={draft.submitting}
+            style={styles.send}
+            accessibilityRole="button"
+            accessibilityLabel={page === total - 1 ? 'Review the answers' : 'Next question'}>
+            <Text style={styles.sendLabel}>{page === total - 1 ? 'Review ›' : 'Next ›'}</Text>
+          </Pressable>
+        )}
       </View>
+    </View>
+  );
+}
+
+/**
+ * Everything about to be sent, on one page, before it is.
+ *
+ * An answer is cut to three lines: a pasted paragraph is a legitimate answer and it would
+ * otherwise bury the five questions around it. Tapping a line opens it in place; the pencil goes
+ * back to the question itself. Which lines are open is deliberately not in the draft -- it is a
+ * reading state, worth nothing once the card is gone, and the store is for what gets sent.
+ */
+function Recap({
+  request,
+  draft,
+  onEdit,
+  styles,
+}: {
+  request: QuestionAskFrame;
+  draft: QuestionDraft;
+  onEdit: (index: number) => void;
+  styles: ReturnType<typeof createStyles>;
+}): React.JSX.Element {
+  const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set());
+  const rows = draftSummary(draft, request);
+
+  const toggle = (index: number): void =>
+    setOpen(current => {
+      const next = new Set(current);
+      if (!next.delete(index)) next.add(index);
+      return next;
+    });
+
+  return (
+    <View style={styles.recap}>
+      {rows.map((row, index) => (
+        <View key={index} style={styles.recapRow}>
+          <View style={styles.recapHead}>
+            <Text style={styles.header}>{row.header}</Text>
+            <Pressable
+              onPress={() => onEdit(index)}
+              disabled={draft.submitting}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit the answer to ${row.header}`}>
+              <Text style={styles.edit}>edit</Text>
+            </Pressable>
+          </View>
+          {row.answered ? (
+            <Pressable
+              onPress={() => toggle(index)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: open.has(index) }}
+              accessibilityLabel={`The answer to ${row.header}`}>
+              <Text
+                style={styles.recapAnswer}
+                numberOfLines={open.has(index) ? undefined : RECAP_LINES}>
+                {row.text}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.recapBlank}>unanswered</Text>
+          )}
+        </View>
+      ))}
     </View>
   );
 }
@@ -88,12 +251,14 @@ function QuestionBlock({
   question,
   index,
   draft,
+  onPicked,
   styles,
 }: {
   id: string;
   question: QuestionInfoFrame;
   index: number;
   draft: QuestionDraft;
+  onPicked: (question: QuestionInfoFrame) => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   const custom = questionAllowsCustom(question);
@@ -116,6 +281,7 @@ function QuestionBlock({
             onPress={() => {
               if (draft.submitting) return;
               questionStore.patch(id, current => draftSelect(current, question, index, option.label));
+              onPicked(question);
             }}
             style={[styles.option, hit ? styles.optionHit : null]}
             accessibilityRole={multiple ? 'checkbox' : 'radio'}
@@ -264,7 +430,16 @@ const createStyles = (palette: Palette) =>
       minHeight: 40,
       marginBottom: space.xs,
     },
+    recap: { gap: space.sm },
+    recapRow: { gap: 2 },
+    recapHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    recapAnswer: { fontSize: font.body, color: palette.text },
+    recapBlank: { fontSize: font.body, color: palette.textMuted, fontStyle: 'italic' },
+    edit: { fontSize: font.small, color: palette.accent },
     foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    walk: { paddingVertical: space.sm, paddingHorizontal: space.sm },
+    walkLabel: { fontSize: font.body, color: palette.accent },
+    walkSpacer: { width: space.sm },
     progress: { fontSize: font.small, color: palette.textMuted },
     send: {
       paddingVertical: space.sm,
