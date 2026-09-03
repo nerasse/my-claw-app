@@ -276,6 +276,12 @@ class ChatStoreImpl {
    */
   private trimAllowed = new Map<string, boolean>();
   /**
+   * What each hydrated run row stood for, per thread: the row itself and the ids of the items
+   * that replaced it. This is what lets the trim fold a group back rather than drop it --
+   * docs/run-hydration.md.
+   */
+  private hydrated = new Map<string, Map<string, { row: RunSummaryItem; itemIds: string[] }>>();
+  /**
    * Sync cursors per thread: `since` is the id of the last entry received (for delta requests),
    * `leaf` is the branch tip the client is showing. Updated after every sync.
    */
@@ -518,11 +524,79 @@ class ChatStoreImpl {
     }
   }
 
-  /** Drops the oldest items past the cap, when the reader is not looking at them. */
+  /**
+   * Gives memory back, when the reader is not looking at what goes -- docs/run-hydration.md.
+   *
+   * Two steps, cheapest first. **Dehydrating** puts a hydrated group back to the one row the
+   * server sent for it: hundreds of items become one, nothing leaves the thread, and reopening
+   * the group fetches them again. **Dropping** is the fallback for what cannot be folded (a run
+   * that streamed in live, free bubbles) and it does lose content, so it is paid for by telling
+   * the pager there is older work again.
+   *
+   * That last part is the whole trap. A live conversation that grows past the cap started as a
+   * page the server had nothing older than, so `hasMore` is false. Drop the oldest items without
+   * touching it and the reader who scrolls up asks for nothing and is served nothing: the
+   * beginning of their own conversation is gone until they switch threads and back.
+   */
   private trimToCap(threadId: string, items: ChatItem[], force = false): ChatItem[] {
     if (items.length <= MAX_HELD_ITEMS) return items;
     if (!force && this.trimAllowed.get(threadId) !== true) return items;
-    return items.slice(items.length - TRIM_TO_ITEMS);
+    const folded = this.dehydrateHeld(threadId, items);
+    if (folded.length <= MAX_HELD_ITEMS) return folded;
+    this.forgetHydrated(threadId, folded.slice(0, folded.length - TRIM_TO_ITEMS));
+    // Content is leaving the thread: whatever the page said before, there is older work now.
+    const page = this.pages.get(threadId);
+    if (page && !page.hasMore) this.pages.set(threadId, { ...page, hasMore: true });
+    return folded.slice(folded.length - TRIM_TO_ITEMS);
+  }
+
+  /**
+   * Every hydrated group put back to its row, oldest first, until the thread is under the cap.
+   *
+   * The rows are the ones the server sent, kept verbatim rather than rebuilt: a row carries the
+   * exact entry ids of the range it stands for, and a tool card holds `t-<callId>` rather than
+   * the id of its entry -- rebuilding a range from what is on screen is how the wrong ids would
+   * get sent back, which is the bug this paging code has already shipped once.
+   */
+  private dehydrateHeld(threadId: string, items: ChatItem[]): ChatItem[] {
+    const memo = this.hydrated.get(threadId);
+    if (!memo || memo.size === 0) return items;
+    const held = new Set(items.map(item => item.id));
+    const rowAt = new Map<string, RunSummaryItem>();
+    const swallowed = new Set<string>();
+    let freed = 0;
+    for (const { row, itemIds } of memo.values()) {
+      const first = itemIds[0];
+      // A range whose head was already dropped cannot be folded back: the row would have nowhere
+      // to stand, and swallowing the tail would delete it outright.
+      if (first === undefined || !held.has(first)) continue;
+      rowAt.set(first, row);
+      for (const id of itemIds) if (held.has(id)) swallowed.add(id);
+      freed += itemIds.length - 1;
+      // Enough is enough: folding back a group the reader just opened, when the thread is already
+      // under the cap without it, would collapse their work under them for nothing.
+      if (items.length - freed <= TRIM_TO_ITEMS) break;
+    }
+    if (rowAt.size === 0) return items;
+    const out: ChatItem[] = [];
+    for (const item of items) {
+      const row = rowAt.get(item.id);
+      if (row) out.push({ ...row, hydration: 'idle' });
+      if (swallowed.has(item.id)) continue;
+      out.push(item);
+    }
+    for (const id of rowAt.keys()) memo.delete(`run-${id}`);
+    return out;
+  }
+
+  /** Ranges whose items are being dropped: the row can no longer stand for what is not there. */
+  private forgetHydrated(threadId: string, dropped: readonly ChatItem[]): void {
+    const memo = this.hydrated.get(threadId);
+    if (!memo || memo.size === 0) return;
+    const gone = new Set(dropped.map(item => item.id));
+    for (const [rowId, { itemIds }] of memo) {
+      if (itemIds.some(id => gone.has(id))) memo.delete(rowId);
+    }
   }
 
   /** The paging cursor names the oldest held item: keep it exact through prepends and trims. */
@@ -860,7 +934,8 @@ class ChatStoreImpl {
   hydrateRun(threadId: string, rowId: string, entries: HistoryEntry[]): void {
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const at = existing.findIndex(item => item.id === rowId);
-    if (at < 0) return;
+    const row = at < 0 ? undefined : existing[at];
+    if (!row || row.kind !== 'run') return;
     const known = new Set(existing.map(item => item.id));
     known.delete(rowId);
     const items = itemsOf(entries).filter(item => !known.has(item.id));
@@ -871,6 +946,10 @@ class ChatStoreImpl {
       return;
     }
     this.threads.set(threadId, [...existing.slice(0, at), ...items, ...existing.slice(at + 1)]);
+    // Kept so the trim can put this group back to its row instead of dropping its items.
+    const memo = this.hydrated.get(threadId) ?? new Map<string, { row: RunSummaryItem; itemIds: string[] }>();
+    memo.set(rowId, { row, itemIds: items.map(item => item.id) });
+    this.hydrated.set(threadId, memo);
     // The row may have been the oldest item held: the paging cursor now names the first item it
     // stood for, or scrolling up would ask for a row that no longer exists.
     this.pageCursorFollows(threadId);
@@ -1250,6 +1329,7 @@ class ChatStoreImpl {
 
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
+    this.hydrated.delete(threadId);
     this.spawnCards.delete(threadId);
     this.spawnStatus.delete(threadId);
     this.syncState.delete(threadId);
@@ -1263,6 +1343,12 @@ class ChatStoreImpl {
 
   clearAll(): void {
     this.threads.clear();
+    this.hydrated.clear();
+    // Paging state belongs to the threads that just went: a cursor left behind names an item no
+    // thread holds any more, and a stale `trimAllowed` decides for the next reader whether their
+    // oldest messages may be dropped.
+    this.pages.clear();
+    this.trimAllowed.clear();
     this.spawnCards.clear();
     this.spawnStatus.clear();
     this.syncState.clear();
@@ -1284,7 +1370,13 @@ class ChatStoreImpl {
 
   private append(threadId: string, item: ChatItem): void {
     const items = this.threads.get(threadId) ?? EMPTY_ITEMS;
-    this.threads.set(threadId, [...items, item]);
+    // The live path is the one that grows without ever asking the server for anything: a long run
+    // streams bubbles and cards in for hours, and the sync deltas that used to be the only trim
+    // point never come while the socket stays up. Cheap when there is nothing to do -- it is a
+    // length test -- and it is what makes a conversation left open all day clean itself.
+    const trimmed = this.trimToCap(threadId, [...items, item]);
+    this.threads.set(threadId, trimmed);
+    if (trimmed.length !== items.length + 1) this.pageCursorFollows(threadId);
     this.emit();
   }
 

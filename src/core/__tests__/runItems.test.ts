@@ -8,7 +8,7 @@
 const mockSend = jest.fn<Promise<void>, [string]>(() => Promise.resolve());
 jest.mock('../connection', () => ({ connection: { send: (frame: string) => mockSend(frame) } }));
 
-import { requestRunItems, resetRunItemAsks } from '../runItems';
+import { requestRunItems } from '../runItems';
 import { chatStore, type RunSummaryItem } from '../chat';
 import { routeServerFrame, type ServerFrameHandlers } from '../frameRouter';
 import type { HistoryEntry, RunMeta, ServerFrame } from '../protocol';
@@ -42,7 +42,6 @@ const rowOf = (threadId: string): RunSummaryItem => {
 beforeEach(() => {
   mockSend.mockClear();
   mockSend.mockImplementation(() => Promise.resolve());
-  resetRunItemAsks();
   chatStore.clearAll();
   chatStore.seedHistory(THREAD, foldedPage);
 });
@@ -72,9 +71,16 @@ test('the answer takes the row place, in order', () => {
   expect(chatStore.getItems(THREAD).some(item => item.kind === 'run')).toBe(false);
 });
 
-test('the same range is never asked twice', () => {
+test('the same range is never asked twice while one ask is in flight', () => {
   // A group can be opened, closed and opened again, and the row re-renders on every store change.
   requestRunItems(THREAD, [rowOf(THREAD)]);
+  requestRunItems(THREAD, [rowOf(THREAD)]);
+  expect(mockSend).toHaveBeenCalledTimes(1);
+});
+
+test('a range that failed is not retried on every open', () => {
+  requestRunItems(THREAD, [rowOf(THREAD)]);
+  route({ type: 'chat.run.items', threadId: THREAD, fromId: 'run-w1', messages: [], found: false });
   requestRunItems(THREAD, [rowOf(THREAD)]);
   expect(mockSend).toHaveBeenCalledTimes(1);
 });

@@ -83,3 +83,118 @@ test('at the newest message the trim drops the oldest items and the cursor follo
   expect(page.oldestId).toBe(items[0].id);
   expect(items[items.length - 1].id).toBe(`a-${MAX_HELD_ITEMS + 499}`);
 });
+
+/**
+ * The live thread that cleans itself up -- docs/run-hydration.md, lot 4.
+ *
+ * A long run streams in item by item and is never folded while it runs, so a conversation left
+ * open grows past the cap on its own. Giving that memory back must not put the beginning of the
+ * conversation out of reach: dropping happens only when folding is not enough, and it always
+ * leaves the pager able to fetch back what went.
+ */
+
+const RUN = { id: 'r1', status: 'done' as const, startTs: '2026-01-01T10:00:00.000Z', endTs: '2026-01-01T10:01:00.000Z' };
+
+/** The row the server sends in place of a finished run's work. */
+const foldedRow = (id: string, count: number, lastId: string) =>
+  ({ id: `run-${id}`, role: 'run' as const, ts: '2026-01-01T10:00:00.000Z', run: RUN, toolCount: count, itemCount: count, lastId });
+
+test('a live thread past the cap says there is older work again once it drops any', () => {
+  // The trap, exactly. The thread opened on a page the server had nothing older than, so the
+  // pager holds hasMore: false. Then a run streams in for an hour and pushes it past the cap.
+  chatStore.seedHistory(THREAD, gen(20, 'start'));
+  chatStore.setPage(THREAD, { nextBefore: 0, hasMore: false });
+  expect(chatStore.getPage(THREAD).hasMore).toBe(false);
+
+  chatStore.handleSyncResult(THREAD, gen(MAX_HELD_ITEMS + 500, 'live'), 'live-1', 'live-1');
+  chatStore.setTrimAllowed(THREAD, true);
+
+  const items = chatStore.getItems(THREAD);
+  expect(items.length).toBe(TRIM_TO_ITEMS);
+  // Without this the reader scrolls up, `loadOlderHistory` returns early on hasMore, and the
+  // start of their own conversation is unreachable until they leave the thread and come back.
+  expect(chatStore.getPage(THREAD).hasMore).toBe(true);
+  expect(chatStore.getPage(THREAD).oldestId).toBe(items[0].id);
+});
+
+test('a hydrated group folds back to its row instead of being dropped', () => {
+  // The cheap unloading: the work of a group the reader opened goes back to the one row the
+  // server sent for it. Nothing leaves the thread, so nothing has to be fetched to read it again.
+  const work = gen(MAX_HELD_ITEMS, 'w');
+  chatStore.seedHistory(THREAD, [...gen(20, 'head'), foldedRow('w-0', work.length, 'w-last'), ...gen(20, 'tail')]);
+  chatStore.setPage(THREAD, { nextBefore: 0, hasMore: false });
+  chatStore.hydrateRun(THREAD, 'run-w-0', work);
+  expect(chatStore.getItems(THREAD).length).toBe(work.length + 40);
+
+  chatStore.setTrimAllowed(THREAD, true);
+  const items = chatStore.getItems(THREAD);
+  // The group is one row again, and the bubbles around it never moved.
+  expect(items.length).toBe(41);
+  expect(items.filter(item => item.kind === 'run').map(item => item.id)).toEqual(['run-w-0']);
+  expect(items[0].id).toBe('head-0');
+  expect(items[items.length - 1].id).toBe('tail-19');
+  // Nothing was lost, so the pager is left exactly as it was.
+  expect(chatStore.getPage(THREAD).hasMore).toBe(false);
+});
+
+test('a folded-back group can be opened again', () => {
+  // What a module-level "already asked" memo would have broken: the row is idle again, so the
+  // next open fetches it rather than showing a skeleton that never fills.
+  const work = gen(MAX_HELD_ITEMS, 'w');
+  chatStore.seedHistory(THREAD, [foldedRow('w-0', work.length, 'w-last'), ...gen(20, 'tail')]);
+  chatStore.hydrateRun(THREAD, 'run-w-0', work);
+  chatStore.setTrimAllowed(THREAD, true);
+
+  const row = chatStore.getItems(THREAD).find(item => item.kind === 'run');
+  expect(row).toMatchObject({ id: 'run-w-0', hydration: 'idle', lastId: 'w-last' });
+  // And it still stands for the same range: the row is the server's, kept verbatim.
+  expect(row?.kind === 'run' ? row.itemCount : 0).toBe(work.length);
+});
+
+test('folding back is preferred, dropping is what is left', () => {
+  // A group worth folding, but not enough of one: the rest of the thread still has to go.
+  const work = gen(1000, 'w');
+  chatStore.seedHistory(THREAD, [...gen(MAX_HELD_ITEMS, 'live'), foldedRow('w-0', work.length, 'w-last')]);
+  chatStore.setPage(THREAD, { nextBefore: 0, hasMore: false });
+  chatStore.hydrateRun(THREAD, 'run-w-0', work);
+
+  chatStore.setTrimAllowed(THREAD, true);
+  const items = chatStore.getItems(THREAD);
+  expect(items.length).toBe(TRIM_TO_ITEMS);
+  // The group survived as its row, at the end where it was; the live items above it are what
+  // went, and the pager was told.
+  expect(items[items.length - 1]).toMatchObject({ kind: 'run', id: 'run-w-0' });
+  expect(chatStore.getPage(THREAD).hasMore).toBe(true);
+});
+
+test('a run streaming in all day cleans up on its own, without a single sync', () => {
+  // The live path never asks the server for anything, so the sync deltas that used to be the
+  // only trim point never come. A conversation left open would grow until the app died.
+  chatStore.seedHistory(THREAD, gen(20, 'start'));
+  chatStore.setPage(THREAD, { nextBefore: 0, hasMore: false });
+  chatStore.setTrimAllowed(THREAD, true);
+
+  for (let i = 0; i < MAX_HELD_ITEMS; i += 1) {
+    chatStore.addToolCall(THREAD, { id: `card-${i}`, name: 'bash', args: {}, output: 'ok', ok: true, truncated: false });
+  }
+
+  const items = chatStore.getItems(THREAD);
+  expect(items.length).toBeLessThanOrEqual(MAX_HELD_ITEMS);
+  // The newest card is still the last thing in the thread: the reader watching the run sees it.
+  expect(items[items.length - 1].id).toBe(`card-${MAX_HELD_ITEMS - 1}`);
+  // And what went is reachable again.
+  const page = chatStore.getPage(THREAD);
+  expect(page.hasMore).toBe(true);
+  expect(page.oldestId).toBe(items[0].id);
+});
+
+test('the reader up in the history is never trimmed under, live or not', () => {
+  chatStore.seedHistory(THREAD, gen(20, 'start'));
+  chatStore.setTrimAllowed(THREAD, false);
+  for (let i = 0; i < MAX_HELD_ITEMS; i += 1) {
+    chatStore.addToolCall(THREAD, { id: `card-${i}`, name: 'bash', args: {}, output: 'ok', ok: true, truncated: false });
+  }
+  // Nothing dropped: what they are reading stays put until they come back down.
+  expect(chatStore.getItems(THREAD).length).toBe(MAX_HELD_ITEMS + 20);
+  expect(chatStore.getItems(THREAD)[0].id).toBe('start-0');
+});
