@@ -9,7 +9,7 @@ import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine } from './ReasoningLine';
 import { LocationView } from './LocationView';
 import { chatSelectable } from '../core/platform';
-import { contextMenuProps } from '../core/webProps';
+import { contextMenuProps, onAccentProps } from '../core/webProps';
 import { font, lineBoxFor, lineHeightFor, radius, scaleFont, space, useChatFontScale, useThemedStyles, type Palette } from '../theme';
 
 function clock(ts: number): string {
@@ -89,6 +89,10 @@ export const Bubble = React.memo(function BubbleView({
   ) : item.streaming && !thinkingShown ? (
     <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(bodySize) }]}>▍</Text>
   ) : null;
+  // A user bubble is filled with the accent, which is also what a browser paints the selection
+  // highlight in: unmarked, a drag over one's own message selects text that looks untouched.
+  // webTheme.web.ts flips the pair on the marked subtree. Nothing on Android.
+  const onAccent = agent ? {} : onAccentProps();
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
       <View style={[styles.stack, agent ? styles.stackAgent : styles.stackUser]}>
@@ -101,6 +105,7 @@ export const Bubble = React.memo(function BubbleView({
       <Pressable
         onLongPress={chatSelectable ? undefined : () => onMenu(item)}
         {...contextMenuProps(() => onMenu(item))}
+        {...onAccent}
         style={[
           styles.bubble,
           agent ? styles.bubbleAgent : styles.bubbleUser,

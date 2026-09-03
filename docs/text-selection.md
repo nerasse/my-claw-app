@@ -63,6 +63,26 @@ it back into the nodes that caused the problem.
 Outside the chat list (document viewers, settings, diagnostics) `selectable` is fine and is kept:
 those screens are ordinary scroll views, and their text is one node per field.
 
+## The highlight itself, on the web
+
+A browser selects across nodes on its own, so the chat list opts back into `user-select`
+(`webTheme.web.ts`, `[data-claw-select="text"]`) and a drag over several bubbles works. What it
+does *not* do is guarantee the highlight is visible:
+
+```
+::selection                   background: accent      color: accentText
+user bubble (Bubble.tsx)      background: accent      color: accentText
+```
+
+Selecting one's own message painted the colours already on screen, in **both** themes: the text
+went from selected to unselected with nothing to show for it. So a user bubble is marked
+(`onAccentProps()` -> `data-claw-on-accent="1"`, web-only) and the pair is flipped on that
+subtree -- `accentText` on `accent` becomes `accent` on `accentText`, which is the page's own
+contrast, inverted. Guarded by `src/core/__tests__/webThemeSelection.test.ts` in both palettes:
+the failure is invisible to anything that looks at the React tree.
+
+Any future accent-filled surface holding selectable text needs the same marker.
+
 ## Inline metrics, the other half of the bug report
 
 Not selection, but it landed with it. An inline run shares the line its prose builds, and Android

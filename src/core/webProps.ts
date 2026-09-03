@@ -13,5 +13,9 @@ export function selectableProps(): Partial<ViewProps> {
   return {};
 }
 
+export function onAccentProps(): Partial<ViewProps> {
+  return {};
+}
+
 export function autoGrow(_node: unknown, _maxHeight: number): void {}
 

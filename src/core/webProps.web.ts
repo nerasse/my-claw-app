@@ -27,6 +27,17 @@ export function selectableProps(): Partial<ViewProps> {
 }
 
 /**
+ * Marks a surface that is filled with the accent colour, so the selection highlight can flip on
+ * it (webTheme.web.ts).
+ *
+ * Without it a drag over a user bubble selects nothing visible: the bubble is already
+ * `accent` with `accentText` on top, which is exactly what `::selection` paints.
+ */
+export function onAccentProps(): Partial<ViewProps> {
+  return { dataSet: { clawOnAccent: '1' } } as Partial<ViewProps>;
+}
+
+/**
  * Grows a multiline field with its content, up to a ceiling. A textarea has one fixed height in
  * a browser: the composer would otherwise stay two lines tall while a paragraph scrolls inside.
  *

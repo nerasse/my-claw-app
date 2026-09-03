@@ -12,6 +12,11 @@ import type { Palette } from '../theme/palettes';
 
 const STYLE_ID = 'claw-desktop';
 
+/** The document-level CSS of one palette. Exported for the tests: the rules matter, the DOM does not. */
+export function webThemeCss(palette: Palette): string {
+  return css(palette);
+}
+
 function sheet(): HTMLStyleElement {
   const existing = document.getElementById(STYLE_ID);
   if (existing instanceof HTMLStyleElement) return existing;
@@ -44,6 +49,12 @@ input:focus, textarea:focus { outline: none; }
    palette, so the browser paints it nearly invisible. accent + accentText flips one way in
    light (blue on dark text) and the other way in dark, always with contrast. */
 ::selection { background: ${palette.accent}; color: ${palette.accentText}; }
+
+/* ...except on a surface that is already the accent, which is what a user bubble is: there the
+   rule above paints the colours that are on screen anyway, and a drag selects nothing visible.
+   The pair is flipped on those, so the highlight reads as the page's own inverse. */
+[data-claw-on-accent="1"]::selection,
+[data-claw-on-accent="1"] ::selection { background: ${palette.accentText}; color: ${palette.accent}; }
 
 /* Text is unselectable by default in react-native-web. Marked regions opt back in. */
 [data-claw-select="text"], [data-claw-select="text"] * { user-select: text !important; }
