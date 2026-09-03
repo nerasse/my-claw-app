@@ -918,6 +918,22 @@ export function AppShell(): React.JSX.Element {
     [],
   );
 
+  /**
+   * The in-app ring, and the one condition that keeps it from doubling the tray.
+   *
+   * The frame handlers only know the thread, and the open thread does not change when the app
+   * goes away: the JS keeps running behind the foreground service, so a run finishing with the
+   * phone in a pocket rang here *and* was pushed -- the server only skips a device it was told
+   * is `foreground` on that thread. Two sounds for one event, screen off.
+   *
+   * `AppState` is exactly the boolean the app reports to the server, read at the moment of the
+   * frame, so the ring fires on precisely the runs the push skips.
+   */
+  const ringOnScreen = useCallback(() => {
+    if (AppState.currentState !== 'active') return;
+    playAlertSound().catch(() => {});
+  }, []);
+
   useEffect(() => {
     const offState = connection.onState(next => {
       setStatus(next);
@@ -930,6 +946,22 @@ export function AppShell(): React.JSX.Element {
       if (next.state === 'connected') {
         for (const frame of resumeFrames(activeThreadRef.current)) {
           connection.send(frame).catch(() => {});
+        }
+        // The foreground the server last heard about can be stale: a state change that lands
+        // while the socket is down is swallowed by the send above, and nothing re-asserts it.
+        // Its skipDevice decision is read from that store, so a phone that is actually watching
+        // the run rings here *and* is pushed there -- the double sound. One small frame on every
+        // connect keeps the two clocks from drifting, in both directions (a phone that left for
+        // another app would otherwise never be told again, and miss every run silently).
+        if (pushSupported) {
+          connection
+            .send(
+              encodeNotificationsState({
+                foreground: AppState.currentState === 'active',
+                ...(activeThreadRef.current ? { threadId: activeThreadRef.current } : {}),
+              }),
+            )
+            .catch(() => {});
         }
         // Server-owned display prefs and voice mode shape the conversation as soon as it loads,
         // not when the owner first opens Settings: a fresh tab must render with the same layout
@@ -999,13 +1031,13 @@ export function AppShell(): React.JSX.Element {
         // The card is appearing in the thread the owner is looking at: ring once. A question on
         // any other thread, or a device behind, is the push's business (server-side skipDevice
         // keeps a foreground device on the right thread silent on the tray and loud here).
-        playAlertSound().catch(() => {});
+        ringOnScreen();
       },
       onRunEndOnActiveThread: () => {
         // The run finished on the thread on screen: the same ring a question plays. The push
         // skips this device (foreground on that thread), so the ring stands in for the
         // notification here -- the tray and the sound never double up.
-        playAlertSound().catch(() => {});
+        ringOnScreen();
       },
       onUndoPromptOnActiveThread: () => {
         // The sheet is opening on the thread on screen: no ring, it is already the owner's focus.
@@ -1096,7 +1128,7 @@ export function AppShell(): React.JSX.Element {
       offFrame();
       offPending();
     };
-  }, [openThread, selectThread]);
+  }, [openThread, selectThread, ringOnScreen]);
 
   /**
    * Closes the topmost layer, and says whether there was one.

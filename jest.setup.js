@@ -264,6 +264,7 @@ jest.mock('./src/core/nativeBridge', () => ({
       }),
     ),
     cancelRecording: jest.fn(() => Promise.resolve()),
+    playAlertSound: jest.fn(() => Promise.resolve()),
     playAudio: jest.fn(() => Promise.resolve()),
     pausePlayback: jest.fn(() => Promise.resolve()),
     seekPlayback: jest.fn(() => Promise.resolve()),

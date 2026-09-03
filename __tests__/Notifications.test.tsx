@@ -21,6 +21,8 @@ jest.mock('react-native/Libraries/Utilities/Platform', () => ({
 const mockLinkHandlers: Array<(event: { url: string }) => void> = [];
 const mockAppStateHandlers: Array<(state: string) => void> = [];
 let mockInitialUrl: string | null = null;
+/** Read through a getter, so a test can put the app in the background for real. */
+let mockAppState = 'active';
 
 jest.mock('react-native/Libraries/Linking/Linking', () => ({
   __esModule: true,
@@ -38,7 +40,9 @@ jest.mock('react-native/Libraries/Linking/Linking', () => ({
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
   __esModule: true,
   default: {
-    currentState: 'active',
+    get currentState() {
+      return mockAppState;
+    },
     addEventListener: jest.fn((_type: string, handler: (state: string) => void) => {
       mockAppStateHandlers.push(handler);
       return { remove: () => mockAppStateHandlers.splice(mockAppStateHandlers.indexOf(handler), 1) };
@@ -49,6 +53,7 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
+import { questionStore } from '../src/core/questionStore';
 import {
   notificationIdFor,
   parseNotificationLink,
@@ -87,6 +92,11 @@ beforeEach(() => {
   mockLinkHandlers.length = 0;
   mockAppStateHandlers.length = 0;
   mockInitialUrl = null;
+  mockAppState = 'active';
+  // A question left pending by a previous test rides the module store into the next mount and
+  // draws its card (docs/question-form.md): the suite is about notifications, not forms.
+  questionStore.clear();
+  bridge.playAlertSound.mockClear();
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 't-default' });
   // The registration guard is module state: a previous test may have already registered.
   resetPushRegistration();
@@ -202,6 +212,59 @@ test('the app reports its foreground state so the thread on screen stays silent'
   await unmount(tree);
 });
 
+/** The app going away, both halves: what it tells the server, and what it actually is. */
+async function goBackground(): Promise<void> {
+  mockAppState = 'background';
+  await ReactTestRenderer.act(async () => {
+    mockAppStateHandlers.forEach(handler => handler('background'));
+  });
+}
+
+test('a run finishing on the open thread rings, once, while the app is on screen', async () => {
+  const tree = await renderApp();
+  await waitFor(() => sentOfType('notifications.state').length >= 1);
+
+  await emit({ type: 'chat.run.end', threadId: 't-default', reason: 'done' });
+  expect(bridge.playAlertSound).toHaveBeenCalledTimes(1);
+  await unmount(tree);
+});
+
+test('the same run with the app away leaves the sound to the tray', async () => {
+  // The bug this pins: the JS keeps running behind the foreground service and the open thread
+  // does not change when the app goes away, so the ring fired here while the server -- told the
+  // device was not foreground -- pushed as well. Two sounds for one run, screen off, in a pocket.
+  const tree = await renderApp();
+  await waitFor(() => sentOfType('notifications.state').length >= 1);
+  await goBackground();
+  expect(sentOfType('notifications.state').pop()!.foreground).toBe(false);
+
+  await emit({ type: 'chat.run.end', threadId: 't-default', reason: 'done' });
+  expect(bridge.playAlertSound).not.toHaveBeenCalled();
+  await unmount(tree);
+});
+
+test('a question waiting on the open thread follows the same rule', async () => {
+  const tree = await renderApp();
+  await waitFor(() => sentOfType('notifications.state').length >= 1);
+  const askFrame = {
+    type: 'question.ask',
+    id: 'que_1',
+    threadId: 't-default',
+    replyToId: 't-call-1',
+    ts: 'iso',
+    questions: [{ header: 'Langue', question: 'FR ou EN ?', options: [{ label: 'fr' }] }],
+  };
+
+  await goBackground();
+  await emit(askFrame);
+  expect(bridge.playAlertSound).not.toHaveBeenCalled();
+
+  mockAppState = 'active';
+  await emit({ ...askFrame, id: 'que_2' });
+  expect(bridge.playAlertSound).toHaveBeenCalledTimes(1);
+  await unmount(tree);
+});
+
 test('a reconnect with the same key does not re-register: one registration per session', async () => {
   const tree = await renderApp();
   await emit({ type: 'notifications.info', vapidPublicKey: 'server-key' });
@@ -211,6 +274,27 @@ test('a reconnect with the same key does not re-register: one registration per s
   await emit({ type: 'notifications.info', vapidPublicKey: 'server-key' });
   await new Promise<void>(resolve => setTimeout(() => resolve(), 20));
   expect(unifiedPush.default.registerDevice.mock.calls.length).toBe(1);
+  await unmount(tree);
+});
+
+test('a reconnect re-asserts what is on screen, so the push cannot double the ring', async () => {
+  const tree = await renderApp();
+  await waitFor(() => sentOfType('notifications.state').length >= 1);
+
+  // The state the server last heard was "background on another thread" -- a report that went
+  // out while the app was behind, or one that was swallowed while the socket was down. The
+  // phone is actually in the hand, on the thread, so every run that ends rings in-app *and*
+  // pushes, because skipDevice reads the stale store. Reconnecting must set it straight.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:state', { state: 'disconnected', reason: 'probe' });
+    mockAppState = 'active';
+    DeviceEventEmitter.emit('claw:ws:state', { state: 'connected' });
+  });
+
+  await waitFor(() => {
+    const last = sentOfType('notifications.state').at(-1);
+    return last !== undefined && last.foreground === true && last.threadId === 't-default';
+  });
   await unmount(tree);
 });
 
