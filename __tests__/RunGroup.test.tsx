@@ -158,14 +158,48 @@ test('the open state is the caller, so it survives the row being replaced', () =
     <FoldedRunGroup run={RUN} summaries={[summaryRow('run-w1', 8)]} open={false} onToggle={onToggle} onOpen={onOpen} />,
   );
   press(folded, 0);
-  // Opening fetches the work and reports the toggle; the screen is what remembers it.
-  expect(onOpen).toHaveBeenCalledWith([expect.objectContaining({ id: 'run-w1' })]);
+  // The press reports the toggle and nothing else: the screen is what remembers it, and being
+  // open is what fetches (see the two tests below).
   expect(onToggle).toHaveBeenCalledWith(RUN);
 
   // The screen having recorded it, the group that replaces the row renders open.
   const items = Array.from({ length: 8 }, (_, i) => card(`c${i}`));
   const hydrated = group(items, true);
   expect(hydrated.root.findAllByType(Text).map(node => node.props.children)).toContain('c0');
+});
+
+test('a group drawn open asks for its work, with no press behind it', () => {
+  // The press used to be the only trigger, and a group can be open without one: the screen
+  // remembers the fold across a redraw, so a reconnect (a reset re-seeds every row at `idle`) or
+  // the trim (a hydrated group folded back to its row) both hand back an open group nobody will
+  // press again. It sat on a skeleton for good -- a stack of empty bars mid-conversation.
+  const onOpen = jest.fn();
+  const summaries = [summaryRow('run-w1', 10)];
+  render(<FoldedRunGroup run={RUN} summaries={summaries} open onToggle={jest.fn()} onOpen={onOpen} />);
+  expect(onOpen).toHaveBeenCalledWith(summaries);
+
+  const closed = jest.fn();
+  render(<FoldedRunGroup run={RUN} summaries={[summaryRow('run-w2', 10)]} open={false} onToggle={jest.fn()} onOpen={closed} />);
+  expect(closed).not.toHaveBeenCalled();
+});
+
+test('a redraw that hands back a row without its work asks again', () => {
+  // `requestRunItems` is idempotent on the row's own `hydration`, so asking on every redraw costs
+  // a comparison -- and it is the only thing that refills a group without the reader's help.
+  const onOpen = jest.fn();
+  const loading: RunSummaryItem[] = [{ ...summaryRow('run-w1', 10), hydration: 'loading' }];
+  const tree = render(<FoldedRunGroup run={RUN} summaries={loading} open onToggle={jest.fn()} onOpen={onOpen} />);
+  expect(onOpen).toHaveBeenCalledTimes(1);
+
+  const refreshed = [summaryRow('run-w1', 10)];
+  ReactTestRenderer.act(() => {
+    tree.update(
+      <ThemeProvider>
+        <FoldedRunGroup run={RUN} summaries={refreshed} open onToggle={jest.fn()} onOpen={onOpen} />
+      </ThemeProvider>,
+    );
+  });
+  expect(onOpen).toHaveBeenNthCalledWith(2, refreshed);
 });
 
 test('an opened folded group draws a skeleton the size of what is coming', () => {

@@ -9,7 +9,7 @@ import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
-import { chatStore, isSubAgentTool, useChatItems, type ChatItem, type RunInfo, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
@@ -591,10 +591,14 @@ export function ChatScreen({
    */
   const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(() => new Set());
   // This screen is not remounted when the reader changes thread, so the set has to be emptied by
-  // hand. Two reasons beyond the leak: a group is folded again every time a thread is opened, and
-  // a folded row marked open by a previous visit would draw a skeleton nobody ever asked to fill
-  // -- the fetch fires on the press, not on the render.
+  // hand: a group is folded again every time a thread is opened, and holding run ids of threads
+  // nobody is reading is a leak. It is no longer what keeps an empty group from being drawn --
+  // being open is what fetches now (`FoldedRunGroup`), so a group reopened by a redraw fills
+  // itself instead of sitting on a skeleton.
   useEffect(() => setExpandedRuns(new Set()), [threadId]);
+  // Stable per thread: the group asks for its work from an effect keyed on this, and a fresh
+  // closure every render would re-run it on every store change for nothing.
+  const openRun = useCallback((summaries: RunSummaryItem[]) => requestRunItems(threadId, summaries), [threadId]);
   const toggleRun = useCallback((run: RunInfo) => {
     setExpandedRuns(current => {
       const next = new Set(current);
@@ -681,7 +685,7 @@ export function ChatScreen({
             summaries={row.summaries}
             open={expandedRuns.has(row.run.id)}
             onToggle={toggleRun}
-            onOpen={summaries => requestRunItems(threadId, summaries)}
+            onOpen={openRun}
           />
         );
       }
@@ -700,7 +704,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, threadId, expandedRuns, toggleRun],
+    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun],
   );
 
   const locationLabel = location

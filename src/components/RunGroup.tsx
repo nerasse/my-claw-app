@@ -119,16 +119,32 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   const summary = headline(toolCount, firstTool, durationOf(run));
   const failed = summaries.some(row => row.hydration === 'failed');
 
+  /**
+   * Being open is what fetches, not the press that opened it.
+   *
+   * The press was the only trigger, and a group can become open-without-work twice over: a
+   * reconnect replaces the thread with a fresh page (`resume` asks for it, and a reset re-seeds
+   * every row at `idle`), and the trim folds a hydrated group back to its row to give memory
+   * back. Both keep the group open -- the reader never closed it -- and both leave rows nobody
+   * will ever press again, so the body sat on a skeleton for good: ten empty bars in the middle
+   * of a conversation, which is what an owner reads as a broken load.
+   *
+   * `requestRunItems` is idempotent on the row's own `hydration`, so re-running this on every
+   * store change costs a comparison and asks exactly once per range.
+   */
+  React.useEffect(() => {
+    if (open) onOpen(summaries);
+  }, [open, summaries, onOpen]);
+
   return (
     <View style={styles.wrap}>
       <Bar
         run={run}
         summary={summary}
         open={open}
-        onPress={() => {
-          if (!open) onOpen(summaries);
-          onToggle(run);
-        }}
+        // Only the fold state moves here: the effect above is what asks, so a group opened by a
+        // press and a group reopened by a redraw cannot take two different paths.
+        onPress={() => onToggle(run)}
         styles={styles}
       />
       {open ? (
