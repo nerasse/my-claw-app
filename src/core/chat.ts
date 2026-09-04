@@ -1019,6 +1019,34 @@ class ChatStoreImpl {
     this.addUserMessage(threadId, id, text, attachments, location);
   }
 
+  /**
+   * The boundary a compaction just wrote, drawn while the run that caused it is still going.
+   *
+   * Idempotent on the server's entry id, exactly like `echoUserMessage`: the same cut arrives
+   * twice on a device that drew it live and then reloaded the thread, and two rules for one cut
+   * is the failure that matters here.
+   *
+   * `role: 'user'` because that is the role the server keeps the summary in, and `summaryOf` is
+   * the field that stops it being drawn as a bubble the owner wrote -- ChatScreen routes to
+   * CompactionBoundary on it alone.
+   */
+  addCompactionBoundary(threadId: string, id: string, summary: string, count: number): void {
+    if (this.getItems(threadId).some(item => item.id === id)) return;
+    this.append(threadId, {
+      kind: 'text',
+      id,
+      role: 'user',
+      text: summary,
+      attachments: [],
+      streaming: false,
+      // Zero would be falsy and the rule would render as a wall of summary in the owner's own
+      // voice, which is the one thing CompactionBoundary exists to prevent. The server never
+      // sends 0 (a plan with an empty middle is refused), so the clamp keeps the invariant local.
+      summaryOf: Math.max(1, count),
+      ts: Date.now(),
+    });
+  }
+
   setLocation(threadId: string, id: string, location: LocationData): void {
     this.patch(threadId, id, { location });
   }
@@ -1425,7 +1453,11 @@ class ChatStoreImpl {
    * message, which is by definition the newest thing in the thread.
    */
   private insertionIndex(items: readonly ChatItem[], incoming: ChatItem): number {
-    if (incoming.kind === 'text' && incoming.role === 'user') return items.length;
+    // A compaction boundary is stored under `role: 'user'` (the role the prompt needs the summary
+    // in), but it is not something the owner sent: it belongs to the run that is still going, like
+    // that run's own cards, so it must not step over a send parked behind it.
+    const ownMessage = incoming.kind === 'text' && incoming.role === 'user' && incoming.summaryOf === undefined;
+    if (ownMessage) return items.length;
     let index = items.length;
     while (index > 0) {
       const previous = items[index - 1];

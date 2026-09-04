@@ -381,6 +381,26 @@ export interface ChatUserFrame {
   location?: LocationData;
 }
 
+/**
+ * A compaction cut the prompt, drawn while the owner is looking at the run that caused it.
+ *
+ * `/compact` answers with a command bubble of its own; the automatic gates answered with nothing,
+ * so the rule existed in the server's log and only surfaced at the next history load, which read
+ * as a thread that had lost its middle for no stated reason.
+ *
+ * `id` is the server's `compaction` entry id, the one a replayed history draws it under, so a
+ * device holding both keeps one rule and not two. The turns it stands for are still in the thread,
+ * above the rule: `count` only says how many the prompt no longer carries.
+ */
+export interface ChatCompactionFrame {
+  type: 'chat.compaction';
+  threadId: string;
+  id: string;
+  summary: string;
+  count: number;
+  ts?: string;
+}
+
 export interface ChatHistoryFrame {
   type: 'chat.history';
   threadId: string;
@@ -1679,6 +1699,7 @@ export interface HelloFrame {
 export type ServerFrame =
   | ChatMessageFrame
   | ChatUserFrame
+  | ChatCompactionFrame
   | LocationCapabilitiesFrame
   | ChatLocationFrame
   | LocationPreviewResultFrame
@@ -1770,6 +1791,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'device.pair.result',
   'chat.message',
   'chat.user',
+  'chat.compaction',
   'location.capabilities',
   'chat.location',
   'location.preview.result',

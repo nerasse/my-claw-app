@@ -207,6 +207,35 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.queuedSince !== undefined)).toBe(false);
   });
 
+  test('a compaction boundary is drawn once, however many times the server names it', () => {
+    chatStore.addCompactionBoundary(THREAD, 'e-42', 'ce qui precede', 813);
+    // The same cut again: live first, then a history load. One rule, not two.
+    chatStore.addCompactionBoundary(THREAD, 'e-42', 'ce qui precede', 813);
+
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(1);
+    const boundary = items[0] as { role?: string; text?: string; summaryOf?: number };
+    expect(boundary.summaryOf).toBe(813);
+    expect(boundary.text).toBe('ce qui precede');
+    // Stored under the role the prompt needs, never drawn as one: `summaryOf` is what ChatScreen
+    // routes on, and a count of 0 would be falsy and fall back to a bubble in the owner's voice.
+    expect(boundary.role).toBe('user');
+    chatStore.addCompactionBoundary(THREAD, 'e-0', 'resume', 0);
+    expect((chatStore.getItems(THREAD)[1] as { summaryOf?: number }).summaryOf).toBeTruthy();
+  });
+
+  test('a compaction boundary does not step over a send parked behind the run', () => {
+    // The boundary belongs to the run in flight, like its tool cards, not to the owner. Stored
+    // under `role: 'user'`, it would otherwise take the fast path meant for a typed message and
+    // land under a bubble that has not started.
+    chatStore.addUserMessage(THREAD, 'm1', 'la suite');
+    chatStore.markQueued(THREAD, 'm1', 'injection');
+    chatStore.addCompactionBoundary(THREAD, 'e-7', 'ce qui precede', 12);
+
+    const ids = chatStore.getItems(THREAD).map(item => item.id);
+    expect(ids).toEqual(['e-7', 'm1']);
+  });
+
   test('the end of the run lifts an injection the run never acked', () => {
     // A run can die, or be stopped, without ever reaching the boundary that would have drained
     // its mailbox. chat.run.end clears everything for that reason: it is the backstop.

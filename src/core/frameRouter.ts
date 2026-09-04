@@ -223,6 +223,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // in the drawer here before its bubbles can be read.
       noteActivity(frame.threadId, frame.text);
       break;
+    case 'chat.compaction':
+      // No ring, no unread mark, and deliberately no `noteActivity`: a compaction is not a
+      // message and the owner never asked for this one, so bumping the thread in the drawer for
+      // it would be noise (docs/notifications.md on the server).
+      chatStore.addCompactionBoundary(frame.threadId, frame.id, frame.summary, frame.count);
+      break;
     case 'chat.run.start':
       chatStore.startRun(frame.threadId);
       break;
