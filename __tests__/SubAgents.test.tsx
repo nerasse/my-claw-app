@@ -13,6 +13,12 @@ import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../te
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-subagents';
 
+function sentFrames(): Array<Record<string, unknown>> {
+  return bridge.sendMessage.mock.calls.map(
+    ([frame]) => JSON.parse(String(frame)) as Record<string, unknown>,
+  );
+}
+
 /** The server issues `sub-` + 16 hex; a fixture that is not shaped like one proves nothing. */
 function handleFor(id: string): string {
   let hex = '';
@@ -196,6 +202,58 @@ describe('inside a sub-agent', () => {
     // Back at the conversation: its counter is on screen again and the sub-agent header is gone.
     await waitFor(() => labelsOf(tree).includes('1 sub-agent'));
     expect(textsOf(tree)).not.toContain('digger-a1b2 · research');
+    await settleAndUnmount(tree);
+  });
+
+  it('the way out is a control of its own, not the drawer wearing a chevron', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await enter(tree);
+    // The header offers a back and no way to open the conversation list: the same press used to
+    // be wired to onOpenDrawer, which is what made this one button behave unlike every other.
+    expect(labelsOf(tree)).not.toContain('Open conversations');
+    const back = labelsOf(tree).find(label => label.startsWith('Back to '))!;
+    await pressLabel(tree, back);
+    await waitFor(() => labelsOf(tree).includes('1 sub-agent'));
+    // Landed on the conversation, not on the drawer over it.
+    expect(labelsOf(tree)).toContain('Open conversations');
+    await settleAndUnmount(tree);
+  });
+
+  it('the parent comes back on its newest message, not where the sub-agent was left', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    // Reading up the parent thread, away from the bottom: the jump affordance appears.
+    const list = (): ReactTestRenderer.ReactTestInstance =>
+      tree.root.find(node => node.props.data && Array.isArray(node.props.data) && node.props.inverted);
+    await ReactTestRenderer.act(async () => {
+      list().props.onScroll({ nativeEvent: { contentOffset: { y: 900 } } });
+    });
+    await waitFor(() => labelsOf(tree).includes('Jump to latest message'));
+
+    await enter(tree);
+    const back = labelsOf(tree).find(label => label.startsWith('Back to '))!;
+    await pressLabel(tree, back);
+    await waitFor(() => labelsOf(tree).includes('1 sub-agent'));
+
+    // The list is remounted per thread, so it comes back at offset 0 -- and the flag that draws
+    // this button is reset with it. Kept across the swap, both said the reader was 900px up a
+    // conversation they had just returned to the bottom of.
+    expect(labelsOf(tree)).not.toContain('Jump to latest message');
+    await settleAndUnmount(tree);
+  });
+
+  it('asks for the model pinned on the sub-agent, not the one the parent had', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    const handle = handleFor('subagent/digger-a1b2');
+    await enter(tree);
+    // Opening a sub-agent used to ask only for its history, so the picker kept answering with
+    // the parent's model. Its session has a pin of its own and this is where it is read.
+    await waitFor(() =>
+      sentFrames().some(frame => frame.type === 'model.get' && frame.threadId === handle),
+    );
+    // The roster stays the parent's: a sub-agent has no siblings of its own to list.
+    expect(
+      sentFrames().some(frame => frame.type === 'subagents.list' && frame.threadId === THREAD),
+    ).toBe(true);
     await settleAndUnmount(tree);
   });
 });

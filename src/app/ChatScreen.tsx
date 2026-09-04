@@ -61,6 +61,7 @@ export function ChatScreen({
   hint,
   autoFocusHero,
   onOpenDrawer,
+  onBack,
   onStatusPress,
   onSend,
   locationEnabled,
@@ -96,6 +97,8 @@ export function ChatScreen({
   hint?: string;
   autoFocusHero: boolean;
   onOpenDrawer: () => void;
+  /** Leaves a sub-agent for the conversation that reached it. Only ever set with `subagent`. */
+  onBack?: () => void;
   onStatusPress: () => void;
   onSend: (text: string, attachments?: OutgoingAttachment[], location?: LocationInput) => void;
   /** Server capability; false until the post-connect capability frame says otherwise. */
@@ -210,6 +213,12 @@ export function ChatScreen({
     setAddressOverride(null);
     setLocationSheet(false);
     setLocationDraft('');
+    // A conversation opens on its newest message, so the reader is at the bottom by definition.
+    // Only a scroll event used to say so, and a thread swap produces none: the flag stayed on
+    // whatever the previous thread left, which showed the jump pill on a thread already at its
+    // end and, worse, withheld the trim permission from a thread that had earned it.
+    setAtBottom(true);
+    chatStore.setTrimAllowed(threadId, true);
   }, [threadId]);
 
   /**
@@ -715,27 +724,30 @@ export function ChatScreen({
   return (
     <View style={styles.screen}>
       {subagent ? (
-        <View style={[styles.subHeader, column]}>
-          {/* Names the parent rather than saying "back": the way out must be legible without
-              remembering how you got in. */}
-          <Pressable
-            onPress={onOpenDrawer}
-            style={styles.backRow}
-            accessibilityRole="button"
-            accessibilityLabel={`Back to ${subagent.parentTitle}`}>
-            <Text style={styles.backGlyph}>‹</Text>
-            <Text style={styles.backLabel} numberOfLines={1}>
-              {subagent.parentTitle}
-            </Text>
-          </Pressable>
-          <View style={styles.subIdentity}>
+        <View style={column}>
+          {/* One row, a bare chevron on the left, exactly like every other screen that stacks over
+              another: the way out must be where the hand already looks for it. What this screen
+              adds is the standing marker below, not a header shaped differently. */}
+          <View style={styles.header}>
+            <Pressable
+              onPress={onBack}
+              style={styles.menuButton}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Back to ${subagent.parentTitle}`}>
+              <Text style={styles.backGlyph}>‹</Text>
+            </Pressable>
+            {/* The marker, in the accent and on its own: the title stays the identity and nothing
+                else, which is what gets read, selected and copied. */}
             <Text style={styles.subGlyph}>◈</Text>
             <View style={styles.headerText}>
               <Text style={styles.title} numberOfLines={1}>
                 {`${subagent.id.replace(/^subagent\//, '')} · ${subagent.type}`}
               </Text>
+              {/* The parent is named rather than left to memory: the chevron says there is a way
+                  out, this says where it lands. */}
               <Text style={styles.subtitle} numberOfLines={1}>
-                {`${subagent.status === 'running' ? 'running' : 'idle'} · ${subagent.messageCount} msg${subagent.messageCount === 1 ? '' : 's'}`}
+                {`${subagent.status === 'running' ? 'running' : 'idle'} · ${subagent.messageCount} msg${subagent.messageCount === 1 ? '' : 's'} · from ${subagent.parentTitle}`}
               </Text>
             </View>
             <Pressable
@@ -855,7 +867,13 @@ export function ChatScreen({
                 message, which is exactly the bug this replaces. Scrolling up towards older
                 messages is then the list's own end, so paging back is onEndReached and the
                 arriving page is appended — no scroll position to preserve, on either platform. */}
+            {/* Keyed by thread, like the hero composer above and for a harder reason: a list kept
+                across a swap keeps its scroll offset, and offset 3000 of the conversation just
+                left is the middle of nowhere in the one arriving. It also fired onEndReached at
+                once, paging in old entries nobody asked for, over recycled cells still holding
+                the previous thread's rows. */}
             <FlatList
+              key={threadId}
               ref={listRef}
               {...scrollProps}
               inverted
@@ -1004,31 +1022,8 @@ const createStyles = (palette: Palette) => ({
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
-  subHeader: {
-    paddingBottom: space.sm,
-  },
-  backRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.xs,
-    paddingVertical: 2,
-  },
-  backGlyph: {
-    color: palette.accent,
-    fontSize: 20,
-    lineHeight: 22,
-    marginTop: -2,
-  },
-  backLabel: {
-    flex: 1,
-    color: palette.accent,
-    fontSize: font.small,
-  },
-  subIdentity: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-  },
+  // 26, not the menu glyph's 20: the same chevron at the same size as every other screen's back.
+  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   subGlyph: {
     color: palette.accent,
     fontSize: font.meta,

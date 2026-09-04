@@ -249,6 +249,20 @@ Object.freeze(EMPTY_MODELS);
 const EMPTY_UNAVAILABLE: UnavailableModel[] = [];
 Object.freeze(EMPTY_UNAVAILABLE);
 
+/**
+ * The chat on screen is a sub-agent rather than a conversation. Carries the parent so the header
+ * can name it, so a send can declare which conversation it is driven from, and so the way back
+ * lands where the owner came from.
+ */
+type SubAgentView = {
+  threadId: string;
+  id: string;
+  type: string;
+  status: 'idle' | 'running';
+  messageCount: number;
+  parentThreadId: string;
+};
+
 /** The config scope shape ("["*"]" for all, absent for inherit) as the editor's mode union. */
 function scopeModeOf(scope: string[] | null | undefined): ScopeMode {
   if (!Array.isArray(scope)) return 'inherit';
@@ -544,18 +558,7 @@ export function AppShell(): React.JSX.Element {
   const [agentsOpen, setAgentsOpen] = useState(false);
   /** The drawer's Sub-Agents page: shared agents from every conversation, not one roster. */
   const [agentsGlobalOpen, setAgentsGlobalOpen] = useState(false);
-  /**
-   * Set while the chat on screen is a sub-agent rather than a conversation. It carries the parent
-   * so the header can name it and so a send can declare which conversation it is driving from.
-   */
-  const [subagentView, setSubagentView] = useState<{
-    threadId: string;
-    id: string;
-    type: string;
-    status: 'idle' | 'running';
-    messageCount: number;
-    parentThreadId: string;
-  } | null>(null);
+  const [subagentView, setSubagentView] = useState<SubAgentView | null>(null);
   const [subagentAction, setSubagentAction] = useState<'reset' | 'kill' | null>(null);
   /**
    * The hand-back in progress: which answer, and which callers it goes to.
@@ -642,8 +645,18 @@ export function AppShell(): React.JSX.Element {
     }
   }, []);
 
-  const openThread = useCallback(
-    (threadId: string) => {
+  /**
+   * Puts a conversation on screen, sub-agent or not. The one door in.
+   *
+   * A sub-agent used to have its own opening path, and the two drifted: it asked for the history
+   * and forgot the roster, the model pin and the notification, so `/model` inside a sub-agent
+   * answered with the parent's model and a banner for the thread being read stayed in the tray.
+   * Anything that must happen on the way in is written once, here.
+   */
+  const enterThread = useCallback(
+    (threadId: string, view: SubAgentView | null) => {
+      subagentRef.current = view;
+      setSubagentView(view);
       selectThread(threadId);
       chatStore.markRead(threadId);
       setAutoFocusHero(false);
@@ -651,12 +664,13 @@ export function AppShell(): React.JSX.Element {
       setSettingsOpen(false);
       setArchivesOpen(false);
       setAgentsOpen(false);
-      subagentRef.current = null;
-      setSubagentView(null);
+      setAgentsGlobalOpen(false);
       // The run that raised a notification is the one now on screen: clear it, whichever way the
       // owner arrived. A tap cancels its own notification, the drawer and the deep link did not.
       dismissThreadNotification(threadId);
-      connection.send(encodeSubAgentsList(threadId)).catch(() => {});
+      // The roster on screen is always the parent's: a sub-agent's siblings are what the door
+      // beside them lists, and a sub-agent has no roster of its own to show.
+      connection.send(encodeSubAgentsList(view ? view.parentThreadId : threadId)).catch(() => {});
       // Sync the thread: asks for delta since last known entry, or full page if fresh.
       const { since, leaf } = chatStore.getSyncState(threadId);
       connection.send(encodeSessionSync(threadId, since, leaf ?? undefined));
@@ -666,6 +680,8 @@ export function AppShell(): React.JSX.Element {
     },
     [selectThread],
   );
+
+  const openThread = useCallback((threadId: string) => enterThread(threadId, null), [enterThread]);
 
   // The two thread lists differ only by where the back arrow should lead afterwards. Held stable
   // here rather than written inline at the call site: they are handed to memoized rows, and a
@@ -839,25 +855,16 @@ export function AppShell(): React.JSX.Element {
    */
   const openSubAgent = useCallback(
     (entry: SubAgentEntry, parentThreadId: string) => {
-      const view = {
+      enterThread(entry.threadId, {
         threadId: entry.threadId,
         id: entry.id,
         type: entry.type,
         status: entry.status,
         messageCount: entry.messageCount,
         parentThreadId,
-      };
-      subagentRef.current = view;
-      setSubagentView(view);
-      setAgentsOpen(false);
-      setAutoFocusHero(false);
-      setDrawerOpen(false);
-      selectThread(entry.threadId);
-      chatStore.markRead(entry.threadId);
-      const { since: entrySince, leaf: entryLeaf } = chatStore.getSyncState(entry.threadId);
-      connection.send(encodeSessionSync(entry.threadId, entrySince, entryLeaf ?? undefined));
+      });
     },
-    [selectThread],
+    [enterThread],
   );
 
   /**
@@ -1444,7 +1451,7 @@ export function AppShell(): React.JSX.Element {
       }
       return true;
     }
-    // chat ouvert sur téléphone → back va au home (pas à la sortie)
+    // A chat open on a phone: back goes home, not out of the app.
     if (Platform.OS !== 'web' && !layout.pinnedDrawer && activeThreadRef.current && !settingsOpen
         && !archivesOpen && !filesOpen && !subagentRef.current) {
       selectThread(null);
@@ -3093,7 +3100,7 @@ export function AppShell(): React.JSX.Element {
             deviceInfo={deviceInfo}
             hint={hint}
             autoFocusHero={autoFocusHero}
-            onOpenDrawer={subagentView ? leaveSubAgent : () => setDrawerOpen(true)}
+            onOpenDrawer={() => setDrawerOpen(true)}
             onStatusPress={openSettings}
             onSend={sendChat}
             subagentCount={subagentCount}
@@ -3110,6 +3117,9 @@ export function AppShell(): React.JSX.Element {
                     messageCount: subagentView.messageCount,
                     parentTitle: parentTitleOf(subagentView.parentThreadId),
                   },
+                  // Its own prop, not the drawer's: the way back used to be the hamburger slot
+                  // wearing a chevron, which is why it read as the odd one out of every header.
+                  onBack: leaveSubAgent,
                   onSubAgentMenu: () => setSubagentMenuOpen(true),
                 }
               : {})}
