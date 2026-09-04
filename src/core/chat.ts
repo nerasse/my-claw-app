@@ -176,9 +176,14 @@ Object.freeze(NO_PAGE);
 /**
  * An item that exists only in this window: the turn in flight. The server cannot have written it
  * yet, so no sync result can carry it, and it always belongs after everything a sync delivers.
+ *
+ * A parked send counts as one. The server took it and put it in a mailbox, and writes it to the
+ * history only when the run drains it. Left out of this test it passed for persisted, which cost
+ * it both ways: a sync delta hoisted the run's cards above the message still waiting, and a reset
+ * dropped the bubble outright while the owner was watching it wait.
  */
 function isLocalLive(item: ChatItem): boolean {
-  if (item.kind === 'text') return item.streaming === true;
+  if (item.kind === 'text') return item.streaming === true || item.queuedSince !== undefined;
   return item.kind === 'tool' && item.running === true;
 }
 
@@ -1407,13 +1412,38 @@ class ChatStoreImpl {
     this.emit();
   }
 
+  /**
+   * Where a new item goes when the owner has already typed the next message.
+   *
+   * A parked send sits at the end of the thread under its badge, and everything the server emits
+   * meanwhile belongs to the turn *before* it: the run it interrupted is still calling tools. In
+   * arrival order those cards landed under a message that had not started, which reads as the
+   * message having been sent mid-run, and it cut the run's own cards into two groups around it.
+   *
+   * So a parked send holds the bottom until it drains. Only that trailing block of parked bubbles
+   * is stepped over, never a bubble already under way -- and never by the owner's own next
+   * message, which is by definition the newest thing in the thread.
+   */
+  private insertionIndex(items: readonly ChatItem[], incoming: ChatItem): number {
+    if (incoming.kind === 'text' && incoming.role === 'user') return items.length;
+    let index = items.length;
+    while (index > 0) {
+      const previous = items[index - 1];
+      if (previous?.kind !== 'text' || previous.queuedSince === undefined) break;
+      index -= 1;
+    }
+    return index;
+  }
+
   private append(threadId: string, item: ChatItem): void {
     const items = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    const at = this.insertionIndex(items, item);
+    const next = at === items.length ? [...items, item] : [...items.slice(0, at), item, ...items.slice(at)];
     // The live path is the one that grows without ever asking the server for anything: a long run
     // streams bubbles and cards in for hours, and the sync deltas that used to be the only trim
     // point never come while the socket stays up. Cheap when there is nothing to do -- it is a
     // length test -- and it is what makes a conversation left open all day clean itself.
-    const trimmed = this.trimToCap(threadId, [...items, item]);
+    const trimmed = this.trimToCap(threadId, next);
     this.threads.set(threadId, trimmed);
     if (trimmed.length !== items.length + 1) this.pageCursorFollows(threadId);
     this.emit();

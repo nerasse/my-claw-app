@@ -1119,3 +1119,83 @@ describe('chatStore run grouping', () => {
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ run: { status: 'aborted' } });
   });
 });
+
+describe('a parked send holds the bottom of the thread', () => {
+  const ids = (): string[] => chatStore.getItems(THREAD).map(item => item.id);
+
+  /** What the server does when a send lands mid-run: park it, keep calling tools. */
+  function parkDuringRun(): void {
+    chatStore.startToolCall(THREAD, 't-1', 'bash', { command: 'first' });
+    chatStore.addUserMessage(THREAD, 'm1', 'wait, do this instead');
+    chatStore.markQueued(THREAD, 'm1', 'injection');
+  }
+
+  test('the tool cards of the run it interrupted stay above it', () => {
+    parkDuringRun();
+    // The run had not finished: these cards belong to the turn before the message.
+    chatStore.startToolCall(THREAD, 't-2', 'read', { path: '/tmp/a' });
+    chatStore.startToolCall(THREAD, 't-3', 'read', { path: '/tmp/b' });
+    expect(ids()).toEqual(['t-1', 't-2', 't-3', 'm1']);
+  });
+
+  test('what the run says while the message waits stays above it too', () => {
+    parkDuringRun();
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'still on the previous request');
+    chatStore.endStream(THREAD, 's1');
+    expect(ids()).toEqual(['t-1', 's1', 'm1']);
+  });
+
+  test('once drained, the answer to it lands below it', () => {
+    parkDuringRun();
+    chatStore.startToolCall(THREAD, 't-2', 'read', { path: '/tmp/a' });
+    // chat.send.acked: the run reached the turn boundary and took the message.
+    chatStore.clearQueued(THREAD, 'm1');
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'on it');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.startToolCall(THREAD, 't-9', 'bash', { command: 'the new work' });
+    expect(ids()).toEqual(['t-1', 't-2', 'm1', 's1', 't-9']);
+  });
+
+  test('the owner typing again lands after the message already parked, never before it', () => {
+    parkDuringRun();
+    chatStore.addUserMessage(THREAD, 'm2', 'and this too');
+    chatStore.markQueued(THREAD, 'm2', 'injection');
+    // Both wait, in the order they were typed, and the run keeps working above both.
+    chatStore.startToolCall(THREAD, 't-2', 'read', { path: '/tmp/a' });
+    expect(ids()).toEqual(['t-1', 't-2', 'm1', 'm2']);
+  });
+
+  test('a message mirrored from another window also lands last', () => {
+    parkDuringRun();
+    chatStore.echoUserMessage(THREAD, 'm2', 'from the phone');
+    expect(ids()).toEqual(['t-1', 'm1', 'm2']);
+  });
+
+  test('nothing parked, nothing moved: arrival order is still the order', () => {
+    chatStore.addUserMessage(THREAD, 'm1', 'do this');
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'here');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.startToolCall(THREAD, 't-1', 'bash', { command: 'work' });
+    expect(ids()).toEqual(['m1', 's1', 't-1']);
+  });
+
+  test('a history delta of the running turn does not hoist itself above the waiting message', () => {
+    // The same trap the live path had, by another road: a delta is newer than what is persisted
+    // but not newer than a send the server is still holding in a mailbox.
+    parkDuringRun();
+    chatStore.handleSyncResult(THREAD, [toolEntry], null, null, true);
+    expect(ids()[ids().length - 1]).toBe('m1');
+  });
+
+  test('a reset keeps the waiting message instead of dropping it', () => {
+    // Branch switch or unknown cursor: the server replaces the thread. It cannot send back a
+    // message it has not written yet, so dropping every local item took the bubble with it.
+    parkDuringRun();
+    chatStore.handleSyncResult(THREAD, [toolEntry], null, null, true, 'branch-switch');
+    expect(ids()).toContain('m1');
+    expect(ids()[ids().length - 1]).toBe('m1');
+  });
+});
