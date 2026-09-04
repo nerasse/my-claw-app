@@ -25,6 +25,7 @@ import {
   useUnreadThreads,
   type TextItem,
 } from '../core/chat';
+import { formatTranscript } from '../core/transcript';
 import { useQuestionThreads } from '../core/questionStore';
 import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
@@ -249,6 +250,9 @@ Object.freeze(EMPTY_MODELS);
 const EMPTY_UNAVAILABLE: UnavailableModel[] = [];
 Object.freeze(EMPTY_UNAVAILABLE);
 
+/** The session-level actions both menus draw from; see `sessionEntries`. */
+type SessionEntryKey = 'refresh' | 'model' | 'tune' | 'stop' | 'instructions' | 'files' | 'status' | 'transcript';
+
 /**
  * The chat on screen is a sub-agent rather than a conversation. Carries the parent so the header
  * can name it, so a send can declare which conversation it is driven from, and so the way back
@@ -261,6 +265,8 @@ type SubAgentView = {
   status: 'idle' | 'running';
   messageCount: number;
   parentThreadId: string;
+  /** Where its tools work. Absent on an agent spawned before the server carried the field. */
+  workspaceDir?: string;
 };
 
 /** The config scope shape ("["*"]" for all, absent for inherit) as the editor's mode union. */
@@ -862,6 +868,7 @@ export function AppShell(): React.JSX.Element {
         status: entry.status,
         messageCount: entry.messageCount,
         parentThreadId,
+        ...(entry.workspaceDir ? { workspaceDir: entry.workspaceDir } : {}),
       });
     },
     [enterThread],
@@ -2173,16 +2180,126 @@ export function AppShell(): React.JSX.Element {
     chatStore.markRead(threadId);
   }, []);
 
-  const refreshAction = useCallback(
-    (target: SessionSummary, close: () => void): SheetEntry => ({
-      label: 'Refresh',
-      hint: 'resync this conversation with the server',
-      onPress: () => {
-        refreshThread(target.threadId);
-        close();
+  // Declared here rather than beside the header that shows them: the menu entries below name the
+  // current model in their hints, and a const cannot be read above its declaration.
+  const currentModelLabel = threadModel
+    ? catalog.models.find(model => model.id === threadModel.model)?.label ?? threadModel.model
+    : null;
+  // A model this chat did not pick is inherited, and from where decides what to go and edit. A
+  // row that only named the model could not explain why picking the global default changed
+  // nothing: the agent's own pin was answering all along.
+  const currentModelOrigin =
+    threadModel?.source === 'agent' || threadModel?.source === 'agent-file'
+      ? 'from the agent config'
+      : threadModel?.source === 'global'
+        ? 'global default'
+        : null;
+
+  /**
+   * What a copied transcript is titled. A sub-agent is named by its id rather than by a title: it
+   * has none, and the id is what the roster and the header already show.
+   */
+  const transcriptTitleOf = useCallback(
+    (threadId: string): string =>
+      subagentRef.current?.threadId === threadId
+        ? subagentRef.current.id.replace(/^subagent\//, '')
+        : runTitlesRef.current[threadId] ?? sessionStore.titleOf(threadId) ?? 'conversation',
+    [],
+  );
+
+  /**
+   * One definition per session-level action, composed by each menu in its own order.
+   *
+   * A sub-agent is a real session, and the server resolves its handle to that session for every
+   * one of these: the model pin, the stop, the status command and the instructions report all go
+   * through `resolveSessionId`. They were simply never offered inside a sub-agent, so reading a
+   * busy agent's context or changing its model meant leaving the chat.
+   *
+   * Written once rather than per menu because two hand-kept lists of the same actions drift. That
+   * is the failure `enterThread` exists for, on the way in; this is the same rule for the way out.
+   * A record and not an array: the two menus order them differently, and neither has to inherit
+   * the other's order to share the definitions.
+   *
+   * `threadId` is nullable for the command menu alone, which the keyboard opens on the home screen
+   * where no conversation is picked yet. Only the two pickers are composed there, and they act on
+   * the sheets, which read the conversation on screen themselves. Everything else is composed from
+   * a menu that has a target, and says so rather than acting on the wrong one.
+   */
+  const sessionEntries = useCallback(
+    (threadId: string | null, close: () => void): Record<SessionEntryKey, SheetEntry> => ({
+      refresh: {
+        label: 'Refresh',
+        hint: 'resync this conversation with the server',
+        onPress: () => {
+          if (threadId) refreshThread(threadId);
+          close();
+        },
+      },
+      model: {
+        label: 'Model…',
+        hint: currentModelLabel
+          ? `current: ${currentModelLabel}${currentModelOrigin ? ` · ${currentModelOrigin}` : ''}`
+          : undefined,
+        onPress: () => {
+          close();
+          openModel();
+        },
+      },
+      tune: {
+        label: 'Effort / window…',
+        hint: currentModelLabel ? `tune ${currentModelLabel}` : undefined,
+        onPress: () => {
+          close();
+          setTuneOpen(true);
+        },
+      },
+      stop: {
+        label: 'Stop',
+        onPress: () => {
+          if (threadId) connection.send(encodeChatStop(threadId));
+          close();
+        },
+      },
+      instructions: {
+        label: 'Instructions',
+        hint: 'every layer it loads, nested files included',
+        onPress: () => {
+          close();
+          if (threadId) openSessionInstructions(threadId);
+        },
+      },
+      files: {
+        label: 'Session files',
+        onPress: () => {
+          close();
+          if (threadId) openFilesFor(threadId);
+        },
+      },
+      status: {
+        label: 'Status',
+        hint: 'context, tokens, cost',
+        onPress: () => {
+          close();
+          if (threadId) openStatus(threadId);
+        },
+      },
+      transcript: {
+        label: 'Copy transcript',
+        hint: 'messages and tool results, as markdown',
+        onPress: () => {
+          if (threadId) {
+            Clipboard.setString(formatTranscript(transcriptTitleOf(threadId), chatStore.getItems(threadId)));
+          }
+          close();
+        },
       },
     }),
-    [refreshThread],
+    [refreshThread, currentModelLabel, currentModelOrigin, openModel, openSessionInstructions, openFilesFor, openStatus, transcriptTitleOf],
+  );
+
+  const refreshAction = useCallback(
+    (target: SessionSummary, close: () => void): SheetEntry => sessionEntries(target.threadId, close).refresh,
+    [sessionEntries],
   );
 
   // Pinning leads both menus, on its own: it is the one action that changes nothing about the
@@ -2212,24 +2329,13 @@ export function AppShell(): React.JSX.Element {
   );
 
   const conversationActions = useCallback(
-    (target: SessionSummary, close: () => void): SheetEntry[] => [
+    (target: SessionSummary, close: () => void): SheetEntry[] => {
+      const shared = sessionEntries(target.threadId, close);
+      return [
       // What the conversation reads comes before what it produced: the instructions decide every
       // answer in it, the files are one of their outputs.
-      {
-        label: 'Instructions',
-        hint: 'every layer it loads, nested files included',
-        onPress: () => {
-          close();
-          openSessionInstructions(target.threadId);
-        },
-      },
-      {
-        label: 'Session files',
-        onPress: () => {
-          close();
-          openFilesFor(target.threadId);
-        },
-      },
+      shared.instructions,
+      shared.files,
       {
         label: 'Change workspace',
         hint: `current: ${workspaceOf(target.threadId)}`,
@@ -2249,14 +2355,8 @@ export function AppShell(): React.JSX.Element {
           close();
         },
       },
-      {
-        label: 'Status',
-        hint: 'context, tokens, cost',
-        onPress: () => {
-          close();
-          openStatus(target.threadId);
-        },
-      },
+      shared.status,
+      shared.transcript,
       target.archived
         ? {
             label: 'Unarchive',
@@ -2283,8 +2383,9 @@ export function AppShell(): React.JSX.Element {
           close();
         },
       },
-    ],
-    [openStatus, openSessionInstructions, setThreadArchived, openFilesFor, workspaceOf],
+      ];
+    },
+    [sessionEntries, setThreadArchived, workspaceOf],
   );
 
   const threadActions: SheetEntry[] = threadMenu
@@ -2377,19 +2478,6 @@ export function AppShell(): React.JSX.Element {
     [newThread, openModel, openStatus, openSessionInstructions, sessions, setTuneOpen],
   );
 
-  const currentModelLabel = threadModel
-    ? catalog.models.find(model => model.id === threadModel.model)?.label ?? threadModel.model
-    : null;
-  // A model this chat did not pick is inherited, and from where decides what to go and edit. A
-  // row that only named the model could not explain why picking the global default changed
-  // nothing: the agent's own pin was answering all along.
-  const currentModelOrigin =
-    threadModel?.source === 'agent' || threadModel?.source === 'agent-file'
-      ? 'from the agent config'
-      : threadModel?.source === 'global'
-        ? 'global default'
-        : null;
-
   const activeSummary: SessionSummary | null = activeThread
     ? {
         threadId: activeThread,
@@ -2404,38 +2492,10 @@ export function AppShell(): React.JSX.Element {
   const commandMenuOptions: SheetEntry[] = [
     // Same head as the drawer's sheet: one action, in the same place, whichever menu was opened.
     ...(activeSummary ? [refreshAction(activeSummary, () => setCommandMenuOpen(false)), pinAction(activeSummary, () => setCommandMenuOpen(false))] : []),
-    {
-      label: 'Model…',
-      hint: currentModelLabel
-        ? `current: ${currentModelLabel}${currentModelOrigin ? ` · ${currentModelOrigin}` : ''}`
-        : undefined,
-      onPress: () => {
-        setCommandMenuOpen(false);
-        openModel();
-      },
-    },
-    {
-      label: 'Effort / window…',
-      hint: currentModelLabel
-        ? `tune ${currentModelLabel}`
-        : undefined,
-      onPress: () => {
-        setCommandMenuOpen(false);
-        setTuneOpen(true);
-      },
-    },
-    ...(streaming
-      ? [
-          {
-            label: 'Stop',
-            onPress: () => {
-              const threadId = activeThreadRef.current;
-              if (threadId) connection.send(encodeChatStop(threadId));
-              setCommandMenuOpen(false);
-            },
-          } satisfies SheetEntry,
-        ]
-      : []),
+    ...(() => {
+      const shared = sessionEntries(activeThread, () => setCommandMenuOpen(false));
+      return [shared.model, shared.tune, ...(streaming ? [shared.stop] : [])];
+    })(),
     // Model and Stop sit here because only the conversation on screen can answer for them: the
     // app knows the live model and the running turn of the one in front of it, not of a thread
     // picked in the drawer. Everything below is the shared conversation list.
@@ -4016,6 +4076,23 @@ export function AppShell(): React.JSX.Element {
         <ActionSheet
           preview={subagentView.id.replace(/^subagent\//, '')}
           options={[
+            // The session actions first, in the order the conversation menu uses them, then what
+            // belongs to an agent alone. Pin, Archive, Rename and Change workspace are absent on
+            // purpose: a sub-agent is not in the drawer, so they would act on nothing visible.
+            ...(() => {
+              const shared = sessionEntries(subagentView.threadId, () => setSubagentMenuOpen(false));
+              return [
+                shared.model,
+                shared.tune,
+                ...(streaming ? [shared.stop] : []),
+                shared.instructions,
+                shared.files,
+                shared.status,
+                shared.refresh,
+                shared.transcript,
+              ];
+            })(),
+            { type: 'separator' as const },
             {
               label: 'Copy id',
               onPress: () => {
@@ -4023,6 +4100,20 @@ export function AppShell(): React.JSX.Element {
                 setSubagentMenuOpen(false);
               },
             },
+            ...(subagentView.workspaceDir
+              ? [
+                  {
+                    label: 'Workspace',
+                    hint: subagentView.workspaceDir,
+                    onPress: () => {
+                      // The path, not a browser: it answers "where does this agent write", which
+                      // is the question a multi-repo workspace actually raises.
+                      if (subagentView.workspaceDir) Clipboard.setString(subagentView.workspaceDir);
+                      setSubagentMenuOpen(false);
+                    },
+                  },
+                ]
+              : []),
             {
               label: 'Clear memory',
               hint: 'archives the transcript, keeps the agent and its workspace',

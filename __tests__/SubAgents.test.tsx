@@ -3,6 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
+import Clipboard from '@react-native-clipboard/clipboard';
 import { chatStore } from '../src/core/chat';
 import { subAgentCallersStore, subAgentStore } from '../src/core/subagents';
 import { sessionStore } from '../src/core/sessions';
@@ -254,6 +255,94 @@ describe('inside a sub-agent', () => {
     expect(
       sentFrames().some(frame => frame.type === 'subagents.list' && frame.threadId === THREAD),
     ).toBe(true);
+    await settleAndUnmount(tree);
+  });
+
+  it('offers the session actions a conversation has, since they resolve on its own session', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await enter(tree);
+    await pressLabel(tree, 'Sub-agent actions');
+
+    // Each of these already resolved the sub-agent's session server side; the menu simply never
+    // offered them, so reading a busy agent's context meant leaving its chat.
+    const shown = textsOf(tree);
+    for (const label of ['Model…', 'Effort / window…', 'Instructions', 'Session files', 'Status', 'Refresh', 'Copy transcript']) {
+      expect(shown).toContain(label);
+    }
+    // What it keeps of its own.
+    expect(shown).toContain('Copy id');
+    expect(shown).toContain('Clear memory');
+    await settleAndUnmount(tree);
+  });
+
+  it('leaves out what would act on nothing: a sub-agent is not in the drawer', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await enter(tree);
+    await pressLabel(tree, 'Sub-agent actions');
+
+    const shown = textsOf(tree);
+    for (const absent of ['Pin to top', 'Unpin', 'Archive', 'Rename…', 'Change workspace']) {
+      expect(shown).not.toContain(absent);
+    }
+    await settleAndUnmount(tree);
+  });
+
+  it('reads the status of the sub-agent, not of the conversation behind it', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    const handle = handleFor('subagent/digger-a1b2');
+    await enter(tree);
+    await pressLabel(tree, 'Sub-agent actions');
+    await pressLabel(tree, 'Status');
+
+    // The whole point of the entry: the report has to be asked for the agent on screen. Asking
+    // for the parent would show a plausible page about the wrong session.
+    await waitFor(() =>
+      sentFrames().some(frame => frame.type === 'status.get' && frame.threadId === handle),
+    );
+    expect(sentFrames().some(frame => frame.type === 'status.get' && frame.threadId === THREAD)).toBe(false);
+    await settleAndUnmount(tree);
+  });
+
+  it('names the directory the agent works in, and only when the server knows one', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2', workspaceDir: '/home/neras/dev/some-repo' })]);
+    await enter(tree);
+    await pressLabel(tree, 'Sub-agent actions');
+    expect(textsOf(tree)).toContain('/home/neras/dev/some-repo');
+    await settleAndUnmount(tree);
+
+    // An agent spawned before the server carried the field: the row is absent rather than empty.
+    const older = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await enter(older);
+    await pressLabel(older, 'Sub-agent actions');
+    expect(textsOf(older)).not.toContain('Workspace');
+    await settleAndUnmount(older);
+  });
+
+  it('copies what the agent did, tool results included, and not what it thought', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    const handle = handleFor('subagent/digger-a1b2');
+    await enter(tree);
+    await ReactTestRenderer.act(async () => {
+      chatStore.seedHistory(handle, [
+        { id: 'h-a', role: 'assistant', text: 'the cache was cold', ts: '2026-01-01T10:00:02.000Z' },
+      ]);
+      chatStore.addToolCall(handle, {
+        id: 'tc-1',
+        name: 'bash',
+        args: {},
+        ok: true,
+        output: 'cache MISS',
+        truncated: false,
+      });
+    });
+    await pressLabel(tree, 'Sub-agent actions');
+    await pressLabel(tree, 'Copy transcript');
+
+    const copied = (Clipboard.setString as jest.Mock).mock.calls.at(-1)?.[0] as string;
+    expect(copied).toContain('the cache was cold');
+    expect(copied).toContain('cache MISS');
+    // Titled by the agent's id: a sub-agent has no conversation title to borrow.
+    expect(copied).toContain('digger-a1b2');
     await settleAndUnmount(tree);
   });
 });

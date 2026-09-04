@@ -1283,6 +1283,11 @@ export interface SubAgentEntry {
   visibility: 'global' | 'workspace' | 'private';
   /** Which workspace a `workspace`-visible agent is scoped to; absent means the default one. */
   workspaceKey?: string;
+  /**
+   * The directory the agent's tools work in, which `workspaceKey` does not name: that one is the
+   * orchestrator it belongs to. Absent on an agent spawned before the server carried the field.
+   */
+  workspaceDir?: string;
   model?: string;
   createdAt: string;
 }
