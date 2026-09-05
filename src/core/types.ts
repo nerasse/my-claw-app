@@ -10,8 +10,6 @@ export interface WsStatusPayload {
 }
 
 export interface Capabilities {
-  accessibility: boolean;
-  notificationListener: boolean;
   wssConnection: boolean;
 }
 

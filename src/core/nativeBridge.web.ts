@@ -19,8 +19,6 @@ export interface DeviceInfoNative {
 }
 
 export interface DeviceCapabilities {
-  accessibility: boolean;
-  notificationListener: boolean;
   wssConnection: boolean;
 }
 
@@ -586,8 +584,6 @@ export const deviceBridge: DeviceBridgeNative = {
   getDeviceInfo: () => Promise.resolve(readDeviceInfo()),
   getCapabilities: () =>
     Promise.resolve({
-      accessibility: false,
-      notificationListener: false,
       wssConnection: true,
     }),
   getCurrentLocation: () =>
