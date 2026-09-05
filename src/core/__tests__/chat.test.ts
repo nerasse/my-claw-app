@@ -224,6 +224,36 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     expect((chatStore.getItems(THREAD)[1] as { summaryOf?: number }).summaryOf).toBeTruthy();
   });
 
+  test('a compaction closes the placeholder it took over from the command notice', () => {
+    // The race that made this necessary: the server sends `chat.command.pending` after 400ms,
+    // and a compaction only announces its start once the session log is loaded -- longer than
+    // that on a long thread. So the notice creates the placeholder and the compaction inherits
+    // it. A successful /compact answers with no bubble now, so if the compaction cannot close a
+    // placeholder it did not create, "Compacting the context..." stays on screen for good.
+    chatStore.addUserMessage(THREAD, 'send-1', '/compact');
+    chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
+    chatStore.setCompacting(THREAD, 1_800_000_000_000);
+    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.text === 'Compacting the context...')).toBe(true);
+
+    chatStore.setCompacting(THREAD, undefined);
+    const texts = chatStore.getItems(THREAD).map(item => (item.kind === 'text' ? item.text : ''));
+    expect(texts).toEqual(['/compact']);
+  });
+
+  test('a compaction that failed still shows the reason it gives', () => {
+    // The real order: the server settles the compaction inside a finally, so the state frame
+    // always precedes the command's own answer. The placeholder goes with the settle, and the
+    // refusal that follows lands as its own bubble rather than being swallowed.
+    chatStore.addUserMessage(THREAD, 'send-1', '/compact');
+    chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
+    chatStore.setCompacting(THREAD, 1_800_000_000_000);
+    chatStore.setCompacting(THREAD, undefined);
+    chatStore.addCommandResult(THREAD, 'cmd-send-1', 'Compaction failed.', 'send-1');
+
+    const texts = chatStore.getItems(THREAD).map(item => (item.kind === 'text' ? item.text : ''));
+    expect(texts).toEqual(['/compact', 'Compaction failed.']);
+  });
+
   test('a compaction boundary does not step over a send parked behind the run', () => {
     // The boundary belongs to the run in flight, like its tool cards, not to the owner. Stored
     // under `role: 'user'`, it would otherwise take the fast path meant for a typed message and

@@ -286,6 +286,16 @@ class ChatStoreImpl {
   private syntheticSeq = 0;
   /** Placeholder bubble per thread while a slow command runs, keyed by thread -> bubble id. */
   private pendingCommands = new Map<string, string>();
+  /**
+   * Threads whose command placeholder was taken over by a compaction.
+   *
+   * The compaction owns a placeholder it did not create whenever `chat.command.pending` won the
+   * race (the server sends that after 400ms, and the start of a compaction is emitted only once
+   * the session log is loaded, which on a long thread takes longer). A successful `/compact` no
+   * longer answers with a bubble, so without this the adopted placeholder had nothing left to
+   * close it and "Compacting the context..." stayed on screen for good.
+   */
+  private compactingAdopted = new Set<string>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
@@ -1118,12 +1128,17 @@ class ChatStoreImpl {
   setCompacting(threadId: string, since: number | undefined): void {
     const existing = this.pendingCommands.get(threadId);
     if (since === undefined) {
-      // A command placeholder is the command's to close: its result replaces it in place.
-      if (existing === COMPACTING_ITEM) this.clearCommandPending(threadId);
+      // Its own placeholder, or one it adopted: either way the compaction is what ends it. A
+      // placeholder still owned by a command is that command's to close, in place, with its result.
+      if (existing === COMPACTING_ITEM || (existing && this.compactingAdopted.has(threadId))) {
+        this.clearCommandPending(threadId);
+      }
+      this.compactingAdopted.delete(threadId);
       return;
     }
     if (existing === COMPACTING_ITEM) return;
     if (existing) {
+      this.compactingAdopted.add(threadId);
       this.patch(threadId, existing, { text: COMPACTING_TEXT, ts: since });
       return;
     }
@@ -1147,6 +1162,7 @@ class ChatStoreImpl {
    */
   clearCommandPending(threadId: string): void {
     const id = this.pendingCommands.get(threadId);
+    this.compactingAdopted.delete(threadId);
     if (!id) return;
     this.pendingCommands.delete(threadId);
     this.removeItem(threadId, id);
