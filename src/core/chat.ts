@@ -138,6 +138,12 @@ const EMPTY_SPAWN_CARDS: SpawnCard[] = [];
 Object.freeze(EMPTY_SPAWN_CARDS);
 /** One notification per displayed frame at most, whatever rate the tokens arrive at. */
 const FRAME_MS = 16;
+/**
+ * The compaction placeholder's id, fixed rather than derived: the state that raises it has no
+ * command and no send behind it (an automatic gate), and one per thread is the whole rule.
+ */
+const COMPACTING_ITEM = 'compacting';
+const COMPACTING_TEXT = 'Compacting the context...';
 Object.freeze(EMPTY_ITEMS);
 Object.freeze(EMPTY_THREADS);
 
@@ -1074,6 +1080,9 @@ class ChatStoreImpl {
    */
   addCommandPending(threadId: string, replyToId: string, text: string): void {
     const existing = this.pendingCommands.get(threadId);
+    // The compaction placeholder already occupies the slot and already names the operation this
+    // notice would call "Running /compact": it keeps the words, and its own end takes it away.
+    if (existing === COMPACTING_ITEM) return;
     if (existing) this.patch(threadId, existing, { text });
     else {
       const parent = this.getItems(threadId).find(item => item.id === replyToId);
@@ -1093,6 +1102,43 @@ class ChatStoreImpl {
         ts: parent ? parent.ts + 1 : Date.now(),
       });
     }
+  }
+
+  /**
+   * A compaction is running on this thread, or has stopped (`since` absent).
+   *
+   * The same placeholder a slow command gets, in the same one-per-thread slot: the owner already
+   * knows that bubble as what a `/compact` shows, and the automatic gates now reach it too. It is
+   * driven by a state frame rather than by the command, so a window that opens or reloads while
+   * the summarizer runs draws it from the replay instead of showing a thread doing nothing.
+   *
+   * `since` is the server's start instant, so the counter reads the true elapsed on a window that
+   * arrives late instead of restarting from zero.
+   */
+  setCompacting(threadId: string, since: number | undefined): void {
+    const existing = this.pendingCommands.get(threadId);
+    if (since === undefined) {
+      // A command placeholder is the command's to close: its result replaces it in place.
+      if (existing === COMPACTING_ITEM) this.clearCommandPending(threadId);
+      return;
+    }
+    if (existing === COMPACTING_ITEM) return;
+    if (existing) {
+      this.patch(threadId, existing, { text: COMPACTING_TEXT, ts: since });
+      return;
+    }
+    this.pendingCommands.set(threadId, COMPACTING_ITEM);
+    this.append(threadId, {
+      kind: 'text',
+      id: COMPACTING_ITEM,
+      role: 'agent',
+      text: COMPACTING_TEXT,
+      attachments: [],
+      streaming: true,
+      command: true,
+      ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
+      ts: since,
+    });
   }
 
   /**

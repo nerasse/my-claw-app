@@ -401,6 +401,25 @@ export interface ChatCompactionFrame {
   ts?: string;
 }
 
+/**
+ * A compaction is running on this thread, or has just stopped.
+ *
+ * The state, not the event that ends it: the server broadcasts it when it flips and replays it to
+ * a window that opens or reloads mid-operation, which is why it carries the instant it began.
+ * Before it, the minute or two the summarizer takes was visible only as the placeholder bubble
+ * `/compact` draws locally -- so a reload during a compaction showed a thread doing nothing, and
+ * the owner typed `/compact` again to be told one was already running.
+ *
+ * `since` absent means it is over. Silent by design: no ring, no tray entry -- a compaction is
+ * not something the owner has to be told about (docs/notifications.md).
+ */
+export interface ChatCompactingFrame {
+  type: 'chat.compacting';
+  threadId: string;
+  /** ISO instant the operation began. Absent means it is over. */
+  since?: string;
+}
+
 export interface ChatHistoryFrame {
   type: 'chat.history';
   threadId: string;
@@ -1733,6 +1752,7 @@ export type ServerFrame =
   | ChatMessageFrame
   | ChatUserFrame
   | ChatCompactionFrame
+  | ChatCompactingFrame
   | LocationCapabilitiesFrame
   | ChatLocationFrame
   | LocationPreviewResultFrame
@@ -1825,6 +1845,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.message',
   'chat.user',
   'chat.compaction',
+  'chat.compacting',
   'location.capabilities',
   'chat.location',
   'location.preview.result',

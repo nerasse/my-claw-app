@@ -236,6 +236,52 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     expect(ids).toEqual(['e-7', 'm1']);
   });
 
+  /**
+   * The operation is one to two minutes of nothing. Before the state frame, only the window that
+   * typed `/compact` had a placeholder: every other one, and that same one after a reload, showed
+   * a thread doing nothing at all.
+   */
+  test('a compaction in flight is one placeholder, counted from when the server started it', () => {
+    const started = Date.now() - 42_000;
+    chatStore.setCompacting(THREAD, started);
+    chatStore.setCompacting(THREAD, started + 5_000);
+
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(1);
+    const bubble = items[0] as { role?: string; text?: string; streaming?: boolean; ts?: number };
+    expect(bubble.text).toContain('Compacting');
+    expect(bubble.streaming).toBe(true);
+    // The server's own start, so a window that arrives late counts from the same zero rather
+    // than restarting the clock at the moment its socket happened to connect.
+    expect(bubble.ts).toBe(started);
+
+    chatStore.setCompacting(THREAD, undefined);
+    expect(chatStore.getItems(THREAD)).toHaveLength(0);
+  });
+
+  test('the notice of the command that started it does not talk over the compaction', () => {
+    // `/compact` sends its own "still running" notice a moment later. Two names for one operation
+    // in one slot: the placeholder already up says the truer of the two.
+    chatStore.addUserMessage(THREAD, 'm1', '/compact');
+    chatStore.setCompacting(THREAD, Date.now());
+    chatStore.addCommandPending(THREAD, 'm1', 'Running /compact...');
+
+    const texts = chatStore.getItems(THREAD).map(item => (item as { text?: string }).text);
+    expect(texts).toEqual(['/compact', 'Compacting the context...']);
+  });
+
+  test('the answer to /compact replaces the placeholder instead of stacking under it', () => {
+    // The end of the operation lands before the command result, so the slot is free when it
+    // arrives: a placeholder left behind would sit above an answer that says the same thing.
+    chatStore.addUserMessage(THREAD, 'm1', '/compact');
+    chatStore.setCompacting(THREAD, Date.now());
+    chatStore.setCompacting(THREAD, undefined);
+    chatStore.addCommandResult(THREAD, 'cmd-m1', 'Context compacted.', 'm1');
+
+    const texts = chatStore.getItems(THREAD).map(item => (item as { text?: string }).text);
+    expect(texts).toEqual(['/compact', 'Context compacted.']);
+  });
+
   test('the end of the run lifts an injection the run never acked', () => {
     // A run can die, or be stopped, without ever reaching the boundary that would have drained
     // its mailbox. chat.run.end clears everything for that reason: it is the backstop.

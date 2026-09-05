@@ -233,6 +233,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // it would be noise (docs/notifications.md on the server).
       chatStore.addCompactionBoundary(frame.threadId, frame.id, frame.summary, frame.count);
       break;
+    case 'chat.compacting':
+      // Same silence as the boundary above: a placeholder in the thread, nothing in the tray.
+      chatStore.setCompacting(frame.threadId, frame.since ? Date.parse(frame.since) : undefined);
+      break;
     case 'chat.run.start':
       chatStore.startRun(frame.threadId);
       break;
