@@ -9,6 +9,7 @@ import { acknowledgeDiagnostics } from './diagnostics';
 import { devicesStore } from './devices';
 import { modelStore } from './model';
 import { jobsStore } from './jobs';
+import { browserStore } from './browser';
 import { agentsStore } from './agents';
 import { tagsStore } from './tags';
 import { agentsFileStore } from './agentsFile';
@@ -109,6 +110,8 @@ export interface ServerFrameHandlers {
   setJobsError: (message: string | null) => void;
   setJobRuns: (runs: JobRunEntry[]) => void;
   setRunsError: (message: string | null) => void;
+  /** A refused browser.info: the page says why instead of sitting on "loading". */
+  setBrowserError: (message: string | null) => void;
   setApprovals: (update: (current: ApprovalRequestFrame[]) => ApprovalRequestFrame[]) => void;
   setApprovalHistory: (frame: ApprovalHistoryResultFrame) => void;
   /** A question landed on the thread on screen: the device rings once, the push does the rest. */
@@ -168,6 +171,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setJobsError,
     setJobRuns,
     setRunsError,
+    setBrowserError,
     setApprovals,
     setApprovalHistory,
     onQuestionAskOnActiveThread,
@@ -598,6 +602,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         sessionInstructionsStore.receive(frame);
       }
       break;
+    case 'browser.info.result':
+      browserStore.replace(frame);
+      break;
     case 'jobs.list.result':
       // The fresh listing is also the answer to a save or a delete: a pending one closes
       // the editor on arrival, and a refused one lands as a jobs-scoped error instead.
@@ -709,6 +716,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         markJobsSaving(false);
         setJobsSaving(false);
         setJobsError(frame.message);
+      } else if (frame.scope === 'browser') {
+        setBrowserError(frame.message);
       } else if (frame.scope === 'status') {
         statusStore.fail(frame.message);
       } else if (frame.scope === 'agents') {

@@ -1254,6 +1254,32 @@ export interface JobsListResultFrame {
   jobs: JobEntry[];
 }
 
+export interface BrowserServiceEntry {
+  unit: string;
+  active: boolean;
+}
+
+export interface BrowserTabEntry {
+  id: string;
+  title: string;
+  url: string;
+}
+
+/** What a human needs to drive the browser by hand: where to connect, with what password, and
+ *  whether anything is running behind it. See docs/browser-page.md in the server repo. */
+export interface BrowserInfoResultFrame {
+  type: 'browser.info.result';
+  enabled: boolean;
+  webUrl?: string;
+  vncHost?: string;
+  vncPort: number;
+  /** Absent when x11vnc runs without one. The page says so rather than showing a blank. */
+  password?: string;
+  services: BrowserServiceEntry[];
+  tabs: BrowserTabEntry[];
+  tabsError?: string;
+}
+
 /** One run of a job, listed as a thread the app can reopen and chat on. */
 export interface JobRunEntry {
   threadId: string;
@@ -1407,7 +1433,8 @@ export type ErrorScope =
   // here, so those refusals fell through to the generic branch and were drawn as an agent message
   // in whatever conversation happened to be open.
   | 'subagents'
-  | 'providers';
+  | 'providers'
+  | 'browser';
 
 export interface ErrorFrame {
   type: 'error';
@@ -1702,6 +1729,7 @@ export interface HelloFrame {
 }
 
 export type ServerFrame =
+  | BrowserInfoResultFrame
   | ChatMessageFrame
   | ChatUserFrame
   | ChatCompactionFrame
@@ -1852,6 +1880,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'status.result',
   'session.instructions.result',
   'jobs.list.result',
+  'browser.info.result',
   'jobs.runs.result',
   'subagents.list.result',
   'subagents.callers.result',
@@ -2553,6 +2582,11 @@ export interface JobFieldsOut {
 /** Lists the scheduled tasks; every mutation answers with the same fresh listing. */
 export function encodeJobsList(): string {
   return JSON.stringify({ type: 'jobs.list' });
+}
+
+/** Asks for the browser's connection details and current state. Read-only, no arguments. */
+export function encodeBrowserInfo(): string {
+  return JSON.stringify({ type: 'browser.info' });
 }
 
 /** Creates (no id) or updates a job. The schedule is parsed server-side. */

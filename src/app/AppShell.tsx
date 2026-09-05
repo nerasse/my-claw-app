@@ -205,6 +205,7 @@ import { VideoViewer } from './VideoViewer';
 import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
+import { BrowserScreen } from './BrowserScreen';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { JobsScreen } from './JobsScreen';
@@ -527,6 +528,8 @@ export function AppShell(): React.JSX.Element {
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [browserError, setBrowserError] = useState<string | null>(null);
   /** The More sheet in the drawer footer: Archived, Agents, Jobs, Settings. */
   const [moreOpen, setMoreOpen] = useState(false);
   const [diagSnapshot, setDiagSnapshot] = useState('');
@@ -1039,6 +1042,7 @@ export function AppShell(): React.JSX.Element {
       setJobsError,
       setJobRuns,
       setRunsError,
+      setBrowserError,
       setApprovals,
       setApprovalHistory,
       onQuestionAskOnActiveThread: () => {
@@ -1427,6 +1431,10 @@ export function AppShell(): React.JSX.Element {
       setArchivesOpen(false);
       return true;
     }
+    if (browserOpen) {
+      setBrowserOpen(false);
+      return true;
+    }
     if (filesOpen) {
       setFilesOpen(false);
       return true;
@@ -1472,6 +1480,7 @@ export function AppShell(): React.JSX.Element {
     agentsGlobalOpen,
     agentsOpen,
     archivesOpen,
+    browserOpen,
     bubbleMenu,
     commandMenuOpen,
     drawerOpen,
@@ -3204,7 +3213,7 @@ export function AppShell(): React.JSX.Element {
   );
 
   /** Something other than the conversation is showing: settings, the archives, the files. */
-  const pageOpen = settingsOpen || archivesOpen || filesOpen;
+  const pageOpen = settingsOpen || archivesOpen || filesOpen || browserOpen;
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -3776,6 +3785,8 @@ export function AppShell(): React.JSX.Element {
             ) : (
               <EmptyCategoryScreen title="Other" onBack={() => setSettingsPage('index')} />
             )
+          ) : browserOpen ? (
+            <BrowserScreen error={browserError} onClose={() => setBrowserOpen(false)} />
           ) : archivesOpen ? (
             <ArchivesScreen
               sessions={archivedSessions}
@@ -4199,6 +4210,16 @@ export function AppShell(): React.JSX.Element {
                 setMoreOpen(false);
                 setDrawerOpen(false);
                 openJobs();
+              },
+            },
+            {
+              label: 'Browser',
+              hint: 'take the session over',
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                setBrowserError(null);
+                setBrowserOpen(true);
               },
             },
             {
