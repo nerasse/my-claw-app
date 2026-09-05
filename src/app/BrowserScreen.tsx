@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useBrowserInfo } from '../core/browser';
-import { useLayerFrame } from '../core/layout';
 import { connection } from '../core/connection';
 import { encodeBrowserInfo } from '../core/protocol';
 
@@ -38,8 +36,6 @@ function useCopy(): { copied: string | null; copy: (key: string, value: string) 
  */
 export function BrowserScreen({ error, onClose }: { error: string | null; onClose: () => void }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const layerFrame = useLayerFrame();
-  const insets = useSafeAreaInsets();
   const info = useBrowserInfo();
   const { copied, copy } = useCopy();
   const [revealed, setRevealed] = useState(false);
@@ -56,8 +52,8 @@ export function BrowserScreen({ error, onClose }: { error: string | null; onClos
   const vncAddress = info?.vncHost ? `${info.vncHost}:${info.vncPort}` : null;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+    <View style={styles.screen}>
+      <View style={styles.header}>
         <Pressable
           onPress={onClose}
           hitSlop={8}
@@ -215,12 +211,13 @@ export function BrowserScreen({ error, onClose }: { error: string | null; onClos
 }
 
 const createStyles = (palette: Palette) => ({
-  stage: { backgroundColor: palette.bg },
+  // A page of the shell's own column, not a layer over the window: it flows inside the pane the
+  // shell opened for it, which is already placed beside the conversation list and already padded.
+  screen: { flex: 1 },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
-    paddingHorizontal: space.md,
     paddingBottom: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
@@ -245,12 +242,12 @@ const createStyles = (palette: Palette) => ({
   },
   refreshText: { fontSize: font.body, color: palette.text },
   error: {
-    margin: space.md,
+    marginTop: space.md,
     color: palette.danger,
     fontSize: font.small,
   },
-  empty: { padding: space.lg, color: palette.textFaint, fontSize: font.body },
-  body: { padding: space.md, gap: space.md, paddingBottom: space.xl },
+  empty: { paddingVertical: space.lg, color: palette.textFaint, fontSize: font.body },
+  body: { gap: space.md, paddingTop: space.md, paddingBottom: space.xl },
   card: {
     backgroundColor: palette.surface,
     borderRadius: radius.md,

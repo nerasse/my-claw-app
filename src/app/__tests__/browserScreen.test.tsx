@@ -8,7 +8,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Linking, Text } from 'react-native';
+import { Linking, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { BrowserScreen } from '../BrowserScreen';
 import { browserStore } from '../../core/browser';
@@ -20,6 +20,13 @@ import { parseServerFrame, type BrowserInfoResultFrame } from '../../core/protoc
 jest.mock('../../core/connection', () => ({
   connection: { send: jest.fn(() => Promise.resolve()) },
 }));
+
+// Auto-mocked, so every test states the window it is talking about: left to itself the hook
+// returns undefined and any consumer of the layout crashes on a size it never asked for.
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions');
+const windowIs = (width: number): void => {
+  (useWindowDimensions as unknown as jest.Mock).mockReturnValue({ width, height: 900, scale: 2, fontScale: 1 });
+};
 
 function info(over: Partial<BrowserInfoResultFrame> = {}): BrowserInfoResultFrame {
   return {
@@ -64,6 +71,8 @@ describe('BrowserScreen', () => {
     mounted = tree;
     return tree;
   }
+
+  beforeEach(() => windowIs(412));
 
   afterEach(() => {
     if (mounted) ReactTestRenderer.act(() => mounted?.unmount());
@@ -128,6 +137,20 @@ describe('BrowserScreen', () => {
     expect(shown).toContain('my-claw-chromium');
     expect(shown).toContain('up');
     expect(shown).toContain('down');
+  });
+
+  // The shell opens this page inside its own column, which on a wide window is a 460pt pane beside
+  // the conversation. The page used to place itself like a layer over the whole window as well,
+  // offset past the pinned list: 288 of that pane went to an empty margin and the cards drew in
+  // what was left, title wrapping one letter per line.
+  it('flows inside the pane it was given, whatever the window is doing', () => {
+    windowIs(1600);
+    const tree = render();
+    const root = StyleSheet.flatten(tree.root.findAllByType(View)[0]!.props.style) as Record<string, unknown>;
+
+    expect(root.position).toBeUndefined();
+    expect(root.left).toBeUndefined();
+    expect(root.flex).toBe(1);
   });
 
   it('asks the server on open, because units start and stop between two visits', () => {

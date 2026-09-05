@@ -73,6 +73,12 @@ export interface Layout {
  *
  * Those pages cover the window, which on a desktop means covering the conversation list too: a
  * column of the layout, not something to paint over. They begin where it ends instead.
+ *
+ * Only for a page mounted at the shell root, over everything. A page the shell opens *inside* its
+ * own column (settings, files, the archives, the browser) is already past the list, and offsetting
+ * it again takes the width out of the pane it was given: on a wide window that pane is 460pt, so
+ * the browser page drew its cards in the 150pt that were left and wrapped its own title one
+ * letter per line.
  */
 export function useLayerFrame(): { left: number } {
   const { pinnedDrawer } = useLayout();
