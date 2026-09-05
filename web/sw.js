@@ -78,7 +78,10 @@ self.addEventListener('push', event => {
   const link = payload.click || payload.url || '/';
   event.waitUntil(
     self.registration.showNotification(payload.title || 'MyClaw', {
-      body: payload.message || '',
+      // The server publishes one payload for every endpoint, and it names the line `body`
+      // (src/notifications/push.ts). Reading only ntfy's `message` showed every web
+      // notification with a title and nothing under it.
+      body: payload.body || payload.message || '',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       tag: notificationIdFor(link),

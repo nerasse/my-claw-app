@@ -144,6 +144,7 @@ import {
   dismissThreadNotification,
   parseNotificationLink,
   pushSupported,
+  registerForPush,
   resetPushRegistration,
   subscribeToPushRegistration,
 } from '../core/notifications';
@@ -1685,6 +1686,18 @@ export function AppShell(): React.JSX.Element {
         resetPushRegistration();
       }
     });
+  }, []);
+
+  /**
+   * The owner allowing notifications, from the tap that is the only thing a browser accepts as
+   * consent. The subscription that follows travels to the server through the effect above, so
+   * this is the whole of it: ask, and let the registration path do its job.
+   */
+  const allowNotifications = useCallback(async () => {
+    const key = vapidRef.current;
+    if (!key) return;
+    resetPushRegistration();
+    await registerForPush(key);
   }, []);
 
   // The one notification the user asked to never see is the run they are already watching, so
@@ -3315,6 +3328,7 @@ export function AppShell(): React.JSX.Element {
                 onUpdateServer={runServerUpdate}
                 onAppUpdate={runAppUpdate}
                 onAppUpdateInstallSettings={openAppUpdateInstallSettings}
+                onEnableNotifications={allowNotifications}
                 status={status}
                 serverVersion={serverVersion}
                 appVersion={appVersion}

@@ -44,6 +44,27 @@ connexion WS ──► frame notifications.info { vapidPublicKey }
   (`AppState`) et de thread actif : c'est ce qui permet au serveur de **taire** la notification
   du run que l'utilisateur regarde déjà.
 
+## Le navigateur : une permission, et une seule occasion de la demander
+
+Le web a le même transport (Web Push, VAPID, `sw.js` pour l'affichage et le tap) et une
+contrainte que l'Android n'a pas : `Notification.requestPermission()` n'est accordé que depuis un
+**geste utilisateur**. Firefox refuse l'appel hors geste, Chrome dépense son unique prompt dans
+une boîte que personne ne regarde, et le refus est mémorisé.
+
+L'app demandait cette permission à la réception de `notifications.info`, c'est-à-dire à la
+connexion. Résultat observé : le téléphone avait un endpoint, les deux fenêtres web **aucun** --
+donc une question posée par l'agent atteignait le tray du téléphone et rien du tout sur le bureau.
+
+Depuis : `notifications.info` ne (ré)enregistre que si la permission est déjà accordée
+(`notificationPermission() === 'granted'`) ou si la plateforme n'en a pas la notion
+(`'unavailable'`, l'Android, dont le distributeur possède l'enregistrement). Sinon, le navigateur
+est laissé tranquille et la demande passe par une **ligne de Réglages → General → notifications**,
+au doigt : `tray: allowed | blocked by the browser | not allowed yet`. Un navigateur qui a refusé
+le dit, au lieu de rester muet. Témoin : `src/core/__tests__/notificationPermission.test.ts`.
+
+Le service worker lit le corps sous `body` (le nom que le serveur publie), avec `message` en
+repli : il n'affichait auparavant que le titre, quel que soit le contenu de la notification.
+
 ## La notification de connexion (foreground service)
 
 Android exige qu'un foreground service affiche une notification persistante. Celle de
@@ -107,6 +128,9 @@ conversation ne s'empilent plus, le second remplace le premier.
 | Fichier | Rôle |
 | --- | --- |
 | `src/core/notifications.ts` | permissions, distributeur, enregistrement, parsing des deep links. Tout est no-op hors Android. |
+| `src/core/notifications.web.ts` | le pendant navigateur : `pushSupported`, `notificationPermission`, subscription Web Push |
+| `web/sw.js` | affichage et tap côté navigateur (l'app peut être fermée) |
+| `src/app/GeneralSettingsScreen.tsx` | la ligne « notifications » : l'état de la permission et le geste qui la demande |
 | `src/core/protocol.ts` | frames `notifications.info` / `register` / `state` |
 | `src/app/AppShell.tsx` | enregistrement à la réception de la clé, état premier-plan, ouverture sur tap, effacement à l'ouverture |
 | `android/.../DeviceBridgeModule.kt` | `cancelNotification(id)` : le seul moyen d'atteindre une notification posée par un service sans JS |
@@ -114,9 +138,11 @@ conversation ne s'empilent plus, le second remplace le premier.
 
 ## Plateformes
 
-UnifiedPush est un standard **Android**. `pushSupported` est `false` ailleurs et chaque entrée
-de `src/core/notifications.ts` devient un no-op plutôt que de prétendre que la plateforme est
-couverte : un futur build iOS demandera APNs, un build web la Notification API (Web Push).
+UnifiedPush est un standard **Android**. `pushSupported` est `false` sur les plateformes sans
+transport et chaque entrée de `src/core/notifications.ts` devient un no-op plutôt que de prétendre
+que la plateforme est couverte ; un futur build iOS demandera APNs. Le **web** est couvert par
+`notifications.web.ts` : même payload chiffré VAPID, donc rien ne change côté serveur, mais la
+permission du navigateur passe par un geste (section ci-dessus).
 
 ## Dépendances natives et build
 

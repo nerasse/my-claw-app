@@ -19,7 +19,7 @@ import { providersEnvStore } from './providers';
 import { statusStore } from './status';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
-import { registerForPush } from './notifications';
+import { notificationPermission, registerForPush } from './notifications';
 
 /** Same page size the shell requests on open: a branch switch refreshes the thread with it. */
 const HISTORY_LIMIT = 50;
@@ -632,12 +632,20 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       setRunsError(null);
       break;
     }
-    case 'notifications.info':
+    case 'notifications.info': {
       // The server hands its VAPID key on every connection; registering again is how the
       // library verifies the distributor link is still alive (and picks up a rotation).
       setVapidKey(frame.vapidPublicKey);
-      registerForPush(frame.vapidPublicKey).catch(() => {});
+      // A browser that has not granted the permission yet is not asked here: `requestPermission`
+      // needs a user gesture, so a connect-time attempt fails on Firefox and spends Chrome's one
+      // prompt on a dialog nobody is looking at. It gets a switch in Settings instead. Android
+      // reports `unavailable` -- there is no permission on that path -- and registers as it always did.
+      const permission = notificationPermission();
+      if (permission === 'unavailable' || permission === 'granted') {
+        registerForPush(frame.vapidPublicKey).catch(() => {});
+      }
       break;
+    }
     case 'hello':
       // The server names itself on connect: the settings page labels "connected" with it.
       setServerVersion(frame.version);

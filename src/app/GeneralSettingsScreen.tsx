@@ -16,6 +16,7 @@ import {
   type AppUpdatePhase,
 } from '../core/appUpdate';
 import { appUpdateSupported } from '../core/appUpdateRuntime';
+import { notificationPermission } from '../core/notifications';
 import { font, radius, scaleFont, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -83,6 +84,7 @@ export function GeneralSettingsScreen({
   onUpdateServer,
   onAppUpdate,
   onAppUpdateInstallSettings,
+  onEnableNotifications,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
@@ -119,6 +121,11 @@ export function GeneralSettingsScreen({
   onAppUpdate: () => void;
   /** Opens Android's "install unknown apps" settings screen. */
   onAppUpdateInstallSettings: () => void;
+  /**
+   * Asks the browser for the notification permission and subscribes. Only ever called from this
+   * tap: the grant needs a user gesture, which a connect-time attempt does not have.
+   */
+  onEnableNotifications: () => Promise<void>;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // the server field is never focused on the way in.
@@ -134,6 +141,19 @@ export function GeneralSettingsScreen({
   const busyUpdating = updateBusy(updatePhase);
   const appUpdating = appUpdatePhase.kind === 'downloading' || appUpdatePhase.kind === 'installing' || appUpdatePhase.kind === 'checking';
   const [showToken, setShowToken] = useState(false);
+  const [permission, setPermission] = useState(() => notificationPermission());
+  const [enabling, setEnabling] = useState(false);
+  const enableNotifications = async (): Promise<void> => {
+    setEnabling(true);
+    try {
+      await onEnableNotifications();
+    } finally {
+      // The browser's verdict is the only truth worth showing, including "denied": the row says
+      // so instead of leaving a switch that looks available and does nothing.
+      setPermission(notificationPermission());
+      setEnabling(false);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -198,6 +218,39 @@ export function GeneralSettingsScreen({
             )}
           </View>
         </View>
+
+        {permission === 'unavailable' ? null : (
+          <View style={styles.categoryItem}>
+            <Text style={styles.section}>notifications</Text>
+            <View style={styles.card}>
+              <View style={styles.kv}>
+                <Text style={styles.key}>tray</Text>
+                <Text style={styles.value}>
+                  {permission === 'granted' ? 'allowed' : permission === 'denied' ? 'blocked by the browser' : 'not allowed yet'}
+                </Text>
+              </View>
+              {permission === 'granted' ? (
+                <Text style={styles.hint}>questions and finished runs reach this browser</Text>
+              ) : permission === 'denied' ? (
+                <Text style={styles.hint}>reset it in the site settings of the browser, then reload</Text>
+              ) : (
+                <>
+                  <Pressable
+                    style={[styles.button, enabling && styles.buttonOff]}
+                    onPress={() => {
+                      enableNotifications().catch(() => {});
+                    }}
+                    disabled={enabling}
+                    accessibilityRole="button"
+                    accessibilityLabel="Allow notifications in this browser">
+                    <Text style={styles.buttonText}>{enabling ? 'Asking...' : 'Allow notifications'}</Text>
+                  </Pressable>
+                  <Text style={styles.hint}>a question waiting on you is worth an interruption</Text>
+                </>
+              )}
+            </View>
+          </View>
+        )}
 
         <View style={styles.categoryItem}>
           <Text style={styles.section}>server</Text>

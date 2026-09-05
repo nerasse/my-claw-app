@@ -47,6 +47,19 @@ export function listDistributors(): Distributor[] {
   return [];
 }
 
+/**
+ * Whether the tray is reachable, and whose decision that is.
+ *
+ * A browser gates notifications on a permission it will only grant from a user gesture: Firefox
+ * refuses `requestPermission()` outside one outright, and Chrome spends its single prompt. Asking
+ * on connect therefore failed silently and for good -- the settings row exists so the owner can
+ * grant it with a tap, and so a browser that blocked it says so instead of staying mute.
+ */
+export function notificationPermission(): 'granted' | 'denied' | 'default' | 'unavailable' {
+  if (!pushSupported || typeof Notification === 'undefined') return 'unavailable';
+  return Notification.permission;
+}
+
 export function savedDistributor(): string | null {
   return null;
 }

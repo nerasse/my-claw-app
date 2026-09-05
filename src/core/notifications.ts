@@ -32,6 +32,15 @@ export type PushRegistrationEvent =
 
 export const pushSupported = Platform.OS === 'android';
 
+/**
+ * There is no permission to ask for here: the distributor owns the registration and the channel
+ * is pre-created at boot, so nothing in this build has a grant to report (docs/notifications.md).
+ * The web counterpart answers the browser's own verdict, which is what the settings row reads.
+ */
+export function notificationPermission(): 'granted' | 'denied' | 'default' | 'unavailable' {
+  return 'unavailable';
+}
+
 /** The distributors installed on the device (ntfy, NextPush, …), for the settings row. */
 export function listDistributors(): Distributor[] {
   if (!pushSupported) return [];
