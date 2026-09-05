@@ -3215,10 +3215,16 @@ export function AppShell(): React.JSX.Element {
         barStyle={dark ? 'light-content' : 'dark-content'}
         backgroundColor={palette.bg}
       />
-      <KeyboardAvoidingView
-        style={styles.safe}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      {/* Never 'height', on any platform: that branch renders `height: _initialFrameHeight -
+          bottom` with `flex: 0`, and _initialFrameHeight is measured once, at the first layout,
+          then never again -- while `bottom` is recomputed as `state.bottom + frame.height -
+          keyboardY`, which adds the shrink it already applied. The two stay consistent only as
+          long as every keyboard event is separated by a layout pass. Two events in a row (the IME
+          restored on resume, then the field focused) counted the keyboard twice and left the shell
+          a strip at the top of the screen: header, composer, then a band of background where the
+          conversation should be. 'padding' derives the inset from the live frame alone, so a stale
+          frame costs one frame of overshoot instead of compounding. See docs/keyboard-avoidance.md. */}
+      <KeyboardAvoidingView style={styles.safe} behavior="padding">
         {/* A row with one child on a phone, two on a desktop: the conversation list stops being
             an overlay and becomes a column, and the pages beside it lose nothing. */}
         <View style={styles.shell}>
