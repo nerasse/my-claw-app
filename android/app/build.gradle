@@ -95,6 +95,10 @@ android {
         versionCode 214
         versionName "0.6.35"
     }
+    // Debug only. The release key is never here: a keystore Gradle can read is a keystore the
+    // repository can leak, and this one shipped every release signed with the React Native
+    // template's public debug key. Release APKs leave Gradle unsigned and are signed by
+    // scripts/release.sh, which alone knows the lineage. See docs/release-signing.md.
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -114,9 +118,9 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // No signingConfig on purpose: assembleRelease emits app-release-unsigned.apk and
+            // scripts/release.sh signs it with the rotated key. An APK that skips that script
+            // cannot be installed, which is the point.
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

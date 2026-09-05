@@ -9,7 +9,10 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
+import android.content.pm.SigningInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -582,7 +585,10 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     val request = Request.Builder()
       .url(url)
       .post(body)
-      .header("x-filename", filename)
+      // Percent-encoded, like the web client: an OkHttp header value must be ISO-8859-1 and a
+      // name such as "resume.pdf" with accents throws before the request leaves. The server
+      // decodes it back (files-http.ts, decodeUploadName).
+      .header("x-filename", Uri.encode(filename))
       .header("x-type", type)
       .header("x-thread-id", threadId)
       .build()
@@ -1072,6 +1078,65 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     promise.resolve(null)
   }
 
+  private fun certDigests(certs: Array<android.content.pm.Signature>?): Set<String> {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    return certs.orEmpty().map { cert ->
+      digest.digest(cert.toByteArray()).joinToString("") { byte -> "%02x".format(byte) }
+    }.toSet()
+  }
+
+  /** Who signed this package right now. */
+  private fun currentSigners(info: SigningInfo?): Set<String> =
+    if (info == null) emptySet() else certDigests(info.apkContentsSigners)
+
+  /**
+   * Every certificate a package can prove it descends from: the current signer plus, when the
+   * APK carries a v3 rotation lineage, its ancestors. This is what makes the key rotation
+   * installable -- the archive is signed by the release key and the phone still holds the old
+   * debug one, and the lineage is the proof that links the two.
+   */
+  private fun provenSigners(info: SigningInfo?): Set<String> {
+    if (info == null) return emptySet()
+    val history = if (info.hasMultipleSigners()) emptySet() else certDigests(info.signingCertificateHistory)
+    return currentSigners(info) + history
+  }
+
+  /**
+   * What the staged file has to prove before it is handed to PackageInstaller: that it is this
+   * app, that it moves forward, and that it was signed by a key this install already trusts.
+   *
+   * Until this existed the only checks were the `PK` magic and a size the same server announced,
+   * so whoever answered the update relay -- a compromised server, a hostile network, anyone who
+   * reached the release registry -- got their APK past a system dialog that says nothing alarming
+   * when the signature matches. Returns null when the archive is acceptable, a reason otherwise.
+   */
+  private fun rejectionReason(file: java.io.File): String? {
+    val pm = reactContext.packageManager
+    val self = reactContext.packageName
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+      // No signing-certificate API below P. Those devices are served by the original key
+      // (see the rotation range in scripts/release.sh) and the platform enforces the match.
+      val archive = pm.getPackageArchiveInfo(file.absolutePath, 0)
+        ?: return "the staged file is not a readable package"
+      if (archive.packageName != self) return "the staged package is ${archive.packageName}, not $self"
+      return null
+    }
+    val flags = PackageManager.GET_SIGNING_CERTIFICATES
+    val archive: PackageInfo = pm.getPackageArchiveInfo(file.absolutePath, flags)
+      ?: return "the staged file is not a readable package"
+    if (archive.packageName != self) return "the staged package is ${archive.packageName}, not $self"
+    val installed: PackageInfo = pm.getPackageInfo(self, flags)
+    if (archive.longVersionCode <= installed.longVersionCode) {
+      return "the staged build is ${archive.longVersionCode}, not newer than ${installed.longVersionCode}"
+    }
+    val trusted = currentSigners(installed.signingInfo)
+    val proven = provenSigners(archive.signingInfo)
+    if (trusted.isEmpty()) return "this install has no signer to compare against"
+    if (proven.isEmpty()) return "the staged package is not signed"
+    if (!proven.containsAll(trusted)) return "the staged package was signed by an unknown key"
+    return null
+  }
+
   /**
    * Commits the staged APK through PackageInstaller. The confirmation is Android's own (one
    * system screen); the outcome is emitted on claw:update:install by InstallResultReceiver.
@@ -1083,6 +1148,18 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     val file = stagedApk()
     if (!file.exists() || file.length() == 0L) {
       promise.reject("APK_NOT_STAGED", "no staged apk, download first")
+      return
+    }
+    val refusal = try {
+      rejectionReason(file)
+    } catch (e: Exception) {
+      e.message ?: "the staged package could not be verified"
+    }
+    if (refusal != null) {
+      // A file that failed this check is never worth keeping: leaving it staged would offer the
+      // same Install button again on the next screen.
+      dropStagedApk(reactContext)
+      promise.reject("APK_UNTRUSTED", refusal)
       return
     }
     // Deliberately no canRequestPackageInstalls() gate here. That value is cached per process,
@@ -1243,24 +1320,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   @ReactMethod
   fun getCapabilities(promise: Promise) {
     val caps = Arguments.createMap()
-    caps.putBoolean("accessibility", ClawAccessibilityService.instance() != null)
-    caps.putBoolean("notificationListener", ClawNotificationListener.isListening())
     caps.putBoolean("wssConnection", true)
     promise.resolve(caps)
-  }
-
-  @ReactMethod
-  fun getAccessibilitySnapshot(promise: Promise) {
-    promise.resolve(ClawAccessibilityService.instance()?.snapshot())
-  }
-
-  @ReactMethod
-  fun performAccessibilityAction(action: ReadableMap, promise: Promise) {
-    val service = ClawAccessibilityService.instance()
-    if (service == null) {
-      promise.reject("NO_ACCESSIBILITY_SERVICE", "Accessibility service is not enabled")
-      return
-    }
-    promise.resolve(service.performAction(action))
   }
 }
