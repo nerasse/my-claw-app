@@ -45,6 +45,22 @@ describe('chatStore streaming', () => {
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ error: 'boom', streaming: false });
   });
 
+  // A stop settles every streamer of the session, and most of them never opened a bubble here:
+  // one per message folded into the running turn. Each used to leave an empty bubble behind, so a
+  // single stop read as four of them.
+  test('an abort with nothing to say about a bubble we never had leaves nothing behind', () => {
+    chatStore.abortStream(THREAD, 'never-opened', undefined);
+    expect(chatStore.getItems(THREAD)).toHaveLength(0);
+  });
+
+  test('the bubble a stop does end keeps its text and stops spinning', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'moitie de la reponse');
+    chatStore.abortStream(THREAD, 's1', undefined);
+    expect(chatStore.getItems(THREAD)).toHaveLength(1);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'moitie de la reponse', streaming: false });
+  });
+
   test('a failed send is marked on the user bubble', () => {
     chatStore.addUserMessage(THREAD, 'u1', 'hi');
     chatStore.markSendFailed(THREAD, 'u1');

@@ -1345,6 +1345,11 @@ class ChatStoreImpl {
 
   abortStream(threadId: string, id: string, error?: string): void {
     if (!this.streams.has(id)) {
+      // A bubble is invented here, and only for a run that died before its first token: the error
+      // has nowhere else to go, and a thread that ends on nothing explains nothing. With no error
+      // there is nothing to invent it for -- a stop settles bubbles it never opened (one streamer
+      // per message folded into the run), and each of those used to leave an empty bubble behind.
+      if (!error) return;
       this.append(threadId, {
         kind: 'text',
         id,
@@ -1352,7 +1357,7 @@ class ChatStoreImpl {
         text: '',
         attachments: [],
         streaming: false,
-        error: error ?? 'interrupted',
+        error,
         ts: Date.now(),
       });
       return;
