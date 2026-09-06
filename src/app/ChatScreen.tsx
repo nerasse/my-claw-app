@@ -196,6 +196,8 @@ export function ChatScreen({
     return questions.filter(ask => !ask.replyToId || !ids.has(ask.replyToId));
   }, [questions, items]);
   const [draft, setDraft] = useState(() => draftTextOf(threadId));
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [atBottom, setAtBottom] = useState(true);
   const commands = useCommands();
   const inCommandRef = useRef(false);
@@ -233,8 +235,6 @@ export function ChatScreen({
    * screen is unmounted (a page covering the chat on a phone) and just before the swap to
    * another conversation, which is what stops a message written here from being sent there.
    */
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
   useEffect(() => {
@@ -246,6 +246,10 @@ export function ChatScreen({
   /** Every change, so the owner's other devices see it. Debounced and deduped by the store. */
   const changeDraft = useCallback(
     (text: string) => {
+      // The ref too, not only the state: a change made in the same tick as the swap to a page
+      // (a slash command that opens one) never renders before the unmount saves the draft, and
+      // the cleared field came back with the command still in it.
+      draftRef.current = text;
       setDraft(text);
       queueDraftSync(threadId, text);
     },
@@ -254,6 +258,7 @@ export function ChatScreen({
 
   /** Sent, or otherwise consumed: drops the pending sync too, or it would land after the send. */
   const consumeDraft = useCallback(() => {
+    draftRef.current = '';
     setDraft('');
     clearDraft(threadId);
   }, [threadId]);
