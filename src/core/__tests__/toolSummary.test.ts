@@ -4,6 +4,7 @@
  */
 
 import { labelArgs, shortenPath, summarizeTool, toolContent } from '../toolSummary';
+import { PREVIEW_GUARD, summarizeArgs } from '../utils';
 
 it('names the argument that identifies the call, not the first one serialized', () => {
   // `path` last on purpose: object order is the model's, and the old preview followed it.
@@ -30,11 +31,29 @@ it('shortens a path from the left: the tree above a file identifies nothing', ()
   expect(shortenPath('chat.ts')).toBe('chat.ts');
 });
 
-it('flattens and clamps, so one card is one line whatever the argument holds', () => {
-  const long = summarizeTool('bash', { command: `echo ${'x'.repeat(200)}` });
-  expect(long.detail.length).toBeLessThanOrEqual(73);
-  expect(long.detail.endsWith('…')).toBe(true);
+it('flattens to one line whatever the argument holds', () => {
   expect(summarizeTool('bash', { command: 'a\n  b\n  c' }).detail).toBe('a b c');
+});
+
+// The row is `flex: 1` with `numberOfLines={1}`, so it clips at the pixel and draws its own
+// ellipsis. Cutting here too meant the shorter of the two won: at a reduced chat font scale the
+// character count ran out first and left the rest of the row blank behind a dead ellipsis.
+it('hands the preview over whole, so the layout is what decides where it ends', () => {
+  const long = summarizeTool('bash', { command: `echo ${'x'.repeat(200)}` });
+  expect(long.detail.length).toBeGreaterThan(72);
+  expect(long.detail).not.toContain('…');
+
+  const unknown = summarizeTool('some_mcp_tool', {}, summarizeArgs({ q: 'y'.repeat(200), n: 2 }));
+  expect(unknown.detail.length).toBeGreaterThan(72);
+  expect(unknown.detail).not.toContain('…');
+});
+
+// A tool called with a whole file as its first argument would otherwise be flattened and measured
+// in full on every render.
+it('still refuses to build a preview no row could ever draw', () => {
+  const huge = summarizeTool('bash', { command: 'z'.repeat(50_000) });
+  expect(huge.detail.length).toBe(PREVIEW_GUARD);
+  expect(summarizeArgs({ body: 'z'.repeat(50_000) }).length).toBe(PREVIEW_GUARD);
 });
 
 it('marks a path, a command or a pattern as code and a bare verb as prose', () => {

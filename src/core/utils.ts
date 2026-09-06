@@ -63,6 +63,15 @@ export function formatDuration(ms?: number): string {
   return `${Math.floor(ms / 60_000)}m${String(Math.round((ms % 60_000) / 1000)).padStart(2, '0')}s`;
 }
 
+/**
+ * How much of a one-line preview is worth building.
+ *
+ * Not a visual limit: the row that draws it is `flex: 1` with `numberOfLines={1}`, so the layout
+ * clips at the pixel and adds its own ellipsis. This only keeps a tool called with a whole file as
+ * its first argument from being flattened and measured in full. Far past what any row can show.
+ */
+export const PREVIEW_GUARD = 512;
+
 /** One-line preview of tool arguments for the collapsed card. */
 export function summarizeArgs(args: Record<string, unknown>): string {
   // The type says this is always an object; the wire does not. A tool card whose `args` never
@@ -74,5 +83,5 @@ export function summarizeArgs(args: Record<string, unknown>): string {
   const value = typeof first[1] === 'string' ? first[1] : JSON.stringify(first[1]);
   const preview = (value ?? '').replace(/\s+/g, ' ').trim();
   const suffix = entries.length > 1 ? ` +${entries.length - 1}` : '';
-  return `${preview.slice(0, 60)}${preview.length > 60 ? '…' : ''}${suffix}`;
+  return `${preview.slice(0, PREVIEW_GUARD)}${suffix}`;
 }

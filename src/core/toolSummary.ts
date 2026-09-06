@@ -11,6 +11,8 @@
  * first-argument preview, and an MCP tool or a plugin therefore still reads sensibly.
  */
 
+import { PREVIEW_GUARD } from './utils';
+
 /**
  * What kind of thing a tool touches. Not drawn: a per-family glyph in the card head was tried and
  * removed -- a row already carries a chevron, and a second mark next to it read as a stray arrow
@@ -167,8 +169,20 @@ export function labelArgs(name: string, args: Record<string, unknown>): Record<s
 /** Tools whose `action`/`mode` says as much as their target, shown ahead of it. */
 const VERB_KEYS: readonly string[] = ['action', 'mode', 'method'];
 
-/** How much of a one-line preview survives. Past this a phone wraps or clips anyway. */
-const MAX_DETAIL = 72;
+/**
+ * The preview is cut by the layout, not here.
+ *
+ * This used to stop at 72 characters, on the reasoning that "past this a phone wraps or clips
+ * anyway". That held while the chat drew at its design size: barely fifty characters fitted a row,
+ * so the layout always clipped first and this cut was never seen. The chat font scale made it
+ * visible -- shrink the text and more characters fit, while the cut stayed at 72 and left the rest
+ * of the row blank behind an ellipsis that pointed at nothing.
+ *
+ * A character count cannot know the width it will be drawn in: that depends on the font scale, the
+ * screen, the tool name, the failed badge and the duration sharing the row. `numberOfLines={1}` on
+ * a `flex: 1` text knows all of it, so the string is handed over whole and clipped at the pixel.
+ */
+const MAX_DETAIL = PREVIEW_GUARD;
 
 function firstString(args: Record<string, unknown>, keys: readonly string[]): string {
   for (const key of keys) {
@@ -191,7 +205,7 @@ export function shortenPath(path: string): string {
 
 function clamp(text: string): string {
   const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length > MAX_DETAIL ? `${flat.slice(0, MAX_DETAIL)}…` : flat;
+  return flat.length > MAX_DETAIL ? flat.slice(0, MAX_DETAIL) : flat;
 }
 
 export interface ToolSummary {
