@@ -57,6 +57,21 @@ tab has no equivalent. Queue unsent frames in IndexedDB and drain on reconnect. 
 place the web ends up better than the app, whose in-memory outbox dies with the process (see
 AGENTS.md, known traps).
 
+Three rules it took a bug each to learn:
+
+- **Read the stored queue once per page, not once per `connect()`.** `connect()` runs again on a
+  server address change or a re-login, and restoring prepended the stored frames to a queue that
+  already held them: one message sent once per reconnect the tab had made.
+- **Cap it at 200, like `ClawConnectionService`,** and answer `false` past that. An unbounded
+  queue in `localStorage` ends at the quota, where every write starts failing at once, and the
+  composer needs to hear no rather than mark a bubble sent that nothing will carry.
+- **Some frames go stale.** `chat.stop`, `approval.response`, `undo.choose`, `undo.cancel` all
+  name a run or a sheet that was live when they were typed. Replayed on a reconnect an hour later
+  they act on whatever holds that place now: a stop that kills an unrelated answer. Each frame is
+  stamped when queued and the perishable ones are dropped past a minute. A queue written before
+  the stamps reads as undated, which is treated as old -- the right call, since the message is
+  still worth sending and the stop beside it is not.
+
 ## Package shims
 
 Same `.web.tsx` mechanism, wrapped in `src/compat/`:

@@ -178,12 +178,45 @@ const RECONNECT_MAX_MS = 30000;
 /** How often a socket that claims to be open is asked to prove it. */
 const HEARTBEAT_MS = 25000;
 const OUTBOX_KEY = 'claw:outbox';
+/** The ceiling ClawConnectionService uses, so both surfaces fail the same way. */
+const OUTBOX_CAPACITY = 200;
+
+/** A queued frame and when it was queued: staleness is a property of the frame, not of the queue. */
+interface QueuedFrame {
+  text: string;
+  at: number;
+}
+
+function isQueuedFrame(entry: unknown): entry is QueuedFrame {
+  if (typeof entry !== 'object' || entry === null) return false;
+  const candidate = entry as { text?: unknown; at?: unknown };
+  return typeof candidate.text === 'string' && typeof candidate.at === 'number';
+}
+
+/**
+ * Frames that name a run, a sheet or a prompt that was live when they were typed. Replayed later
+ * they act on whatever holds that place now, which is worse than not sending them at all.
+ */
+const PERISHABLE = ['chat.stop', 'approval.response', 'undo.choose', 'undo.cancel'];
+const PERISHABLE_MS = 60_000;
+
+function isPerishable(text: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    const type = (parsed as { type?: unknown } | null)?.type;
+    return typeof type === 'string' && PERISHABLE.includes(type);
+  } catch {
+    return false;
+  }
+}
 
 /** Mirrors ClawConnectionService: one socket, an outbox, exponential backoff, state events. */
 class WebConnection {
   private socket: WebSocket | null = null;
   private url = '';
-  private outbox: string[] = [];
+  private outbox: QueuedFrame[] = [];
+  /** The stored queue is read once, not once per `connect()`. */
+  private restored = false;
   private state = 'idle';
   private attempt = 0;
   /** When the live socket opened, 0 when none did. A short life is a failure, not a success. */
@@ -249,7 +282,11 @@ class WebConnection {
       this.socket.send(text);
       return true;
     }
-    this.outbox.push(text);
+    // Same ceiling as ClawConnectionService, and the same answer past it: false, so the composer
+    // marks the bubble failed instead of pretending a frame is on its way. An unbounded queue in
+    // localStorage ends at the quota, where every write starts failing at once.
+    if (this.outbox.length >= OUTBOX_CAPACITY) return false;
+    this.outbox.push({ text, at: Date.now() });
     this.persistOutbox();
     deviceEvents.emit('claw:ws:outbox', { pending: this.outbox.length });
     return true;
@@ -279,15 +316,34 @@ class WebConnection {
     }
   }
 
+  /**
+   * Read once per page, like the native service reads it once per process. It used to run on every
+   * `connect()` -- and `connect()` runs again on a server address change or a re-login -- so the
+   * stored frames were prepended to a queue that already held them, and the same message was sent
+   * as many times as the tab had reconnected.
+   */
   private restoreOutbox(): void {
+    if (this.restored) return;
+    this.restored = true;
     try {
       const stored = localStorage.getItem(OUTBOX_KEY);
       if (!stored) return;
       const parsed: unknown = JSON.parse(stored);
       if (!Array.isArray(parsed)) return;
-      const frames = parsed.filter((frame): frame is string => typeof frame === 'string');
+      const frames = parsed
+        // `at: 0` for a bare string: written by a version that did not stamp them, so it is old,
+        // which is the right reading for deciding what has gone stale.
+        .map((entry): QueuedFrame | null =>
+          typeof entry === 'string'
+            ? { text: entry, at: 0 }
+            : isQueuedFrame(entry)
+              ? entry
+              : null,
+        )
+        .filter((entry): entry is QueuedFrame => entry !== null);
       // Ahead of anything queued since the page loaded: they were typed first.
-      this.outbox = [...frames, ...this.outbox];
+      this.outbox = [...frames, ...this.outbox].slice(0, OUTBOX_CAPACITY);
+      this.persistOutbox();
       if (this.outbox.length > 0) {
         deviceEvents.emit('claw:ws:outbox', { pending: this.outbox.length });
       }
@@ -391,7 +447,14 @@ class WebConnection {
   private drain(): void {
     const queued = this.outbox;
     this.outbox = [];
-    queued.forEach(text => this.send(text));
+    const now = Date.now();
+    queued.forEach(entry => {
+      // A stop, an approval or an undo only means anything to the run that was live when it was
+      // typed. Sent on a reconnect an hour later it lands on whatever is running now: a stop that
+      // kills an unrelated answer, or a decision on a sheet that timed out long ago.
+      if (isPerishable(entry.text) && now - entry.at > PERISHABLE_MS) return;
+      this.send(entry.text);
+    });
     this.persistOutbox();
     deviceEvents.emit('claw:ws:outbox', { pending: this.outbox.length });
   }
