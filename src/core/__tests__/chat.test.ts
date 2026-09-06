@@ -1112,6 +1112,63 @@ describe('handleSyncResult: a reload mid-run', () => {
     expect(chatStore.getItems(T).map(item => item.id)).toEqual(['e-user', 'stream-1']);
   });
 
+  test('an older page delivered twice stays where it was, instead of jumping below the newer one', () => {
+    // The general shape of the same race: a delta replaces matching ids by dropping them and
+    // re-appending at the end, so a page the thread already holds does not settle in place, it
+    // moves. Two exchanges become one conversation read backwards -- the first question landing
+    // under the answer to the second.
+    const first = [
+      { id: 'u-1', role: 'user' as const, text: 'premiere question', ts: '2026-01-01T00:00:00.000Z', attachments: [] },
+      { id: 'a-1', role: 'assistant' as const, text: 'premiere reponse', ts: '2026-01-01T00:00:01.000Z', attachments: [] },
+    ];
+    chatStore.handleSyncResult(T, first, 'a-1', 'a-1', false, undefined);
+    chatStore.handleSyncResult(
+      T,
+      [
+        { id: 'u-2', role: 'user' as const, text: 'seconde question', ts: '2026-01-01T00:00:02.000Z', attachments: [] },
+        { id: 'a-2', role: 'assistant' as const, text: 'seconde reponse', ts: '2026-01-01T00:00:03.000Z', attachments: [] },
+      ],
+      'a-2',
+      'a-2',
+      false,
+      undefined,
+    );
+    expect(chatStore.getItems(T).map(item => item.id)).toEqual(['u-1', 'a-1', 'u-2', 'a-2']);
+
+    // The racing request, still carrying the null cursor it left with.
+    chatStore.handleSyncResult(T, first, 'a-2', 'a-2', false, undefined);
+
+    expect(chatStore.getItems(T).map(item => item.id)).toEqual(['u-1', 'a-1', 'u-2', 'a-2']);
+  });
+
+  test('a card re-delivered with its result settles in place, it does not move to the end', () => {
+    chatStore.handleSyncResult(
+      T,
+      [
+        { id: 'call-1', role: 'tool', ts: '2026-01-01T00:00:01.000Z', name: 'bash', args: {}, output: '', ok: true, attachments: [] } as never,
+        { id: 'a-after', role: 'assistant', text: 'suite', ts: '2026-01-01T00:00:02.000Z', attachments: [] },
+      ],
+      'a-after',
+      'a-after',
+      false,
+      undefined,
+    );
+
+    // The same card, now carrying its output: replacing it must not reorder the thread.
+    chatStore.handleSyncResult(
+      T,
+      [{ id: 'call-1', role: 'tool', ts: '2026-01-01T00:00:01.000Z', name: 'bash', args: {}, output: 'done', ok: true, attachments: [] } as never],
+      'a-after',
+      'a-after',
+      false,
+      undefined,
+    );
+
+    const items = chatStore.getItems(T);
+    expect(items.map(item => item.id)).toEqual(['call-1', 'a-after']);
+    expect(items[0]).toMatchObject({ output: 'done' });
+  });
+
   test('a settled card is not treated as live, so a later delta still lands after it', () => {
     chatStore.handleSyncResult(
       T,

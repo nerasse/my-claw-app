@@ -874,18 +874,22 @@ class ChatStoreImpl {
     if (entries.length === 0) return;
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const incoming = this.itemsOfWithSpawnReconcile(threadId, entries);
-    const incomingIds = new Set(incoming.map(item => item.id));
+    const byId = new Map(incoming.map(item => [item.id, item]));
 
-    // Remove any existing items that the delta replaces (tool cards settling)
-    const kept = existing.filter(item => !incomingIds.has(item.id));
+    // An id the thread already holds is **patched where it sits**, never moved. Dropping it and
+    // re-appending is what turned a page the client already had into a reordering: a racing
+    // session.sync leaves with a null cursor and re-delivers the opening exchange, and the first
+    // question landed under the answer to the second. Same fault settles a tool card at the end of
+    // the thread rather than in the turn that called it.
+    const patched = existing.map(item => byId.get(item.id) ?? item);
+    const seen = new Set(existing.map(item => item.id));
+    const fresh = incoming.filter(item => !seen.has(item.id));
     // A delta is newer than what is persisted, but NOT newer than the turn in flight: the live
-    // items belong to a run the server has not written yet. Concatenating blind hoists a running
-    // tool card above the user bubble it answers, which is what a reload used to show -- two
-    // session.sync requests race out with the same null cursor, so the second re-delivers a page
-    // that already sits behind the live card.
-    const persisted = kept.filter(item => !isLocalLive(item));
-    const live = kept.filter(isLocalLive);
-    this.threads.set(threadId, this.trimToCap(threadId, [...persisted, ...incoming, ...live]));
+    // items belong to a run the server has not written yet. Appending blind hoists a running tool
+    // card above the user bubble it answers.
+    const persisted = patched.filter(item => !isLocalLive(item));
+    const live = patched.filter(isLocalLive);
+    this.threads.set(threadId, this.trimToCap(threadId, [...persisted, ...fresh, ...live]));
     this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
   }
