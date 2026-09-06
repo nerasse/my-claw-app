@@ -40,15 +40,16 @@ const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
 function render(request: QuestionAskFrame = ask) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   const onReply = jest.fn();
+  const onRevealField = jest.fn();
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
       <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
-        <QuestionCard request={request} onReply={onReply} />
+        <QuestionCard request={request} onReply={onReply} onRevealField={onRevealField} />
       </ThemeContext.Provider>,
     );
   });
   mounted.push(tree);
-  return { tree, onReply };
+  return { tree, onReply, onRevealField };
 }
 
 /** Pressables are matched by the text they carry: `Pressable` itself is not findable by type. */
@@ -199,6 +200,19 @@ describe('QuestionCard', () => {
     pressLabel(tree, 'Review the answers');
     press(tree, 'Send');
     expect(onReply).toHaveBeenCalledWith('que_1', [[], []]);
+  });
+
+  // The card cannot scroll itself into view: it does not know it is in a list, and the app draws
+  // edge to edge, so Android never resizes the window and never reveals the focused input either.
+  it('asks to be revealed when the free-text field takes focus', () => {
+    const { tree, onRevealField } = render();
+    expect(onRevealField).not.toHaveBeenCalled();
+    press(tree, 'Type your own answer');
+    const input = tree.root.findAllByType(TextInput)[0]!;
+    ReactTestRenderer.act(() => {
+      input.props.onFocus?.();
+    });
+    expect(onRevealField).toHaveBeenCalled();
   });
 
   it('a long answer is cut in the recap and opens on tap', () => {

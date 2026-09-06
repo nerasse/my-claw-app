@@ -612,6 +612,19 @@ export function ChatScreen({
    * Draws one bubble or card. `groupedFlag`/`showTimeFlag` are passed in rather than read from
    * the global index so the same code serves free rows and the children of a run group.
    */
+  /**
+   * Bring the bottom of the thread back under the keyboard when a free-text answer opens.
+   *
+   * The pending question is at the bottom -- the pill that jumps to it scrolls to the same
+   * offset, and an inverted list pins offset 0 to the bottom edge whatever the keyboard leaves
+   * of the viewport. The field is the last thing in the card, so this puts it right above the
+   * composer instead of off screen under the keyboard.
+   */
+  const revealQuestionField = useCallback(() => {
+    setAtBottom(true);
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
   const renderItemContent = useCallback(
     (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean) => {
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
@@ -623,7 +636,7 @@ export function ChatScreen({
         if (ask) {
           return (
             <View style={toolColumn}>
-              <QuestionCard request={ask} onReply={onQuestionReply} />
+              <QuestionCard request={ask} onReply={onQuestionReply} onRevealField={revealQuestionField} />
             </View>
           );
         }
@@ -666,7 +679,7 @@ export function ChatScreen({
         </View>
       );
     },
-    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const renderRowContent = useCallback(
@@ -738,11 +751,16 @@ export function ChatScreen({
       questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
           {questionsLoose.map(ask => (
-            <QuestionCard key={ask.id} request={ask} onReply={onQuestionReply} />
+            <QuestionCard
+              key={ask.id}
+              request={ask}
+              onReply={onQuestionReply}
+              onRevealField={revealQuestionField}
+            />
           ))}
         </View>
       ) : null,
-    [questionsLoose, onQuestionReply, styles.looseQuestions],
+    [questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
   );
 
   const listFooter = useMemo(

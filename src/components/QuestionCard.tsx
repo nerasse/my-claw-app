@@ -46,9 +46,17 @@ const RECAP_LINES = 3;
 export function QuestionCard({
   request,
   onReply,
+  onRevealField,
 }: {
   request: QuestionAskFrame;
   onReply: (id: string, answers: string[][]) => void;
+  /**
+   * Called when the free-text field takes focus, so the surface holding this card can bring it
+   * above the keyboard. The card cannot do it: it does not know it is in a list, and Android
+   * stopped doing it for us -- the app draws edge to edge, so `adjustResize` never resizes the
+   * window and the native scroll-the-focused-view-into-view never fires.
+   */
+  onRevealField?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const draft = useQuestionDraft(request.id);
@@ -136,6 +144,7 @@ export function QuestionCard({
           index={page}
           draft={draft}
           onPicked={onPicked}
+          onRevealField={onRevealField}
           styles={styles}
         />
       )}
@@ -252,6 +261,7 @@ function QuestionBlock({
   index,
   draft,
   onPicked,
+  onRevealField,
   styles,
 }: {
   id: string;
@@ -259,6 +269,7 @@ function QuestionBlock({
   index: number;
   draft: QuestionDraft;
   onPicked: (question: QuestionInfoFrame) => void;
+  onRevealField?: () => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   const custom = questionAllowsCustom(question);
@@ -329,7 +340,16 @@ function QuestionBlock({
         </Pressable>
       ) : null}
 
-      {custom && editing ? <CustomField id={id} question={question} index={index} draft={draft} styles={styles} /> : null}
+      {custom && editing ? (
+        <CustomField
+          id={id}
+          question={question}
+          index={index}
+          draft={draft}
+          onRevealField={onRevealField}
+          styles={styles}
+        />
+      ) : null}
     </View>
   );
 }
@@ -345,12 +365,14 @@ function CustomField({
   question,
   index,
   draft,
+  onRevealField,
   styles,
 }: {
   id: string;
   question: QuestionInfoFrame;
   index: number;
   draft: QuestionDraft;
+  onRevealField?: () => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   return (
@@ -362,6 +384,7 @@ function CustomField({
       placeholderTextColor="#888"
       autoFocus
       multiline
+      onFocus={onRevealField}
       accessibilityLabel={`Free-form answer to ${question.header}`}
     />
   );
