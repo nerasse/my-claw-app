@@ -663,6 +663,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
           : [...current, frame],
       );
       break;
+    case 'approval.pending':
+      // Authoritative, like question.pending: the server's list wins whole. That is what re-asks a
+      // sheet raised on another thread or while this device was asleep, and what clears one left
+      // behind by a server that restarted holding it.
+      setApprovals(() => frame.entries.map(entry => ({ type: 'approval.request' as const, ...entry })));
+      break;
     case 'approval.resolved':
       // Answered on another window, timed out, or the run went away: drop it wherever it sits in
       // the queue, so the sheet never asks about a call that can no longer be answered.

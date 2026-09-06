@@ -537,6 +537,23 @@ export interface ApprovalRequestFrame {
   allowSessionOffered?: boolean;
 }
 
+/** One pending approval, as `approval.pending` carries it: a request without the frame envelope. */
+export type ApprovalPendingEntry = Omit<ApprovalRequestFrame, 'type'>;
+
+/**
+ * Every approval still waiting for an answer, sent when the socket opens.
+ *
+ * Authoritative: the whole pending set is replaced by `entries`, empty included. A sheet is
+ * broadcast once and the server only replays it to a sync of the thread it belongs to, so an
+ * approval raised on another thread or while the device slept was never asked again and the tool
+ * was denied on timeout without the owner seeing it. The empty list clears a sheet left behind by
+ * a server that restarted while holding one.
+ */
+export interface ApprovalPendingFrame {
+  type: 'approval.pending';
+  entries: ApprovalPendingEntry[];
+}
+
 /** The prompt is over and nobody here answered it: timed out, cancelled, or another window won. */
 export interface ApprovalResolvedFrame {
   type: 'approval.resolved';
@@ -1807,6 +1824,7 @@ export type ServerFrame =
   | ChatClearedFrame
   | TranscriptFrame
   | ApprovalRequestFrame
+  | ApprovalPendingFrame
   | ApprovalResolvedFrame
   | ApprovalHistoryResultFrame
   | QuestionAskFrame
@@ -1922,6 +1940,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'providers.env.result',
   'chat.transcript',
   'approval.request',
+  'approval.pending',
   'approval.resolved',
   'approval.history.result',
   'question.ask',
