@@ -30,6 +30,7 @@ export const Bubble = React.memo(function BubbleView({
   showTime,
   onMenu,
   onOpenAttachment,
+  onResend,
   expandReasoning,
 }: {
   item: TextItem;
@@ -39,6 +40,8 @@ export const Bubble = React.memo(function BubbleView({
   grouped: boolean;
   showTime: boolean;
   onMenu: (item: TextItem) => void;
+  /** The owner's message never got its receipt: send it again, same id. */
+  onResend?: (item: TextItem) => void;
   onOpenAttachment?: (
     kind: 'image' | 'text' | 'video' | 'file',
     target: { url: string; filename: string; sizeBytes?: number },
@@ -158,11 +161,22 @@ export const Bubble = React.memo(function BubbleView({
           </Text>
         ) : null}
 
-        {item.error ? (
+        {item.error && !agent && onResend ? (
+          <Pressable
+            onPress={() => onResend(item)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Send again">
+            <Text style={styles.error}>{`${item.error} · tap to send again`}</Text>
+          </Pressable>
+        ) : item.error ? (
           <Text style={styles.error}>
             {item.error}
           </Text>
         ) : null}
+
+        {/* Sent on a socket that called itself open; the receipt is what proves it arrived. */}
+        {!agent && item.pending ? <Text style={styles.queuedUser}>sending…</Text> : null}
 
         {showTime ? <Text style={[styles.time, agent ? styles.timeAgent : styles.timeUser]}>{clock(item.ts)}</Text> : null}
       </Pressable>

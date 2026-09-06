@@ -1010,3 +1010,55 @@ test('a draft does not follow the reader into another conversation', async () =>
 
   await unmount(tree);
 });
+
+test('a send waits for the server receipt, and one that never got it can be sent again under the same id', async () => {
+  const tree = await renderWithHistory();
+  // The server says it receipts sends: from here every send is waited for.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify({ type: 'hello', version: '0.6.3', receipts: true }) });
+  });
+  bridge.sendMessage.mockClear();
+  await typeInto(tree, 'es-tu la ?');
+  await pressLabel(tree, 'Send message');
+  await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('"chat.send"')));
+  const sent = JSON.parse(String(bridge.sendMessage.mock.calls.find(([frame]) => String(frame).includes('"chat.send"'))?.[0])) as { id: string };
+  await waitFor(() => textsOf(tree).includes('sending…'));
+
+  // The receipt: the wait is over, the bubble reads as any other.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify({ type: 'chat.send.received', threadId: THREAD, id: sent.id }) });
+  });
+  await waitFor(() => !textsOf(tree).includes('sending…'));
+
+  // A verdict on it (the outbox refused, or the wait ran out) offers to send again: same id, so the
+  // server takes a message that did arrive once and a lost one for the first time.
+  await ReactTestRenderer.act(async () => {
+    chatStore.markSendFailed(THREAD, sent.id, 'not delivered');
+  });
+  await waitFor(() => textsOf(tree).includes('not delivered · tap to send again'));
+  bridge.sendMessage.mockClear();
+  await pressLabel(tree, 'Send again');
+  await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('"chat.send"')));
+  const again = JSON.parse(String(bridge.sendMessage.mock.calls.find(([frame]) => String(frame).includes('"chat.send"'))?.[0])) as { id: string; text: string };
+  expect(again.id).toBe(sent.id);
+  expect(again.text).toBe('es-tu la ?');
+  await waitFor(() => textsOf(tree).includes('sending…'));
+  expect(textsOf(tree)).not.toContain('not delivered · tap to send again');
+  // Exactly one bubble for the message, whatever the number of tries.
+  expect(chatStore.getItems(THREAD).filter(item => item.id === sent.id)).toHaveLength(1);
+
+  await unmount(tree);
+});
+
+test('a server without receipts is not waited for: no send ever reads as undelivered on its account', async () => {
+  const tree = await renderWithHistory();
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify({ type: 'hello', version: '0.6.2' }) });
+  });
+  await typeInto(tree, 'coucou');
+  await pressLabel(tree, 'Send message');
+  await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('"chat.send"')));
+  expect(textsOf(tree)).not.toContain('sending…');
+  expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.pending)).toBe(false);
+  await unmount(tree);
+});

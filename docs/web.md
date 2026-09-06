@@ -72,6 +72,17 @@ Three rules it took a bug each to learn:
   the stamps reads as undated, which is treated as old -- the right call, since the message is
   still worth sending and the stop beside it is not.
 
+And one the outbox cannot cover: **a socket that is `OPEN` and dead.** A NAT timeout or a VPN
+switch leaves the browser's socket open for minutes; `send` succeeds, the frame is gone, and the
+outbox never saw it because the socket said yes. The heartbeat (`ping` answered by the server's
+`pong`, two misses and the socket is closed) brings the link back, but the message sent in between
+is lost without a word. So every `chat.send` waits for the server's `chat.send.received`
+(`hello.receipts` announces it): the bubble reads "sending…" until then, and 15 s without a receipt
+on a link that called itself open, it reads "not delivered · tap to send again". Sending again
+reuses the id: the server takes a repeated id once, so a receipt that was merely late costs
+nothing. Armed only on an open link, never on a queued send, whose receipt comes with the
+reconnect. Store side in `chatStore.expectReceipt` / `markDelivered`.
+
 ## Package shims
 
 Same `.web.tsx` mechanism, wrapped in `src/compat/`:

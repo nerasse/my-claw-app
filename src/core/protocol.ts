@@ -1025,6 +1025,17 @@ export interface CommandResultFrame {
  * drained) or by the stream that follows (a compaction released). Without this the bubble sits
  * there with nothing behind it and the app looks dropped.
  */
+/**
+ * The transport receipt of a `chat.send`, to the sending window only, before anything is done with
+ * the message. The bubble waits for it (`pending`); one that never comes reads as undelivered, and
+ * the message can be sent again under the same id, which the server takes once.
+ */
+export interface SendReceivedFrame {
+  type: 'chat.send.received';
+  threadId: string;
+  id: string;
+}
+
 export interface SendQueuedFrame {
   type: 'chat.send.queued';
   threadId: string;
@@ -1772,6 +1783,8 @@ export interface NotificationsInfoFrame {
 export interface HelloFrame {
   type: 'hello';
   version: string;
+  /** The server receipts every `chat.send`; absent on one that predates receipts, which is then not waited for. */
+  receipts?: boolean;
 }
 
 export type ServerFrame =
@@ -1819,6 +1832,7 @@ export type ServerFrame =
   | ModelResultFrame
   | CommandPendingFrame
   | CommandResultFrame
+  | SendReceivedFrame
   | SendQueuedFrame
   | SendAckedFrame
   | ChatClearedFrame
@@ -1897,6 +1911,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'draft.changed',
   'chat.command.pending',
   'chat.command.result',
+  'chat.send.received',
   'chat.send.queued',
   'chat.send.acked',
   'chat.cleared',

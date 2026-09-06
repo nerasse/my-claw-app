@@ -243,6 +243,12 @@ import { setPageTitle } from '../core/pageTitle';
 
 /** One page of replayed history, not a ceiling: scrolling past the oldest asks for the next. */
 const HISTORY_LIMIT = 50;
+/**
+ * How long a send waits for its receipt before reading as undelivered. The receipt is sent before
+ * the server does anything with the message, so a healthy link answers in milliseconds; the margin
+ * is for a server whose loop is held by a large session opening.
+ */
+const RECEIPT_TIMEOUT_MS = 15_000;
 
 /**
  * A frozen empty for the model list this shell hands to the provider page. A fresh `[]` reads the
@@ -1617,7 +1623,7 @@ export function AppShell(): React.JSX.Element {
    * sub-agent's answer to its parent posts into the parent while the sub-agent is still on screen.
    */
   const sendChatTo = useCallback(
-    async (threadId: string, text: string, attachments?: OutgoingAttachment[], location?: LocationInput) => {
+    async (threadId: string, text: string, attachments?: OutgoingAttachment[], location?: LocationInput, again?: string) => {
       // No default model configured: a send would resolve to an empty provider and fail with
       // "Provider \"\" not found in config". Open the provider setup instead of posting into
       // a conversation nobody can answer.
@@ -1626,23 +1632,34 @@ export function AppShell(): React.JSX.Element {
         setSettingsOpen(true);
         return;
       }
-      const id = uuid();
-      chatStore.addUserMessage(
-        threadId,
-        id,
-        text,
-        attachments?.map(attachment => ({
-          id: attachment.id,
-          type: attachment.type,
-          uri: attachment.uri,
-          filename: attachment.filename,
-          ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
-          ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
-        })) ?? [],
-        location,
-      );
-      const isVoiceNote = attachments?.some(attachment => attachment.audioAsVoice) ?? false;
-      if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : location ? '(location)' : '(attachment)'));
+      // `again` is a message sent before that never got its receipt: same id, so the server takes
+      // it once whatever happened to the first try, and the bubble already on screen is the one.
+      const id = again ?? uuid();
+      if (!again) {
+        chatStore.addUserMessage(
+          threadId,
+          id,
+          text,
+          attachments?.map(attachment => ({
+            id: attachment.id,
+            type: attachment.type,
+            uri: attachment.uri,
+            filename: attachment.filename,
+            ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
+            ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
+          })) ?? [],
+          location,
+        );
+        const isVoiceNote = attachments?.some(attachment => attachment.audioAsVoice) ?? false;
+        if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : location ? '(location)' : '(attachment)'));
+      }
+      // Armed before the send, never after: a fast receipt would otherwise land on a bubble not yet
+      // waiting and the wait would run out on a message that did arrive. Only on a link that calls
+      // itself open: a send parked in the outbox is delivered when the link comes back, minutes
+      // later maybe, and is not undelivered for that. A server without receipts is not waited for.
+      if (chatStore.serverReceipts() && (await connection.getState()) === 'connected') {
+        chatStore.expectReceipt(threadId, id, RECEIPT_TIMEOUT_MS);
+      }
       // The wire only carries the reference; uri and filename are local bubble concerns.
       const delivered = await connection.send(
         encodeChatSend(
@@ -1673,6 +1690,29 @@ export function AppShell(): React.JSX.Element {
       return sendChatTo(threadId, text, attachments, location);
     },
     [selectThread, sendChatTo],
+  );
+
+  /** The bubble's own copy is what goes again: the uploads it names are already on the server. */
+  const resendChat = useCallback(
+    (item: TextItem) => {
+      const threadId = activeThreadRef.current;
+      if (!threadId || item.role !== 'user') return;
+      sendChatTo(
+        threadId,
+        item.text,
+        item.attachments.map(attachment => ({
+          id: attachment.id,
+          type: attachment.type,
+          uri: attachment.uri,
+          filename: attachment.filename,
+          ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
+          ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
+        })),
+        item.location,
+        item.id,
+      ).catch(() => {});
+    },
+    [sendChatTo],
   );
 
   // Push notifications (docs/notifications.md). The distributor answers registrations on its
@@ -3215,6 +3255,7 @@ export function AppShell(): React.JSX.Element {
                 }
               : {})}
             onBubbleMenu={setBubbleMenu}
+            onResend={resendChat}
             onOpenImage={setImageViewer}
             onOpenText={setTextViewer}
             onOpenVideo={setVideoViewer}

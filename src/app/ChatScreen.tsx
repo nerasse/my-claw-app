@@ -67,6 +67,7 @@ export function ChatScreen({
   onSend,
   locationEnabled,
   onBubbleMenu,
+  onResend,
   onOpenImage,
   onOpenText,
   onOpenVideo,
@@ -105,6 +106,8 @@ export function ChatScreen({
   /** Server capability; false until the post-connect capability frame says otherwise. */
   locationEnabled: boolean;
   onBubbleMenu: (item: TextItem) => void;
+  /** A message of the owner's that never got its receipt is sent again, same id. */
+  onResend: (item: TextItem) => void;
   onOpenImage: (target: { url: string; filename: string; sizeBytes?: number }) => void;
   onOpenText: (target: { url: string; filename: string }) => void;
   onOpenVideo: (target: { url: string; filename: string }) => void;
@@ -673,13 +676,14 @@ export function ChatScreen({
           grouped={groupedFlag}
           showTime={showTimeFlag}
           onMenu={onBubbleMenu}
+          onResend={onResend}
           onOpenAttachment={openAttachment}
           expandReasoning={uiPrefs?.expandReasoning ?? false}
         />
         </View>
       );
     },
-    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onResend, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const renderRowContent = useCallback(
