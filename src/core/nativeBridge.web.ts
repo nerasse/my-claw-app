@@ -194,6 +194,8 @@ class WebConnection {
   /** Bumped on every open, so a superseded socket's callbacks can be ignored. */
   private generation = 0;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /** Pings sent since the last pong. Two means the peer stopped answering. */
+  private unanswered = 0;
 
   connect(url: string): void {
     this.url = url;
@@ -325,7 +327,13 @@ class WebConnection {
     };
     socket.onmessage = event => {
       if (generation !== this.generation) return;
-      deviceEvents.emit('claw:ws:message', { text: String(event.data) });
+      const text = String(event.data);
+      // Read before anything else and not forwarded: the pong answers the transport, not the app.
+      if (text.includes('"pong"')) {
+        this.notePong();
+        if (text === '{"type":"pong"}') return;
+      }
+      deviceEvents.emit('claw:ws:message', { text });
     };
     socket.onclose = () => {
       if (this.socket !== socket) return;
@@ -348,26 +356,31 @@ class WebConnection {
   /**
    * A browser cannot send a WebSocket ping from JS, and a socket killed by a NAT timeout or a
    * VPN switch stays `OPEN` forever: the page said "connected" while every frame fell in a hole.
-   * What a dead link cannot fake is draining: bytes handed to a socket with no peer sit in
-   * `bufferedAmount`. Two checks in a row with nothing drained means the link is gone.
+   *
+   * Draining was the first answer and it does not work. Fifteen bytes handed to a socket whose
+   * peer is gone still reach the kernel buffer, `bufferedAmount` falls back to zero on the next
+   * tick, and the check passes forever. So the ping is answered now (`pong`, server side), and
+   * what is counted is the reply: two pings with no answer between them and the link is gone.
    */
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    let stalled = 0;
+    this.unanswered = 0;
     this.heartbeatTimer = setInterval(() => {
       const socket = this.socket;
       if (!socket || socket.readyState !== WebSocket.OPEN) return;
-      if (socket.bufferedAmount > 0) {
-        stalled += 1;
-        if (stalled >= 2) {
-          stalled = 0;
-          socket.close(4000, 'stalled');
-        }
+      if (this.unanswered >= 2) {
+        this.unanswered = 0;
+        socket.close(4000, 'no pong');
         return;
       }
-      stalled = 0;
+      this.unanswered += 1;
       socket.send(JSON.stringify({ type: 'ping' }));
     }, HEARTBEAT_MS);
+  }
+
+  /** The peer answered: whatever the socket claims, this link carried a frame both ways. */
+  private notePong(): void {
+    this.unanswered = 0;
   }
 
   private stopHeartbeat(): void {
