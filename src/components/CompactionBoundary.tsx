@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { CollapsibleAside } from './CollapsibleAside';
+import { formatElapsed, useElapsed } from './CommandElapsed';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 function turns(count: number): string {
@@ -44,6 +45,31 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
     </View>
   );
 });
+
+/**
+ * The same rule while the compaction is still running, at the bottom of the thread.
+ *
+ * The operation is one to two minutes of nothing on the wire, and a thread that shows nothing for
+ * that long reads as a frozen app. It used to be a bubble ("Compacting the context...", a command
+ * placeholder in the list) and that shape was the bug: an item is kept by sync deltas, moved to the
+ * end by each of them, and removed by exactly one frame, so a lost end left ghosts of it wandering
+ * through the run an hour later. This is drawn from thread state instead (`useCompacting`): one
+ * per thread by construction, and it goes when the boundary it becomes arrives, or when anything
+ * else shows the operation is over.
+ */
+export function CompactionRunning({ since }: { since: number }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const elapsed = useElapsed(since);
+  return (
+    <View style={styles.row} accessibilityRole="summary">
+      <View style={styles.rule}>
+        <View style={styles.line} />
+        <Text style={styles.label}>Compacting the context · {formatElapsed(elapsed)}</Text>
+        <View style={styles.line} />
+      </View>
+    </View>
+  );
+}
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: { width: '100%' as const, marginBottom: space.md, paddingHorizontal: space.sm },

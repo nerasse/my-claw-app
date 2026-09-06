@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Linking, Pressable, Text, View } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
-import { CompactionBoundary } from '../components/CompactionBoundary';
+import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
 import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
-import { chatStore, isSubAgentTool, useChatItems, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, useCompacting, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
@@ -172,6 +172,9 @@ export function ChatScreen({
   // Subscribed here rather than handed down: a growing bubble must not re-render the shell that
   // holds every page of the app, only the conversation showing it.
   const items = useChatItems(threadId);
+  // A compaction running on this conversation: thread state, drawn as a rule at the bottom of the
+  // list rather than as an item in it (CompactionRunning says why).
+  const compactingSince = useCompacting(threadId);
   // The questions waiting on this conversation, from the store rather than a prop: the form is a
   // row of the list, so it must survive this screen being unmounted and remounted.
   const questions = useThreadQuestions(threadId);
@@ -750,10 +753,13 @@ export function ChatScreen({
    */
   const renderListItem = useCallback(({ item }: { item: ChatRow }) => renderRow(item), [renderRow]);
 
+  // The list is inverted, so its header is the bottom of the screen: the compaction rule and the
+  // loose questions sit under the newest message, where the thread actually stops.
   const listHeader = useMemo(
     () =>
-      questionsLoose.length > 0 ? (
+      compactingSince !== undefined || questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
+          {compactingSince !== undefined ? <CompactionRunning since={compactingSince} /> : null}
           {questionsLoose.map(ask => (
             <QuestionCard
               key={ask.id}
@@ -764,7 +770,7 @@ export function ChatScreen({
           ))}
         </View>
       ) : null,
-    [questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
+    [compactingSince, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
   );
 
   const listFooter = useMemo(

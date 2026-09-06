@@ -296,29 +296,54 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     expect((chatStore.getItems(THREAD)[1] as { summaryOf?: number }).summaryOf).toBeTruthy();
   });
 
-  test('a compaction closes the placeholder it took over from the command notice', () => {
-    // The race that made this necessary: the server sends `chat.command.pending` after 400ms,
-    // and a compaction only announces its start once the session log is loaded -- longer than
-    // that on a long thread. So the notice creates the placeholder and the compaction inherits
-    // it. A successful /compact answers with no bubble now, so if the compaction cannot close a
-    // placeholder it did not create, "Compacting the context..." stays on screen for good.
-    chatStore.addUserMessage(THREAD, 'send-1', '/compact');
-    chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
-    chatStore.setCompacting(THREAD, 1_800_000_000_000);
-    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.text === 'Compacting the context...')).toBe(true);
+  test('a compaction in flight is state on the thread, not a bubble in it', () => {
+    // It was a bubble (id `compacting`, streaming, a command): one more live item that every
+    // delta re-appended at the end of the thread, that a fresh page dropped and a replay
+    // recreated, and that only one frame could ever remove. Two ghosts of it were seen wandering
+    // through a run an hour after the compaction had ended. As state there is one per thread by
+    // construction, nothing moves it, and several signs of life can end it.
+    const started = Date.now() - 42_000;
+    chatStore.setCompacting(THREAD, started);
+    expect(chatStore.getCompacting(THREAD)).toBe(started);
+    expect(chatStore.getItems(THREAD)).toHaveLength(0);
+
+    // A replay names the same start; a second compaction names its own. Last word wins.
+    chatStore.setCompacting(THREAD, started + 5_000);
+    expect(chatStore.getCompacting(THREAD)).toBe(started + 5_000);
 
     chatStore.setCompacting(THREAD, undefined);
-    const texts = chatStore.getItems(THREAD).map(item => (item.kind === 'text' ? item.text : ''));
-    expect(texts).toEqual(['/compact']);
+    expect(chatStore.getCompacting(THREAD)).toBeUndefined();
   });
 
-  test('a fresh page lets go of a compaction placeholder whose end frame was lost', () => {
-    // The end of a compaction travels as one frame and is replayed to nobody once settled: a
-    // window whose socket dropped for those seconds kept "Compacting the context..." ticking
-    // through every resync, since the placeholder counts as live. A page that replaces the
-    // thread post-dates the compaction (a compaction still running is replayed after it).
+  test('the boundary it wrote ends it, even when the end frame was lost', () => {
+    // The end travels as one frame and is replayed to nobody once settled. The boundary is also
+    // written to history, so it arrives on every path a window can take; a compaction that has
+    // produced its boundary is over whatever else was heard.
+    chatStore.setCompacting(THREAD, Date.now());
+    chatStore.addCompactionBoundary(THREAD, 'e-7', 'ce qui precede', 12);
+    expect(chatStore.getCompacting(THREAD)).toBeUndefined();
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['e-7']);
+  });
+
+  test('the end of the run and the start of an answer end it too', () => {
+    // A compaction runs inside its run (a gate at the start, an overflow retry in the middle) and
+    // the summarizer never streams: a run closing or a stream opening on the thread means the
+    // operation is behind us, whatever became of its own end frame.
+    chatStore.startRun(THREAD, 'r1');
+    chatStore.setCompacting(THREAD, Date.now());
+    chatStore.endRun(THREAD, 'aborted');
+    expect(chatStore.getCompacting(THREAD)).toBeUndefined();
+
+    chatStore.setCompacting(THREAD, Date.now());
+    chatStore.startStream(THREAD, 'a1', 'm1');
+    expect(chatStore.getCompacting(THREAD)).toBeUndefined();
+  });
+
+  test('a fresh page lets go of a compaction, a delta does not', () => {
+    // A page that replaces the thread post-dates the compaction (one still running is replayed
+    // right after it, which sets the state again). A delta arrives while the server is holding
+    // the run's frames back for the compaction: what the state says is still true.
     chatStore.setCompacting(THREAD, 1_800_000_000_000);
-    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.text === 'Compacting the context...')).toBe(true);
     chatStore.handleSyncResult(
       THREAD,
       [{ id: 'u1', role: 'user', text: 'hello', ts: '2026-01-01T00:00:00.000Z' } as HistoryEntry],
@@ -327,18 +352,35 @@ describe('an injected send waits for the run to read it, not for it to speak', (
       false,
       'unknown-cursor',
     );
+    expect(chatStore.getCompacting(THREAD)).toBeUndefined();
     expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['u1']);
-    // A delta keeps it: the server holds deltas back while a compaction runs, so a delta that
-    // arrives while the placeholder is up is one the placeholder still describes.
+
     chatStore.setCompacting(THREAD, 1_800_000_000_000);
     chatStore.handleSyncResult(THREAD, [], 'u1', 'u1', false);
-    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.text === 'Compacting the context...')).toBe(true);
+    expect(chatStore.getCompacting(THREAD)).toBe(1_800_000_000_000);
+
+    chatStore.clearThread(THREAD);
+    expect(chatStore.getCompacting(THREAD)).toBeUndefined();
+  });
+
+  test('the notice of the command that started it gives way to the compaction', () => {
+    // The server sends `chat.command.pending` after 400ms, and a compaction announces its start
+    // once the session log is loaded -- longer than that on a long thread. Either order: one
+    // sign of the operation, the compaction's own, and no "Running /compact..." bubble left to
+    // outlive it (a successful /compact answers with no bubble, the boundary is its report).
+    chatStore.addUserMessage(THREAD, 'send-1', '/compact');
+    chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
+    chatStore.setCompacting(THREAD, 1_800_000_000_000);
+    expect(chatStore.getItems(THREAD).map(item => (item as { text?: string }).text)).toEqual(['/compact']);
+    expect(chatStore.getCompacting(THREAD)).toBe(1_800_000_000_000);
+
+    chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
+    expect(chatStore.getItems(THREAD).map(item => (item as { text?: string }).text)).toEqual(['/compact']);
   });
 
   test('a compaction that failed still shows the reason it gives', () => {
     // The real order: the server settles the compaction inside a finally, so the state frame
-    // always precedes the command's own answer. The placeholder goes with the settle, and the
-    // refusal that follows lands as its own bubble rather than being swallowed.
+    // always precedes the command's own answer. The refusal lands as its own bubble.
     chatStore.addUserMessage(THREAD, 'send-1', '/compact');
     chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
     chatStore.setCompacting(THREAD, 1_800_000_000_000);
@@ -359,52 +401,6 @@ describe('an injected send waits for the run to read it, not for it to speak', (
 
     const ids = chatStore.getItems(THREAD).map(item => item.id);
     expect(ids).toEqual(['e-7', 'm1']);
-  });
-
-  /**
-   * The operation is one to two minutes of nothing. Before the state frame, only the window that
-   * typed `/compact` had a placeholder: every other one, and that same one after a reload, showed
-   * a thread doing nothing at all.
-   */
-  test('a compaction in flight is one placeholder, counted from when the server started it', () => {
-    const started = Date.now() - 42_000;
-    chatStore.setCompacting(THREAD, started);
-    chatStore.setCompacting(THREAD, started + 5_000);
-
-    const items = chatStore.getItems(THREAD);
-    expect(items).toHaveLength(1);
-    const bubble = items[0] as { role?: string; text?: string; streaming?: boolean; ts?: number };
-    expect(bubble.text).toContain('Compacting');
-    expect(bubble.streaming).toBe(true);
-    // The server's own start, so a window that arrives late counts from the same zero rather
-    // than restarting the clock at the moment its socket happened to connect.
-    expect(bubble.ts).toBe(started);
-
-    chatStore.setCompacting(THREAD, undefined);
-    expect(chatStore.getItems(THREAD)).toHaveLength(0);
-  });
-
-  test('the notice of the command that started it does not talk over the compaction', () => {
-    // `/compact` sends its own "still running" notice a moment later. Two names for one operation
-    // in one slot: the placeholder already up says the truer of the two.
-    chatStore.addUserMessage(THREAD, 'm1', '/compact');
-    chatStore.setCompacting(THREAD, Date.now());
-    chatStore.addCommandPending(THREAD, 'm1', 'Running /compact...');
-
-    const texts = chatStore.getItems(THREAD).map(item => (item as { text?: string }).text);
-    expect(texts).toEqual(['/compact', 'Compacting the context...']);
-  });
-
-  test('the answer to /compact replaces the placeholder instead of stacking under it', () => {
-    // The end of the operation lands before the command result, so the slot is free when it
-    // arrives: a placeholder left behind would sit above an answer that says the same thing.
-    chatStore.addUserMessage(THREAD, 'm1', '/compact');
-    chatStore.setCompacting(THREAD, Date.now());
-    chatStore.setCompacting(THREAD, undefined);
-    chatStore.addCommandResult(THREAD, 'cmd-m1', 'Context compacted.', 'm1');
-
-    const texts = chatStore.getItems(THREAD).map(item => (item as { text?: string }).text);
-    expect(texts).toEqual(['/compact', 'Context compacted.']);
   });
 
   test('the end of the run lifts an injection the run never acked', () => {

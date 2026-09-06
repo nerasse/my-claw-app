@@ -144,12 +144,6 @@ const EMPTY_SPAWN_CARDS: SpawnCard[] = [];
 Object.freeze(EMPTY_SPAWN_CARDS);
 /** One notification per displayed frame at most, whatever rate the tokens arrive at. */
 const FRAME_MS = 16;
-/**
- * The compaction placeholder's id, fixed rather than derived: the state that raises it has no
- * command and no send behind it (an automatic gate), and one per thread is the whole rule.
- */
-const COMPACTING_ITEM = 'compacting';
-const COMPACTING_TEXT = 'Compacting the context...';
 Object.freeze(EMPTY_ITEMS);
 Object.freeze(EMPTY_THREADS);
 
@@ -297,15 +291,15 @@ class ChatStoreImpl {
   /** Placeholder bubble per thread while a slow command runs, keyed by thread -> bubble id. */
   private pendingCommands = new Map<string, string>();
   /**
-   * Threads whose command placeholder was taken over by a compaction.
+   * Threads on which a compaction is running, with the server's start instant.
    *
-   * The compaction owns a placeholder it did not create whenever `chat.command.pending` won the
-   * race (the server sends that after 400ms, and the start of a compaction is emitted only once
-   * the session log is loaded, which on a long thread takes longer). A successful `/compact` no
-   * longer answers with a bubble, so without this the adopted placeholder had nothing left to
-   * close it and "Compacting the context..." stayed on screen for good.
+   * State, not an item. It was a bubble (a streaming "command" placeholder in the thread): one more
+   * live item that every sync delta re-appended at the end, that a fresh page dropped and a replay
+   * recreated, and that exactly one frame could ever remove. Two ghosts of it were seen wandering
+   * through a run an hour after the compaction had ended. As state there is one per thread by
+   * construction, nothing moves it, and every sign that the operation is over can end it.
    */
-  private compactingAdopted = new Set<string>();
+  private compacting = new Map<string, number>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
@@ -704,6 +698,9 @@ class ChatStoreImpl {
 
   /** Closes the run of a thread. False when there was none to close: the end said nothing new. */
   endRun(threadId: string, reason: RunStatus = 'done'): boolean {
+    // A compaction runs inside its run (a gate at the start, an overflow retry in the middle) and
+    // does not outlive it: a Stop that aborted the summarizer ends both.
+    this.compacting.delete(threadId);
     if (!this.activeRuns.delete(threadId) && !this.openRuns.has(threadId)) return false;
     const open = this.openRuns.get(threadId);
     this.openRuns.delete(threadId);
@@ -892,14 +889,10 @@ class ChatStoreImpl {
    * Called on unknown-cursor or branch-switch.
    */
   private resetThread(threadId: string, entries: HistoryEntry[]): void {
-    // A compaction placeholder is closed by the end frame and by nothing else, and an end frame
-    // lost with the socket left "Compacting the context..." ticking for good: it counts as live,
-    // so both resync paths kept it. A fresh page is the moment to let it go. A compaction still
-    // in flight is replayed right after the page (docs/live-turn-replay.md), which puts a
-    // placeholder back; one that has settled is not, which is the point.
-    if (this.pendingCommands.get(threadId) === COMPACTING_ITEM || this.compactingAdopted.has(threadId)) {
-      this.clearCommandPending(threadId);
-    }
+    // A fresh page post-dates whatever compaction this window last heard of. One still in flight
+    // is replayed right after the page (docs/live-turn-replay.md), which sets the state again; one
+    // that has settled is not, which is the point.
+    this.compacting.delete(threadId);
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const base = this.itemsOfWithSpawnReconcile(threadId, entries);
     const known = new Set(base.map(item => item.id));
@@ -1116,7 +1109,12 @@ class ChatStoreImpl {
    * CompactionBoundary on it alone.
    */
   addCompactionBoundary(threadId: string, id: string, summary: string, count: number): void {
-    if (this.getItems(threadId).some(item => item.id === id)) return;
+    // The compaction that wrote this rule is over, whether or not its end frame made it here.
+    this.compacting.delete(threadId);
+    if (this.getItems(threadId).some(item => item.id === id)) {
+      this.emit();
+      return;
+    }
     this.append(threadId, {
       kind: 'text',
       id,
@@ -1198,10 +1196,10 @@ class ChatStoreImpl {
    * a placeholder: the result replaces it in place, so the chat never shows both.
    */
   addCommandPending(threadId: string, replyToId: string, text: string): void {
+    // The compaction rule already says what this notice would call "Running /compact", and a
+    // successful /compact answers with no bubble: a notice drawn now would have nothing to close it.
+    if (this.compacting.has(threadId)) return;
     const existing = this.pendingCommands.get(threadId);
-    // The compaction placeholder already occupies the slot and already names the operation this
-    // notice would call "Running /compact": it keeps the words, and its own end takes it away.
-    if (existing === COMPACTING_ITEM) return;
     if (existing) this.patch(threadId, existing, { text });
     else {
       const parent = this.getItems(threadId).find(item => item.id === replyToId);
@@ -1226,43 +1224,29 @@ class ChatStoreImpl {
   /**
    * A compaction is running on this thread, or has stopped (`since` absent).
    *
-   * The same placeholder a slow command gets, in the same one-per-thread slot: the owner already
-   * knows that bubble as what a `/compact` shows, and the automatic gates now reach it too. It is
-   * driven by a state frame rather than by the command, so a window that opens or reloads while
-   * the summarizer runs draws it from the replay instead of showing a thread doing nothing.
-   *
+   * Driven by a state frame rather than by the command, so a window that opens or reloads while
+   * the summarizer runs learns of it from the replay instead of showing a thread doing nothing.
    * `since` is the server's start instant, so the counter reads the true elapsed on a window that
-   * arrives late instead of restarting from zero.
+   * arrives late instead of restarting from zero. The end frame is one way for it to stop; the
+   * boundary it wrote, the end of its run, a stream opening and a fresh page are the others, so
+   * an end lost with the socket cannot leave the rule up for good.
    */
   setCompacting(threadId: string, since: number | undefined): void {
-    const existing = this.pendingCommands.get(threadId);
     if (since === undefined) {
-      // Its own placeholder, or one it adopted: either way the compaction is what ends it. A
-      // placeholder still owned by a command is that command's to close, in place, with its result.
-      if (existing === COMPACTING_ITEM || (existing && this.compactingAdopted.has(threadId))) {
-        this.clearCommandPending(threadId);
-      }
-      this.compactingAdopted.delete(threadId);
+      if (this.compacting.delete(threadId)) this.emit();
       return;
     }
-    if (existing === COMPACTING_ITEM) return;
-    if (existing) {
-      this.compactingAdopted.add(threadId);
-      this.patch(threadId, existing, { text: COMPACTING_TEXT, ts: since });
-      return;
-    }
-    this.pendingCommands.set(threadId, COMPACTING_ITEM);
-    this.append(threadId, {
-      kind: 'text',
-      id: COMPACTING_ITEM,
-      role: 'agent',
-      text: COMPACTING_TEXT,
-      attachments: [],
-      streaming: true,
-      command: true,
-      ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
-      ts: since,
-    });
+    this.compacting.set(threadId, since);
+    // The notice of the /compact that started it, when it won the race (the server sends it after
+    // 400ms, the compaction announces itself once the session log is loaded): one sign of the
+    // operation, and a successful /compact answers with no bubble, so nothing would close it.
+    this.clearCommandPending(threadId);
+    this.emit();
+  }
+
+  /** The server's start instant of the compaction running on the thread, if one is. */
+  getCompacting(threadId: string): number | undefined {
+    return this.compacting.get(threadId);
   }
 
   /**
@@ -1271,7 +1255,6 @@ class ChatStoreImpl {
    */
   clearCommandPending(threadId: string): void {
     const id = this.pendingCommands.get(threadId);
-    this.compactingAdopted.delete(threadId);
     if (!id) return;
     this.pendingCommands.delete(threadId);
     this.removeItem(threadId, id);
@@ -1368,6 +1351,9 @@ class ChatStoreImpl {
 
   startStream(threadId: string, id: string, replyToId?: string): void {
     if (this.streams.has(id)) return;
+    // The summarizer never streams, so an answer opening on the thread means the compaction that
+    // was holding the run is behind us, whatever became of its end frame.
+    this.compacting.delete(threadId);
     this.streams.set(id, '');
     this.lastStream.set(threadId, id);
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
@@ -1598,6 +1584,7 @@ class ChatStoreImpl {
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
     this.hydrated.delete(threadId);
+    this.compacting.delete(threadId);
     this.spawnCards.delete(threadId);
     this.spawnStatus.delete(threadId);
     this.syncState.delete(threadId);
@@ -1612,6 +1599,7 @@ class ChatStoreImpl {
   clearAll(): void {
     this.threads.clear();
     this.hydrated.clear();
+    this.compacting.clear();
     // Paging state belongs to the threads that just went: a cursor left behind names an item no
     // thread holds any more, and a stale `trimAllowed` decides for the next reader whether their
     // oldest messages may be dropped.
@@ -1786,6 +1774,12 @@ export function useHistoryPage(threadId: string | null): HistoryPage {
 
 export function useActiveRun(threadId: string | null): boolean {
   const snapshot = useCallback(() => (threadId ? chatStore.hasActiveRun(threadId) : false), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+/** When the compaction running on the thread started (server time), or undefined when none is. */
+export function useCompacting(threadId: string | null): number | undefined {
+  const snapshot = useCallback(() => (threadId ? chatStore.getCompacting(threadId) : undefined), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 

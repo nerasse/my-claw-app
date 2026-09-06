@@ -6,6 +6,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { AgentMarkdown } from '../src/components/AgentMarkdown';
 import { CommandElapsed } from '../src/components/CommandElapsed';
+import { CompactionRunning } from '../src/components/CompactionBoundary';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { commandStore } from '../src/core/commands';
@@ -28,6 +29,17 @@ function allTexts(tree: Tree): string[] {
   };
   walk(tree.root);
   return out;
+}
+
+
+/** Every Text node's content as one string: `<Text>a · {b}</Text>` renders as two children. */
+function textLines(tree: Tree): string[] {
+  return tree.root
+    .findAll(node => typeof node.props.children === 'string' || Array.isArray(node.props.children))
+    .map(node => {
+      const children: unknown = node.props.children;
+      return Array.isArray(children) ? children.filter((c): c is string => typeof c === 'string').join('') : String(children);
+    });
 }
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -449,6 +461,47 @@ test('a slow command shows it is running, and the result replaces that bubble', 
   expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.role === 'agent')).toHaveLength(1);
   // The answer is not a wait: the counter goes with the placeholder it belonged to.
   expect(tree.root.findAllByType(CommandElapsed)).toHaveLength(0);
+
+  await settleAndUnmount(tree);
+});
+
+test('a compaction in flight is one rule at the bottom, and its boundary takes its place', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u6', 'continue', []);
+  });
+
+  const since = new Date(Date.now() - 42_000).toISOString();
+  await emit({ type: 'chat.compacting', threadId: THREAD, since });
+  // The same start again, as a reconnecting window is replayed it: still one sign of the operation.
+  await emit({ type: 'chat.compacting', threadId: THREAD, since });
+  await waitFor(() => textLines(tree).some(text => text.includes('Compacting the context')), 60);
+  expect(tree.root.findAllByType(CompactionRunning)).toHaveLength(1);
+  // Counted from the server's start, not from when this window heard of it.
+  expect(textLines(tree).some(text => text.includes('Compacting the context · 42s'))).toBe(true);
+  // A rule across the thread, like the boundary it becomes: not a bubble, so nothing to long-press.
+  expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.role === 'agent')).toHaveLength(0);
+
+  // The boundary arrives before (or instead of) the end frame: the rule is now the finished one.
+  await emit({ type: 'chat.compaction', threadId: THREAD, id: 'e-9', summary: 'ce qui precede', count: 12, ts: new Date().toISOString() });
+  await waitFor(() => textLines(tree).some(text => text.includes('Context compacted · 12 turns summarized')), 60);
+  expect(tree.root.findAllByType(CompactionRunning)).toHaveLength(0);
+  expect(textLines(tree).some(text => text.includes('Compacting the context'))).toBe(false);
+
+  await settleAndUnmount(tree);
+});
+
+test('a compaction whose end was never heard is over with its run', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u7', 'continue', []);
+  });
+  await emit({ type: 'chat.run.start', threadId: THREAD, run: 'r-1' });
+  await emit({ type: 'chat.compacting', threadId: THREAD, since: new Date().toISOString() });
+  await waitFor(() => tree.root.findAllByType(CompactionRunning).length === 1, 60);
+
+  await emit({ type: 'chat.run.end', threadId: THREAD, run: 'r-1', reason: 'aborted' });
+  await waitFor(() => tree.root.findAllByType(CompactionRunning).length === 0, 60);
 
   await settleAndUnmount(tree);
 });
