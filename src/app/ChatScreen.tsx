@@ -718,6 +718,43 @@ export function ChatScreen({
     [renderRowContent],
   );
 
+  /**
+   * The three props a FlatList compares by identity.
+   *
+   * `VirtualizedList` is a `PureComponent`: identical props and it does not re-render at all. An
+   * inline arrow and two inline elements meant those props were fresh on every render of this
+   * screen, so every keystroke in the composer re-rendered every visible bubble of the
+   * conversation. Nothing here reads the draft, and now nothing here changes when it does.
+   *
+   * The footer is not only about cost. Handed a fresh element while a page is loading, the list
+   * re-renders, which schedules the state that renders this screen again, which builds another
+   * fresh element: the test that covers this runs the renderer out of memory when the `useMemo`
+   * is removed.
+   */
+  const renderListItem = useCallback(({ item }: { item: ChatRow }) => renderRow(item), [renderRow]);
+
+  const listHeader = useMemo(
+    () =>
+      questionsLoose.length > 0 ? (
+        <View style={styles.looseQuestions}>
+          {questionsLoose.map(ask => (
+            <QuestionCard key={ask.id} request={ask} onReply={onQuestionReply} />
+          ))}
+        </View>
+      ) : null,
+    [questionsLoose, onQuestionReply, styles.looseQuestions],
+  );
+
+  const listFooter = useMemo(
+    () =>
+      loadingOlder ? (
+        <View style={styles.olderSpinner}>
+          <ActivityIndicator size="small" color={palette.textFaint} />
+        </View>
+      ) : null,
+    [loadingOlder, palette.textFaint, styles.olderSpinner],
+  );
+
   const locationLabel = location
     ? addressOverride !== null
       ? addressOverride.trim() || 'Coordinates only'
@@ -896,25 +933,11 @@ export function ChatScreen({
               keyExtractor={keyOfRow}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
-              renderItem={({ item: row }) => renderRow(row)}
-              ListHeaderComponent={
-                questionsLoose.length > 0 ? (
-                  <View style={styles.looseQuestions}>
-                    {questionsLoose.map(ask => (
-                      <QuestionCard key={ask.id} request={ask} onReply={onQuestionReply} />
-                    ))}
-                  </View>
-                ) : null
-              }
+              renderItem={renderListItem}
+              ListHeaderComponent={listHeader}
               onEndReached={onLoadOlder}
               onEndReachedThreshold={0.4}
-              ListFooterComponent={
-                loadingOlder ? (
-                  <View style={styles.olderSpinner}>
-                    <ActivityIndicator size="small" color={palette.textFaint} />
-                  </View>
-                ) : null
-              }
+              ListFooterComponent={listFooter}
               // Bubbles have no knowable height (markdown, images, tool output), so getItemLayout
               // is out and these numbers are the only handle on how much is mounted at once.
               initialNumToRender={12}
