@@ -1,19 +1,18 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useSessionInstructions } from '../core/sessionInstructions';
 import { CopyButton } from '../components/CopyButton';
 import type { SessionInstructionLayer, SessionInstructionNested, SessionInstructionPatch } from '../core/protocol';
-import { useLayerFrame } from '../core/layout';
 
 /**
  * What this conversation is actually loaded with: every layer of the system prompt as the server
  * composes it, then the nested AGENTS.md its runs read along the way.
  *
- * A sibling of the status page, opened from the same two menus and drawn as an absolute layer of
- * the shell. The distinction it exists to make: Settings > Workspaces shows the files a workspace
+ * A sibling of the status page, opened from the same two menus and drawn as a page of the shell
+ * like settings: beside the conversation on a wide window, in its place on a phone. The
+ * distinction it exists to make: Settings > Workspaces shows the files a workspace
  * holds, this shows what one thread reads, which is the question anyone actually asks. Every
  * layer that comes from a file can be opened and edited from here, nested files included.
  */
@@ -56,15 +55,13 @@ export function SessionInstructionsScreen({
   onPatch: (patch: SessionInstructionPatch) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const layerFrame = useLayerFrame();
-  const insets = useSafeAreaInsets();
   const state = useSessionInstructions();
   useDismissKeyboard();
   const payload = state.payload;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+    <View style={styles.screen}>
+      <View style={styles.header}>
         <Pressable
           onPress={onClose}
           hitSlop={8}
@@ -304,13 +301,12 @@ function Toggle({ on, onToggle, accessibilityLabel }: { on: boolean; onToggle: (
 }
 
 const createStyles = (palette: Palette) => ({
-  stage: { backgroundColor: palette.bg },
+  screen: { flex: 1 },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
     paddingBottom: space.sm,
-    paddingHorizontal: space.md,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
@@ -327,7 +323,7 @@ const createStyles = (palette: Palette) => ({
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   headerSub: { fontSize: font.small, color: palette.textFaint },
   empty: { padding: space.xl, fontSize: font.body, color: palette.textFaint },
-  body: { paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.xl, gap: space.sm },
+  body: { paddingTop: space.md, paddingBottom: space.xl, gap: space.sm },
   card: {
     backgroundColor: palette.surface,
     borderWidth: 1,

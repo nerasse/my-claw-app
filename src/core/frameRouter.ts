@@ -27,7 +27,6 @@ import {
   encodeAgentsConfigGet,
   encodeSessionSync,
   encodeModelGet,
-  encodeStatusGet,
   encodeSessionHistory,
   encodeSubAgentsList,
   type ApprovalRequestFrame,
@@ -43,6 +42,7 @@ import {
   type ServerFrame,
   type SessionFileMeta,
   type SkillEntry,
+  type StatusPayload,
   type ToolEntry,
   type UpdateResultFrame,
   type UiPrefsResultFrame,
@@ -104,7 +104,8 @@ export interface ServerFrameHandlers {
   setWorkspacesError: (message: string | null) => void;
   setWorkspacesBusy: (busy: boolean) => void;
   setProviderBusy: (busy: boolean) => void;
-  setStatusOpen: (open: boolean) => void;
+  /** A typed `/status` answered with the report: the page opens on it and watches the thread. */
+  openStatusPage: (threadId: string, status: StatusPayload) => void;
   setModelOpen: (open: boolean) => void;
   setJobsEditor: (value: JobEntry | 'new' | null) => void;
   setJobsSaving: (saving: boolean) => void;
@@ -130,13 +131,6 @@ export interface ServerFrameHandlers {
  * Every server frame lands here. Frames that only feed a store are served outright; the ones that
  * touch the shell's own state go through `handlers`.
  */
-/** Re-asks the report of the status page when it is open on `threadId` and idle. */
-function refreshStatusPage(threadId: string): void {
-  if (statusStore.getSnapshot().threadId !== threadId) return;
-  if (!statusStore.refresh()) return;
-  connection.send(encodeStatusGet(threadId)).catch(() => {});
-}
-
 export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandlers): void {
   const {
     activeThreadId,
@@ -172,7 +166,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setWorkspacesError,
     setWorkspacesBusy,
     setProviderBusy,
-    setStatusOpen,
+    openStatusPage,
     setModelOpen,
     setJobsEditor,
     setJobsSaving,
@@ -271,8 +265,6 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (frame.threadId === activeThreadId()) {
         connection.send(encodeModelGet(frame.threadId)).catch(() => {});
       }
-      // The run badge and the last turn's cost are part of the report.
-      refreshStatusPage(frame.threadId);
       break;
     }
     case 'subagents.list.result':
@@ -518,10 +510,6 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'model.result':
       modelStore.replaceThread(frame);
-      // The server pushes this after every model call. The status page shows the same reading in
-      // full (occupancy, tokens, cost), so while it is open on that thread it asks again and
-      // follows the run turn by turn, instead of holding the snapshot of when it was opened.
-      refreshStatusPage(frame.threadId);
       break;
     case 'agents.config.result':
       agentsStore.receive(frame);
@@ -579,13 +567,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         // A /status answered by the server: the page replaces the bubble, so the report
         // never takes space in the conversation. Its placeholder goes with it.
         chatStore.clearCommandPending(frame.threadId);
-        statusStore.receive({
-          type: 'status.result',
-          threadId: frame.threadId,
-          text: frame.text,
-          status: frame.status,
-        });
-        setStatusOpen(true);
+        openStatusPage(frame.threadId, frame.status);
       } else {
         // A quiet command (undo, retry, branches) never showed its input on any surface: drop
         // the optimistic bubble this device drew at send, so the result is the whole story.
@@ -617,9 +599,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       }
       break;
     case 'status.result':
-      // A late answer to a page that was already closed must not reopen it: only accept
-      // while a request is in flight.
-      if (statusStore.getSnapshot().fetch === 'loading') statusStore.receive(frame);
+      // Pushed by the server for as long as the page is watched: the store keeps it when the page
+      // is open on that thread, and drops a late one for a page since closed or moved.
+      statusStore.receive(frame);
       break;
     case 'session.instructions.result':
       // Accept both the first fetch (loading) and the answer to a set (ready): a control the

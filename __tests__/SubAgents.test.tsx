@@ -297,9 +297,9 @@ describe('inside a sub-agent', () => {
     // The whole point of the entry: the report has to be asked for the agent on screen. Asking
     // for the parent would show a plausible page about the wrong session.
     await waitFor(() =>
-      sentFrames().some(frame => frame.type === 'status.get' && frame.threadId === handle),
+      sentFrames().some(frame => frame.type === 'status.watch' && frame.threadId === handle),
     );
-    expect(sentFrames().some(frame => frame.type === 'status.get' && frame.threadId === THREAD)).toBe(false);
+    expect(sentFrames().some(frame => frame.type === 'status.watch' && frame.threadId === THREAD)).toBe(false);
     await settleAndUnmount(tree);
   });
 

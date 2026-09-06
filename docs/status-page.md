@@ -1,0 +1,56 @@
+# Status page (app side)
+
+What the status page of a conversation shows, where it opens, and why it is **pushed** rather than
+asked for. The report itself (fields, attribution, prices) is the server's: `docs/status-command.md`
+of the my-claw repository.
+
+## What the owner sees
+
+- The header: `Status`, the model the conversation runs on (tag named), and a `live` mark once the
+  first report has landed. No refresh button: there is nothing to refresh by hand.
+- A run strip when something is going on: `running · main, digger[1]`, `compacting`.
+- **Context**: occupied over the effective window, the meter, the auto-compaction threshold, the
+  last measured prompt.
+- **Usage · total**: one figure for everything the conversation caused, its own calls and every
+  sub-agent it drove added together (billed and reference prices added; the split is a sub-line
+  when both exist), then tokens (in, cached, out) and calls. Under it the tree: `this conversation`
+  first, then one row per sub-agent (name, type, a dot while it runs, `gone` once its session was
+  killed), a sub-agent's own sub-agents indented under it. A row unfolds into the models it used,
+  each priced (`*` not a charge, `~` a neighbouring model's price). `since <date> (90 days)` closes
+  the card when the conversation is older than the analytics.
+- **Details**, folded: started, last active, turns, session id, who spawned a sub-agent, the
+  window's provenance, the estimate, the request wall, config default, effort, verbose, approved.
+
+What was taken out when the page was redrawn (0.6.45): the grid of session counters and the
+`cost · 90 days` card showed the same calls and tokens the usage card shows; `active run` was in
+three places; `platform · dm` never varied; the raw text of the chat command was a dump of the
+same numbers. Duplicates are not context, they are noise to scan past.
+
+## Where it opens
+
+A page of the shell like settings or files: in the pane beside the conversation on a wide window
+(`layout.sidePane`), in the conversation's place on a phone. Until 0.6.45 it was an absolute layer
+over the whole shell, which on a desktop covered the conversation the report was about. The
+instructions page moved the same way, its editor now taking the pane instead of stacking a second
+layer over the first.
+
+Opening the page from the drawer's menu on another conversation switches to that conversation
+first, like the files page does: a report beside a conversation it does not describe reads as a
+report of that conversation.
+
+## Live
+
+The page is watched server side from open to close: `status.watch { threadId }` on open, the
+server answers with the report and pushes a fresh one each time it moves (a call recorded on the
+session or on a sub-agent billed to it, a run starting or ending, a compaction, a model change),
+`status.unwatch` on close. `statusStore.receive` keeps a report for the open thread and drops one
+for any other; nothing in the app asks.
+
+The previous design asked (`status.get`) on every `model.result` the header lives on and at the
+end of a run, and only the thread's own readings reached the app: a sub-agent's calls stream on
+the sub-agent's thread, so the parent's delegated figure stood still until the parent itself made
+a call. A `fetch === 'loading'` guard against late answers papered over the race between the ask
+and the push. Both are gone.
+
+A watch belongs to a socket. `resumeFrames` re-watches the page still open when a new socket comes
+up, or a phone back from the background would keep the report of the moment the old socket died.

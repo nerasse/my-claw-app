@@ -60,7 +60,8 @@ import {
   encodeSessionInstructionsGet,
   encodeSessionInstructionsSet,
   encodeInstructionsSetNested,
-  encodeStatusGet,
+  encodeStatusUnwatch,
+  encodeStatusWatch,
   encodeConfigGet,
   encodeConfigSet,
   encodeDiagSnapshot,
@@ -115,6 +116,7 @@ import {
   type SessionFileMeta,
   type SessionSummary,
   type SkillEntry,
+  type StatusPayload,
   type SkillTarget,
   type ToolEntry,
   type VoiceMode,
@@ -220,7 +222,6 @@ import { ApprovalSheet } from '../components/ApprovalSheet';
 import { UndoSheet } from '../components/UndoSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
-import { ScreenLayer } from '../components/ScreenLayer';
 import { AppUpdateModal } from './AppUpdateModal';
 import { ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
 import { ModelTuneSheet } from '../components/ModelTuneSheet';
@@ -789,13 +790,26 @@ export function AppShell(): React.JSX.Element {
   }, [openSettings]);
 
   /**
-   * The status page is asked on every opening, then re-asked by the frame router at every turn
-   * the server measures and at the end of a run (`refreshStatusPage`), and by its own button.
+   * The status page is watched server side from open to close: the watch answers with the report
+   * and every change to it after that, so the page follows the conversation without asking. It
+   * opens beside the conversation it reports on, so a thread named from the drawer is switched to
+   * first, like the files page does.
    */
-  const openStatus = useCallback((threadId: string) => {
-    statusStore.open(threadId);
-    setStatusOpen(true);
-    connection.send(encodeStatusGet(threadId)).catch(() => {});
+  const openStatus = useCallback(
+    (threadId: string, report?: StatusPayload) => {
+      if (activeThreadRef.current !== threadId) openThread(threadId);
+      statusStore.open(threadId);
+      if (report) statusStore.receive({ type: 'status.result', threadId, status: report });
+      setStatusOpen(true);
+      connection.send(encodeStatusWatch(threadId)).catch(() => {});
+    },
+    [openThread],
+  );
+
+  const closeStatus = useCallback(() => {
+    statusStore.close();
+    setStatusOpen(false);
+    connection.send(encodeStatusUnwatch()).catch(() => {});
   }, []);
 
   /**
@@ -803,12 +817,16 @@ export function AppShell(): React.JSX.Element {
    * report is composed on demand server side, so a cached one would age into a lie the moment a
    * file is edited from anywhere.
    */
-  const openSessionInstructions = useCallback((threadId: string) => {
-    sessionInstructionsStore.open(threadId);
-    setInstructionsPageEditing(false);
-    setInstructionsPageOpen(true);
-    connection.send(encodeSessionInstructionsGet(threadId)).catch(() => {});
-  }, []);
+  const openSessionInstructions = useCallback(
+    (threadId: string) => {
+      if (activeThreadRef.current !== threadId) openThread(threadId);
+      sessionInstructionsStore.open(threadId);
+      setInstructionsPageEditing(false);
+      setInstructionsPageOpen(true);
+      connection.send(encodeSessionInstructionsGet(threadId)).catch(() => {});
+    },
+    [openThread],
+  );
 
   /** The jobs page asks on every opening: the listing is a snapshot, and cheap to refresh. */
   const openJobs = useCallback(() => {
@@ -1056,7 +1074,7 @@ export function AppShell(): React.JSX.Element {
       setWorkspacesError,
       setWorkspacesBusy,
       setProviderBusy,
-      setStatusOpen,
+      openStatusPage: openStatus,
       setModelOpen,
       setJobsEditor,
       setJobsSaving,
@@ -1167,7 +1185,7 @@ export function AppShell(): React.JSX.Element {
       offFrame();
       offPending();
     };
-  }, [openThread, selectThread, ringOnScreen]);
+  }, [openThread, openStatus, selectThread, ringOnScreen]);
 
   /**
    * Closes the topmost layer, and says whether there was one.
@@ -1200,12 +1218,8 @@ export function AppShell(): React.JSX.Element {
       setAgentsGlobalOpen(false);
       return true;
     }
-    // Topmost layer first: the image covers everything else.
     if (statusOpen) {
-      // The status page is an absolute layer over the whole shell, so the back key must
-      // always close it before anything underneath can see the press.
-      statusStore.close();
-      setStatusOpen(false);
+      closeStatus();
       return true;
     }
     if (instructionsPageOpen) {
@@ -1503,6 +1517,7 @@ export function AppShell(): React.JSX.Element {
     archivesOpen,
     browserOpen,
     bubbleMenu,
+    closeStatus,
     commandMenuOpen,
     drawerOpen,
     fileToDelete,
@@ -3281,7 +3296,7 @@ export function AppShell(): React.JSX.Element {
   );
 
   /** Something other than the conversation is showing: settings, the archives, the files. */
-  const pageOpen = settingsOpen || archivesOpen || filesOpen || browserOpen;
+  const pageOpen = settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || instructionsPageOpen;
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -3353,6 +3368,7 @@ export function AppShell(): React.JSX.Element {
         {layout.sidePane ? <View style={styles.chatPane}>{activeThread === null ? <View style={styles.pageFull} testID="home-placeholder" /> : chatScreen}</View> : null}
         {layout.sidePane && !pageOpen ? null : (
         <View
+          testID={layout.sidePane ? 'page-pane' : undefined}
           style={
             layout.sidePane
               ? styles.pagePane
@@ -3876,6 +3892,82 @@ export function AppShell(): React.JSX.Element {
               onOpenText={setTextViewer}
               onOpenVideo={setVideoViewer}
             />
+          ) : statusOpen ? (
+            <StatusScreen onClose={closeStatus} />
+          ) : instructionsPageOpen ? (
+            instructionsPageEditing && instructions.editor ? (
+              <InstructionEditorScreen
+                editor={instructions.editor}
+                maxBytes={instructions.maxBytes}
+                onBack={() => {
+                  instructionsStore.closeEditor();
+                  setInstructionsPageEditing(false);
+                  // The report is stale the moment a file is saved: ask again rather than show
+                  // sizes and origins that the edit just invalidated.
+                  const threadId = sessionInstructions.threadId;
+                  if (threadId) {
+                    sessionInstructionsStore.open(threadId);
+                    connection.send(encodeSessionInstructionsGet(threadId)).catch(() => {});
+                  }
+                }}
+                onChange={draft => instructionsStore.edit(draft)}
+                onSave={() => {
+                  const editor = instructions.editor;
+                  if (!editor) return;
+                  instructionsStore.markSaving();
+                  const threadId = sessionInstructions.threadId ?? undefined;
+                  connection
+                    .send(
+                      editor.origin === 'nested'
+                        ? encodeInstructionsSetNested(editor.workspace, editor.file, editor.draft, editor.sha ?? '', threadId)
+                        : encodeInstructionsSet(editor.workspace, editor.file, editor.draft, editor.sha),
+                    )
+                    .catch(() => {});
+                }}
+                onReload={() => {
+                  const editor = instructions.editor;
+                  if (!editor) return;
+                  const nested = editor.origin === 'nested';
+                  instructionsStore.openEditor(editor.workspace, editor.file);
+                  connection
+                    .send(
+                      nested
+                        ? encodeInstructionsGetNested(editor.workspace, editor.file, sessionInstructions.threadId ?? undefined)
+                        : encodeInstructionsGet(editor.workspace, editor.file),
+                    )
+                    .catch(() => {});
+                }}
+              />
+            ) : (
+              <SessionInstructionsScreen
+              onClose={() => {
+                sessionInstructionsStore.close();
+                setInstructionsPageOpen(false);
+              }}
+              onPatch={patch => {
+                const threadId = sessionInstructions.threadId;
+                if (!threadId) return;
+                sessionInstructionsStore.pending();
+                connection.send(encodeSessionInstructionsSet(threadId, patch)).catch(() => {
+                  sessionInstructionsStore.fail('Failed to send the control');
+                });
+              }}
+              onEditLayer={(workspace, file) => {
+                instructionsStore.openEditor(workspace, file);
+                setInstructionsPageEditing(true);
+                connection.send(encodeInstructionsGet(workspace, file)).catch(() => {});
+              }}
+              onEditNested={item => {
+                const threadId = sessionInstructions.threadId ?? undefined;
+                const workspace = sessionInstructions.payload?.workspace ?? 'default';
+                // The editor is addressed by the path the report listed, absolute included: the
+                // server checks it against what this very conversation read.
+                instructionsStore.openEditor(workspace, item.path);
+                setInstructionsPageEditing(true);
+                connection.send(encodeInstructionsGetNested(workspace, item.path, threadId)).catch(() => {});
+              }}
+            />
+            )
           ) : (
             pairingOpen ? (
               <PairingScreen
@@ -4529,100 +4621,6 @@ export function AppShell(): React.JSX.Element {
           ]}
           onClose={() => setSubagentAction(null)}
         />
-      ) : null}
-
-      {statusOpen ? (
-        <StatusScreen
-          onClose={() => {
-            statusStore.close();
-            setStatusOpen(false);
-          }}
-          onRefresh={() => {
-            const threadId = statusStore.getSnapshot().threadId;
-            if (threadId && statusStore.refresh()) connection.send(encodeStatusGet(threadId)).catch(() => {});
-          }}
-        />
-      ) : null}
-
-      {instructionsPageOpen ? (
-        <>
-          <SessionInstructionsScreen
-            onClose={() => {
-              sessionInstructionsStore.close();
-              setInstructionsPageOpen(false);
-            }}
-            onPatch={patch => {
-              const threadId = sessionInstructions.threadId;
-              if (!threadId) return;
-              sessionInstructionsStore.pending();
-              connection.send(encodeSessionInstructionsSet(threadId, patch)).catch(() => {
-                sessionInstructionsStore.fail('Failed to send the control');
-              });
-            }}
-            onEditLayer={(workspace, file) => {
-              instructionsStore.openEditor(workspace, file);
-              setInstructionsPageEditing(true);
-              connection.send(encodeInstructionsGet(workspace, file)).catch(() => {});
-            }}
-            onEditNested={item => {
-              const threadId = sessionInstructions.threadId ?? undefined;
-              const workspace = sessionInstructions.payload?.workspace ?? 'default';
-              // The editor is addressed by the path the report listed, absolute included: the
-              // server checks it against what this very conversation read.
-              instructionsStore.openEditor(workspace, item.path);
-              setInstructionsPageEditing(true);
-              connection.send(encodeInstructionsGetNested(workspace, item.path, threadId)).catch(() => {});
-            }}
-          />
-          {instructionsPageEditing && instructions.editor ? (
-            // The editor is written for the settings stack, where the shell's container paints
-            // and pads it; over this page it is a layer and has to carry its own stage.
-            <ScreenLayer>
-              <InstructionEditorScreen
-                editor={instructions.editor}
-                maxBytes={instructions.maxBytes}
-                onBack={() => {
-                  instructionsStore.closeEditor();
-                  setInstructionsPageEditing(false);
-                  // The report is stale the moment a file is saved: ask again rather than show
-                  // sizes and origins that the edit just invalidated.
-                  const threadId = sessionInstructions.threadId;
-                  if (threadId) {
-                    sessionInstructionsStore.open(threadId);
-                    connection.send(encodeSessionInstructionsGet(threadId)).catch(() => {});
-                  }
-                }}
-                onChange={draft => instructionsStore.edit(draft)}
-                onSave={() => {
-                  const editor = instructions.editor;
-                  if (!editor) return;
-                  instructionsStore.markSaving();
-                  const threadId = sessionInstructions.threadId ?? undefined;
-                  connection
-                    .send(
-                      editor.origin === 'nested'
-                        ? encodeInstructionsSetNested(editor.workspace, editor.file, editor.draft, editor.sha ?? '', threadId)
-                        : encodeInstructionsSet(editor.workspace, editor.file, editor.draft, editor.sha),
-                    )
-                    .catch(() => {});
-                }}
-                onReload={() => {
-                  const editor = instructions.editor;
-                  if (!editor) return;
-                  const nested = editor.origin === 'nested';
-                  instructionsStore.openEditor(editor.workspace, editor.file);
-                  connection
-                    .send(
-                      nested
-                        ? encodeInstructionsGetNested(editor.workspace, editor.file, sessionInstructions.threadId ?? undefined)
-                        : encodeInstructionsGet(editor.workspace, editor.file),
-                    )
-                    .catch(() => {});
-                }}
-              />
-            </ScreenLayer>
-          ) : null}
-        </>
       ) : null}
 
       {jobsOpen ? (

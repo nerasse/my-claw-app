@@ -5,9 +5,11 @@ import {
   encodeModelList,
   encodeSessionSync,
   encodeSessionList,
+  encodeStatusWatch,
   encodeSubAgentsList,
 } from './protocol';
 import { chatStore } from './chat';
+import { statusStore } from './status';
 
 /**
  * What a socket asks for the moment it comes up, in order.
@@ -24,6 +26,10 @@ import { chatStore } from './chat';
  */
 export function resumeFrames(activeThreadId: string | null): string[] {
   const frames = [encodeSessionList(), encodeCommandsList(), encodeModelList(), encodeJobsList()];
+  // A watch belongs to a socket, and this is a new one: the status page still open would
+  // otherwise keep the report of the moment the old socket died, and never hear another.
+  const watched = statusStore.getSnapshot().threadId;
+  if (watched) frames.push(encodeStatusWatch(watched));
   if (!activeThreadId) return frames;
   // Ask for entries since the last one we have, on the branch we're showing.
   const { since, leaf } = chatStore.getSyncState(activeThreadId);

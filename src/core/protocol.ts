@@ -1055,19 +1055,64 @@ export interface SendAckedFrame {
   replyToId: string;
 }
 
+/** One model as one session used it, priced when a price is on record. */
+export interface UsageModelRow {
+  model: string;
+  calls: number;
+  errors: number;
+  promptTokens: number;
+  cacheReadTokens: number;
+  completionTokens: number;
+  /** Absent when the model has no price on record. */
+  costUsd?: number;
+  /** A charge (pay-as-you-go endpoint), as opposed to a reference price. */
+  costBilled: boolean;
+  /** Priced from a neighbouring model id, not this one. */
+  costApproximate: boolean;
+}
+
+/** Calls, tokens and money over one set of rows. */
+export interface UsageTotals {
+  calls: number;
+  errors: number;
+  promptTokens: number;
+  cacheReadTokens: number;
+  completionTokens: number;
+  /** What was charged: pay-as-you-go endpoints. */
+  billedUsd: number;
+  /** What it would have cost at list price: flat plans, subscriptions, self-hosted. Not a charge. */
+  referenceUsd: number;
+  /** Rows without a price on record: their tokens are counted, their money is not. */
+  unpriced: number;
+}
+
+/** A sub-agent this conversation drove, with what it spent on this conversation's behalf. */
+export interface UsageAgent extends UsageTotals {
+  sessionId: string;
+  /** The name it was spawned under; the id's tail once the session is gone. */
+  displayName: string;
+  /** The agent it was spawned as; absent once the session is gone. */
+  type?: string;
+  /** 1 for a sub-agent of this conversation, 2 for a sub-agent of one of those. */
+  depth: number;
+  /** The session still exists (not killed), so the conversation can be opened. */
+  alive: boolean;
+  running: boolean;
+  rows: UsageModelRow[];
+}
+
 /**
- * Structured `/status` report for the fullscreen diagnostics page. The text form stays the
- * canonical rendering on the chat channels; this is the same report shaped as fields.
+ * The `/status` report of a conversation, as the server shapes it. The page draws it and nothing
+ * else; the server pushes a fresh one to the page each time something in it moves.
  */
 export interface StatusPayload {
   /** Null when this thread has no session yet: nothing has ever been asked here. */
   session: {
     id: string;
-    platform: string;
-    chatType: string;
     createdAt: string;
     lastActiveAt: string;
-    messages: number;
+    /** Entries in the conversation's log. */
+    turns: number;
     subAgent?: {
       displayName: string;
       type: string;
@@ -1090,80 +1135,52 @@ export interface StatusPayload {
     /**
      * How long one request may go silent before the server cuts it, with where the number comes
      * from: `120s (default)`, `900s (model)`, `none (Stop only)`. Spelled by the server, since the
-     * transport defaults are its constants. Absent on a server that predates the field.
+     * transport defaults are its constants.
      */
-    timeout?: string;
+    timeout: string;
   };
   context: {
     /** The provider's count on the last call; undefined until a call is recorded. */
     measured?: { tokens: number; pctOfLimit: number };
+    /** chars/4 over the prompt as it stands: under-counts, a drift from `measured` is a mis-tuning made visible. */
     estimated: number;
     /** What actually drives auto-compaction. */
     occupied: number;
-    /**
-     * The engine owns the history and the server's copy is only a log of it (claude-sdk), so
-     * `estimated` covers turns the model already summarised away. Absent on the home loop, where
-     * that copy is the prompt.
-     */
-    mirrorIsTranscript?: boolean;
     autoCompactOn: boolean;
     autoCompactThresholdPct: number;
     autoCompactThresholdTokens: number;
-    /** A context handed to another model (engine switch) is reported here. */
-    carried?: { model: string; messages: number; tokens: number; dropped: number };
   };
-  /** Session-counter figures since /new; null when no call has been made. */
-  conversation: {
-    calls: number;
-    promptTokens: number;
-    cacheReadTokens: number;
-    completionTokens: number;
-  } | null;
-  /** The 90-day analytics for this session's own calls; null while there are none. */
-  analytics: {
-    calls: number;
-    errors: number;
-    durationMs?: number;
-    billedUsd: number;
-    referenceUsd: number;
-    unpriced: number;
-    rows: Array<{
-      model: string;
-      calls: number;
-      promptTokens: number;
-      cacheReadTokens: number;
-      completionTokens: number;
-      /** Absent when the model has no price on record. */
-      costUsd?: number;
-      costBilled: boolean;
-      costApproximate: boolean;
-    }>;
-  } | null;
-  /** Work driven by this session but run elsewhere (sub-agents, browser); null when there is none. */
-  delegated: {
-    calls: number;
-    tokens: number;
-    billedUsd: number;
-    referenceUsd: number;
+  /**
+   * What this conversation has spent, its own calls and every sub-agent it drove, from the
+   * analytics of the last 90 days. Null while nothing at all was called.
+   */
+  usage: {
+    /** Own plus every agent below: the one figure the page leads with. */
+    total: UsageTotals;
+    own: UsageTotals & {
+      /** Wall time spent inside the API, own calls. */
+      durationMs: number;
+      rows: UsageModelRow[];
+    };
+    /** Depth-first: a sub-agent's own sub-agents follow it. */
+    agents: UsageAgent[];
+    /** Analytics keep 90 days. Set when the conversation is older: the figures start here, not at its creation. */
+    since?: string;
   } | null;
   runtime: {
-    activeRun: string;
+    /** The live run tree of this conversation: `main` at depth 0, each sub-agent below it. */
+    runs: Array<{ label: string; depth: number; startedAt: string }>;
+    /** A /compact holds the session: work in progress with no run node of its own. */
+    compacting: boolean;
     verbose: boolean;
     approvedTools: string[];
   };
 }
 
-/** The fullscreen status report of a conversation, asked by the page the menu opened. */
-export interface StatusGetFrame {
-  type: 'status.get';
-  threadId: string;
-}
-
+/** The report of a watched conversation, on watch and at every change since. */
 export interface StatusResultFrame {
   type: 'status.result';
   threadId: string;
-  /** The same report as text, for clients that only show plain output. */
-  text: string;
   status: StatusPayload;
 }
 
@@ -2622,9 +2639,16 @@ export function encodeChatStop(threadId: string): string {
   return JSON.stringify({ type: 'chat.stop', threadId });
 }
 
-/** The fullscreen status page of a conversation, asked when the menu opens it. */
-export function encodeStatusGet(threadId: string): string {
-  return JSON.stringify({ type: 'status.get', threadId });
+/**
+ * Opens the status page of a conversation on the server: the report comes now, then again each
+ * time it moves, until `encodeStatusUnwatch` or the socket closes. One page per socket.
+ */
+export function encodeStatusWatch(threadId: string): string {
+  return JSON.stringify({ type: 'status.watch', threadId });
+}
+
+export function encodeStatusUnwatch(): string {
+  return JSON.stringify({ type: 'status.unwatch' });
 }
 
 export interface JobFieldsOut {

@@ -1,22 +1,20 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useStatus } from '../core/status';
-import type { StatusPayload } from '../core/protocol';
-import { useLayerFrame } from '../core/layout';
+import type { StatusPayload, UsageAgent, UsageModelRow, UsageTotals } from '../core/protocol';
 
 /**
- * Fullscreen status page, drawn from the structured `/status` report. It lives outside the
- * conversation (and outside the agent's context -- a command never reaches the model), opened
- * from the thread menu or by typing `/status`. Rendered as an absolute layer of the shell, like
- * the image viewer, so the back key walks one level instead of closing the app.
+ * The status page of a conversation, drawn from the structured `/status` report the server pushes
+ * for as long as the page is open (docs/status-page.md). It lives outside the conversation and
+ * outside the agent's context: a command never reaches the model. Opened from the thread menu or
+ * by typing `/status`, it is a page of the shell like settings: beside the conversation on a wide
+ * window, in its place on a phone.
  *
- * Laid out by what a phone glance actually needs: how full the context is, what it cost, then
- * the conversation itself. Ids, notes and the chat command's raw text are one tap away rather
- * than in the way. The chat text says "since /new", a command the app never surfaces -- here a
- * conversation is a thread, so the counters are simply this conversation's.
+ * Laid out by what a glance needs: how full the context is, what the conversation has cost in
+ * total (its own calls and every sub-agent it drove), then who spent what. Ids, provenance and
+ * tuning are one tap away rather than in the way.
  */
 
 function short(n: number): string {
@@ -49,29 +47,29 @@ function duration(ms: number): string {
   return `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
 }
 
-export function StatusScreen({
-  onClose,
-  onRefresh,
-}: {
-  onClose: () => void;
-  onRefresh: () => void;
-}): React.JSX.Element {
+/** The one figure for a set of rows: what was charged plus what it would have cost. */
+function cost(t: UsageTotals): number {
+  return t.billedUsd + t.referenceUsd;
+}
+
+/** A priced row's cost with its markers: `*` not a charge, `~` a neighbouring model's price. */
+function rowCost(row: UsageModelRow): string {
+  if (row.costUsd === undefined) return '-';
+  return `${row.costBilled ? '' : '*'}${row.costApproximate ? '~' : ''}${money(row.costUsd)}`;
+}
+
+export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const layerFrame = useLayerFrame();
-  const insets = useSafeAreaInsets();
   const status = useStatus();
   useDismissKeyboard();
   const payload = status.payload;
-  const refreshing = status.fetch === 'loading';
   const headerSub = payload
-    ? [payload.model.current, payload.model.tag ? `tag ${payload.model.tag}` : null, refreshing ? 'refreshing…' : null]
-        .filter(Boolean)
-        .join(' · ')
+    ? [payload.model.current, payload.model.tag ? `tag ${payload.model.tag}` : null].filter(Boolean).join(' · ')
     : 'this conversation';
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+    <View style={styles.screen}>
+      <View style={styles.header}>
         <Pressable
           onPress={onClose}
           hitSlop={8}
@@ -86,45 +84,42 @@ export function StatusScreen({
             {headerSub}
           </Text>
         </View>
-        <Pressable
-          onPress={onRefresh}
-          disabled={refreshing}
-          hitSlop={8}
-          style={[styles.backButton, refreshing ? styles.refreshBusy : null]}
-          accessibilityRole="button"
-          accessibilityLabel="Refresh status">
-          <Text style={styles.refreshGlyph}>↻</Text>
-        </Pressable>
+        {status.fetch === 'ready' ? (
+          <View style={styles.live} accessibilityLabel="Live: the page follows the conversation">
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>live</Text>
+          </View>
+        ) : null}
       </View>
 
-      {refreshing && !payload ? (
+      {status.fetch === 'loading' ? (
         <Text style={styles.empty}>asking the server…</Text>
       ) : status.fetch === 'error' ? (
         <Text style={styles.empty}>{status.error}</Text>
       ) : payload ? (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          {payload.runtime.activeRun !== 'none' ? (
-            <View style={styles.runBadge}>
-              <Text style={styles.runBadgeText}>{`running · ${payload.runtime.activeRun}`}</Text>
-            </View>
-          ) : null}
+          <RunStrip payload={payload} />
           <ContextCard payload={payload} />
-          <StatGrid payload={payload} />
-          <CostCard payload={payload} />
-          <DelegatedCard payload={payload} />
-          <ConversationCard payload={payload} />
+          <UsageCard payload={payload} />
           <DetailsFold payload={payload} />
-          {status.text ? (
-            <Fold label="raw output" hint="the chat command's text">
-              <View style={styles.codeBlock}>
-                <Text style={styles.code} selectable>
-                  {status.text}
-                </Text>
-              </View>
-            </Fold>
-          ) : null}
         </ScrollView>
       ) : null}
+    </View>
+  );
+}
+
+/** What is going on right now: the live run tree, a compaction in progress. Nothing when idle. */
+function RunStrip({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  const r = payload.runtime;
+  if (r.runs.length === 0 && !r.compacting) return null;
+  const parts = [...r.runs]
+    .sort((a, b) => a.depth - b.depth)
+    .map(run => (run.depth === 0 ? run.label : `${run.label}[${run.depth}]`));
+  if (r.compacting) parts.push('compacting');
+  return (
+    <View style={styles.runBadge}>
+      <Text style={styles.runBadgeText}>{`running · ${parts.join(', ')}`}</Text>
     </View>
   );
 }
@@ -212,9 +207,7 @@ function ContextCard({ payload }: { payload: StatusPayload }): React.JSX.Element
           : 'auto-compact off'}
       </Text>
       <Text style={styles.cardNote}>
-        {`${c.measured ? `measured ${short(c.measured.tokens)}` : 'no call recorded yet'} · estimated ${short(
-          c.estimated,
-        )}${c.mirrorIsTranscript ? ' (whole log: the engine compacts its own history)' : ''}`}
+        {c.measured ? `last call measured ${short(c.measured.tokens)}` : 'no call recorded yet'}
       </Text>
     </Card>
   );
@@ -229,158 +222,181 @@ function Meter({ pct, color }: { pct: number; color: string }): React.JSX.Elemen
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }): React.JSX.Element {
+/**
+ * Everything the conversation has spent, total first: its own calls and every sub-agent it drove
+ * are one figure, then one row each, a sub-agent's own sub-agents indented under it. A row unfolds
+ * into the models it used.
+ */
+function UsageCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  return (
-    <View style={styles.statCell}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      {sub ? (
-        <Text style={styles.statSub} numberOfLines={1}>
-          {sub}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-/** Four numbers, no scrolling: what this conversation has spent in messages and tokens. */
-function StatGrid({ payload }: { payload: StatusPayload }): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
-  const c = payload.conversation;
-  return (
-    <View style={styles.grid}>
-      <Stat label="messages" value={payload.session ? String(payload.session.messages) : '-'} />
-      <Stat label="calls" value={c ? String(c.calls) : '0'} />
-      <Stat
-        label="tokens in"
-        value={c ? short(c.promptTokens) : '-'}
-        sub={c && c.cacheReadTokens > 0 ? `cached ${short(c.cacheReadTokens)}` : undefined}
-      />
-      <Stat label="tokens out" value={c ? short(c.completionTokens) : '-'} />
-    </View>
-  );
-}
-
-function CostCard({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
-  const styles = useThemedStyles(createStyles);
-  const a = payload.analytics;
-  if (!a) return null;
+  const u = payload.usage;
+  if (!u) {
+    return (
+      <Card>
+        <CardHead title="usage" />
+        <Text style={styles.cardNote}>nothing has been called here yet.</Text>
+      </Card>
+    );
+  }
+  const t = u.total;
+  const tokens = t.promptTokens + t.completionTokens;
+  const split = t.billedUsd > 0 && t.referenceUsd > 0;
+  const hasReference = t.referenceUsd > 0;
+  const hasApproximate = [...u.own.rows, ...u.agents.flatMap(a => a.rows)].some(r => r.costApproximate);
+  const legend = [
+    hasReference ? '* not a charge' : null,
+    hasApproximate ? '~ neighbouring model id' : null,
+    t.unpriced > 0 ? `${t.unpriced} model(s) unpriced` : null,
+    u.since ? `since ${u.since.slice(0, 10)} (90 days)` : null,
+  ].filter(Boolean);
   return (
     <Card>
-      <CardHead title="cost · 90 days" trailing={money(a.billedUsd)} />
+      <CardHead title="usage · total" trailing={money(cost(t))} />
       <Text style={styles.cardNote}>
-        {`${a.calls} calls · ${a.errors} errors${a.durationMs ? ` · ${duration(a.durationMs)} of API time` : ''}`}
+        {`${short(tokens)} tokens · ${short(t.promptTokens)} in · ${short(t.cacheReadTokens)} cached · ${short(
+          t.completionTokens,
+        )} out · ${t.calls} calls${t.errors > 0 ? ` · ${t.errors} errors` : ''}`}
       </Text>
-      {a.referenceUsd > 0 ? (
-        <Text style={styles.cardNote}>{`${money(a.referenceUsd)} reference · flat plans, subscriptions, self-hosted`}</Text>
+      {split ? (
+        <Text style={styles.cardNote}>{`billed ${money(t.billedUsd)} · reference ${money(t.referenceUsd)}`}</Text>
+      ) : hasReference ? (
+        <Text style={styles.cardNote}>reference price, not a charge</Text>
       ) : null}
-      {a.unpriced > 0 ? (
-        <Text style={styles.cardNote}>{`${a.unpriced} model(s) without a price`}</Text>
-      ) : null}
-      {a.rows.length > 0 ? (
+      <View style={styles.tree}>
+        <UsageRow
+          label="this conversation"
+          hint={u.own.durationMs > 0 ? `${duration(u.own.durationMs)} of API time` : undefined}
+          totals={u.own}
+          rows={u.own.rows}
+          depth={0}
+        />
+        {u.agents.map(agent => (
+          <AgentRow key={agent.sessionId} agent={agent} />
+        ))}
+      </View>
+      {legend.length > 0 ? <Text style={styles.codeNote}>{legend.join(' · ')}</Text> : null}
+    </Card>
+  );
+}
+
+function AgentRow({ agent }: { agent: UsageAgent }): React.JSX.Element {
+  const shape = [agent.type, agent.alive ? null : 'gone'].filter(Boolean).join(' · ');
+  return (
+    <UsageRow
+      label={agent.displayName}
+      hint={shape || undefined}
+      running={agent.running}
+      totals={agent}
+      rows={agent.rows}
+      depth={agent.depth}
+    />
+  );
+}
+
+/** One line of the usage tree: who, then calls, in, out, cost. Unfolds into its per-model lines. */
+function UsageRow({
+  label,
+  hint,
+  running,
+  totals,
+  rows,
+  depth,
+}: {
+  label: string;
+  hint?: string;
+  running?: boolean;
+  totals: UsageTotals;
+  rows: UsageModelRow[];
+  depth: number;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const [open, setOpen] = useState(false);
+  const indent = Math.max(0, depth - 1) * space.lg;
+  return (
+    <View style={[styles.usageRow, { marginLeft: indent }]}>
+      <Pressable
+        onPress={() => setOpen(value => !value)}
+        style={styles.usageHead}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`Usage of ${label}`}>
+        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+        <View style={styles.usageWho}>
+          <View style={styles.usageNameRow}>
+            {running ? <View style={styles.runningDot} accessibilityLabel={`${label} is running`} /> : null}
+            <Text style={styles.usageName} numberOfLines={1}>
+              {label}
+            </Text>
+          </View>
+          {hint ? (
+            <Text style={styles.usageHint} numberOfLines={1}>
+              {hint}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={styles.usageNums} numberOfLines={1}>
+          {`${totals.calls}× · ${short(totals.promptTokens)} in · ${short(totals.completionTokens)} out`}
+        </Text>
+        <Text style={styles.usageCost}>{totals.unpriced > 0 && cost(totals) === 0 ? '-' : money(cost(totals))}</Text>
+      </Pressable>
+      {open ? (
         <View style={styles.modelTable}>
-          {a.rows.map((row, index) => (
+          {rows.length === 0 ? <Text style={styles.codeNote}>no call of its own</Text> : null}
+          {rows.map((row, index) => (
             <View key={`${row.model}-${index}`} style={styles.modelRow}>
               <Text style={styles.modelName} numberOfLines={1}>
                 {row.model.split('/').pop()}
               </Text>
-              <Text style={styles.modelNums}>
-                {`${row.calls}× · ${short(row.promptTokens)} in · ${short(row.completionTokens)} out`}
+              <Text style={styles.modelNums} numberOfLines={1}>
+                {`${row.calls}× · ${short(row.promptTokens)} in${
+                  row.cacheReadTokens > 0 ? ` · ${short(row.cacheReadTokens)} cached` : ''
+                } · ${short(row.completionTokens)} out${row.errors > 0 ? ` · ${row.errors} err` : ''}`}
               </Text>
-              <Text style={styles.modelCost}>
-                {row.costUsd === undefined
-                  ? '-'
-                  : `${row.costBilled ? '' : '*'}${row.costApproximate ? '~' : ''}${money(row.costUsd)}`}
-              </Text>
+              <Text style={styles.modelCost}>{rowCost(row)}</Text>
             </View>
           ))}
-          <Text style={styles.codeNote}>* not a charge · ~ price of a matched model id</Text>
         </View>
       ) : null}
-    </Card>
+    </View>
   );
 }
 
-function DelegatedCard({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
-  const styles = useThemedStyles(createStyles);
-  const d = payload.delegated;
-  if (!d) return null;
-  return (
-    <Card>
-      <CardHead title="delegated · sub-agents, browser" trailing={money(d.billedUsd)} />
-      <Text style={styles.cardNote}>
-        {`${d.calls} calls · ${short(d.tokens)} tokens${d.referenceUsd > 0 ? ` · ${money(d.referenceUsd)} reference` : ''}`}
-      </Text>
-    </Card>
-  );
-}
-
-function ConversationCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
-  const s = payload.session;
-  if (!s) {
-    return (
-      <Card>
-        <CardHead title="conversation" />
-        <Text style={styles.cardNote}>nothing has been asked here yet.</Text>
-      </Card>
-    );
-  }
-  return (
-    <Card>
-      <CardHead title="conversation" />
-      <Row label="platform" value={`${s.platform} · ${s.chatType}`} />
-      <Row label="started" value={ago(s.createdAt)} />
-      <Row label="last active" value={ago(s.lastActiveAt)} />
-      <Row label="active run" value={payload.runtime.activeRun} />
-      {s.subAgent ? (
-        <Row label="sub-agent" value={`${s.subAgent.displayName} (${s.subAgent.type}, ${s.subAgent.visibility})`} />
-      ) : null}
-    </Card>
-  );
-}
-
-/** Everything true but rarely asked: ids, window provenance, tool approvals. */
+/** Everything true but rarely asked: dates, ids, window provenance, tuning, approvals. */
 function DetailsFold({ payload }: { payload: StatusPayload }): React.JSX.Element {
   const s = payload.session;
   const r = payload.runtime;
   const c = payload.context;
   return (
-    <Fold label="details" hint="ids, context window, approvals">
+    <Fold label="details" hint="dates, ids, context window, tuning">
       <Card>
+        {s ? <Row label="started" value={`${s.createdAt.slice(0, 16).replace('T', ' ')} · ${ago(s.createdAt)}`} /> : null}
+        {s ? <Row label="last active" value={ago(s.lastActiveAt)} /> : null}
+        {s ? <Row label="turns" value={String(s.turns)} /> : null}
+        {s ? <Row label="session id" value={s.id} monospace /> : null}
+        {s?.subAgent ? (
+          <Row label="sub-agent" value={`${s.subAgent.displayName} (${s.subAgent.type}, ${s.subAgent.visibility})`} />
+        ) : null}
+        {s?.subAgent ? <Row label="spawned by" value={s.subAgent.parentSessionId} monospace /> : null}
         <Row label="context limit" value={`${short(payload.model.contextLimit)} · ${payload.model.contextNotes.join(', ')}`} />
-        {payload.model.timeout ? <Row label="request wall" value={payload.model.timeout} /> : null}
+        <Row label="estimated" value={`${short(c.estimated)} · chars/4, under-counts`} />
+        <Row label="request wall" value={payload.model.timeout} />
         {payload.model.configDefault ? <Row label="config default" value={payload.model.configDefault} /> : null}
         {payload.model.effort ? <Row label="effort" value={payload.model.effort} /> : null}
         {payload.model.selfHosted ? <Row label="billing" value="self-hosted, no marginal cost" /> : null}
-        {c.carried ? (
-          <Row
-            label="carried to"
-            value={`${c.carried.model}: ${c.carried.messages} messages (~${short(c.carried.tokens)} tokens)${
-              c.carried.dropped > 0 ? `, ${c.carried.dropped} oldest dropped` : ''
-            }`}
-          />
-        ) : null}
         <Row label="verbose" value={r.verbose ? 'on' : 'off'} />
         {r.approvedTools.length > 0 ? <Row label="approved" value={r.approvedTools.join(', ')} /> : null}
-        {s ? <Row label="created" value={s.createdAt.slice(0, 16).replace('T', ' ')} /> : null}
-        {s ? <Row label="session id" value={s.id} monospace /> : null}
-        {s?.subAgent ? <Row label="spawned by" value={s.subAgent.parentSessionId} monospace /> : null}
-        {r.activeRun === 'none' ? null : <Row label="run" value={r.activeRun} monospace />}
       </Card>
     </Fold>
   );
 }
 
 const createStyles = (palette: Palette) => ({
-  stage: { backgroundColor: palette.bg },
+  screen: { flex: 1 },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
     paddingBottom: space.sm,
-    paddingHorizontal: space.md,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
@@ -393,13 +409,14 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
-  refreshGlyph: { fontSize: 22, lineHeight: 26, color: palette.text },
-  refreshBusy: { opacity: 0.4 },
   headerMain: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   headerSub: { fontSize: font.small, color: palette.textFaint },
+  live: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingRight: space.xs },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.accent },
+  liveText: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.5, textTransform: 'uppercase' as const },
   empty: { padding: space.xl, fontSize: font.body, color: palette.textFaint },
-  body: { paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.xl, gap: space.sm },
+  body: { paddingTop: space.md, paddingBottom: space.xl, gap: space.sm },
   runBadge: {
     alignSelf: 'flex-start' as const,
     paddingHorizontal: space.md,
@@ -429,31 +446,12 @@ const createStyles = (palette: Palette) => ({
     letterSpacing: 0.5,
     textTransform: 'uppercase' as const,
   },
-  cardTrailing: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text },
+  cardTrailing: { fontSize: font.screen, fontWeight: '700' as const, color: palette.text },
   cardNote: { fontSize: font.small, color: palette.textMuted },
   cardNoteWarn: { color: palette.warn },
   heroRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.sm },
   hero: { fontSize: 28, lineHeight: 32, fontWeight: '700' as const, color: palette.text },
   heroUnit: { fontSize: font.body, color: palette.textFaint },
-  grid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.sm },
-  statCell: {
-    flexGrow: 1,
-    flexBasis: '47%' as const,
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-  },
-  statLabel: {
-    fontSize: font.micro,
-    color: palette.textFaint,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-  },
-  statValue: { fontSize: font.screen, fontWeight: '600' as const, color: palette.text },
-  statSub: { fontSize: font.micro, color: palette.textFaint },
   row: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -472,18 +470,31 @@ const createStyles = (palette: Palette) => ({
   meterFill: { height: 6, borderRadius: radius.pill },
   barFill: { color: palette.accent },
   barWarn: { color: palette.warn },
-  modelTable: { marginTop: space.xs, gap: space.xs },
+  tree: { marginTop: space.xs, borderTopWidth: 1, borderTopColor: palette.border },
+  usageRow: { borderBottomWidth: 1, borderBottomColor: palette.border },
+  usageHead: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingVertical: space.sm,
+  },
+  usageWho: { flex: 1, minWidth: 0 },
+  usageNameRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
+  usageName: { fontSize: font.meta, color: palette.text, flexShrink: 1 },
+  usageHint: { fontSize: font.micro, color: palette.textFaint },
+  runningDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.accent },
+  usageNums: { fontSize: font.micro, color: palette.textFaint, flexShrink: 1 },
+  usageCost: { width: 58, fontSize: font.small, fontWeight: '600' as const, color: palette.text, textAlign: 'right' as const },
+  modelTable: { paddingLeft: space.lg, paddingBottom: space.sm, gap: space.xxs },
   modelRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.sm,
     paddingVertical: space.xxs,
-    borderTopWidth: 1,
-    borderTopColor: palette.border,
   },
-  modelName: { flex: 1, fontSize: font.small, color: palette.text },
-  modelNums: { fontSize: font.micro, color: palette.textFaint },
-  modelCost: { width: 58, fontSize: font.small, color: palette.text, textAlign: 'right' as const },
+  modelName: { flex: 1, fontSize: font.small, color: palette.textMuted },
+  modelNums: { fontSize: font.micro, color: palette.textFaint, flexShrink: 1 },
+  modelCost: { width: 58, fontSize: font.small, color: palette.textMuted, textAlign: 'right' as const },
   codeNote: { fontSize: font.micro, color: palette.textFaint },
   fold: {
     borderWidth: 1,
@@ -508,12 +519,4 @@ const createStyles = (palette: Palette) => ({
   },
   foldHint: { flex: 1, fontSize: font.micro, color: palette.textFaint, textAlign: 'right' as const },
   foldBody: { paddingHorizontal: space.sm, paddingBottom: space.sm },
-  code: { fontFamily: 'monospace' as const, fontSize: font.micro, color: palette.text },
-  codeBlock: {
-    backgroundColor: palette.codeBg,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.md,
-    padding: space.md,
-  },
 });

@@ -144,15 +144,19 @@ test('typing "/" opens the slash-menu, filters live, and inserts on tap', async 
   });
   expect(inputOf(tree).props.value).toBe('/help ');
 
-  // /status is handled natively too: the tap opens the fullscreen page instead of typing.
+  // /status is handled natively too: the tap opens the status page instead of typing. On a
+  // phone the page takes the conversation's place, so the composer comes back empty on close.
   await typeInto(tree, '/st');
   await waitFor(() => textsOf(tree).includes('Session diagnostics: context, tokens, cost'));
   const statusItem = tree.root.find(node => node.props.accessibilityLabel?.startsWith('Command status'));
   await ReactTestRenderer.act(async () => {
     statusItem.props.onPress();
   });
-  expect(inputOf(tree).props.value).toBe('');
   await waitFor(() => labelsOf(tree).includes('Close status'));
+  expect(bridge.sendMessage).not.toHaveBeenCalledWith(expect.stringContaining('"/st'));
+  await pressLabel(tree, 'Close status');
+  await waitFor(() => !labelsOf(tree).includes('Close status'));
+  expect(inputOf(tree).props.value).toBe('');
 
   await unmount(tree);
 });
