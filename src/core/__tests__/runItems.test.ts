@@ -78,6 +78,20 @@ test('the same range is never asked twice while one ask is in flight', () => {
   expect(mockSend).toHaveBeenCalledTimes(1);
 });
 
+test('an ask lost with the socket is asked again once the link is back', () => {
+  // The frame left the device and the socket died before the answer: nothing rejected, so the
+  // row stayed `loading` on a skeleton that never filled, and every later open was refused by the
+  // in-flight guard. A reconnect replays nothing; dropping the in-flight asks is what lets the open
+  // group ask again.
+  requestRunItems(THREAD, [rowOf(THREAD)]);
+  expect(rowOf(THREAD).hydration).toBe('loading');
+  chatStore.dropInflightHydration();
+  expect(rowOf(THREAD).hydration).toBe('idle');
+  requestRunItems(THREAD, [rowOf(THREAD)]);
+  expect(mockSend).toHaveBeenCalledTimes(2);
+  expect(rowOf(THREAD).hydration).toBe('loading');
+});
+
 test('a range that failed is not retried on every open', () => {
   requestRunItems(THREAD, [rowOf(THREAD)]);
   route({ type: 'chat.run.items', threadId: THREAD, fromId: 'run-w1', messages: [], found: false });

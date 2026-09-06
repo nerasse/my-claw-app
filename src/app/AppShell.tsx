@@ -170,6 +170,7 @@ import { reduceUpdate, type UpdatePhase } from '../core/serverUpdate';
 import { reduceAppUpdate, type AppUpdatePhase } from '../core/appUpdate';
 import { appUpdateRuntime, appUpdateSupported } from '../core/appUpdateRuntime';
 import { playAlertSound } from '../core/alertSound';
+import { resetToolOutputAsks } from '../core/toolOutput';
 import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
@@ -960,6 +961,11 @@ export function AppShell(): React.JSX.Element {
         // server would show yesterday's label.
         setServerVersion(null);
         setLocationEnabled(false);
+        // So are the reads it carried: an ask for a folded run's work or a clipped tool output
+        // that left on this socket will never be answered, and the guards against asking twice
+        // would otherwise refuse to ask again -- a skeleton, or a "Show more", stuck for good.
+        chatStore.dropInflightHydration();
+        resetToolOutputAsks();
       }
       if (next.state === 'connected') {
         for (const frame of resumeFrames(activeThreadRef.current)) {

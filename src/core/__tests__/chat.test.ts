@@ -312,6 +312,29 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     expect(texts).toEqual(['/compact']);
   });
 
+  test('a fresh page lets go of a compaction placeholder whose end frame was lost', () => {
+    // The end of a compaction travels as one frame and is replayed to nobody once settled: a
+    // window whose socket dropped for those seconds kept "Compacting the context..." ticking
+    // through every resync, since the placeholder counts as live. A page that replaces the
+    // thread post-dates the compaction (a compaction still running is replayed after it).
+    chatStore.setCompacting(THREAD, 1_800_000_000_000);
+    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.text === 'Compacting the context...')).toBe(true);
+    chatStore.handleSyncResult(
+      THREAD,
+      [{ id: 'u1', role: 'user', text: 'hello', ts: '2026-01-01T00:00:00.000Z' } as HistoryEntry],
+      'u1',
+      'u1',
+      false,
+      'unknown-cursor',
+    );
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['u1']);
+    // A delta keeps it: the server holds deltas back while a compaction runs, so a delta that
+    // arrives while the placeholder is up is one the placeholder still describes.
+    chatStore.setCompacting(THREAD, 1_800_000_000_000);
+    chatStore.handleSyncResult(THREAD, [], 'u1', 'u1', false);
+    expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.text === 'Compacting the context...')).toBe(true);
+  });
+
   test('a compaction that failed still shows the reason it gives', () => {
     // The real order: the server settles the compaction inside a finally, so the state frame
     // always precedes the command's own answer. The placeholder goes with the settle, and the
@@ -1317,6 +1340,23 @@ describe('chatStore run grouping', () => {
     chatStore.handleSyncResult(THREAD, [runEntry('run-1', 'error')], 'run-1', null, false);
     const items = chatStore.getItems(THREAD);
     expect(items[0]).toMatchObject({ run: { id: 'run-1', status: 'error' } });
+    expect(chatStore.hasActiveRun(THREAD)).toBe(false);
+  });
+
+  test('a page that closes the run gives what was painted live the server run: one id, one duration', () => {
+    // Seen on a real thread: the tool cards painted live kept a synthetic run (and a stale one, whose
+    // start was a question earlier), the phases came back from the page under the server run, and
+    // the same run drew as three groups, one of them "52 min" long inside a 7-minute answer. The
+    // rename only ran while the run was still in flight; a page arriving after its end never did it.
+    chatStore.startRun(THREAD);
+    chatStore.startStream(THREAD, 's1');
+    chatStore.addToolCall(THREAD, { id: 'c1', name: 'web_search', args: {}, ok: true, output: 'o', truncated: false });
+    chatStore.handleSyncResult(THREAD, [runEntry('run-1', 'done')], 'run-1', null, false);
+    const items = chatStore.getItems(THREAD);
+    expect(items.length).toBe(3);
+    expect(items.every(i => i.run?.id === 'run-1')).toBe(true);
+    expect(items.every(i => i.run?.status === 'done')).toBe(true);
+    expect(items.every(i => i.run?.endTs === Date.parse('2026-01-01T00:01:00.000Z'))).toBe(true);
     expect(chatStore.hasActiveRun(THREAD)).toBe(false);
   });
 

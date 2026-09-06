@@ -673,8 +673,9 @@ class ChatStoreImpl {
     this.emit();
   }
 
-  endRun(threadId: string, reason: RunStatus = 'done'): void {
-    if (!this.activeRuns.delete(threadId) && !this.openRuns.has(threadId)) return;
+  /** Closes the run of a thread. False when there was none to close: the end said nothing new. */
+  endRun(threadId: string, reason: RunStatus = 'done'): boolean {
+    if (!this.activeRuns.delete(threadId) && !this.openRuns.has(threadId)) return false;
     const open = this.openRuns.get(threadId);
     this.openRuns.delete(threadId);
     if (open) {
@@ -683,6 +684,7 @@ class ChatStoreImpl {
       this.sealRun(threadId, open.info.id, reason, Date.now());
     }
     this.emit();
+    return true;
   }
 
   /** Marks every item of a run with its terminal state. */
@@ -737,6 +739,13 @@ class ChatStoreImpl {
       }
     } else if (activeRun === false) {
       this.openRuns.delete(threadId);
+      // No run is in flight, so whatever the live frames painted under a synthetic id is the work
+      // of the run this page closes: it takes that run's id, status and end. Renaming only while
+      // the run was still running left a page that arrived after its end with two ids for one
+      // run, the cards under the synthetic one (and a stale start, when an earlier end had been
+      // missed), the phases under the server's -- three groups and a wrong duration for one turn.
+      const latest = [...entries].reverse().find(entry => entry.run)?.run;
+      if (open?.synthetic && latest) this.renameRun(threadId, open.info.id, runInfoOf(latest));
       // A trailing run still marked running is dead (its end frame or marker was lost): settle it
       // as done so the group closes instead of rendering as an eternal open run. Only the last
       // run can be running, so the search goes from the end.
@@ -854,6 +863,14 @@ class ChatStoreImpl {
    * Called on unknown-cursor or branch-switch.
    */
   private resetThread(threadId: string, entries: HistoryEntry[]): void {
+    // A compaction placeholder is closed by the end frame and by nothing else, and an end frame
+    // lost with the socket left "Compacting the context..." ticking for good: it counts as live,
+    // so both resync paths kept it. A fresh page is the moment to let it go. A compaction still
+    // in flight is replayed right after the page (docs/live-turn-replay.md), which puts a
+    // placeholder back; one that has settled is not, which is the point.
+    if (this.pendingCommands.get(threadId) === COMPACTING_ITEM || this.compactingAdopted.has(threadId)) {
+      this.clearCommandPending(threadId);
+    }
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const base = this.itemsOfWithSpawnReconcile(threadId, entries);
     const known = new Set(base.map(item => item.id));
@@ -989,6 +1006,25 @@ class ChatStoreImpl {
     // stood for, or scrolling up would ask for a row that no longer exists.
     this.pageCursorFollows(threadId);
     this.emit();
+  }
+
+  /**
+   * Every ask for a row's work still in flight is forgotten: the socket it left on is gone, and
+   * nothing will answer it. A row left `loading` kept its skeleton for good, because the guard
+   * against a second ask read the state as "an answer is coming". Back to `idle`, the open group
+   * asks again through the path it already has when the link returns.
+   */
+  dropInflightHydration(): void {
+    let changed = false;
+    for (const [threadId, items] of this.threads) {
+      if (!items.some(item => item.kind === 'run' && item.hydration === 'loading')) continue;
+      changed = true;
+      this.threads.set(
+        threadId,
+        items.map(item => (item.kind === 'run' && item.hydration === 'loading' ? { ...item, hydration: 'idle' } : item)),
+      );
+    }
+    if (changed) this.emit();
   }
 
   /** Where a row is in its round trip: latched before the ask leaves, cleared by the splice. */

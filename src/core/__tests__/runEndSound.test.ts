@@ -37,6 +37,17 @@ beforeEach(() => {
 
 it('a run ending on the thread on screen rings once', () => {
   const { state, serverHandlers } = makeHandlers('t1');
+  chatStore.startRun('t1');
+  routeServerFrame(runEnd('t1'), serverHandlers);
+  expect(state.runEnds).toBe(1);
+});
+
+it('the same end announced twice rings once: an end that closes nothing is not an end', () => {
+  // A server one version back announced a run's end once per message folded into it, and a
+  // replayed end says nothing new either. The store already ignores the second; the ring did not.
+  const { state, serverHandlers } = makeHandlers('t1');
+  chatStore.startRun('t1');
+  routeServerFrame(runEnd('t1'), serverHandlers);
   routeServerFrame(runEnd('t1'), serverHandlers);
   expect(state.runEnds).toBe(1);
 });
@@ -49,7 +60,9 @@ it('a run ending on another thread does not ring', () => {
 
 it('an aborted or failed run on screen rings the same as a done one', () => {
   const { state, serverHandlers } = makeHandlers('t1');
+  chatStore.startRun('t1');
   routeServerFrame(runEnd('t1', 'aborted'), serverHandlers);
+  chatStore.startRun('t1');
   routeServerFrame(runEnd('t1', 'error'), serverHandlers);
   expect(state.runEnds).toBe(2);
 });

@@ -185,8 +185,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
   /** Activity in a thread the user is not reading: badge it and make sure it is listed. */
   const noteActivity = (threadId: string, text: string): void => {
     if (threadId === activeThreadId()) return;
+    // A sub-agent's thread is listed nowhere, so an unread mark on it has no row to sit on: it
+    // only inflated the tab title with a count nothing could clear. Its activity shows on the
+    // card in the parent thread.
+    if (isSubAgentThread(threadId)) return;
     chatStore.markUnread(threadId);
-    if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text);
+    sessionStore.ensure(threadId, text);
   };
 
   // The run id rides on the reply: keeping the last one is what makes "logs for this run"
@@ -241,13 +245,14 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       chatStore.startRun(frame.threadId);
       break;
     case 'chat.run.end': {
-      chatStore.endRun(frame.threadId, frame.reason);
+      const ended = chatStore.endRun(frame.threadId, frame.reason);
       chatStore.clearQueued(frame.threadId);
       // The run just finished on the thread on screen: one ring, exactly like a question hitting
       // the open thread. A run ending on any other thread (or the device in the background) is
       // the push's business -- server-side skipDevice keeps the tray silent for the foreground
-      // device on that thread, so the ring and the banner never double up.
-      if (frame.threadId === activeThreadId()) onRunEndOnActiveThread?.(frame);
+      // device on that thread, so the ring and the banner never double up. An end that closed
+      // nothing (announced twice by an older server, or replayed) is not a second run ending.
+      if (ended && frame.threadId === activeThreadId()) onRunEndOnActiveThread?.(frame);
       // A run may have spawned sub-agents; the roster is refetched at its end rather than
       // pushed, which keeps the counter honest without a live push path.
       const parent = subagentParent() ?? activeThreadId();

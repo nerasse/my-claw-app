@@ -224,6 +224,10 @@ test('a run finishing on the open thread rings, once, while the app is on screen
   const tree = await renderApp();
   await waitFor(() => sentOfType('notifications.state').length >= 1);
 
+  // The end of a run the app knows: an end that closes nothing (announced twice by an older
+  // server, or replayed) is not a run ending and stays silent.
+  await emit({ type: 'chat.run.start', threadId: 't-default' });
+  await emit({ type: 'chat.run.end', threadId: 't-default', reason: 'done' });
   await emit({ type: 'chat.run.end', threadId: 't-default', reason: 'done' });
   expect(bridge.playAlertSound).toHaveBeenCalledTimes(1);
   await unmount(tree);
