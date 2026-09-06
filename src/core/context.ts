@@ -52,10 +52,14 @@ export function contextTiers(
 }
 
 /**
- * How full the window of a conversation is, as a whole percent, or null when there is nothing
- * honest to show (no session yet, or a server that predates the field). Never clamped down to
- * 100: a prompt over its ceiling is exactly the moment worth seeing, and rounding it away would
- * hide the one reading that calls for a compaction.
+ * How full the window of a conversation is, to a tenth of a percent, or null when there is
+ * nothing honest to show (no session yet, or a server that predates the field). Never clamped
+ * down to 100: a prompt over its ceiling is exactly the moment worth seeing, and rounding it away
+ * would hide the one reading that calls for a compaction.
+ *
+ * A tenth, because the server pushes a fresh reading after every model call and the header is
+ * meant to move with it. On a 1M window a turn adds a few hundred to a couple of thousand tokens,
+ * under 0.2%: a whole percent sat still for dozens of turns and read as a gauge that was stuck.
  */
 export function contextPercent(
   state: { effective?: number; used?: number } | null | undefined,
@@ -64,7 +68,7 @@ export function contextPercent(
   const effective = state?.effective;
   if (used === undefined || effective === undefined) return null;
   if (!Number.isFinite(used) || !Number.isFinite(effective) || effective <= 0 || used < 0) return null;
-  return Math.round((used / effective) * 100);
+  return Math.round((used / effective) * 1000) / 10;
 }
 
 /** One line for a picker header: what the run may use, and the full window when they differ. */

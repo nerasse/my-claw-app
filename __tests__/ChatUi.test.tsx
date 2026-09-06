@@ -919,7 +919,23 @@ test('the header reads the share of the context window instead of announcing a h
     });
   });
 
-  await waitFor(() => stringsOf(tree).some(text => text.includes('ctx 25%')));
+  await waitFor(() => stringsOf(tree).some(text => text.includes('ctx 25.0%')));
+
+  // The next turn's reading moves the line, even by a fraction of a percent: on a wide window a
+  // whole percent sat still for dozens of turns and the gauge read as stuck.
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'model.result',
+        threadId: THREAD,
+        model: 'fast-1',
+        defaultModel: 'fast-1',
+        effort: { level: '', levels: [], supported: false },
+        context: { raw: 400000, effective: 200000, used: 50800 },
+      }),
+    });
+  });
+  await waitFor(() => stringsOf(tree).some(text => text.includes('ctx 25.4%')));
   await unmount(tree);
 });
 

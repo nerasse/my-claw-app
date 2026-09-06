@@ -49,13 +49,25 @@ function duration(ms: number): string {
   return `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
 }
 
-export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.Element {
+export function StatusScreen({
+  onClose,
+  onRefresh,
+}: {
+  onClose: () => void;
+  onRefresh: () => void;
+}): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const layerFrame = useLayerFrame();
   const insets = useSafeAreaInsets();
   const status = useStatus();
   useDismissKeyboard();
   const payload = status.payload;
+  const refreshing = status.fetch === 'loading';
+  const headerSub = payload
+    ? [payload.model.current, payload.model.tag ? `tag ${payload.model.tag}` : null, refreshing ? 'refreshing…' : null]
+        .filter(Boolean)
+        .join(' · ')
+    : 'this conversation';
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
@@ -71,13 +83,21 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
         <View style={styles.headerMain}>
           <Text style={styles.title}>Status</Text>
           <Text style={styles.headerSub} numberOfLines={1}>
-            {payload ? payload.model.current : 'this conversation'}
-            {payload?.model.tag ? ` · tag ${payload.model.tag}` : ''}
+            {headerSub}
           </Text>
         </View>
+        <Pressable
+          onPress={onRefresh}
+          disabled={refreshing}
+          hitSlop={8}
+          style={[styles.backButton, refreshing ? styles.refreshBusy : null]}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh status">
+          <Text style={styles.refreshGlyph}>↻</Text>
+        </Pressable>
       </View>
 
-      {status.fetch === 'loading' ? (
+      {refreshing && !payload ? (
         <Text style={styles.empty}>asking the server…</Text>
       ) : status.fetch === 'error' ? (
         <Text style={styles.empty}>{status.error}</Text>
@@ -373,6 +393,8 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  refreshGlyph: { fontSize: 22, lineHeight: 26, color: palette.text },
+  refreshBusy: { opacity: 0.4 },
   headerMain: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   headerSub: { fontSize: font.small, color: palette.textFaint },

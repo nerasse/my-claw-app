@@ -777,7 +777,10 @@ export function AppShell(): React.JSX.Element {
     openSettings();
   }, [openSettings]);
 
-  /** The status page is asked on every opening: the report is a snapshot, not a live gauge. */
+  /**
+   * The status page is asked on every opening, then re-asked by the frame router at every turn
+   * the server measures and at the end of a run (`refreshStatusPage`), and by its own button.
+   */
   const openStatus = useCallback((threadId: string) => {
     statusStore.open(threadId);
     setStatusOpen(true);
@@ -2544,7 +2547,7 @@ export function AppShell(): React.JSX.Element {
   // compacted, so it belongs where the owner already looks. Degraded states keep the word.
   const contextShare = contextPercent(threadModel?.context);
   const subtitle = [
-    offline ? status.state : contextShare === null ? null : `ctx ${contextShare}%`,
+    offline ? status.state : contextShare === null ? null : `ctx ${contextShare.toFixed(1)}%`,
     pending > 0 ? `${pending} pending` : null,
     itemCount > 0 ? `${itemCount} items` : null,
     // The model that runs here: the one fact about a conversation worth seeing at a glance.
@@ -4487,6 +4490,10 @@ export function AppShell(): React.JSX.Element {
           onClose={() => {
             statusStore.close();
             setStatusOpen(false);
+          }}
+          onRefresh={() => {
+            const threadId = statusStore.getSnapshot().threadId;
+            if (threadId && statusStore.refresh()) connection.send(encodeStatusGet(threadId)).catch(() => {});
           }}
         />
       ) : null}

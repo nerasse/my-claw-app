@@ -48,6 +48,18 @@ class StatusStoreImpl {
     this.emit();
   }
 
+  /**
+   * Asks again for the report of the page already open, keeping the one on screen until the
+   * answer lands: the page redraws in place rather than blanking to a spinner. Nothing to do on a
+   * closed page, or while a request is already in flight.
+   */
+  refresh(): boolean {
+    if (this.state.threadId === null || this.state.fetch === 'loading') return false;
+    this.state = { ...this.state, fetch: 'loading', error: null };
+    this.emit();
+    return true;
+  }
+
   receive(frame: StatusResultFrame): void {
     this.state = {
       threadId: frame.threadId,

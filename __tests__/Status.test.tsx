@@ -330,3 +330,101 @@ test('a late status.result does not reopen a closed page', async () => {
 
   await unmount(tree);
 });
+
+test('the page follows the run: every reading the server pushes re-asks the report, and the old one stays on screen meanwhile', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+  bridge.sendMessage.mockClear();
+
+  // The frame the server pushes after each model call, for this thread.
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'claude-opus-5',
+    defaultModel: 'claude-opus-5',
+    effort: { level: '', levels: [], supported: false },
+    context: { raw: 1_000_000, effective: 512_000, used: 71_000 },
+  });
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'status.get', threadId: THREAD })]),
+  );
+  // No blank page while the answer is on its way: the report is redrawn in place.
+  const meanwhile = textsOf(tree).join('\n');
+  expect(meanwhile).toContain('70k');
+  expect(meanwhile).toContain('refreshing…');
+  expect(meanwhile).not.toContain('asking the server…');
+
+  // A second reading before the answer lands does not stack a second request.
+  bridge.sendMessage.mockClear();
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'claude-opus-5',
+    defaultModel: 'claude-opus-5',
+    effort: { level: '', levels: [], supported: false },
+    context: { raw: 1_000_000, effective: 512_000, used: 72_000 },
+  });
+  expect(sentFrames().some(frame => frame.type === 'status.get')).toBe(false);
+
+  await emit({
+    type: 'status.result',
+    threadId: THREAD,
+    text: 'report',
+    status: { ...PAYLOAD, context: { ...PAYLOAD.context, occupied: 72_000 } },
+  });
+  await waitFor(() => textsOf(tree).some(text => text.includes('72k')));
+  expect(textsOf(tree).join('\n')).not.toContain('refreshing…');
+
+  // A reading for another conversation is not this page's business.
+  bridge.sendMessage.mockClear();
+  await emit({
+    type: 'model.result',
+    threadId: 'elsewhere',
+    model: 'claude-opus-5',
+    defaultModel: 'claude-opus-5',
+    effort: { level: '', levels: [], supported: false },
+    context: { raw: 1_000_000, effective: 512_000, used: 1 },
+  });
+  expect(sentFrames().some(frame => frame.type === 'status.get')).toBe(false);
+
+  await unmount(tree);
+});
+
+test('the refresh button at the top right asks again by hand, and the end of a run asks on its own', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+  bridge.sendMessage.mockClear();
+
+  await pressLabel(tree, 'Refresh status');
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'status.get', threadId: THREAD })]),
+  );
+  await emit({ type: 'status.result', threadId: THREAD, text: 'report', status: PAYLOAD });
+
+  bridge.sendMessage.mockClear();
+  await emit({ type: 'chat.run.end', threadId: THREAD, reason: 'done' });
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'status.get', threadId: THREAD })]),
+  );
+
+  await unmount(tree);
+});
+
+test('a closed page asks for nothing when a reading lands', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+  await pressLabel(tree, 'Close status');
+  bridge.sendMessage.mockClear();
+
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'claude-opus-5',
+    defaultModel: 'claude-opus-5',
+    effort: { level: '', levels: [], supported: false },
+    context: { raw: 1_000_000, effective: 512_000, used: 71_000 },
+  });
+  expect(sentFrames().some(frame => frame.type === 'status.get')).toBe(false);
+
+  await unmount(tree);
+});

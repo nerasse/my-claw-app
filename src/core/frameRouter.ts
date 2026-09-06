@@ -27,6 +27,7 @@ import {
   encodeAgentsConfigGet,
   encodeSessionSync,
   encodeModelGet,
+  encodeStatusGet,
   encodeSessionHistory,
   encodeSubAgentsList,
   type ApprovalRequestFrame,
@@ -129,6 +130,13 @@ export interface ServerFrameHandlers {
  * Every server frame lands here. Frames that only feed a store are served outright; the ones that
  * touch the shell's own state go through `handlers`.
  */
+/** Re-asks the report of the status page when it is open on `threadId` and idle. */
+function refreshStatusPage(threadId: string): void {
+  if (statusStore.getSnapshot().threadId !== threadId) return;
+  if (!statusStore.refresh()) return;
+  connection.send(encodeStatusGet(threadId)).catch(() => {});
+}
+
 export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandlers): void {
   const {
     activeThreadId,
@@ -263,6 +271,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (frame.threadId === activeThreadId()) {
         connection.send(encodeModelGet(frame.threadId)).catch(() => {});
       }
+      // The run badge and the last turn's cost are part of the report.
+      refreshStatusPage(frame.threadId);
       break;
     }
     case 'subagents.list.result':
@@ -508,6 +518,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'model.result':
       modelStore.replaceThread(frame);
+      // The server pushes this after every model call. The status page shows the same reading in
+      // full (occupancy, tokens, cost), so while it is open on that thread it asks again and
+      // follows the run turn by turn, instead of holding the snapshot of when it was opened.
+      refreshStatusPage(frame.threadId);
       break;
     case 'agents.config.result':
       agentsStore.receive(frame);

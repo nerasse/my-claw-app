@@ -35,6 +35,10 @@ test('a window with nothing under it is not a choice at all', () => {
 test('the share of the window is a whole percent of what the run may use, not of the full one', () => {
   expect(contextPercent({ effective: 200_000, used: 50_000 })).toBe(25);
   expect(contextPercent({ effective: 128_000, used: 1 })).toBe(0);
+  // A tenth of a percent: on a 1M window one turn is a few hundred tokens, and the header has to
+  // move with the reading the server pushes after every model call, not once every twenty turns.
+  expect(contextPercent({ effective: 1_000_000, used: 124_202 })).toBe(12.4);
+  expect(contextPercent({ effective: 1_000_000, used: 125_300 })).toBe(12.5);
   // Over its ceiling is exactly the reading worth showing: it is not folded back to 100.
   expect(contextPercent({ effective: 100_000, used: 130_000 })).toBe(130);
 });
