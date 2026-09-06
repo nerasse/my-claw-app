@@ -213,3 +213,32 @@ describe('content argument block', () => {
     expect(shown).not.toContain('content');
   });
 });
+
+describe('ToolCard elapsed time while running', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const textsOf = (tree: ReactTestRenderer.ReactTestRenderer): string[] =>
+    tree.root.findAllByType(Text).map(t => [t.props.children].flat().join(''));
+
+  test('a running card counts the seconds since it started, and the settled duration takes over', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-06T10:00:00.000Z'));
+    // A card that has run for a while shows nothing but a spinner: three minutes into a build,
+    // nothing said whether it was three minutes or three seconds. The settled card has a duration,
+    // the running one had none.
+    const started = Date.now() - 42_000;
+    const tree = renderTool(makeItem({ running: true, ts: started }));
+    expect(textsOf(tree)).toContain('42s');
+
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(20_000);
+    });
+    expect(textsOf(tree)).toContain('1m 2s');
+
+    updateItem(tree, makeItem({ running: false, ts: started, durationMs: 62_400 }));
+    expect(textsOf(tree)).not.toContain('1m 2s');
+    expect(textsOf(tree).some(text => text.includes('62.4s') || text.includes('1m'))).toBe(true);
+  });
+});

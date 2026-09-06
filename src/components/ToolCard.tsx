@@ -8,6 +8,7 @@ import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
+import { formatElapsed, useElapsed } from './CommandElapsed';
 
 /**
  * One executed tool, collapsed to a single dense line and expanded on tap to show the
@@ -168,7 +169,7 @@ export const ToolCard = React.memo(function ToolCardView({
               <ActivityIndicator size="small" />
             </View>
           ) : null}
-          {duration ? <Text style={styles.duration}>{duration}</Text> : null}
+          {running ? <RunningFor since={item.ts} /> : duration ? <Text style={styles.duration}>{duration}</Text> : null}
         </View>
         {!open && preview && summary.block ? (
           <Text
@@ -290,6 +291,17 @@ function QuestionHistoryBody({ args, output, ok }: { args: Record<string, unknow
       </Text>
     </View>
   );
+}
+
+/**
+ * Seconds since the call started, where the duration will sit once it settles. Three minutes into
+ * a build the spinner alone said nothing about whether it was three minutes or three seconds. Its
+ * own component so the tick redraws this text and not the card.
+ */
+function RunningFor({ since }: { since: number }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const elapsed = useElapsed(since);
+  return <Text style={styles.duration}>{formatElapsed(elapsed)}</Text>;
 }
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
