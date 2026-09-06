@@ -488,7 +488,9 @@ export function AgentFileScreen({
             <View style={styles.category}>
               <Text style={styles.section}>base</Text>
               <View style={styles.chips}>
-                {(['general', 'research'] as const).map(base => (
+                {/* The browser base is the browser agent's alone (the shared Chromium's toolbox, reached
+                    through delegate_browser_task): shown when the file has it, never offered. */}
+                {(frame.base === 'browser' ? (['browser'] as const) : (['general', 'research'] as const)).map(base => (
                   <Chip
                     key={base}
                     label={base}

@@ -125,11 +125,13 @@ export interface SpawnCard {
 }
 
 /**
- * The two tools a sub-agent card can come from. `spawn` creates one, `send` drives an existing
- * one, and both run the identical lifecycle: matching on `spawn` alone left every `send` card as a
- * plain tool row with no status, no door and nothing replayed after a reload.
+ * The tools a sub-agent card can come from. `spawn` creates one, `send` drives an existing one,
+ * `delegate_browser_task` runs the browser agent as one, and all three run the identical
+ * lifecycle: matching on `spawn` alone left every `send` card as a plain tool row with no status,
+ * no door and nothing replayed after a reload, and the browser call was that plain row until it
+ * became a real sub-agent (server 0.7).
  */
-const SUBAGENT_TOOLS: ReadonlySet<string> = new Set(['spawn', 'send']);
+const SUBAGENT_TOOLS: ReadonlySet<string> = new Set(['spawn', 'send', 'delegate_browser_task']);
 
 export function isSubAgentTool(name: string): boolean {
   return SUBAGENT_TOOLS.has(name);

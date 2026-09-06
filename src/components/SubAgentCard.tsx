@@ -18,6 +18,13 @@ import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '.
  *
  * Memoized, and `onOpen` takes the card id rather than being closed over it: see Bubble.
  */
+/** The site of a browser task. By hand, not `new URL`: RN's URL is a partial polyfill (see `httpOrigin`). */
+function hostOf(url: unknown): string {
+  if (typeof url !== 'string') return '';
+  const match = /^https?:\/\/([^/?#:]+)/i.exec(url.trim());
+  return match ? match[1].toLowerCase() : '';
+}
+
 export const SubAgentCard = React.memo(function SubAgentCardView({
   item,
   threadId,
@@ -49,11 +56,16 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
     (typeof item.args.name === 'string' ? item.args.name : '') ??
     '';
   const id = typeof item.args.id === 'string' ? item.args.id : '';
-  const kind = [typeof item.args.type === 'string' ? item.args.type : '', typeof item.args.mode === 'string' ? item.args.mode : '']
-    .filter(Boolean)
-    .join(' · ');
-  // A spawn is given a task, a send is given a message. Same slot either way.
-  const brief = [item.args.task, item.args.message].find(value => typeof value === 'string') as string | undefined;
+  // A delegated browser task names no agent and no mode: the browser is the agent, the site is
+  // what tells one card from the next.
+  const kind =
+    item.name === 'delegate_browser_task'
+      ? ['browser', hostOf(item.args.url)].filter(Boolean).join(' · ')
+      : [typeof item.args.type === 'string' ? item.args.type : '', typeof item.args.mode === 'string' ? item.args.mode : '']
+          .filter(Boolean)
+          .join(' · ');
+  // A spawn is given a task, a send a message, a browser its instructions. Same slot either way.
+  const brief = [item.args.task, item.args.message, item.args.instructions].find(value => typeof value === 'string') as string | undefined;
 
   // Same rule as a tool card: with the pref off nothing ever opens on its own, and a tap survives
   // the settle. The head is self-sufficient, so an unopened card here costs the reader nothing.

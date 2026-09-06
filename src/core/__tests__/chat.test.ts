@@ -1,5 +1,5 @@
 import { summarizeArgs } from '../utils';
-import { chatStore } from '../chat';
+import { chatStore, isSubAgentTool } from '../chat';
 import type { HistoryEntry } from '../protocol';
 
 const THREAD = 't1';
@@ -188,6 +188,17 @@ describe('chatStore prompt echo', () => {
     const here = { latitude: 48.85, longitude: 2.35, accuracyMeters: 12, capturedAt: '2026-01-01T00:00:00.000Z' };
     chatStore.echoUserMessage(THREAD, 'm2', 'look', [shot], here);
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ attachments: [shot], location: here });
+  });
+});
+
+describe('sub-agent tools', () => {
+  test('a delegated browser task is a sub-agent card, like a spawn and a send', () => {
+    // The card is what gives the run a door, a live status and a replay after a reload; a plain
+    // tool row has none of those, which is what the browser call was.
+    expect(isSubAgentTool('spawn')).toBe(true);
+    expect(isSubAgentTool('send')).toBe(true);
+    expect(isSubAgentTool('delegate_browser_task')).toBe(true);
+    expect(isSubAgentTool('bash')).toBe(false);
   });
 });
 

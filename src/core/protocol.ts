@@ -1722,7 +1722,7 @@ export interface AgentFileResultFrame {
   editable: boolean;
   sha: string;
   description: string;
-  base?: 'general' | 'research';
+  base?: 'general' | 'research' | 'browser';
   tools?: string[];
   skillsMode: FileScopeMode;
   skills?: string[];
@@ -2557,7 +2557,7 @@ export function encodeAgentFileGet(agent: string): string {
 export interface AgentFileFieldsOut {
   sha: string;
   description: string;
-  base?: 'general' | 'research';
+  base?: 'general' | 'research' | 'browser';
   tools?: string[];
   skillsMode: FileScopeMode;
   skills?: string[];

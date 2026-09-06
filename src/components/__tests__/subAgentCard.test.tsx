@@ -104,6 +104,34 @@ it('calls a send what it is: a message, not a task', () => {
   expect(texts(tree)).not.toContain('task');
 });
 
+it('a delegated browser task is a sub-agent card: the browser is who, the site is what, the door opens it', () => {
+  // The browser used to run as a private loop with no session, so its call was an ordinary tool
+  // row: nothing to open, nothing live. It is a real sub-agent now and its card says so.
+  const onOpen = jest.fn();
+  const tree = render(
+    makeItem({
+      name: 'delegate_browser_task',
+      args: { url: 'https://shop.example.com/cart', instructions: 'Check the cart total' },
+    }),
+    { subagent: { label: 'browser-3f2a', status: 'running' as const }, spawn: { subagentId: 'subagent/browser-3f2a', displayName: 'browser-3f2a', status: 'running' as const }, onOpen },
+  );
+  const shown = texts(tree);
+  expect(shown).toContain('browser-3f2a');
+  expect(shown).toContain('browser · shop.example.com');
+  const [button] = door(tree);
+  expect(button).toBeDefined();
+  ReactTestRenderer.act(() => button!.props.onPress());
+  expect(onOpen).toHaveBeenCalledWith('tool-1');
+  // Unfolded, the instructions are the task.
+  ReactTestRenderer.act(() => {
+    tree.root
+      .find(node => node.props.accessibilityLabel === 'Sub-agent browser-3f2a, running' && typeof node.props.onPress === 'function')
+      .props.onPress();
+  });
+  expect(texts(tree)).toContain('task');
+  expect(texts(tree)).toContain('Check the cart total');
+});
+
 it.each([
   ['running' as const, '● running'],
   ['complete' as const, '✓ done'],
