@@ -50,6 +50,13 @@ taking text out of it     -> the selection viewer, one node, raw source
   clipped to the server's `TOOL_OUTPUT_LIMIT`, and unfolding it sends `chat.tool.full` (`core/toolOutput.ts`, once per
   card). The clip is a transport decision, not a display one -- every reconnect replays a page of
   history, so the bytes would be paid for by every device, every time.
+- The measurement needs a **second copy of the children**, hanging outside the cap: a node under a
+  `maxHeight` ancestor is reported at the capped height, so a block measured in place is never
+  known to overflow. That copy is unmounted the moment the answer is in. It renders the children
+  in full, and the blocks that pay for it are exactly the long ones -- a four-thousand-line output
+  was laid out twice on every render to keep answering a settled question. Growth past the cap is
+  one-way (output is appended, never rewritten), so once the block is known to be clipped nothing
+  the probe could measure would change the bar.
 - The bubble menu carries `Select text`, which opens the viewer on the **whole message**:
   reasoning, answer and summary joined by `messageSelectionBody`, in the order they were written.
 - `SelectionViewer` is a plain top-anchored `ScrollView` holding one `<Text selectable>`. One node

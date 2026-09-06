@@ -37,6 +37,11 @@ function measure(tree: ReactTestRenderer.ReactTestRenderer, height: number) {
   });
 }
 
+/** How many measuring nodes are mounted: one while the question is open, none once answered. */
+function probeCount(tree: ReactTestRenderer.ReactTestRenderer) {
+  return tree.root.findAll(n => typeof n.props.onLayout === 'function', { deep: true }).length;
+}
+
 /** The fold bar, whichever way it currently points. */
 function foldBar(tree: ReactTestRenderer.ReactTestRenderer) {
   return tree.root.findAll(
@@ -77,7 +82,6 @@ it('measures the content outside the cap, not inside it', () => {
   // reported at the capped height by the layout pass, so the block stayed cut and the bar that
   // undoes it was never offered. Nothing crashed, the text was simply unreachable.
   const tree = render();
-  measure(tree, BLOCK_MAX_HEIGHT + 400);
 
   for (let node = probe(tree).parent; node; node = node.parent) {
     const capped = [node.props.style]
@@ -85,6 +89,20 @@ it('measures the content outside the cap, not inside it', () => {
       .some(s => s && (s.maxHeight === BLOCK_MAX_HEIGHT || s.overflow === 'hidden'));
     expect(capped).toBe(false);
   }
+});
+
+it('stops measuring once the answer is in, so a long block is not laid out twice forever', () => {
+  // The probe renders the children a second time, in full, and the blocks that pay for it are
+  // exactly the long ones: a four-thousand-line output was laid out twice on every render to keep
+  // answering a question already settled. Growth past the cap is one-way, so the answer is final.
+  const tree = render();
+  expect(probeCount(tree)).toBeGreaterThan(0);
+
+  measure(tree, BLOCK_MAX_HEIGHT + 400);
+
+  expect(clipped(tree)).toBe(true);
+  expect(foldBar(tree).length).toBeGreaterThan(0);
+  expect(probeCount(tree)).toBe(0);
 });
 
 it('leaves a block that fits uncapped', () => {

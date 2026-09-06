@@ -56,16 +56,24 @@ export function ScrollableBlock({
           undoes it never appeared -- the reader was left with text no gesture could reach. This
           copy hangs outside the cap (absolute, so it adds no height of its own) and is the only
           thing that sees the content at full size. It carries `style` so its padding, border and
-          width match the real block and both wrap identically. */}
-      <View
-        style={[style, styles.probe]}
-        pointerEvents="none"
-        aria-hidden
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        onLayout={onLayout}>
-        {children}
-      </View>
+          width match the real block and both wrap identically.
+
+          It is unmounted once the answer is in. The probe renders the children a second time, in
+          full, and the blocks that pay for it are exactly the long ones -- a four-thousand-line
+          tool output was laid out twice, forever, to keep answering a question already settled.
+          Growth past the cap is one-way here (output is appended, never rewritten), so once
+          `clipped` is true nothing it could measure would change the bar. */}
+      {clipped ? null : (
+        <View
+          style={[style, styles.probe]}
+          pointerEvents="none"
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          onLayout={onLayout}>
+          {children}
+        </View>
+      )}
       {clipped ? (
         <Pressable
           style={styles.more}
