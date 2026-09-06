@@ -23,6 +23,12 @@ process: the app relaunched, reconnected, was handed the same frame and crashed 
 no reinstall would fix. `parseServerFrame` validates `type` and nothing else, so a frame missing a
 field its handler walks into is all it takes.
 
+A row that throws is caught by `RowBoundary` and reported as `render`, prefixed `row <id>`. The
+screen-level `ErrorBoundary` is still there and is the wrong granularity on its own: one bubble
+took the whole conversation down with it, and since the item lives in the store, reopening the
+thread hit the same one again. Shapes are also normalised at the store door (`addToolCall`,
+`startToolCall`) rather than defended against in every card.
+
 Three `kind`s: `js` (global handler), `render` (ErrorBoundary), `exit` (Android's own post-mortem:
 CRASH / CRASH_NATIVE / ANR / LOW_MEMORY / SIGNALED — the only way to tell a crash from a battery
 kill). A report is dropped from the device only once acked (`diag.report.result`).

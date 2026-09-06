@@ -1411,7 +1411,15 @@ class ChatStoreImpl {
     });
   }
 
-  addToolCall(threadId: string, payload: ToolCallPayload): void {
+  addToolCall(threadId: string, input: ToolCallPayload): void {
+    // Normalised at the door, once, rather than defended against in every card that reads it.
+    // `parseServerFrame` only validates the frame's `type`, so a tool frame that arrived without
+    // its args or its output is a shape the whole render path below would have to survive.
+    const payload: ToolCallPayload = {
+      ...input,
+      args: input.args && typeof input.args === 'object' ? input.args : {},
+      ...(input.output === undefined || input.output === null ? {} : { output: String(input.output) }),
+    };
     // Upsert: a `chat.tool.start` may have opened this card already. The end frame reuses the
     // same id, so we patch it in place (fill output, drop the spinner) instead of stacking a
     // second card.
@@ -1430,7 +1438,8 @@ class ChatStoreImpl {
 
   /** A tool started executing: open the card with a spinner and empty output, pending the
    *  matching `chat.tool` frame that fills it. */
-  startToolCall(threadId: string, id: string, name: string, args: Record<string, unknown>): void {
+  startToolCall(threadId: string, id: string, name: string, rawArgs: Record<string, unknown>): void {
+    const args = rawArgs && typeof rawArgs === 'object' ? rawArgs : {};
     if (this.findIndex(threadId, id) >= 0) return;
     this.append(threadId, {
       kind: 'tool',

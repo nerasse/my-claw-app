@@ -33,6 +33,7 @@ import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useLayout } from '../core/layout';
 import { watchFileDrop } from '../core/fileDrop';
 import { selectableProps } from '../core/webProps';
+import { RowBoundary } from './RowBoundary';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 function pickAssetToPending(asset: { uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }): PendingAttachment | null {
@@ -668,7 +669,7 @@ export function ChatScreen({
     [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
-  const renderRow = useCallback(
+  const renderRowContent = useCallback(
     (row: ChatRow) => {
       if (row.kind === 'item') {
         // Grouping is a property of reading order, so it is still computed oldest-first and the
@@ -705,6 +706,16 @@ export function ChatScreen({
       );
     },
     [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun],
+  );
+
+  /**
+   * Every row is drawn inside its own boundary. The screen has one too, and it is the wrong
+   * granularity: a single bubble that throws took the whole conversation down with it, and since
+   * the item is in the store, reopening the thread hit the same one again.
+   */
+  const renderRow = useCallback(
+    (row: ChatRow) => <RowBoundary itemId={keyOfRow(row)}>{renderRowContent(row)}</RowBoundary>,
+    [renderRowContent],
   );
 
   const locationLabel = location

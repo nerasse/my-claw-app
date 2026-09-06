@@ -65,6 +65,9 @@ export function formatDuration(ms?: number): string {
 
 /** One-line preview of tool arguments for the collapsed card. */
 export function summarizeArgs(args: Record<string, unknown>): string {
+  // The type says this is always an object; the wire does not. A tool card whose `args` never
+  // arrived used to throw here and take the whole conversation down with it.
+  if (!args || typeof args !== 'object') return '';
   const entries = Object.entries(args);
   if (entries.length === 0) return '';
   const first = entries[0]!;

@@ -1,3 +1,4 @@
+import { summarizeArgs } from '../utils';
 import { chatStore } from '../chat';
 import type { HistoryEntry } from '../protocol';
 
@@ -70,6 +71,20 @@ describe('chatStore streaming', () => {
     chatStore.appendDelta(THREAD, 's1', 'deux');
 
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'un deux' });
+  });
+
+  test('a tool frame missing its args does not become a card that throws on render', () => {
+    // parseServerFrame validates `type` and nothing else, so this shape reaches the store. It was
+    // then summarizeArgs, deep in a card, that threw -- and the screen boundary took the whole
+    // conversation with it, on every open, because the item was in the store.
+    chatStore.addToolCall(THREAD, { id: 't-broken', name: 'bash', ok: true, output: 'done', truncated: false, args: undefined as never });
+
+    const card = chatStore.getItems(THREAD).find(item => item.id === 't-broken');
+    if (card?.kind !== 'tool') throw new Error('expected a tool card');
+    // `toMatchObject({ args: {} })` would pass on undefined too: the point is that a card always
+    // hands the render path an object.
+    expect(card.args).toEqual({});
+    expect(() => summarizeArgs(card.args)).not.toThrow();
   });
 
   test('a replayed tool card replaces its output too', () => {
