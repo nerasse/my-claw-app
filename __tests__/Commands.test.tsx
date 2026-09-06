@@ -652,6 +652,27 @@ test('a run keeps Stop visible across tool calls and until it ends', async () =>
   await settleAndUnmount(tree);
 });
 
+test('a compaction with no run behind it shows Stop, and Stop reaches it', async () => {
+  // A /compact typed by the owner holds the session for one to two minutes without a run: the
+  // Stop button followed the run, so there was nothing on screen to interrupt it with.
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u8', '/compact', []);
+  });
+  await emit({ type: 'chat.compacting', threadId: THREAD, since: new Date().toISOString() });
+  await waitFor(() => labelsOf(tree).includes('Stop generating'));
+  expect(labelsOf(tree)).not.toContain('Send message');
+
+  await pressLabel(tree, 'Stop generating');
+  await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'chat.stop', threadId: THREAD })));
+
+  // The server settles the compaction: the end frame takes the button away with the rule.
+  await emit({ type: 'chat.compacting', threadId: THREAD });
+  await waitFor(() => !labelsOf(tree).includes('Stop generating'));
+
+  await settleAndUnmount(tree);
+});
+
 /**
  * A message written while the agent is answering is steering, not a queued turn: the server
  * injects it into the running turn. The corner therefore follows the composer rather than the

@@ -63,6 +63,15 @@ ends with one sign of the operation:
 A successful `/compact` answers with no bubble (the boundary is its report). A failure answers
 with a `chat.command.result`, which lands as its own bubble since the notice is gone.
 
+## Stop
+
+The Stop button follows `useActiveRun(thread) || useCompacting(thread) !== undefined`. A `/compact`
+the owner typed holds the session for one to two minutes with no run behind it, so a button pinned
+to the run alone left nothing on screen to interrupt it with. The button sends the same `chat.stop`
+frame; the server's `runRegistry.stop` aborts a compaction the way it aborts a run (server
+`>= 0.6.4`, which hands the hold's signal to the summarizer), and the compaction answers
+`Compaction stopped.` while its end frame takes the rule and the button away.
+
 ## Rendering
 
 `ChatScreen` reads `useCompacting(threadId)` and renders `CompactionRunning` in the FlatList

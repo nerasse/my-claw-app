@@ -21,6 +21,7 @@ import {
   useChatItemCount,
   useSpawnCards,
   useActiveRun,
+  useCompacting,
   useHistoryPage,
   useUnreadThreads,
   type TextItem,
@@ -626,8 +627,12 @@ export function AppShell(): React.JSX.Element {
   const sessionInstructions = useSessionInstructions();
   const agentsConfig = agentsState.config;
   // The Stop button is pinned to the run, not to a streaming bubble: it survives tool calls
-  // and model turns, and only disappears when the run itself ends.
-  const streaming = useActiveRun(activeThread);
+  // and model turns, and only disappears when the run itself ends. A compaction the owner typed
+  // holds the session for one to two minutes with no run behind it: the same button reaches it
+  // (the server's stop aborts a compaction as it does a run).
+  const running = useActiveRun(activeThread);
+  const compactingSince = useCompacting(activeThread);
+  const streaming = running || compactingSince !== undefined;
 
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.
