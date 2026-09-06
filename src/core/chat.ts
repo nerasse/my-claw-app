@@ -655,6 +655,23 @@ class ChatStoreImpl {
     return this.openRuns.get(threadId)?.info;
   }
 
+  /**
+   * The run a live item the agent produced belongs to, opened if none is. A stream or a tool card
+   * arriving with no run open means the start frame was missed, or an older server ended the run
+   * early (once per message folded into it): the work is in flight all the same. Without a run the
+   * item stood alone for good, a lone expanded card between two folded groups of the same run. A
+   * synthetic run is what `chat.run.start` would have opened, and the next page renames it.
+   */
+  private runForLiveItem(threadId: string): RunInfo {
+    const open = this.openRuns.get(threadId);
+    if (open) return open.info;
+    this.syntheticSeq += 1;
+    const info: RunInfo = { id: `live-${this.syntheticSeq}`, status: 'running', startTs: Date.now() };
+    this.openRuns.set(threadId, { info, synthetic: true });
+    this.activeRuns.add(threadId);
+    return info;
+  }
+
   startRun(threadId: string): void {
     if (this.activeRuns.has(threadId)) return;
     this.activeRuns.add(threadId);
@@ -1309,7 +1326,7 @@ class ChatStoreImpl {
       text: '',
       attachments: [],
       streaming: true,
-      ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
+      run: this.runForLiveItem(threadId),
       ts: parent ? parent.ts + 1 : Date.now(),
     });
   }
@@ -1473,7 +1490,7 @@ class ChatStoreImpl {
       });
       return;
     }
-    this.append(threadId, { kind: 'tool', ...payload, running: false, ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}), ts: Date.now() });
+    this.append(threadId, { kind: 'tool', ...payload, running: false, run: this.runForLiveItem(threadId), ts: Date.now() });
   }
 
   /** A tool started executing: open the card with a spinner and empty output, pending the
@@ -1490,7 +1507,7 @@ class ChatStoreImpl {
       ok: false,
       truncated: false,
       running: true,
-      ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
+      run: this.runForLiveItem(threadId),
       ts: Date.now(),
     });
   }

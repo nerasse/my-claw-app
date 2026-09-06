@@ -1360,6 +1360,22 @@ describe('chatStore run grouping', () => {
     expect(chatStore.hasActiveRun(THREAD)).toBe(false);
   });
 
+  test('a tool card arriving with no run open gets a run of its own, and folds with the rest once the end lands', () => {
+    // Seen on a phone: one expanded card standing between two folded groups of the same run. The
+    // server of the day had ended the run early (once per message folded into it), so the cards
+    // painted after that had no run to belong to, and nothing ever grouped them.
+    chatStore.startToolCall(THREAD, 'c1', 'bash', { command: 'ls' });
+    expect(chatStore.hasActiveRun(THREAD)).toBe(true);
+    chatStore.addToolCall(THREAD, { id: 'c1', name: 'bash', args: {}, ok: true, output: 'o', truncated: false });
+    chatStore.startStream(THREAD, 's1');
+    const live = chatStore.getItems(THREAD);
+    expect(live.every(i => i.run?.id.startsWith('live-') && i.run.status === 'running')).toBe(true);
+    expect(new Set(live.map(i => i.run?.id)).size).toBe(1);
+
+    chatStore.endRun(THREAD, 'done');
+    expect(chatStore.getItems(THREAD).every(i => i.run?.status === 'done')).toBe(true);
+  });
+
   test('a history page without activeRun settles a trailing running run as done', () => {
     chatStore.seedHistory(THREAD, [runEntry('run-1', 'done'), runEntry('run-2', 'running')], false);
     const items = chatStore.getItems(THREAD);
