@@ -132,6 +132,26 @@ describe('ToolCard arguments fold', () => {
     });
   }
 
+  // A shell command is the densest argument drawn here. It gets its own lines under the head,
+  // where the layout wraps to the real width and cuts by line -- codex and pi both do this, and
+  // neither cuts a preview by a character count.
+  it('gives a shell command its own lines under the head, and keeps a path on the head row', () => {
+    const long = `cd /home/neras/dev/my-claw && ${'echo x && '.repeat(20)}true`;
+    const shell = renderTool(makeItem({ args: { command: long } }));
+    const shellPreview = shell.root
+      .findAllByType(Text)
+      .find(t => t.props.children === long);
+    expect(shellPreview).toBeDefined();
+    expect(shellPreview!.props.numberOfLines).toBe(3);
+
+    const path = renderTool(makeItem({ name: 'apply_patch', args: { path: '/a/b/c/manager.ts' } }));
+    const pathPreview = path.root
+      .findAllByType(Text)
+      .find(t => t.props.children === 'c/manager.ts');
+    expect(pathPreview).toBeDefined();
+    expect(pathPreview!.props.numberOfLines).toBe(1);
+  });
+
   it('shows the output and only a preview of the arguments when the card opens', () => {
     const tree = renderTool(makeItem({ args: PATCH, output: 'Patched, +3', running: true }), { expandTools: true });
     expect(bodyVisible(tree)).toBe(true);
