@@ -22,15 +22,44 @@ class ClawConnection {
       }
     });
     deviceEvents.addListener('claw:ws:message', (payload: { text: string }) => {
-      this.messageListeners.forEach(listener => listener(payload.text));
+      this.messageListeners.forEach(listener => this.guard(listener, payload.text, 'message'));
       const frame = parseServerFrame(payload.text);
       if (frame) {
-        this.frameListeners.forEach(listener => listener(frame));
+        this.frameListeners.forEach(listener => this.guard(listener, frame, frame.type));
       }
     });
     deviceEvents.addListener('claw:ws:outbox', (payload: { pending: number }) => {
       this.pendingListeners.forEach(listener => listener(payload.pending));
     });
+  }
+
+  /**
+   * Where a listener's throw is reported. Set by `diagnostics`, which already depends on this
+   * module: taking the reverse import would close a cycle for one function call.
+   */
+  private onListenerError: ((error: Error, label: string) => void) | null = null;
+
+  setListenerErrorReporter(report: (error: Error, label: string) => void): void {
+    this.onListenerError = report;
+  }
+
+  /**
+   * One listener must not take the process with it. `parseServerFrame` only validates `type`, so
+   * a frame that announces itself correctly and is missing a field the handler walks into throws
+   * from here -- out of a native module callback on Android, which is a crash. The app relaunches,
+   * reconnects, is handed the same frame, and crashes again: a boot loop no reinstall would fix,
+   * driven by one bad frame on the server.
+   *
+   * The throw is reported rather than swallowed, so the frame that did it is named in the server
+   * log on the next connection instead of becoming a mystery.
+   */
+  private guard<T>(listener: (value: T) => void, value: T, label: string): void {
+    try {
+      listener(value);
+    } catch (error) {
+      const detail = error instanceof Error ? error : new Error(String(error));
+      this.onListenerError?.(detail, label);
+    }
   }
 
   connect(url: string): void {

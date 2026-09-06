@@ -120,6 +120,16 @@ export function acknowledgeDiagnostics(accepted: number): void {
  * the browser's error and unhandledrejection events), which is why it lives in `errorHooks`.
  */
 export function installDiagnostics(): void {
+  // A frame handler that throws is caught by the connection rather than left to reach the native
+  // callback and kill the process; this is what keeps the throw from disappearing with it.
+  connection.setListenerErrorReporter((error, label) => {
+    recordDiag({
+      kind: 'js',
+      at: Date.now(),
+      message: `frame listener threw on ${label}: ${error.message}`,
+      ...(error.stack ? { stack: error.stack } : {}),
+    });
+  });
   installGlobalErrorHooks(crash => {
     recordDiag({
       kind: 'js',

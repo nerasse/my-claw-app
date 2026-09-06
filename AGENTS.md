@@ -17,6 +17,12 @@ Read them, server side:
 grep '"message":"device diagnostic"' ~/.my-claw/logs/my-claw-app-$(date +%F).log | jq .
 ```
 
+A frame handler that throws is caught by `connection.guard` and reported as `js`, prefixed
+`frame listener threw on <type>`. It used to escape into the native module callback and kill the
+process: the app relaunched, reconnected, was handed the same frame and crashed again, a boot loop
+no reinstall would fix. `parseServerFrame` validates `type` and nothing else, so a frame missing a
+field its handler walks into is all it takes.
+
 Three `kind`s: `js` (global handler), `render` (ErrorBoundary), `exit` (Android's own post-mortem:
 CRASH / CRASH_NATIVE / ANR / LOW_MEMORY / SIGNALED — the only way to tell a crash from a battery
 kill). A report is dropped from the device only once acked (`diag.report.result`).

@@ -37,6 +37,33 @@ describe('connection listeners', () => {
     expect(frames).toHaveLength(1);
   });
 
+  test('a listener that throws does not take the process, and is reported', () => {
+    // parseServerFrame only validates `type`. A frame that announces itself correctly and lacks a
+    // field the handler walks into used to throw out of a native module callback, which is a crash
+    // on Android -- and the app relaunched, reconnected, was handed the same frame, and crashed
+    // again. A boot loop no reinstall fixes, driven by one bad frame on the server.
+    const errors: Array<{ message: string; label: string }> = [];
+    connection.setListenerErrorReporter((error, label) => errors.push({ message: error.message, label }));
+
+    const seen: unknown[] = [];
+    const offBad = connection.onFrame(() => {
+      throw new Error('missing field');
+    });
+    const offGood = connection.onFrame(frame => seen.push(frame));
+
+    expect(() =>
+      DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify({ type: 'error', message: 'x' }) }),
+    ).not.toThrow();
+
+    // The other listeners still ran: one bad handler is not the whole app.
+    expect(seen).toEqual([{ type: 'error', message: 'x' }]);
+    expect(errors).toEqual([{ message: 'missing field', label: 'error' }]);
+
+    offBad();
+    offGood();
+    connection.setListenerErrorReporter(() => {});
+  });
+
   test('the outbox size is published from both the state and outbox events', () => {
     const sizes: number[] = [];
     const off = connection.onPending(size => sizes.push(size));
