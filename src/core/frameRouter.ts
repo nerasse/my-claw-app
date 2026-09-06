@@ -250,7 +250,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       chatStore.setCompacting(frame.threadId, frame.since ? Date.parse(frame.since) : undefined);
       break;
     case 'chat.run.start':
-      chatStore.startRun(frame.threadId);
+      chatStore.startRun(frame.threadId, frame.run);
       break;
     case 'chat.run.end': {
       const ended = chatStore.endRun(frame.threadId, frame.reason);
@@ -563,6 +563,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // itself, because a silent send during a two-minute hold reads as a drop.
       chatStore.markQueued(frame.threadId, frame.replyToId, frame.reason);
       break;
+    case 'chat.send.received':
+      chatStore.markDelivered(frame.threadId, frame.id);
+      break;
     case 'chat.send.acked':
       // The run drained a queued injection at a turn boundary: lift the mark on the bubble that
       // carried it. The stream that follows opens its own bubble; this one stays answered.
@@ -668,6 +671,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'hello':
       // The server names itself on connect: the settings page labels "connected" with it.
       setServerVersion(frame.version);
+      chatStore.setServerReceipts(frame.receipts === true);
       break;
     case 'chat.cleared':
       chatStore.clearThread(frame.threadId);

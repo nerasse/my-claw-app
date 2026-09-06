@@ -1325,6 +1325,25 @@ describe('chatStore run grouping', () => {
     expect(chatStore.hasActiveRun(THREAD)).toBe(false);
   });
 
+  test('a start frame that names the run gives the live items that name at once, and the page agrees without renaming', () => {
+    // Since server 0.6.3 the run_start marker carries the same id chat.run.start announced, so
+    // what is painted live and what the page holds name the run alike from the first frame.
+    chatStore.startRun(THREAD, 'c0ffee42');
+    chatStore.startToolCall(THREAD, 'c1', 'bash', { command: 'ls' });
+    expect(chatStore.getItems(THREAD).every(i => i.run?.id === 'c0ffee42')).toBe(true);
+    chatStore.handleSyncResult(THREAD, [runEntry('c0ffee42', 'running')], 'c0ffee42', null, true);
+    expect(chatStore.getItems(THREAD).every(i => i.run?.id === 'c0ffee42')).toBe(true);
+    chatStore.endRun(THREAD, 'done');
+    expect(new Set(chatStore.getItems(THREAD).map(i => i.run?.id))).toEqual(new Set(['c0ffee42']));
+  });
+
+  test('a start frame id from an older server, whose pages name runs otherwise, is still renamed by the page', () => {
+    chatStore.startRun(THREAD, 'deadbeef');
+    chatStore.startStream(THREAD, 's1');
+    chatStore.handleSyncResult(THREAD, [runEntry('run-1', 'running')], 'run-1', null, true);
+    expect(chatStore.getItems(THREAD).every(i => i.run?.id === 'run-1')).toBe(true);
+  });
+
   test('a sync page adopts the server run id, renaming synthetic items', () => {
     chatStore.startRun(THREAD);
     chatStore.startStream(THREAD, 's1');
@@ -1487,5 +1506,68 @@ describe('a parked send holds the bottom of the thread', () => {
     chatStore.handleSyncResult(THREAD, [toolEntry], null, null, true, 'branch-switch');
     expect(ids()).toContain('m1');
     expect(ids()[ids().length - 1]).toBe('m1');
+  });
+});
+
+describe('a send waits for its receipt', () => {
+  // A socket a NAT timeout or a VPN switch killed stays OPEN for the browser: the send left, the
+  // server never got it, and nothing said so. The server receipts every send (0.6.3); a bubble
+  // still waiting after the delay says it was not delivered and offers to go again.
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+  const textAt = (index: number) => {
+    const item = chatStore.getItems(THREAD)[index];
+    return item?.kind === 'text' ? item : undefined;
+  };
+
+  test('the receipt lifts the wait; none within the delay marks the bubble undelivered', () => {
+    jest.useFakeTimers();
+    chatStore.addUserMessage(THREAD, 'u1', 'hello');
+    chatStore.expectReceipt(THREAD, 'u1', 15_000);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: true });
+
+    chatStore.markDelivered(THREAD, 'u1');
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false });
+    jest.advanceTimersByTime(20_000);
+    expect(textAt(0)?.error).toBeUndefined();
+
+    chatStore.addUserMessage(THREAD, 'u2', 'lost');
+    chatStore.expectReceipt(THREAD, 'u2', 15_000);
+    jest.advanceTimersByTime(14_999);
+    expect(textAt(1)?.error).toBeUndefined();
+    jest.advanceTimersByTime(1);
+    expect(chatStore.getItems(THREAD)[1]).toMatchObject({ pending: false, error: 'not delivered' });
+  });
+
+  test('sending again clears the verdict and waits anew; a late receipt for the first try settles it', () => {
+    jest.useFakeTimers();
+    chatStore.addUserMessage(THREAD, 'u1', 'hello');
+    chatStore.expectReceipt(THREAD, 'u1', 15_000);
+    jest.advanceTimersByTime(15_000);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ error: 'not delivered' });
+
+    chatStore.expectReceipt(THREAD, 'u1', 15_000);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: true });
+    expect(textAt(0)?.error).toBeUndefined();
+    chatStore.markDelivered(THREAD, 'u1');
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false });
+  });
+
+  test('a receipt for a bubble nobody waits on, or that is gone, changes nothing', () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'hello');
+    chatStore.markDelivered(THREAD, 'u1');
+    chatStore.markDelivered(THREAD, 'ghost');
+    expect(chatStore.getItems(THREAD)).toHaveLength(1);
+    expect(textAt(0)?.pending).toBeUndefined();
+  });
+
+  test('a failed send stops waiting: one verdict, not two', () => {
+    jest.useFakeTimers();
+    chatStore.addUserMessage(THREAD, 'u1', 'hello');
+    chatStore.expectReceipt(THREAD, 'u1', 15_000);
+    chatStore.markSendFailed(THREAD, 'u1');
+    jest.advanceTimersByTime(20_000);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false, error: 'not sent' });
   });
 });

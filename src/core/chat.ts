@@ -50,6 +50,12 @@ export interface TextItem {
   /** Why the server parked this send: a compaction holding the history, or the run's mailbox
    *  holding it for the next turn. Drives the bubble's label. */
   queuedReason?: 'compaction' | 'injection';
+  /**
+   * Sent, receipt awaited (`chat.send.received`). A socket a NAT timeout or a VPN switch killed
+   * stays OPEN for a browser, so a send can leave without arriving: the receipt is the only proof.
+   * Lifted by the receipt; turned into `error: 'not delivered'` when none comes in time.
+   */
+  pending?: boolean;
   /** A long aside a command produced (a compaction summary), folded away under the outcome. */
   details?: string;
   /** A statement of the system (a model fallback), drawn apart for the same reason. */
@@ -284,6 +290,10 @@ class ChatStoreImpl {
    */
   private openRuns = new Map<string, { info: RunInfo; synthetic: boolean }>();
   private syntheticSeq = 0;
+  /** Sends whose receipt has not come yet, by chat.send id, with the timer that gives up. */
+  private awaitingReceipt = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Whether the server receipts sends (`hello.receipts`): an older one is not waited for. */
+  private receipts = false;
   /** Placeholder bubble per thread while a slow command runs, keyed by thread -> bubble id. */
   private pendingCommands = new Map<string, string>();
   /**
@@ -672,16 +682,18 @@ class ChatStoreImpl {
     return info;
   }
 
-  startRun(threadId: string): void {
+  startRun(threadId: string, runId?: string): void {
     if (this.activeRuns.has(threadId)) return;
     this.activeRuns.add(threadId);
     // The frame arrives before any entry does (the trigger turn is written inside the run), so
-    // live-created items need a run to belong to right away. The synthetic id is replaced by the
-    // server's when the first synced entry of the run lands.
+    // live-created items need a run to belong to right away. The name is the one the frame
+    // carries when it does: since server 0.6.3 the run's marker stores the same id, so the page
+    // confirms it rather than renaming it. It stays renameable all the same, for a server whose
+    // pages still name a run after its marker's entry.
     if (!this.openRuns.has(threadId)) {
       this.syntheticSeq += 1;
       this.openRuns.set(threadId, {
-        info: { id: `live-${this.syntheticSeq}`, status: 'running', startTs: Date.now() },
+        info: { id: runId ?? `live-${this.syntheticSeq}`, status: 'running', startTs: Date.now() },
         synthetic: true,
       });
     } else {
@@ -1138,7 +1150,47 @@ class ChatStoreImpl {
 
   /** The native outbox could neither send nor queue the frame: say so on the bubble. */
   markSendFailed(threadId: string, id: string, error = 'not sent'): void {
-    this.patch(threadId, id, { error });
+    this.stopWaiting(id);
+    this.patch(threadId, id, { pending: false, error });
+  }
+
+  /**
+   * The send went out on a socket that claimed to be open: wait for the server's receipt. Past
+   * `timeoutMs` without one the bubble is marked undelivered, and the owner can send it again
+   * under the same id (the server takes a repeated id once). Arming again clears a verdict.
+   */
+  expectReceipt(threadId: string, id: string, timeoutMs: number): void {
+    this.stopWaiting(id);
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    if (!item || item.kind !== 'text') return;
+    this.patch(threadId, id, { pending: true, error: undefined });
+    const timer = setTimeout(() => {
+      this.awaitingReceipt.delete(id);
+      this.patch(threadId, id, { pending: false, error: 'not delivered' });
+    }, timeoutMs);
+    this.awaitingReceipt.set(id, timer);
+  }
+
+  setServerReceipts(enabled: boolean): void {
+    this.receipts = enabled;
+  }
+
+  serverReceipts(): boolean {
+    return this.receipts;
+  }
+
+  /** The server has the send: whatever the socket claimed, this one arrived. */
+  markDelivered(threadId: string, id: string): void {
+    if (!this.stopWaiting(id)) return;
+    this.patch(threadId, id, { pending: false, error: undefined });
+  }
+
+  private stopWaiting(id: string): boolean {
+    const timer = this.awaitingReceipt.get(id);
+    if (timer === undefined) return false;
+    clearTimeout(timer);
+    this.awaitingReceipt.delete(id);
+    return true;
   }
 
   /**
