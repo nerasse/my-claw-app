@@ -40,6 +40,47 @@ describe('chatStore streaming', () => {
     expect(chatStore.getItems(THREAD)).toHaveLength(0);
   });
 
+  /**
+   * A `session.sync` in the middle of a run replays the turn in flight. The window that asks for
+   * it is usually the one that was already watching -- a blip, a thread left and reopened, a
+   * refresh -- so it still holds the bubble, and the replay carries the whole text rather than the
+   * chunks. Appending it is how the answer ended up on screen twice.
+   */
+  test('a replayed bubble replaces what the window already had, it does not stack onto it', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'un ');
+    chatStore.appendDelta(THREAD, 's1', 'deux ');
+
+    chatStore.appendDelta(THREAD, 's1', 'un deux trois', true);
+
+    expect(chatStore.getItems(THREAD)).toHaveLength(1);
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'un deux trois' });
+  });
+
+  test('a replay lands whole on a window that never saw the run', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'un deux trois', true);
+
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'un deux trois' });
+  });
+
+  test('a live delta still appends: only a replay replaces', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendDelta(THREAD, 's1', 'un ');
+    chatStore.appendDelta(THREAD, 's1', 'deux');
+
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'un deux' });
+  });
+
+  test('a replayed tool card replaces its output too', () => {
+    chatStore.startToolCall(THREAD, 't1', 'bash', { command: 'ls' });
+    chatStore.appendToolOutput(THREAD, 't1', { stdout: 'ligne un' });
+    chatStore.appendToolOutput(THREAD, 't1', { stdout: 'ligne un\nligne deux', replay: true });
+
+    const card = chatStore.getItems(THREAD).find(item => item.id === 't1');
+    expect(card).toMatchObject({ output: 'ligne un\nligne deux' });
+  });
+
   test('an abort without a stream still surfaces the error', () => {
     chatStore.abortStream(THREAD, 'a1', 'boom');
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ error: 'boom', streaming: false });

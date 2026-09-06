@@ -298,10 +298,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       noteActivity(frame.threadId, '');
       break;
     case 'chat.stream.delta':
-      chatStore.appendDelta(frame.threadId, frame.id, frame.text);
+      chatStore.appendDelta(frame.threadId, frame.id, frame.text, frame.replay);
       break;
     case 'chat.reasoning.delta':
-      chatStore.appendReasoning(frame.threadId, frame.id, frame.text);
+      chatStore.appendReasoning(frame.threadId, frame.id, frame.text, frame.replay);
       break;
     case 'chat.reasoning.tokens':
       chatStore.setReasoningTokens(frame.threadId, frame.id, frame.tokens);
@@ -319,7 +319,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'chat.tool.delta':
       // Live output from a running tool (bash): append to the card the start frame opened.
-      chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr, clipped: frame.clipped });
+      chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr, clipped: frame.clipped, replay: frame.replay });
       break;
     case 'chat.tool.full.result':
       // The whole output of a card that was pushed clipped. A card the session no longer holds

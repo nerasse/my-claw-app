@@ -132,6 +132,12 @@ export interface StreamDeltaFrame {
   id: string;
   threadId: string;
   text: string;
+  /**
+   * Set only on the replay of a run in flight, where `text` is the bubble's whole text rather
+   * than one more chunk: the window that asks for a sync is usually the one that was already
+   * watching, so appending would paint the turn onto itself.
+   */
+  replay?: boolean;
 }
 
 /** Incremental reasoning for the bubble `id`, from an engine that exposes the text. */
@@ -140,6 +146,8 @@ export interface ReasoningDeltaFrame {
   id: string;
   threadId: string;
   text: string;
+  /** Whole text rather than a chunk. See StreamDeltaFrame.replay. */
+  replay?: boolean;
 }
 
 /**
@@ -234,6 +242,8 @@ export interface ToolDeltaFrame {
    * head would read as a short, complete output.
    */
   clipped?: boolean;
+  /** Whole output rather than a chunk. See StreamDeltaFrame.replay. */
+  replay?: boolean;
 }
 
 /**

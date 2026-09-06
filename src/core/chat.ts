@@ -1274,21 +1274,29 @@ class ChatStoreImpl {
     });
   }
 
-  appendDelta(threadId: string, id: string, text: string): void {
+  /**
+   * One more chunk of a bubble, or -- on a replay -- the whole bubble at once.
+   *
+   * `replay` is what a `session.sync` sends for a turn still in flight, and it has to replace:
+   * the window asking for the sync is usually the one that was already watching, so appending
+   * the turn to itself is how the answer ended up on screen twice after any blip.
+   */
+  appendDelta(threadId: string, id: string, text: string, replay = false): void {
     const current = this.streams.get(id);
     if (current === undefined) return;
     // The first token of the answer is what ends the thinking: past it the counter has to hold a
     // number instead of climbing, or it would keep counting the writing as thinking.
     this.sealReasoning(threadId, id);
-    this.streams.set(id, current + text);
-    this.patch(threadId, id, { text: current + text }, true);
+    const next = replay ? text : current + text;
+    this.streams.set(id, next);
+    this.patch(threadId, id, { text: next }, true);
   }
 
   /**
    * Reasoning accumulates on the bubble it belongs to. Keyed off `streams` like the text is, so a
    * frame arriving for a closed bubble is dropped instead of resurrecting it.
    */
-  appendReasoning(threadId: string, id: string, text: string): void {
+  appendReasoning(threadId: string, id: string, text: string, replay = false): void {
     if (!this.streams.has(id)) return;
     if (!this.reasoningStart.has(id)) {
       const startedAt = Date.now();
@@ -1298,7 +1306,7 @@ class ChatStoreImpl {
       this.patch(threadId, id, { reasoningStartedAt: startedAt });
     }
     const current = this.reasoning.get(id) ?? '';
-    const next = current + text;
+    const next = replay ? text : current + text;
     this.reasoning.set(id, next);
     this.patch(threadId, id, { reasoning: next }, true);
   }
@@ -1441,16 +1449,20 @@ class ChatStoreImpl {
   /** Live output from a running tool (bash): append the chunk to the card the start frame opened.
    *  Coalesced so a fast command does not re-render on every byte. The `chat.tool` frame settles
    *  it and replaces the streamed text with the final output. */
-  appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string; clipped?: boolean }): void {
+  appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string; clipped?: boolean; replay?: boolean }): void {
     const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id && entry.kind === 'tool') as ToolItem | undefined;
     if (!item || (!item.running && !(isSubAgentTool(item.name) && item.spawn && item.spawn.status !== 'running'))) return;
-    const append = (item.output ? (item.output.endsWith('\n') || item.output === '' ? '' : '\n') : '') +
+    const base = chunk.replay ? '' : item.output;
+    const append = (base ? (base.endsWith('\n') ? '' : '\n') : '') +
       (chunk.stdout ?? '') +
       (chunk.stderr ? `${chunk.stdout ? '\n' : ''}STDERR: ${chunk.stderr}` : '');
     // `clipped` only ever arrives on a replay: the head of this output was dropped by the
     // server's live turn journal, so the card says truncated and offers the round-trip that
     // fetches the whole thing once the call settles.
-    this.patchTool(threadId, id, { output: item.output + append, ...(chunk.clipped ? { truncated: true } : {}) }, true);
+    //
+    // `replay` carries the card's whole output rather than a chunk, and replaces for the same
+    // reason the bubbles do: the card was already on screen when the sync was asked for.
+    this.patchTool(threadId, id, { output: base + append, ...(chunk.clipped ? { truncated: true } : {}) }, true);
   }
 
   /**
