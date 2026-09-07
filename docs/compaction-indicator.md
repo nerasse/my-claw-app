@@ -79,12 +79,21 @@ header. The list is inverted, so the header is the bottom of the screen: the rul
 newest message, where the thread actually stops, next to the loose question cards that live there
 for the same reason.
 
+**Unless a send is parked behind that compaction.** A parked bubble is a row, so the header drew the
+rule *under* the message waiting for it, while the boundary the compaction goes on to write sits
+*above* the same message: the thread reordered itself under the reader as the run ended, for no
+reason he could see. `compactionRuleBefore(items)` (in `core/runRows.ts`) names the first bubble
+queued with reason `compaction`, and `renderRow` draws the rule above that row instead. The header
+keeps it while nothing is parked. Only `compaction` counts: a send queued for the next turn boundary
+of a live run (`injection`) is not waiting for this.
+
 The counter is `useElapsed(since)`, refreshed every second while the app is in the foreground.
 React Native pauses JS timers while the app is in the background, so a counter can read stale on
 the first frame after a resume; it catches up on the next tick.
 
 ## Tests
 
+- `src/core/__tests__/compactionRule.test.ts`: where the rule attaches when a send is parked.
 - `src/core/__tests__/chat.test.ts`: state not item, last `since` wins, every clearing signal,
   delta keeps it, `/compact` notice in both orders, failure still answers.
 - `__tests__/Commands.test.tsx`: one rule for two start frames, counted from `since`, the boundary

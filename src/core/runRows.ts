@@ -31,6 +31,20 @@ export function isHoisted(item: ChatItem): boolean {
 }
 
 /**
+ * The bubble the live compaction rule has to stand above, if there is one.
+ *
+ * The rule lives in the list header, which on an inverted list is the bottom of the screen: exactly
+ * where the thread stops, and exactly the wrong place once a send is parked behind that compaction.
+ * A parked bubble is a row, so the header drew the rule *under* it, while the boundary the
+ * compaction goes on to write sits above the same message -- the thread reordered itself under the
+ * reader as the run ended. Only `compaction` counts: a send waiting for the next turn boundary of a
+ * live run is not waiting for this.
+ */
+export function compactionRuleBefore(items: ChatItem[]): string | undefined {
+  return items.find(item => item.kind === 'text' && item.queuedReason === 'compaction')?.id;
+}
+
+/**
  * Splits a thread into rows, folding every finished run's work under one group per segment.
  *
  * Rules, in the order a reader meets them:

@@ -10,7 +10,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import { chatStore, isSubAgentTool, useChatItems, useCompacting, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
-import { buildRows, type ChatRow } from '../core/runRows';
+import { buildRows, compactionRuleBefore, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
@@ -43,6 +43,10 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   const type: AttachmentMeta['type'] = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'file';
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
+
+/** The oldest item a row draws, which is where a rule standing above the row has to attach. */
+const firstItemOfRow = (row: ChatRow): string | undefined =>
+  row.kind === 'item' ? row.item.id : row.kind === 'group' ? row.items[0]?.id : undefined;
 
 const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
@@ -590,6 +594,12 @@ export function ChatScreen({
   // rows and not from raw items: a collapsed group is one row, an open one renders its children
   // inside it -- docs/run-grouping.md.
   const rows = useMemo(() => buildRows(items), [items]);
+  // The rule goes above the send parked behind this compaction, and only stays at the bottom of
+  // the thread while nothing is parked -- `compactionRuleBefore`.
+  const ruleBefore = useMemo(
+    () => (compactingSince === undefined ? undefined : compactionRuleBefore(items)),
+    [compactingSince, items],
+  );
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
 
   /**
@@ -739,8 +749,15 @@ export function ChatScreen({
    * the item is in the store, reopening the thread hit the same one again.
    */
   const renderRow = useCallback(
-    (row: ChatRow) => <RowBoundary itemId={keyOfRow(row)}>{renderRowContent(row)}</RowBoundary>,
-    [renderRowContent],
+    (row: ChatRow) => (
+      <RowBoundary itemId={keyOfRow(row)}>
+        {ruleBefore !== undefined && compactingSince !== undefined && firstItemOfRow(row) === ruleBefore ? (
+          <CompactionRunning since={compactingSince} />
+        ) : null}
+        {renderRowContent(row)}
+      </RowBoundary>
+    ),
+    [renderRowContent, ruleBefore, compactingSince],
   );
 
   /**
@@ -758,13 +775,16 @@ export function ChatScreen({
    */
   const renderListItem = useCallback(({ item }: { item: ChatRow }) => renderRow(item), [renderRow]);
 
-  // The list is inverted, so its header is the bottom of the screen: the compaction rule and the
-  // loose questions sit under the newest message, where the thread actually stops.
+  // The list is inverted, so its header is the bottom of the screen: the loose questions sit under
+  // the newest message, where the thread actually stops, and so does the compaction rule as long as
+  // no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
   const listHeader = useMemo(
     () =>
-      compactingSince !== undefined || questionsLoose.length > 0 ? (
+      (compactingSince !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
-          {compactingSince !== undefined ? <CompactionRunning since={compactingSince} /> : null}
+          {compactingSince !== undefined && ruleBefore === undefined ? (
+            <CompactionRunning since={compactingSince} />
+          ) : null}
           {questionsLoose.map(ask => (
             <QuestionCard
               key={ask.id}
@@ -775,7 +795,7 @@ export function ChatScreen({
           ))}
         </View>
       ) : null,
-    [compactingSince, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
+    [compactingSince, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
   );
 
   const listFooter = useMemo(
