@@ -195,6 +195,19 @@ function isLocalLive(item: ChatItem): boolean {
   return item.kind === 'tool' && item.running === true;
 }
 
+/**
+ * An item inside a window's range that the window does not carry, and that is not therefore a
+ * stale copy of something it does: what only this device holds yet.
+ *
+ * The turn in flight, plus the question that started it. The server writes a question under the
+ * id the app minted for it, so an unmatched user bubble is one the log does not hold yet -- the
+ * window was computed before the entry landed -- and never a second identity for one it does.
+ * Dropping it took the owner's own message off the screen while a run was answering it.
+ */
+function windowLacks(item: ChatItem): boolean {
+  return isLocalLive(item) || (item.kind === 'text' && item.role === 'user');
+}
+
 /** The server speaks ISO strings; the store thinks in milliseconds. */
 function runInfoOf(run: RunMeta): RunInfo {
   return {
@@ -831,9 +844,12 @@ class ChatStoreImpl {
   /**
    * Handles a `session.sync.result` from the server.
    *
-   * Three cases, distinguished by `reset`:
-   * - Absent: delta to append, same branch. Entries are appended, existing items with matching
-   *   ids are replaced (a tool card that was live is now settled).
+   * Four cases:
+   * - A delta (no `reset`, no paging cursor): entries are appended, existing items with matching
+   *   ids are replaced in place (a tool card that was live is now settled).
+   * - A **window** (`nextBefore` present, which the server sends for the newest page and only
+   *   for it): authoritative for the range it covers, so it replaces that range instead of
+   *   piling onto it -- see `applyWindow`.
    * - `"unknown-cursor"`: the cursor was not found, entries is a fresh page. Replaces the thread.
    * - `"branch-switch"`: the server's leaf diverged from the client's. Replaces the thread. This
    *   is the case that `/branches`, `/fork`, `/undo` will exercise in lots 7 and 8.
@@ -860,6 +876,10 @@ class ChatStoreImpl {
     if (reset) {
       // Reset: replace the thread. Only streaming items survive, because they exist only locally.
       this.resetThread(threadId, entries);
+    } else if (nextBefore !== undefined) {
+      // The newest page of the branch, asked for with a null cursor: what the thread *is* over
+      // the range it covers, not something to add to it.
+      this.applyWindow(threadId, entries);
     } else {
       // Delta: append entries, replacing any with matching ids (live tool cards settling).
       this.appendSyncEntries(threadId, entries);
@@ -904,6 +924,46 @@ class ChatStoreImpl {
     const live = existing.filter(item => !known.has(item.id) && isLocalLive(item));
 
     this.threads.set(threadId, [...base, ...live]);
+    this.spawnCards.delete(threadId);
+  }
+
+  /**
+   * A fresh window: the newest page of the branch, which is the truth over the range it covers.
+   *
+   * `resume` asks with a null cursor on every reconnect, and the thread it answers is rarely
+   * empty, so this used to run through `appendSyncEntries`: an entry the window draws under an id
+   * the live run never used counted as new and landed at the end, under the answer. Two of them
+   * do that every time. A run that died before its first token is a bubble the window invented
+   * locally from the stream id while the server journalled a `failure` of its own, and a finished
+   * run comes back folded into one header row standing for cards the window holds one by one.
+   * That is the "same error twice, same run twice, both below the answer" of session 37e36291.
+   *
+   * What the window does not cover is kept: the pages the reader walked back to sit above it, or
+   * a reconnect would yank them out from under a reader who had scrolled up. Everything inside
+   * the range defers to the window, except what only this device holds (a bubble being streamed
+   * into, a card still running, a send still parked), which belongs after it.
+   */
+  private applyWindow(threadId: string, entries: HistoryEntry[]): void {
+    const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    const base = this.itemsOfWithSpawnReconcile(threadId, entries);
+    if (base.length === 0) return;
+    const known = new Set(base.map(item => item.id));
+    const from = base[0]!.ts;
+
+    // The cut: the first held item the window has a say about. An item older than the window's
+    // oldest and under an id the window does not carry is above it, and stays.
+    let cut = existing.length;
+    for (let i = 0; i < existing.length; i++) {
+      const item = existing[i]!;
+      if (item.ts < from && !known.has(item.id)) continue;
+      cut = i;
+      break;
+    }
+    const above = existing.slice(0, cut);
+    const live = existing.slice(cut).filter(item => !known.has(item.id) && windowLacks(item));
+
+    this.threads.set(threadId, this.trimToCap(threadId, [...above, ...base, ...live]));
+    this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
   }
 
