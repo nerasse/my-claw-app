@@ -1101,6 +1101,13 @@ export interface UsageAgent extends UsageTotals {
   rows: UsageModelRow[];
 }
 
+/** The conversation's own calls: its totals, the wall time they took, and the models behind them. */
+export type UsageOwn = UsageTotals & {
+  /** Wall time spent inside the API, own calls. */
+  durationMs: number;
+  rows: UsageModelRow[];
+};
+
 /**
  * The `/status` report of a conversation, as the server shapes it. The page draws it and nothing
  * else; the server pushes a fresh one to the page each time something in it moves.
@@ -1157,11 +1164,7 @@ export interface StatusPayload {
   usage: {
     /** Own plus every agent below: the one figure the page leads with. */
     total: UsageTotals;
-    own: UsageTotals & {
-      /** Wall time spent inside the API, own calls. */
-      durationMs: number;
-      rows: UsageModelRow[];
-    };
+    own: UsageOwn;
     /** Depth-first: a sub-agent's own sub-agents follow it. */
     agents: UsageAgent[];
     /** Analytics keep 90 days. Set when the conversation is older: the figures start here, not at its creation. */

@@ -3,7 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter, StyleSheet } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
 import { statusStore } from '../src/core/status';
@@ -255,29 +255,100 @@ test('the status page leads with context and one total for everything the conver
   await unmount(tree);
 });
 
-test('the sub-agents the conversation drove are rows under it, nested by depth, and unfold into their models', async () => {
+test('the header gives the model its own line, and the tag its own under it', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree);
+  await pressLabel(tree, 'Status');
+  await emit({
+    type: 'status.result',
+    threadId: THREAD,
+    status: { ...PAYLOAD, model: { ...PAYLOAD.model, tag: 'Cheap', effort: 'high' } },
+  });
+  await waitFor(() => textsOf(tree).includes('tag Cheap \u00b7 effort high'));
+
+  const page = textsOf(tree);
+  expect(page).toContain('claude-opus-5');
+  expect(page).toContain('tag Cheap · effort high');
+  // The two share no node any more, which is the width they were fighting over when the phone cut
+  // the model out of the line.
+  expect(page.some(text => text.includes('claude-opus-5') && text.includes('tag Cheap'))).toBe(false);
+
+  await unmount(tree);
+});
+
+test('the models the conversation ran on are on the page, not behind a fold', async () => {
   const tree = await renderApp();
   await openReport(tree);
 
-  const labels = labelsOf(tree);
-  expect(labels).toContain('Usage of this conversation');
-  expect(labels).toContain('Usage of digger');
-  expect(labels).toContain('Usage of coder');
-  expect(labels).toContain('digger is running');
-  expect(labels).not.toContain('coder is running');
+  // The fold that used to hold them is gone, not merely closed: it asked for a tap to answer the
+  // page's own question.
+  expect(labelsOf(tree)).not.toContain('Usage of this conversation');
   const texts = textsOf(tree).join('\n');
-  expect(texts).toContain('4× · 250k in · 8,000 out');
-  expect(texts).toContain('research');
-  // The models a row used stay folded until asked.
-  expect(texts).not.toContain('kimi-k2p6-turbo');
-  await pressLabel(tree, 'Usage of this conversation');
-  const unfolded = textsOf(tree).join('\n');
-  expect(unfolded).toContain('kimi-k2p6-turbo');
-  expect(unfolded).toContain('claude-opus-5');
+  expect(texts).toContain('claude-opus-5');
+  expect(texts).toContain('kimi-k2p6-turbo');
+  expect(texts).toContain('4s of API time');
   // A reference price is marked as not a charge; a billed one is not.
-  expect(unfolded).toContain('*$5.00');
-  expect(unfolded).toContain('$2.00');
-  expect(unfolded).toContain('* not a charge');
+  expect(texts).toContain('*$5.00');
+  expect(texts).toContain('$2.00');
+  expect(texts).toContain('* not a charge');
+
+  await unmount(tree);
+});
+
+/**
+ * Every string a node draws under it, joined. The two-line model row has to prove a negative --
+ * that the numbers are not on the name's line -- and this is the only way to state it.
+ */
+function lineAround(tree: Tree, value: string): string {
+  const node = tree.root.findAll(candidate => candidate.props.children === value)[0];
+  if (!node) throw new Error(`nothing on the page reads ${value}`);
+  let current = node.parent;
+  while (current) {
+    if (StyleSheet.flatten(current.props.style)?.flexDirection === 'row') {
+      return current
+        .findAll(child => typeof child.props.children === 'string', { deep: true })
+        .map(child => child.props.children as string)
+        .join(' ');
+    }
+    current = current.parent;
+  }
+  throw new Error(`${value} shares no row with anything`);
+}
+
+test('a model name gets its own line, not the tail of the numbers line', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+
+  // What it shares its line with is the price, the one figure worth scanning for.
+  const line = lineAround(tree, 'kimi-k2p6-turbo');
+  expect(line).toContain('$2.00');
+  // The calls and tokens that used to squeeze it onto a five-character budget moved under it.
+  expect(line).not.toContain('100k');
+  expect(line).not.toContain('cached');
+
+  await unmount(tree);
+});
+
+test('the sub-agents are recapped as one figure, their cards one tap below', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+
+  // No per-agent row before it is asked for; the recap is what the delegation cost.
+  expect(labelsOf(tree)).not.toContain('Usage of digger');
+  expect(labelsOf(tree)).not.toContain('Usage of coder');
+  const texts = textsOf(tree).join('\n');
+  expect(texts).toContain('2 sub-agents');
+  // digger's 4 calls and coder's 1, and their two reference prices, added rather than listed.
+  expect(texts).toContain('5× · 300k in · 10k out');
+  expect(texts).toContain('$0.30');
+
+  await pressLabel(tree, 'By sub-agent');
+  const opened = labelsOf(tree);
+  expect(opened).toContain('Usage of digger');
+  expect(opened).toContain('Usage of coder');
+  expect(opened).toContain('digger is running');
+  expect(opened).not.toContain('coder is running');
+  expect(textsOf(tree).join('\n')).toContain('research');
 
   await unmount(tree);
 });
@@ -297,6 +368,7 @@ test('a sub-agent whose session is gone is still a row, named by its id and mark
       },
     },
   });
+  await pressLabel(tree, 'By sub-agent');
   await waitFor(() => labelsOf(tree).includes('Usage of run-9f9f'));
   expect(textsOf(tree)).toContain('gone');
   await unmount(tree);

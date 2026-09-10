@@ -6,20 +6,36 @@ of the my-claw repository.
 
 ## What the owner sees
 
-- The header: `Status`, the model the conversation runs on (tag named), and a `live` mark once the
-  first report has landed. No refresh button: there is nothing to refresh by hand.
+- The header: `Status`, the model the conversation runs on on a line of its own, the tag and the
+  effort under it, and a `live` mark once the first report has landed. The model id is the long
+  part of that pair: joined to the tag, it was the model the phone cut. No refresh button: there is
+  nothing to refresh by hand.
 - A run strip when something is going on: `running · main, digger[1]`, `compacting`.
 - **Context**: occupied over the effective window, the meter, the auto-compaction threshold, the
   last measured prompt.
 - **Usage · total**: one figure for everything the conversation caused, its own calls and every
   sub-agent it drove added together (billed and reference prices added; the split is a sub-line
-  when both exist), then tokens (in, cached, out) and calls. Under it the tree: `this conversation`
-  first, then one row per sub-agent (name, type, a dot while it runs, `gone` once its session was
-  killed), a sub-agent's own sub-agents indented under it. A row unfolds into the models it used,
-  each priced (`*` not a charge, `~` a neighbouring model's price). `since <date> (90 days)` closes
-  the card when the conversation is older than the analytics.
+  when both exist), then tokens (in, cached, out) and calls. Under it, three blocks:
+  - `this conversation`, always open: calls, in, out, cost, the wall time spent in the API, and the
+    models behind it.
+  - the sub-agents as one figure: how many, what they cost together in calls, tokens and money,
+    with the models they ran on merged by model id, so a model six workers drove is one line.
+  - `by sub-agent`, folded one tap below: a row per sub-agent (name, type, a dot while it runs,
+    `gone` once its session was killed), a sub-agent's own sub-agents indented under it, each row
+    unfolding into its own models.
+
+  A model line is drawn over two lines: the name and its price first, the calls and tokens under
+  them. On one line the name had whatever the numbers left it, about five characters, which is not
+  a model anyone can tell from its neighbour. Each price carries its markers (`*` not a charge, `~`
+  a neighbouring model's price). `since <date> (90 days)` closes the card when the conversation is
+  older than the analytics.
 - **Details**, folded: started, last active, turns, session id, who spawned a sub-agent, the
   window's provenance, the estimate, the request wall, config default, effort, verbose, approved.
+
+`this conversation` is open because it is the figure every other one is read against: folding it
+asked for a tap to answer the page's own question. The sub-agents are the other way round, since
+what a glance needs from them is what the delegation cost -- with five workers their names are what
+a recap is read past rather than what it is read for.
 
 What was taken out when the page was redrawn (0.6.45): the grid of session counters and the
 `cost · 90 days` card showed the same calls and tokens the usage card shows; `active run` was in

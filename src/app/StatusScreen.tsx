@@ -3,7 +3,8 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useStatus } from '../core/status';
-import type { StatusPayload, UsageAgent, UsageModelRow, UsageTotals } from '../core/protocol';
+import { subAgentsUsage } from '../core/usage';
+import type { StatusPayload, UsageAgent, UsageModelRow, UsageOwn, UsageTotals } from '../core/protocol';
 
 /**
  * The status page of a conversation, drawn from the structured `/status` report the server pushes
@@ -58,14 +59,39 @@ function rowCost(row: UsageModelRow): string {
   return `${row.costBilled ? '' : '*'}${row.costApproximate ? '~' : ''}${money(row.costUsd)}`;
 }
 
+/** One figure for a set of rows, `-` when there is nothing priced behind it. */
+function totalsCost(t: UsageTotals): string {
+  return t.unpriced > 0 && cost(t) === 0 ? '-' : money(cost(t));
+}
+
+/** Calls, tokens in and out, with the errors when there are any. */
+function totalsLine(t: UsageTotals): string {
+  return `${t.calls}× · ${short(t.promptTokens)} in · ${short(t.completionTokens)} out`;
+}
+
+/** A model's line: tokens in, cached and out, with the errors when there are any. */
+function rowLine(row: UsageModelRow): string {
+  return `${row.calls}× · ${short(row.promptTokens)} in${
+    row.cacheReadTokens > 0 ? ` · ${short(row.cacheReadTokens)} cached` : ''
+  } · ${short(row.completionTokens)} out${row.errors > 0 ? ` · ${row.errors} err` : ''}`;
+}
+
 export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const status = useStatus();
   useDismissKeyboard();
   const payload = status.payload;
-  const headerSub = payload
-    ? [payload.model.current, payload.model.tag ? `tag ${payload.model.tag}` : null].filter(Boolean).join(' · ')
-    : 'this conversation';
+  // Two lines because the model id is the long part. Glued to the tag it ran out of width and the
+  // phone cut the model, which is the one thing the header exists to say.
+  const headerModel = payload ? payload.model.current : 'this conversation';
+  const headerNotes = payload
+    ? [
+        payload.model.tag ? `tag ${payload.model.tag}` : null,
+        payload.model.effort ? `effort ${payload.model.effort}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 
   return (
     <View style={styles.screen}>
@@ -80,9 +106,8 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title}>Status</Text>
-          <Text style={styles.headerSub} numberOfLines={1}>
-            {headerSub}
-          </Text>
+          <Text style={styles.headerSub}>{headerModel}</Text>
+          {headerNotes ? <Text style={styles.headerNotes}>{headerNotes}</Text> : null}
         </View>
         {status.fetch === 'ready' ? (
           <View style={styles.live} accessibilityLabel="Live: the page follows the conversation">
@@ -263,19 +288,109 @@ function UsageCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
         <Text style={styles.cardNote}>reference price, not a charge</Text>
       ) : null}
       <View style={styles.tree}>
-        <UsageRow
-          label="this conversation"
-          hint={u.own.durationMs > 0 ? `${duration(u.own.durationMs)} of API time` : undefined}
-          totals={u.own}
-          rows={u.own.rows}
-          depth={0}
-        />
-        {u.agents.map(agent => (
-          <AgentRow key={agent.sessionId} agent={agent} />
-        ))}
+        <MainUsage own={u.own} />
+        <SubAgents agents={u.agents} />
       </View>
       {legend.length > 0 ? <Text style={styles.codeNote}>{legend.join(' · ')}</Text> : null}
     </Card>
+  );
+}
+
+/**
+ * The conversation's own calls, open. It is the figure every other one is read against, and
+ * folding it asked for a tap to answer the page's own question.
+ */
+function MainUsage({ own }: { own: UsageOwn }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.usageRow}>
+      <View style={styles.usageHead}>
+        <View style={styles.usageWho}>
+          <Text style={styles.usageName} numberOfLines={1}>
+            this conversation
+          </Text>
+          {own.durationMs > 0 ? (
+            <Text style={styles.usageHint} numberOfLines={1}>{`${duration(own.durationMs)} of API time`}</Text>
+          ) : null}
+        </View>
+        <Text style={styles.usageNums} numberOfLines={1}>
+          {totalsLine(own)}
+        </Text>
+        <Text style={styles.usageCost}>{totalsCost(own)}</Text>
+      </View>
+      <ModelTable rows={own.rows} />
+    </View>
+  );
+}
+
+/**
+ * The models behind a figure, each over two lines: the name takes the width the numbers used to
+ * share with it, and the numbers move under it. Squeezed onto one line the name had about five
+ * characters, which is not a model anybody can tell from its neighbour.
+ */
+function ModelTable({ rows }: { rows: UsageModelRow[] }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.modelTable}>
+      {rows.length === 0 ? <Text style={styles.codeNote}>no call of its own</Text> : null}
+      {rows.map((row, index) => (
+        <View key={`${row.model}-${index}`} style={styles.modelRow}>
+          <View style={styles.modelTop}>
+            <Text style={styles.modelName} numberOfLines={1}>
+              {row.model.split('/').pop()}
+            </Text>
+            <Text style={styles.modelCost}>{rowCost(row)}</Text>
+          </View>
+          <Text style={styles.modelNums} numberOfLines={1}>
+            {rowLine(row)}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Every sub-agent of the conversation as one figure: what the delegation cost in calls, tokens and
+ * money, with the models they all ran on merged by id. The per-agent cards sit one tap below -- a
+ * recap is read for the total, and with five workers their names are what it is read past.
+ */
+function SubAgents({ agents }: { agents: UsageAgent[] }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  const [open, setOpen] = useState(false);
+  const recap = subAgentsUsage(agents);
+  if (!recap) return null;
+  return (
+    <View style={styles.usageRow}>
+      <View style={styles.usageHead}>
+        <View style={styles.usageWho}>
+          <Text style={styles.usageName} numberOfLines={1}>
+            {agents.length === 1 ? '1 sub-agent' : `${agents.length} sub-agents`}
+          </Text>
+        </View>
+        <Text style={styles.usageNums} numberOfLines={1}>
+          {totalsLine(recap.totals)}
+        </Text>
+        <Text style={styles.usageCost}>{totalsCost(recap.totals)}</Text>
+      </View>
+      <ModelTable rows={recap.rows} />
+      <Pressable
+        onPress={() => setOpen(value => !value)}
+        style={styles.usageHead}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="By sub-agent">
+        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+        <View style={styles.usageWho}>
+          <Text style={styles.usageName} numberOfLines={1}>
+            by sub-agent
+          </Text>
+        </View>
+      </Pressable>
+      {open
+        ? agents.map(agent => <AgentRow key={agent.sessionId} agent={agent} />)
+        : null}
+    </View>
   );
 }
 
@@ -293,7 +408,7 @@ function AgentRow({ agent }: { agent: UsageAgent }): React.JSX.Element {
   );
 }
 
-/** One line of the usage tree: who, then calls, in, out, cost. Unfolds into its per-model lines. */
+/** One sub-agent: who, then calls, in, out, cost. Unfolds into its per-model lines. */
 function UsageRow({
   label,
   hint,
@@ -335,28 +450,11 @@ function UsageRow({
           ) : null}
         </View>
         <Text style={styles.usageNums} numberOfLines={1}>
-          {`${totals.calls}× · ${short(totals.promptTokens)} in · ${short(totals.completionTokens)} out`}
+          {totalsLine(totals)}
         </Text>
-        <Text style={styles.usageCost}>{totals.unpriced > 0 && cost(totals) === 0 ? '-' : money(cost(totals))}</Text>
+        <Text style={styles.usageCost}>{totalsCost(totals)}</Text>
       </Pressable>
-      {open ? (
-        <View style={styles.modelTable}>
-          {rows.length === 0 ? <Text style={styles.codeNote}>no call of its own</Text> : null}
-          {rows.map((row, index) => (
-            <View key={`${row.model}-${index}`} style={styles.modelRow}>
-              <Text style={styles.modelName} numberOfLines={1}>
-                {row.model.split('/').pop()}
-              </Text>
-              <Text style={styles.modelNums} numberOfLines={1}>
-                {`${row.calls}× · ${short(row.promptTokens)} in${
-                  row.cacheReadTokens > 0 ? ` · ${short(row.cacheReadTokens)} cached` : ''
-                } · ${short(row.completionTokens)} out${row.errors > 0 ? ` · ${row.errors} err` : ''}`}
-              </Text>
-              <Text style={styles.modelCost}>{rowCost(row)}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
+      {open ? <ModelTable rows={rows} /> : null}
     </View>
   );
 }
@@ -412,6 +510,7 @@ const createStyles = (palette: Palette) => ({
   headerMain: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   headerSub: { fontSize: font.small, color: palette.textFaint },
+  headerNotes: { fontSize: font.micro, color: palette.textFaint },
   live: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingRight: space.xs },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.accent },
   liveText: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.5, textTransform: 'uppercase' as const },
@@ -485,15 +584,11 @@ const createStyles = (palette: Palette) => ({
   runningDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.accent },
   usageNums: { fontSize: font.micro, color: palette.textFaint, flexShrink: 1 },
   usageCost: { width: 58, fontSize: font.small, fontWeight: '600' as const, color: palette.text, textAlign: 'right' as const },
-  modelTable: { paddingLeft: space.lg, paddingBottom: space.sm, gap: space.xxs },
-  modelRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    paddingVertical: space.xxs,
-  },
+  modelTable: { paddingLeft: space.lg, paddingBottom: space.sm, gap: space.xs },
+  modelRow: { paddingVertical: space.xxs, gap: 1 },
+  modelTop: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   modelName: { flex: 1, fontSize: font.small, color: palette.textMuted },
-  modelNums: { fontSize: font.micro, color: palette.textFaint, flexShrink: 1 },
+  modelNums: { fontSize: font.micro, color: palette.textFaint },
   modelCost: { width: 58, fontSize: font.small, color: palette.textMuted, textAlign: 'right' as const },
   codeNote: { fontSize: font.micro, color: palette.textFaint },
   fold: {
