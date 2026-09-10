@@ -384,7 +384,12 @@ export function AppShell(): React.JSX.Element {
   } | null>(null);
   const [providerBusy, setProviderBusy] = useState(false);
   /** The provider waiting for its delete confirmation, with the env key it may take with it. */
-  const [providerToDelete, setProviderToDelete] = useState<{ key: string; keyEnv?: string } | null>(null);
+  const [providerToDelete, setProviderToDelete] = useState<{
+    key: string;
+    keyEnv?: string;
+    /** Declared models under it, counted when the sheet opens: they are what the server refuses on. */
+    declaredModels: string[];
+  } | null>(null);
   /** Which workspace the workspace page shows. The instruction editor and the layer screen hang
    *  under it, so it outlives them: back walks down to this page, not to a list. */
   const [selectedWorkspace, setSelectedWorkspace] = useState<string>('default');
@@ -2643,6 +2648,20 @@ export function AppShell(): React.JSX.Element {
         : EMPTY_MODELS,
     [agentsConfig?.defaultProvider, catalog.models, selectedProvider],
   );
+  /**
+   * The declarations a provider would take with it, by id. Read off both halves of the catalogue,
+   * because the server refuses on `llm.models` entries and an unavailable one is still an entry:
+   * counting only the runnable half would offer a cascade that removes fewer models than the
+   * refusal was about.
+   */
+  const declaredModelIds = useCallback(
+    (key: string): string[] =>
+      [...catalog.models, ...(catalog.unavailable ?? [])]
+        .filter(model => model.declared === true && (model.provider ?? agentsConfig?.defaultProvider) === key)
+        .map(model => model.id),
+    [agentsConfig?.defaultProvider, catalog.models, catalog.unavailable],
+  );
+
   // The other half of the same catalogue: known, not runnable, and shown only here. Same grouping
   // rule, and empty on a server too old to send the field.
   const providerUnavailable = useMemo(
@@ -2968,6 +2987,7 @@ export function AppShell(): React.JSX.Element {
   const providersPage = (
     <ProvidersScreen
       providers={agentsConfig?.providers ?? []}
+      error={providersEnvState.error}
       onBack={() => setSettingsPage('index')}
       onNewProvider={() => {
         setProviderBusy(false);
@@ -3098,10 +3118,13 @@ export function AppShell(): React.JSX.Element {
       setSettingsPage('provider');
     }
   };
-  const deleteProviderConfirmed = (removeKeyToo: boolean): void => {
+  const deleteProviderConfirmed = (removeKeyToo: boolean, withModels: boolean): void => {
     if (!providerToDelete) return;
     const { key, keyEnv } = providerToDelete;
-    connection.send(encodeProvidersRemove(key)).catch(() => {});
+    // The failure has to land somewhere the reader is looking: the answer arrives after this
+    // screen is gone, and the providers list is what renders a refusal.
+    providersEnvStore.clearError();
+    connection.send(encodeProvidersRemove(key, withModels)).catch(() => {});
     if (removeKeyToo && keyEnv) {
       connection.send(encodeProvidersEnvRemove(keyEnv)).catch(() => {});
     }
@@ -3614,6 +3637,7 @@ export function AppShell(): React.JSX.Element {
                   onDelete={() =>
                     setProviderToDelete({
                       key: providerEdit.key ?? '',
+                      declaredModels: declaredModelIds(providerEdit.key ?? ''),
                       ...(providerEdit.key
                         ? { keyEnv: agentsConfig?.providers.find(p => p.key === providerEdit.key)?.keyEnv }
                         : {}),
@@ -4468,19 +4492,33 @@ export function AppShell(): React.JSX.Element {
 
       {providerToDelete ? (
         <ActionSheet
-          preview={`Delete the provider "${providerToDelete.key}"? Its discovered models leave with the catalog refresh, and a re-auth recreates the SDK providers.`}
+          preview={
+            providerToDelete.declaredModels.length > 0
+              ? `Delete the provider "${providerToDelete.key}"? It still declares ${providerToDelete.declaredModels.length} model${providerToDelete.declaredModels.length === 1 ? '' : 's'}, which cannot run without it: ${providerToDelete.declaredModels.join(', ')}.`
+              : `Delete the provider "${providerToDelete.key}"? Its discovered models leave with the catalog refresh, and a re-auth recreates the SDK providers.`
+          }
           options={[
-            {
-              label: 'Delete',
-              danger: true,
-              onPress: () => deleteProviderConfirmed(false),
-            },
+            ...(providerToDelete.declaredModels.length > 0
+              ? [
+                  {
+                    label: `Delete and remove its ${providerToDelete.declaredModels.length} declared model${providerToDelete.declaredModels.length === 1 ? '' : 's'}`,
+                    danger: true,
+                    onPress: () => deleteProviderConfirmed(false, true),
+                  },
+                ]
+              : [
+                  {
+                    label: 'Delete',
+                    danger: true,
+                    onPress: () => deleteProviderConfirmed(false, false),
+                  },
+                ]),
             ...(providerToDelete.keyEnv
               ? [
                   {
                     label: 'Delete and remove its key from .env',
                     danger: true,
-                    onPress: () => deleteProviderConfirmed(true),
+                    onPress: () => deleteProviderConfirmed(true, false),
                   },
                 ]
               : []),

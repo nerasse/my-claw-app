@@ -66,6 +66,16 @@ class ProvidersEnvStoreImpl {
     this.emit();
   }
 
+  /**
+   * Drops the last refusal. A retry has to start from a clean banner: the previous complaint is
+   * about an attempt that is over, and leaving it up would show it against the new one.
+   */
+  clearError(): void {
+    if (this.state.error === null) return;
+    this.state = { ...this.state, error: null };
+    this.emit();
+  }
+
   private emit(): void {
     for (const listener of this.listeners) {
       listener();

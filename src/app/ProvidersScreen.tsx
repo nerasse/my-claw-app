@@ -12,11 +12,18 @@ import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
  */
 export function ProvidersScreen({
   providers,
+  error,
   onBack,
   onNewProvider,
   onOpenProvider,
 }: {
   providers: ProviderInfo[];
+  /**
+   * The last refusal, from whatever the page behind this one asked for. A delete is answered after
+   * the screen that started it is gone, so this is where its refusal has to surface: without it a
+   * refused removal reads as a button that does nothing.
+   */
+  error: string | null;
   onBack: () => void;
   onNewProvider: () => void;
   onOpenProvider: (key: string) => void;
@@ -53,6 +60,12 @@ export function ProvidersScreen({
       </View>
 
       <DiscoveryNote />
+
+      {error ? (
+        <Text style={styles.error} accessibilityLabel={`Providers error ${error}`}>
+          {error}
+        </Text>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
@@ -92,6 +105,12 @@ export function ProvidersScreen({
 
 const createStyles = (palette: Palette) => ({
   screen: { flex: 1 },
+  error: {
+    color: palette.danger,
+    fontSize: font.small,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.sm,
+  },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

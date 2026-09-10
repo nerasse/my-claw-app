@@ -1514,6 +1514,12 @@ export interface ErrorFrame {
   type: 'error';
   message: string;
   scope?: ErrorScope;
+  /**
+   * What actually went wrong, when the server knows. `message` names the operation that failed
+   * ("providers.remove failed"), which is not something a screen can act on: the refusal that lists
+   * the models still pointing at a provider rides here.
+   */
+  detail?: string;
 }
 
 /**
@@ -2417,8 +2423,13 @@ export function encodeProvidersUpsert(
   return JSON.stringify({ type: 'providers.upsert', key, ...patch });
 }
 
-export function encodeProvidersRemove(key: string): string {
-  return JSON.stringify({ type: 'providers.remove', key });
+/**
+ * `withModels` accepts the cascade: the provider leaves, and so do the curated models declared
+ * under it (and the default-provider role, when it holds it). Without it, the server refuses while
+ * anything still points at the entry, and the confirmation sheet is what offers the choice.
+ */
+export function encodeProvidersRemove(key: string, withModels = false): string {
+  return JSON.stringify({ type: 'providers.remove', key, ...(withModels ? { withModels: true } : {}) });
 }
 
 export function encodeProvidersRename(from: string, to: string): string {

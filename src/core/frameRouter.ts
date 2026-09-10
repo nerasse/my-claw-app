@@ -1,4 +1,5 @@
 import { connection } from './connection';
+import { refusalText } from './refusal';
 import { chatStore } from './chat';
 import { subAgentCallersStore, subAgentStore } from './subagents';
 import { sessionStore } from './sessions';
@@ -708,55 +709,56 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Chosen (here or on another surface) or dismissed: close the sheet.
       undoStore.resolve(frame.id);
       break;
-    case 'error':
+    case 'error': {
+      const refusal = refusalText(frame);
       // Where the user asked is where the refusal belongs: a rejected delete used to be
       // invisible under the files screen, and then loud in a conversation it has nothing
       // to do with.
       if (frame.scope === 'files') {
-        setFilesError(frame.message);
+        setFilesError(refusal);
       } else if (frame.scope === 'model') {
         // A refused discovery is the one model refusal that belongs to a screen rather than to
         // the picker: it says so under the button that asked, and the spinner stops.
-        modelStore.failDiscovery(frame.message);
+        modelStore.failDiscovery(refusal);
         // A stale picker answered by a server that dropped the model: close the sheet,
         // the next model.list will carry the truth.
         setModelOpen(false);
       } else if (frame.scope === 'skills') {
         // An old server has no skill catalog: the skills page must not spin forever.
-        setSkillsError(frame.message);
+        setSkillsError(refusal);
       } else if (frame.scope === 'tools') {
-        setToolsError(frame.message);
+        setToolsError(refusal);
         setToolsSaving(false);
       } else if (frame.scope === 'mcp') {
-        setMcpError(frame.message);
+        setMcpError(refusal);
         setMcpBusy(false);
       } else if (frame.scope === 'config') {
-        onConfigError(frame.message);
+        onConfigError(refusal);
       } else if (frame.scope === 'workspaces') {
-        setWorkspacesError(frame.message);
+        setWorkspacesError(refusal);
         setWorkspacesBusy(false);
       } else if (frame.scope === 'jobs') {
         markJobsSaving(false);
         setJobsSaving(false);
-        setJobsError(frame.message);
+        setJobsError(refusal);
       } else if (frame.scope === 'browser') {
-        setBrowserError(frame.message);
+        setBrowserError(refusal);
       } else if (frame.scope === 'status') {
-        statusStore.fail(frame.message);
+        statusStore.fail(refusal);
       } else if (frame.scope === 'agents') {
-        agentsStore.fail(frame.message);
+        agentsStore.fail(refusal);
         // A file edit can fail while the file page is open: the editor shows it where it
         // was asked for, and a no-op for the list page.
-        agentsFileStore.fail(frame.message);
+        agentsFileStore.fail(refusal);
       } else if (frame.scope === 'instructions') {
-        instructionsStore.fail(frame.message);
+        instructionsStore.fail(refusal);
         // The same scope carries the session page's refusals: it asks for instructions too,
         // and a page left spinning is how an old server used to look like a dead button.
         if (sessionInstructionsStore.getSnapshot().fetch === 'loading') {
-          sessionInstructionsStore.fail(frame.message);
+          sessionInstructionsStore.fail(refusal);
         }
       } else if (frame.scope === 'tags') {
-        tagsStore.fail(frame.message);
+        tagsStore.fail(refusal);
       } else if (frame.scope === 'subagents') {
         // A refused caller list is a real state: an unreachable sub-agent answers like a missing
         // one, so the sheet must say so instead of spinning or showing "no callers". Only when a
@@ -764,7 +766,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         const subagentThread = subagentParent() ? activeThreadId() : null;
         if (subagentThread) subAgentCallersStore.refused(subagentThread);
       } else if (frame.scope === 'providers') {
-        providersEnvStore.fail(frame.message);
+        providersEnvStore.fail(refusal);
         setProviderBusy(false);
       } else {
         const threadId = activeThreadId();
@@ -772,11 +774,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
           chatStore.addAgentMessage(
             threadId,
             `err-${Date.now()}`,
-            `error: ${frame.message}`,
+            `error: ${refusal}`,
             [],
           );
         }
       }
       break;
+    }
   }
 }
