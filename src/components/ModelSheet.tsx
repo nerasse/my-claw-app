@@ -809,8 +809,11 @@ export function ModelSheet({
     byId.get(catalog.defaultModel)?.label ?? catalog.defaultModel;
 
   const effort = thread?.effort;
-  const effortActive =
-    effort?.supported === true && (effort.levels?.length ?? 0) > 0;
+  // `null` means "this flow offers no effort step", and it is the caller's to say. Passing it here
+  // because the model *in force* has no ladder conflated the two: the owner's thread ran a model
+  // with none, so the whole flow lost the step -- measured on 2026-09-11, even for a model
+  // publishing six rungs. The pin is the session's; the ladder belongs to the subject.
+  const effortCurrent = effort?.level ?? '';
 
   return (
     <ModelPickerSheet
@@ -861,7 +864,7 @@ export function ModelSheet({
             }
           : null
       }
-      effort={effortActive ? { current: effort.level } : null}
+      effort={{ current: effortCurrent }}
       context={
         thread?.context
           ? {
