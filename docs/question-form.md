@@ -58,6 +58,14 @@ This is the third shape, and the second stepper. Worth knowing before changing i
   to a page whose keyboard pops open by itself is how you lose sight of what you are answering.
 - **The page is clamped on read** (`draftPage`). `question.pending` replays an ask and drafts
   survive it, so a shorter ask must not leave the form pointing past its own end.
+- **A reply the server never got is visible, and sendable again.** Tapping Send sets `submitting`
+  and the card goes read-only until `question.resolved` arrives; nothing used to undo that. The
+  transport can accept a frame on a socket that is already dead and drop it, so the store arms a
+  watchdog when the reply leaves (`beginReply`, `REPLY_WATCHDOG_MS` = 15 s): past that, the card
+  says `Not sent · tap Send to try again` and the send works again. A transport that refuses the
+  frame outright short-circuits the wait (`replyFailed`, `questionStore`). Observed 2026-09-11: the
+  owner tapped Send, read "Sending…", left, came back and answered again -- the first reply had
+  been lost without a trace and the question waited 62 minutes.
 
 ## Keyboard, web only
 

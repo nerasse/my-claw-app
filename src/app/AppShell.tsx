@@ -27,7 +27,7 @@ import {
   type TextItem,
 } from '../core/chat';
 import { formatTranscript } from '../core/transcript';
-import { useQuestionThreads } from '../core/questionStore';
+import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
@@ -612,9 +612,13 @@ export function AppShell(): React.JSX.Element {
   const questionThreads = useQuestionThreads();
   const undoPrompts = useUndoPrompts(activeThread);
   const replyToQuestion = useCallback((id: string, answers: string[][]) => {
-    connection.send(encodeQuestionReply(id, answers));
     // The card stays where it is, marked sending: the `question.resolved` frame is what drops it,
     // on this window and on every other one. Dropping it here would flicker ahead of the server.
+    // A transport that refuses the frame outright is the one failure it can report, and the store
+    // turns it straight back into a card that can be sent again instead of one stuck on Sending.
+    connection.send(encodeQuestionReply(id, answers)).then(ok => {
+      if (!ok) questionStore.replyFailed(id);
+    });
   }, []);
 
   const itemCount = useChatItemCount(activeThread);

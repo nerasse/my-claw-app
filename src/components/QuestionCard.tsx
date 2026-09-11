@@ -13,7 +13,6 @@ import {
   draftPage,
   draftSelect,
   draftStep,
-  draftSubmitting,
   draftSummary,
   draftText,
   draftToggleCustom,
@@ -112,7 +111,9 @@ export function QuestionCard({
     if (draft.submitting) return;
     cancelHop();
     const answers = draftAnswers(draft, request);
-    questionStore.patch(request.id, draftSubmitting);
+    // The card goes read-only here and a watchdog is armed in the store: the frame can be accepted
+    // by a socket that is already dead and never arrive, and nothing else would ever say so.
+    questionStore.beginReply(request.id);
     onReply(request.id, answers);
   }, [cancelHop, draft, onReply, request]);
 
@@ -163,8 +164,10 @@ export function QuestionCard({
           <View style={styles.walkSpacer} />
         )}
 
-        <Text style={styles.progress}>
-          {recap || !paged ? `${answered}/${total} answered` : ''}
+        <Text style={[styles.progress, draft.failed ? styles.failed : null]}>
+          {draft.failed
+            ? 'Not sent · tap Send to try again'
+            : recap || !paged ? `${answered}/${total} answered` : ''}
         </Text>
 
         {recap || !paged ? (
@@ -464,6 +467,8 @@ const createStyles = (palette: Palette) =>
     walkLabel: { fontSize: font.body, color: palette.accent },
     walkSpacer: { width: space.sm },
     progress: { fontSize: font.small, color: palette.textMuted },
+    /** The send did not land: same place as the progress line, in the palette's warning tone. */
+    failed: { color: palette.warn },
     send: {
       paddingVertical: space.sm,
       paddingHorizontal: space.md,

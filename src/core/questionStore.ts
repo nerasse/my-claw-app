@@ -14,6 +14,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import type { QuestionAskFrame } from './protocol';
+import { draftReplyFailed, draftSubmitting } from './questionState';
 
 /** What the owner has picked so far for one ask, before it is sent. */
 export interface QuestionDraft {
@@ -34,9 +35,27 @@ export interface QuestionDraft {
   page: number;
   /** A reply is in flight: the card is read-only until the resolve lands. */
   submitting: boolean;
+  /**
+   * The reply never reached the server, or the resolve never came back.
+   *
+   * `submitting` used to be the end of the story: the card went read-only on tap and nothing ever
+   * undid it. On a socket that died between the tap and the write the frame is lost without a
+   * trace, and the owner was left on "Sending…" for ever (2026-09-11). The form offers the send
+   * again instead of pretending it is still on its way.
+   */
+  failed: boolean;
 }
 
 type Listener = () => void;
+
+/**
+ * How long a reply may sit unanswered before the card admits it did not arrive.
+ *
+ * The server resolves an ask as soon as the run reads the answer, so a healthy reply comes back in
+ * well under a second. Long enough not to fire on a slow link, short enough that the owner is not
+ * left poking a dead button.
+ */
+export const REPLY_WATCHDOG_MS = 15_000;
 
 const EMPTY_ASKS: QuestionAskFrame[] = [];
 const EMPTY_THREADS: string[] = [];
@@ -52,6 +71,7 @@ export const EMPTY_DRAFT: QuestionDraft = Object.freeze({
   editing: Object.freeze([]) as unknown as boolean[],
   page: 0,
   submitting: false,
+  failed: false,
 }) as QuestionDraft;
 
 class QuestionStoreImpl {
@@ -62,6 +82,8 @@ class QuestionStoreImpl {
   private threadsSnapshot: string[] = EMPTY_THREADS;
   private byThread = new Map<string, QuestionAskFrame[]>();
   private listeners = new Set<Listener>();
+  /** One timer per reply in flight, so a lost frame cannot leave the card read-only for ever. */
+  private watchdogs = new Map<string, ReturnType<typeof setTimeout>>();
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -86,19 +108,50 @@ class QuestionStoreImpl {
     this.asks = entries.map(entry => ({ type: 'question.ask' as const, ...entry }));
     const alive = new Set(this.asks.map(entry => entry.id));
     for (const id of [...this.drafts.keys()]) if (!alive.has(id)) this.drafts.delete(id);
+    for (const id of [...this.watchdogs.keys()]) if (!alive.has(id)) this.clearWatchdog(id);
     this.reindex();
   }
 
   /** Answered here, answered on another surface, canceled, or the run went away. */
   resolve(id: string): void {
+    this.clearWatchdog(id);
     if (!this.asks.some(entry => entry.id === id)) return;
     this.asks = this.asks.filter(entry => entry.id !== id);
     this.drafts.delete(id);
     this.reindex();
   }
 
+  /**
+   * The reply left. The card goes read-only, and a watchdog is armed because nothing else can
+   * prove the frame arrived: `send` reports only whether it reached the socket, and a socket that
+   * died a moment earlier accepts it and drops it. If the resolve has not landed by then, the
+   * card says so and offers the send again.
+   */
+  beginReply(id: string, timeoutMs: number = REPLY_WATCHDOG_MS): void {
+    this.clearWatchdog(id);
+    this.patch(id, draftSubmitting);
+    this.watchdogs.set(id, setTimeout(() => {
+      this.watchdogs.delete(id);
+      this.patch(id, draftReplyFailed);
+    }, timeoutMs));
+  }
+
+  /** The transport refused it outright: no point waiting for a resolve that cannot come. */
+  replyFailed(id: string): void {
+    this.clearWatchdog(id);
+    this.patch(id, draftReplyFailed);
+  }
+
+  private clearWatchdog(id: string): void {
+    const timer = this.watchdogs.get(id);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    this.watchdogs.delete(id);
+  }
+
   clear(): void {
     if (this.asks.length === 0 && this.drafts.size === 0) return;
+    for (const id of [...this.watchdogs.keys()]) this.clearWatchdog(id);
     this.asks = [];
     this.drafts.clear();
     this.reindex();

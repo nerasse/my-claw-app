@@ -115,7 +115,19 @@ export function draftAnsweredCount(draft: QuestionDraft, request: QuestionAskLik
 }
 
 export function draftSubmitting(draft: QuestionDraft): QuestionDraft {
-  return draft.submitting ? draft : { ...draft, submitting: true };
+  if (draft.submitting && !draft.failed) return draft;
+  return { ...draft, submitting: true, failed: false };
+}
+
+/**
+ * The reply did not make it. The card comes back to life so the send can be tried again.
+ *
+ * A no-op when nothing was in flight: a stale watchdog firing on a card that was never sent would
+ * otherwise mark it failed for nothing.
+ */
+export function draftReplyFailed(draft: QuestionDraft): QuestionDraft {
+  if (!draft.submitting) return draft;
+  return { ...draft, submitting: false, failed: true };
 }
 
 /**

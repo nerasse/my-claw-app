@@ -278,4 +278,26 @@ describe('QuestionCard', () => {
     press(tree, 'Sending…');
     expect(onReply).toHaveBeenCalledTimes(1);
   });
+
+  it('says so when the reply never landed, and offers the send again', () => {
+    // A frame accepted by a dead socket reaches nobody: the card used to stay on "Sending…" for
+    // ever because `submitting` was the end of the story (2026-09-11).
+    jest.useFakeTimers();
+    try {
+      const { tree, onReply } = render(single);
+      press(tree, 'Send');
+      expect(hasText(tree, 'Sending…')).toBe(true);
+
+      ReactTestRenderer.act(() => {
+        jest.advanceTimersByTime(15_000);
+      });
+      expect(hasText(tree, 'Not sent · tap Send to try again')).toBe(true);
+
+      press(tree, 'Send');
+      expect(onReply).toHaveBeenCalledTimes(2);
+    } finally {
+      questionStore.clear();
+      jest.useRealTimers();
+    }
+  });
 });
