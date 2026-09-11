@@ -245,6 +245,13 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       chatStore.setCompacting(frame.threadId, frame.since ? Date.parse(frame.since) : undefined);
       break;
     case 'chat.run.start':
+      // A run opening on this thread means the compaction that held its trigger is over: the
+      // message it was waiting for is the one being answered. Without this the badge had to wait
+      // for the agent to speak, and a run that only called tools said nothing for over an hour --
+      // the bubble wore "waiting for the compaction" while its run was well underway (2026-09-11).
+      // Compaction marks only: an injection is still parked in the mailbox of the run that just
+      // started, and clearing it here would read as accepted a message the run has not looked at.
+      chatStore.clearQueued(frame.threadId, undefined, 'compaction');
       chatStore.startRun(frame.threadId, frame.run);
       break;
     case 'chat.run.end': {
