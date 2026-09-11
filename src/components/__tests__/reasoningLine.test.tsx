@@ -44,12 +44,12 @@ test('the counter climbs while the model is thinking', () => {
   jest.useFakeTimers();
   const tree = render({ reasoning: 'weighing options', startedAt: Date.now() - 12_000, streaming: true });
   expect(textOf(tree)).toContain('Thinking…');
-  expect(textOf(tree)).toContain('12s');
+  expect(textOf(tree)).toContain('12.00s');
 
   ReactTestRenderer.act(() => {
     jest.advanceTimersByTime(5_000);
   });
-  expect(textOf(tree)).toContain('17s');
+  expect(textOf(tree)).toContain('17.00s');
 
   // The interval belongs to the counter: a thread full of finished turns must not keep ticking.
   const pending = jest.getTimerCount();
@@ -62,35 +62,42 @@ test('once the answer starts, the label settles and the duration holds still', (
   jest.useFakeTimers();
   const tree = render({ reasoning: 'weighing options', startedAt: Date.now() - 60_000, durationMs: 93_000, streaming: false });
   expect(textOf(tree)).toContain('Reasoning');
-  expect(textOf(tree)).toContain('1m 33s');
+  expect(textOf(tree)).toContain('1m 33.00s');
 
   ReactTestRenderer.act(() => {
     jest.advanceTimersByTime(10_000);
   });
-  expect(textOf(tree)).toContain('1m 33s');
+  expect(textOf(tree)).toContain('1m 33.00s');
   jest.useRealTimers();
 });
 
 test('a sealed span wins over the start, so a stopped run never counts on forever', () => {
   // `streaming` can still be true for the frame between the seal and the end of the bubble.
   const tree = render({ reasoning: 'thought', startedAt: Date.now() - 60_000, durationMs: 2_000, streaming: true });
-  expect(textOf(tree)).toContain('2s');
+  expect(textOf(tree)).toContain('2.00s');
   expect(textOf(tree)).not.toContain('1m');
 });
 
-test('a turn replayed from server history shows the reasoning without inventing a duration', () => {
-  // The span is measured on the client, so history carries neither field. Better no counter than
-  // one started from an instant nobody recorded.
+test('a turn replayed from server history shows the span the server recorded', () => {
+  // Measured at the stream since 2026-09-11 and written on the phase, so a reopened conversation
+  // shows what the thinking cost instead of keeping the thought and losing its duration.
+  const tree = render({ reasoning: 'weighing options', durationMs: 60, streaming: false });
+  expect(textOf(tree)).toContain('Reasoning');
+  expect(textOf(tree)).toContain('0.06s');
+});
+
+test('a replayed turn whose span nobody recorded draws no counter, rather than a zero', () => {
+  // A phase written by a server that predates the field, or one whose span was never closed.
   const tree = render({ reasoning: 'weighing options', streaming: false });
   expect(textOf(tree)).toContain('Reasoning');
-  expect(textOf(tree)).not.toMatch(/\d+s/);
+  expect(textOf(tree)).not.toMatch(/\d+(\.\d+)?s/);
 });
 
 test('a redacted engine gets the counter too, beside its token estimate', () => {
   jest.useFakeTimers();
   const tree = render({ tokens: 1500, startedAt: Date.now() - 8_000, streaming: true });
   expect(textOf(tree)).toContain('1.5k tokens');
-  expect(textOf(tree)).toContain('8s');
+  expect(textOf(tree)).toContain('8.00s');
   ReactTestRenderer.act(() => tree.unmount());
   jest.useRealTimers();
 });

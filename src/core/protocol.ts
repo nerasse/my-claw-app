@@ -353,6 +353,8 @@ export type HistoryEntry =
       reasoning?: string;
       /** How much it thought, when the engine redacts the text and only counts it. */
       reasoningTokens?: number;
+      /** How long that thinking lasted, so a reopened thread shows the span it took. */
+      reasoningMs?: number;
       /** A replayed command answer: same bubble the live `chat.command.result` drew. */
       command?: boolean;
       /** The aside folded under that answer (a compaction summary). */

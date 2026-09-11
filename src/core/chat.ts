@@ -266,6 +266,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
       ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
       ...(entry.reasoningTokens ? { reasoningTokens: entry.reasoningTokens } : {}),
+      ...(entry.reasoningMs !== undefined ? { reasoningMs: entry.reasoningMs } : {}),
       ...(entry.command ? { command: true } : {}),
       ...(entry.details ? { details: entry.details } : {}),
       ...(entry.error ? { error: entry.error } : {}),

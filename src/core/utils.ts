@@ -64,6 +64,19 @@ export function formatDuration(ms?: number): string {
 }
 
 /**
+ * How long a thinking span lasted, for the line that carries it.
+ *
+ * Two decimals, unlike `formatDuration`: a phase can last a tenth of a second, and rounding it to
+ * `0s` reads as a phase that never happened rather than as a very short one. Measured on the
+ * owner's thread, 2026-09-11.
+ */
+export function formatThinkingSpan(ms: number): string {
+  const safe = Math.max(0, ms);
+  if (safe < 60_000) return `${(safe / 1000).toFixed(2)}s`;
+  return `${Math.floor(safe / 60_000)}m ${((safe % 60_000) / 1000).toFixed(2)}s`;
+}
+
+/**
  * How much of a one-line preview is worth building.
  *
  * Not a visual limit: the row that draws it is `flex: 1` with `numberOfLines={1}`, so the layout

@@ -1658,3 +1658,44 @@ describe('handleSyncResult: where a sync puts what it carries', () => {
     expect(ids.indexOf('run-u1')).toBeLessThan(ids.indexOf('p-answer'));
   });
 });
+
+/**
+ * The thinking span as the history carries it -- added 2026-09-11.
+ *
+ * The span used to exist only in the app's memory: reopened, a thread showed every thought as an
+ * untimed aside, and the reloaded phase read `0s` when the live one had a counter.
+ */
+describe('a replayed phase keeps how long it thought', () => {
+  const T = 'thread-thinking';
+
+  afterEach(() => chatStore.clearThread(T));
+
+  test('the duration the server recorded lands on the bubble', () => {
+    chatStore.handleSyncResult(T, [{
+      id: 'e-phase',
+      role: 'assistant',
+      text: 'the answer',
+      ts: '2026-09-11T21:00:00.000Z',
+      attachments: [],
+      reasoning: 'weighing it',
+      reasoningMs: 4200,
+    }], 'e-phase', 'e-phase', false);
+
+    const [item] = chatStore.getItems(T);
+    expect(item).toMatchObject({ kind: 'text', reasoning: 'weighing it', reasoningMs: 4200 });
+  });
+
+  test('a phase the server wrote without a span carries none, rather than a zero', () => {
+    chatStore.handleSyncResult(T, [{
+      id: 'e-old',
+      role: 'assistant',
+      text: 'the answer',
+      ts: '2026-09-11T21:00:00.000Z',
+      attachments: [],
+      reasoning: 'weighing it',
+    }], 'e-old', 'e-old', false);
+
+    expect(chatStore.getItems(T)[0]).toMatchObject({ kind: 'text', reasoning: 'weighing it' });
+    expect((chatStore.getItems(T)[0] as { reasoningMs?: number }).reasoningMs).toBeUndefined();
+  });
+});

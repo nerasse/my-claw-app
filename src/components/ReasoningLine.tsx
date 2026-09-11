@@ -1,7 +1,8 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { CollapsibleAside } from './CollapsibleAside';
-import { formatElapsed, useElapsed } from './CommandElapsed';
+import { useElapsed } from './CommandElapsed';
+import { formatThinkingSpan } from '../core/utils';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /** "1.2k" rather than "1234": this is a progress hint, not an accounting figure. */
@@ -19,7 +20,7 @@ function compactCount(tokens: number): string {
  */
 function ThinkingElapsed({ since }: { since: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  return <Text style={styles.elapsed}>{formatElapsed(useElapsed(since))}</Text>;
+  return <Text style={styles.elapsed}>{formatThinkingSpan(useElapsed(since))}</Text>;
 }
 
 /**
@@ -68,7 +69,7 @@ export function ReasoningLine({
   const elapsed = running ? (
     <ThinkingElapsed since={startedAt} />
   ) : durationMs !== undefined ? (
-    <Text style={styles.elapsed}>{formatElapsed(durationMs)}</Text>
+    <Text style={styles.elapsed}>{formatThinkingSpan(durationMs)}</Text>
   ) : null;
 
   if (!hasBody) {
