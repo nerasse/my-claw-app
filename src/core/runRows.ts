@@ -56,7 +56,8 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  * - Inside a terminal run, hoisted bubbles (see `isHoisted`) stay rows and cut the group into
  *   segments around them.
  * - The last phase of a run is its answer, not its work: it leaves the group and stands as the
- *   row after it. A run whose last entry is a tool (it died before answering) keeps everything.
+ *   row after it. A run whose entries are all cards never answered, and keeps everything. The
+ *   answer is found by *kind*, not by position: an entry that landed after it does not demote it.
  * - A segment with nothing left in it produces no group: a run that only ever wrote its answer
  *   renders as plain bubbles, never as an empty header.
  */
@@ -71,13 +72,25 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
   const closeRun = () => {
     if (!run) return;
     if (current.length > 0) {
-      const last = current[current.length - 1]!;
-      // The answer is the run's final phase: the last item before the run ends. A run whose last
-      // entry is a tool died without answering, and everything stays in the group.
-      if (last.kind === 'text' && last.role === 'agent') {
-        const answer = current.pop()!;
-        if (current.length > 0) rows.push({ kind: 'group', run, items: current });
-        rows.push({ kind: 'item', item: answer });
+      // The answer is the last prose the agent wrote in the run, not the last item held. A card
+      // left running when the run ended is re-appended after it by the store, and "the last item"
+      // then read a card as the run's answer -- so the real answer stayed inside the group, under
+      // a header that had moved below it. Measured on a real thread, 2026-09-10.
+      //
+      // A run whose entries are all cards died before writing anything, and then nothing is
+      // hoisted out: everything stays in the group.
+      let answerAt = -1;
+      for (let i = current.length - 1; i >= 0; i -= 1) {
+        const item = current[i]!;
+        if (item.kind === 'text' && item.role === 'agent') {
+          answerAt = i;
+          break;
+        }
+      }
+      if (answerAt >= 0) {
+        const rest = current.filter((_, i) => i !== answerAt);
+        if (rest.length > 0) rows.push({ kind: 'group', run, items: rest });
+        rows.push({ kind: 'item', item: current[answerAt]! });
       } else {
         rows.push({ kind: 'group', run, items: current });
       }

@@ -1578,3 +1578,83 @@ describe('a send waits for its receipt', () => {
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false, error: 'not sent' });
   });
 });
+
+/**
+ * The order a sync lands entries in -- measured on a real thread (2026-09-10).
+ *
+ * The owner saw the last message of a run inside the collapsed group that stands for its work,
+ * with the group drawn after it. The server's page was correct (`user > header > answer`, replayed
+ * from the log): what reordered it was this store. Two ways in, one defect -- an entry that belongs
+ * in the middle of the thread was placed after the answer.
+ */
+describe('handleSyncResult: where a sync puts what it carries', () => {
+  const T = 'thread-order';
+
+  afterEach(() => chatStore.clearThread(T));
+
+  const at = (s: number): string => `2026-09-10T09:${String(s).padStart(2, '0')}:00.000Z`;
+  const runMeta = { id: 'runA', status: 'done' as const, startTs: at(43), endTs: at(58) };
+  const withRun = { run: runMeta };
+  const user = { id: 'u1', role: 'user' as const, text: 'go', ts: at(43), attachments: [] };
+  const tool = (n: number, extra: Record<string, unknown> = {}) => ({
+    id: `t${n}`,
+    role: 'tool' as const,
+    name: 'bash',
+    args: { command: 'x' },
+    durationMs: 3,
+    ok: true,
+    output: 'ok',
+    truncated: false,
+    ts: at(44 + n),
+    ...withRun,
+    ...extra,
+  });
+  const interim = { id: 'p-interim', role: 'assistant' as const, text: 'Rouge attendu.', ts: at(53), attachments: [], ...withRun };
+  const answer = { id: 'p-answer', role: 'assistant' as const, text: 'Release 0.7.7 ?', ts: at(58), attachments: [], ...withRun };
+  /** The run's work as the server folds it: a header standing for the entries it hides. */
+  const header = {
+    id: 'run-u1',
+    role: 'run' as const,
+    ts: at(44),
+    run: runMeta,
+    toolCount: 2,
+    firstTool: 'bash',
+    itemCount: 3,
+    lastId: 'p-answer',
+  };
+
+  /**
+   * A folded header is always an id the thread does not hold yet, and its place is where the run
+   * began. Appending it as a fresh entry put it after the answer: the reader got the group *below*
+   * the message it belongs to.
+   */
+  test('a folded header arriving in a delta lands at the run it stands for, not after the answer', () => {
+    chatStore.handleSyncResult(T, [user, tool(1), tool(2), interim, answer], 'h', 'l', false);
+    chatStore.handleSyncResult(T, [header], 'h2', 'l2', false);
+
+    const ids = chatStore.getItems(T).map(item => item.id);
+    expect(ids.indexOf('run-u1')).toBeGreaterThan(ids.indexOf('u1'));
+    expect(ids.indexOf('run-u1')).toBeLessThan(ids.indexOf('p-answer'));
+  });
+
+  /**
+   * The other way in, and the one the owner hit: `applyWindow` keeps what only this device holds
+   * yet, and a tool card still marked `running` from a run that has since been folded is not that.
+   * It was re-appended after the page, and `buildRows` then saw a card as the last item of the run
+   * -- so the answer was swallowed into the group instead of standing below it.
+   */
+  test('a card still running when its run was folded is let go, not re-appended after the answer', () => {
+    // The run in flight, as it is while it runs: the page carries it `running`, so the card the
+    // live frame opens belongs to it and not to a synthetic run of its own.
+    const inFlight = { id: 'runA', status: 'running' as const, startTs: at(43) };
+    chatStore.handleSyncResult(T, [{ ...user }, { ...tool(1), run: inFlight, running: true }], 'h', 'l', true);
+    chatStore.startToolCall(T, 't-spin', 'bash', { command: 'tail -f' });
+
+    // The run is over and the next page carries it folded.
+    chatStore.handleSyncResult(T, [user, header, answer], 'h2', 'l2', false, undefined, undefined, true, 81);
+
+    const ids = chatStore.getItems(T).map(item => item.id);
+    expect(ids).not.toContain('t-spin');
+    expect(ids.indexOf('run-u1')).toBeLessThan(ids.indexOf('p-answer'));
+  });
+});

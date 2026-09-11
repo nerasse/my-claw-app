@@ -31,6 +31,18 @@ Appended, both land at the end: the same error a second time and the same run a 
 the answer they precede. Session 37e36291 is the captured case, and the reader saw
 `question, error, question, 5 tool calls, answer, error, 5 tool calls`.
 
+## Where a delta puts what it carries
+
+An entry the thread does not hold is **inserted where its timestamp says**, not appended. Appending
+was the rule, on the grounds that a delta is newer than what is persisted, and one entry breaks it:
+the folded run header. Its id names a range rather than an entry, so the thread can never hold it
+beforehand, and its place is where the run *began* -- not where the delta started. Appended, it
+landed after the answer it stands behind, and the reader got the collapsed group below the message
+it belongs to (2026-09-10, "the last message was inside the group").
+
+The scan walks back from the end and stops at the first entry that is older, so an order the thread
+already had is never rearranged and a plain fresh frame -- the common case -- still lands last.
+
 ## What a window may not touch
 
 - **What it does not cover.** The pages the reader walked back to sit above it. A window is the
@@ -42,5 +54,11 @@ the answer they precede. Session 37e36291 is the captured case, and the reader s
   because the server writes a question under the id the app minted for it: an unmatched user
   bubble is one the log does not hold *yet*, never a second copy of one it does. Those items go
   after the window, where they belong.
+
+  **Unless its run travelled folded.** A card still marked `running` from a run whose work this
+  page now carries as one header can never be reconciled: the page does not hold its id at all, so
+  it stays live for good and is re-appended after the page on every sync. There it sits *after* the
+  answer, and the group then swallows the answer into itself -- the run's own last message rendered
+  as part of its collapsed work. An item whose run is folded by the incoming page is dropped.
 
 Everything else inside the range defers to the window. That is the point: it is the truth there.

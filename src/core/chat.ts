@@ -949,6 +949,11 @@ class ChatStoreImpl {
     if (base.length === 0) return;
     const known = new Set(base.map(item => item.id));
     const from = base[0]!.ts;
+    // What the page carries folded. A run that travelled as a header is one whose entries this
+    // page deliberately does not hold, so an item of that run still marked live can never be
+    // reconciled against it: it was re-appended after the page, which put a card after the
+    // answer and made `buildRows` swallow the answer into the run's own group.
+    const foldedRuns = new Set(entries.flatMap(entry => (entry.role === 'run' ? [entry.run.id] : [])));
 
     // The cut: the first held item the window has a say about. An item older than the window's
     // oldest and under an id the window does not carry is above it, and stays.
@@ -960,7 +965,12 @@ class ChatStoreImpl {
       break;
     }
     const above = existing.slice(0, cut);
-    const live = existing.slice(cut).filter(item => !known.has(item.id) && windowLacks(item));
+    const live = existing
+      .slice(cut)
+      .filter(item => {
+        if (known.has(item.id) || !windowLacks(item)) return false;
+        return !(item.run && foldedRuns.has(item.run.id));
+      });
 
     this.threads.set(threadId, this.trimToCap(threadId, [...above, ...base, ...live]));
     this.pageCursorFollows(threadId);
@@ -990,9 +1000,34 @@ class ChatStoreImpl {
     // card above the user bubble it answers.
     const persisted = patched.filter(item => !isLocalLive(item));
     const live = patched.filter(isLocalLive);
-    this.threads.set(threadId, this.trimToCap(threadId, [...persisted, ...fresh, ...live]));
+    this.threads.set(threadId, this.trimToCap(threadId, [...this.insertByTs(persisted, fresh), ...live]));
     this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
+  }
+
+  /**
+   * The delta's entries, each in its place among what the thread already holds.
+   *
+   * Appending them was the rule, on the grounds that a delta is newer than what is persisted. One
+   * entry breaks it: a folded run header. Its id is one the thread can never hold beforehand -- it
+   * names a range, not an entry -- and its place is where the run began, not where the delta
+   * started. Appended, it landed *after* the answer it stands behind: the reader got the collapsed
+   * group below the message it belongs to, which is what "the last message was inside the group"
+   * looked like on 2026-09-10 (docs/run-hydration.md).
+   *
+   * The scan walks back from the end and stops at the first entry that is older, so the order the
+   * thread already had is never rearranged and a plain fresh frame, the common case, still lands
+   * last.
+   */
+  private insertByTs(existing: ChatItem[], incoming: ChatItem[]): ChatItem[] {
+    if (incoming.length === 0) return existing;
+    const out = [...existing];
+    for (const item of incoming) {
+      let at = out.length;
+      while (at > 0 && out[at - 1]!.ts > item.ts) at -= 1;
+      out.splice(at, 0, item);
+    }
+    return out;
   }
 
   /**

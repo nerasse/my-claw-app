@@ -98,10 +98,24 @@ describe('buildRows', () => {
     expect(rows.map(r => (r.kind === 'item' ? r.item.id : 'group'))).toEqual(['u', 'group', 'steer', 'group', 'a']);
   });
 
-  test('a run that ended on a tool keeps everything in the group', () => {
-    const rows = buildRows([userText('u'), tool('t1', 'r1'), tool('t2', 'r1'), agentText('a', 'partial', 'r1'), tool('t3', 'r1')]);
+  test('a run that died on a tool, having written no prose, keeps everything in the group', () => {
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), tool('t2', 'r1'), tool('t3', 'r1')]);
     expect(rows).toHaveLength(2);
-    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 't2', 'a', 't3']);
+    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 't2', 't3']);
+  });
+
+  /**
+   * Measured on a real thread (2026-09-10): a tool card left `running` when the run ended is
+   * re-appended after the answer by the store, and "the answer is the last item" then swallows the
+   * answer into its own run's group -- the reader saw the last message inside the collapsed work.
+   * The answer is the last prose the agent wrote, wherever the stray card landed.
+   */
+  test('an answer followed by a stray card is still the answer, and leaves the group', () => {
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a', 'answer', 'r1'), tool('t-late', 'r1')]);
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1' } });
+    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 't-late']);
+    expect(rows[2]).toMatchObject({ kind: 'item', item: { id: 'a' } });
   });
 
   test('a run whose only content is its answer produces no group', () => {
