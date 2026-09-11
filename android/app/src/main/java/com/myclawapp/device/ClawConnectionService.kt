@@ -65,6 +65,18 @@ class ClawConnectionService : Service() {
     private const val MAX_RECONNECT_DELAY_MS = 30_000L
     private const val OUTBOX_CAPACITY = 200
     private const val OUTBOX_KEY = "outbox"
+    /**
+     * How often the transport proves the link is still two-way.
+     *
+     * OkHttp's own ping keeps the TCP frame layer honest, but its pong never reaches this class,
+     * so it cannot confirm that an application frame was received. The server answers an
+     * application `ping` with `pong` (the web client relies on the same pair), and TCP preserves
+     * order on one socket: a frame sent before the ping is received if the pong is. That is what
+     * makes an accepted-but-lost frame detectable at all.
+     */
+    private const val PING_INTERVAL_MS = 15_000L
+    private const val PING_FRAME = "{\"type\":\"ping\"}"
+    private const val PONG_FRAME = "{\"type\":\"pong\"}"
 
     @Volatile
     private var state = "idle"
@@ -84,14 +96,35 @@ class ClawConnectionService : Service() {
      */
     private val outbox = ArrayDeque<String>()
 
+    /**
+     * A frame handed to the socket but not yet proven received.
+     *
+     * `ws.send` answers whether the frame reached the *kernel*, not the server: a socket that died
+     * a moment earlier accepts anything and delivers nothing. Until this buffer existed, such a
+     * frame was removed from the outbox on the spot and lost for good -- a `question.reply` the
+     * owner had tapped never reached the server, and nothing said so (2026-09-11).
+     */
+    private class InFlight(val text: String, val sentAt: Long)
+
+    private val inFlight = mutableListOf<InFlight>()
+
+    /** When the last application ping left, so a pong can tell which sends it covers. */
+    @Volatile
+    private var pingSentAt = 0L
+
     fun state(): String = state
 
-    fun pendingCount(): Int = synchronized(outbox) { outbox.size }
+    fun pendingCount(): Int = synchronized(outbox) { outbox.size + inFlight.size }
 
     /** Returns false only when the frame could be neither sent nor queued: the caller must surface it. */
     fun send(text: String): Boolean {
       val ws = instance?.webSocket
-      if (ws != null && state == "connected" && ws.send(text)) return true
+      if (ws != null && state == "connected" && ws.send(text)) {
+        // Held, not dropped: only the pong that follows proves the server got it.
+        synchronized(outbox) { inFlight.add(InFlight(text, System.currentTimeMillis())) }
+        instance?.emitOutboxSize()
+        return true
+      }
       synchronized(outbox) {
         if (outbox.size >= OUTBOX_CAPACITY) return false
         outbox.addLast(text)
@@ -108,6 +141,15 @@ class ClawConnectionService : Service() {
     }
 
     private fun drainOutbox(ws: WebSocket): Boolean {
+      // Anything still in flight crosses the reconnect unsettled: this socket knows nothing of
+      // what the previous one was handed, so it all goes back to the head of the queue.
+      synchronized(outbox) {
+        for (frame in inFlight.asReversed()) {
+          if (outbox.size >= OUTBOX_CAPACITY) break
+          outbox.addFirst(frame.text)
+        }
+        inFlight.clear()
+      }
       var sent = false
       while (true) {
         val next = synchronized(outbox) { outbox.firstOrNull() }
@@ -119,10 +161,49 @@ class ClawConnectionService : Service() {
           if (sent) instance?.persistOutbox()
           return false
         }
-        synchronized(outbox) { if (outbox.firstOrNull() === next) outbox.removeFirst() }
+        synchronized(outbox) {
+          if (outbox.firstOrNull() === next) outbox.removeFirst()
+          // Sent, not yet proven: the same hold as a direct send, so the next pong settles it or
+          // the next reconnect puts it back in the queue.
+          inFlight.add(InFlight(next, System.currentTimeMillis()))
+        }
         sent = true
       }
     }
+
+    /**
+     * A frame arrived: if it is a pong, everything sent before the ping it answers is received,
+     * because TCP delivers one socket's data in order.
+     */
+    private fun acknowledgePong() {
+      val at = pingSentAt
+      if (at == 0L) return
+      var removed = 0
+      synchronized(outbox) {
+        val iterator = inFlight.iterator()
+        while (iterator.hasNext()) {
+          if (iterator.next().sentAt <= at) {
+            iterator.remove()
+            removed += 1
+          }
+        }
+      }
+      if (removed > 0) instance?.emitOutboxSize()
+    }
+  }
+
+  /** One application ping per interval, so a send is never left unconfirmed for long. */
+  private fun schedulePing() {
+    if (stopping) return
+    handler.postDelayed({
+      if (stopping || state != "connected") return@postDelayed
+      val ws = webSocket
+      if (ws != null) {
+        pingSentAt = System.currentTimeMillis()
+        ws.send(PING_FRAME)
+      }
+      schedulePing()
+    }, PING_INTERVAL_MS)
   }
 
   /**
@@ -243,10 +324,15 @@ class ClawConnectionService : Service() {
           drainOutbox(ws)
           emitState(null, 0)
           emitOutboxSize()
+          schedulePing()
         }
 
         override fun onMessage(ws: WebSocket, text: String) {
           if (gen != generation) return
+          if (text == PONG_FRAME) {
+            acknowledgePong()
+            return
+          }
           emitMessage(text)
         }
 
