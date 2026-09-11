@@ -3,7 +3,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter, FlatList } from 'react-native';
 import { AgentMarkdown } from '../src/components/AgentMarkdown';
 import { CommandElapsed } from '../src/components/CommandElapsed';
 import { CompactionRunning } from '../src/components/CompactionBoundary';
@@ -40,6 +40,35 @@ function textLines(tree: Tree): string[] {
       const children: unknown = node.props.children;
       return Array.isArray(children) ? children.filter((c): c is string => typeof c === 'string').join('') : String(children);
     });
+}
+
+/**
+ * Asserts the rule is a row of the list, placed just above the bubble it holds.
+ *
+ * The list is inverted, so `data[0]` is the bottom of the screen and reading order runs up the
+ * array: the rule must sit at the index right after the parked bubble, never inside a cell (an
+ * inverted cell lays its children out the other way round) and never in the header, which is below
+ * every row.
+ */
+function judgeRuleAboveBubble(tree: Tree, bubbleText: string): void {
+  const data = flatListData(tree);
+  const at = data.findIndex(row => row.kind === 'rule');
+  expect(at).toBeGreaterThan(0);
+  expect(data[at - 1]).toMatchObject({ kind: 'item', item: { text: bubbleText } });
+}
+
+/** The rows the chat list is drawing, bottom of the screen first. */
+function flatListData(tree: Tree): Array<Record<string, unknown>> {
+  // The shell draws other lists (the drawer, the pickers); the conversation is the one whose data
+  // is rows. Picking by that keeps this test about the thread rather than about tree order.
+  const list = tree.root
+    .findAllByType(FlatList)
+    .find(node =>
+      Array.isArray(node.props.data) &&
+      (node.props.data as Array<Record<string, unknown>>).some(entry => entry && typeof entry === 'object' && 'kind' in entry),
+    );
+  expect(list).toBeDefined();
+  return (list!.props.data as Array<Record<string, unknown>>);
 }
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -487,6 +516,27 @@ test('a compaction in flight is one rule at the bottom, and its boundary takes i
   await waitFor(() => textLines(tree).some(text => text.includes('Context compacted · 12 turns summarized')), 60);
   expect(tree.root.findAllByType(CompactionRunning)).toHaveLength(0);
   expect(textLines(tree).some(text => text.includes('Compacting the context'))).toBe(false);
+
+  await settleAndUnmount(tree);
+});
+
+/**
+ * Observed on 2026-09-11: a message sent during a /compact showed its "waiting for the
+ * compaction" bubble *above* the compaction rule, with the rule left at the bottom of the thread.
+ * `compactionRuleBefore` exists to put that rule above the bubble it belongs to, so the check is
+ * where the rule is drawn, not merely that it is drawn.
+ */
+test('the compaction rule stands above the bubble parked behind it, not at the bottom', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u9', 'sent during the compaction', []);
+  });
+  await emit({ type: 'chat.compacting', threadId: THREAD, since: new Date(Date.now() - 10_000).toISOString() });
+  await emit({ type: 'chat.send.queued', threadId: THREAD, replyToId: 'u9', reason: 'compaction' });
+  await waitFor(() => allTexts(tree).some(text => text.includes('waiting for the compaction')), 60);
+  expect(tree.root.findAllByType(CompactionRunning)).toHaveLength(1);
+
+  judgeRuleAboveBubble(tree, 'sent during the compaction');
 
   await settleAndUnmount(tree);
 });

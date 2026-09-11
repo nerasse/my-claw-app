@@ -56,6 +56,7 @@ const folded = (id: string, runId: string, itemCount = 12, lastId = `${id}-last`
 const labelOfRow = (row: ChatRow): string => {
   if (row.kind === 'group') return `g:${row.run.id}`;
   if (row.kind === 'folded') return `f:${row.run.id}:${row.summaries.reduce((n, s) => n + s.itemCount, 0)}`;
+  if (row.kind === 'rule') return 'rule';
   return row.item.id;
 };
 

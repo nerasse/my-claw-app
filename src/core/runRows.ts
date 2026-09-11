@@ -11,7 +11,38 @@ import type { ChatItem, RunInfo, RunSummaryItem } from './chat';
 export type ChatRow =
   | { kind: 'item'; item: ChatItem }
   | { kind: 'group'; run: RunInfo; items: ChatItem[] }
-  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[] };
+  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[] }
+  /**
+   * The live compaction rule, as a row of the list rather than a decoration on a cell.
+   *
+   * It used to be drawn inside the cell of the bubble parked behind it, and a cell is not a
+   * reliable reading order: `inverted` puts every cell in `column-reverse` *and* under a scaleY
+   * flip, so a cell with two children renders them the other way round. The owner saw exactly
+   * that, the bubble above a rule meant to stand above it (2026-09-11). A row is ordered by the
+   * data, which is what the inversion is built on, and that holds whatever the cell does.
+   */
+  | { kind: 'rule' };
+
+/** The oldest item a row draws, which is where a rule standing above the row has to attach. */
+export function firstItemOfRow(row: ChatRow): string | undefined {
+  if (row.kind === 'item') return row.item.id;
+  if (row.kind === 'group') return row.items[0]?.id;
+  return undefined;
+}
+
+/**
+ * The rule, inserted as its own row just above the send it belongs to.
+ *
+ * Above, so the bubble comes after it in reading order: the rule is the divider the compaction
+ * draws, and the message waits *below* it. Inserted before the row that holds that bubble, and
+ * never after, so the parked message is the last thing the thread says.
+ */
+export function withCompactionRule(rows: ChatRow[], before: string | undefined): ChatRow[] {
+  if (before === undefined) return rows;
+  const at = rows.findIndex(row => firstItemOfRow(row) === before);
+  if (at < 0) return rows;
+  return [...rows.slice(0, at), { kind: 'rule' }, ...rows.slice(at)];
+}
 
 /**
  * Bubbles that never belong inside a run group: the owner's own turns (which split the group

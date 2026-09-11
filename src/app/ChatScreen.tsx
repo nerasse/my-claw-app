@@ -10,7 +10,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import { chatStore, isSubAgentTool, useChatItems, useCompacting, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
-import { buildRows, compactionRuleBefore, type ChatRow } from '../core/runRows';
+import { buildRows, compactionRuleBefore, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
@@ -44,12 +44,10 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
 
-/** The oldest item a row draws, which is where a rule standing above the row has to attach. */
-const firstItemOfRow = (row: ChatRow): string | undefined =>
-  row.kind === 'item' ? row.item.id : row.kind === 'group' ? row.items[0]?.id : undefined;
-
 const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
+  // The rule has no id of its own: one compaction runs at a time on a thread, so one rule.
+  if (row.kind === 'rule') return 'rule:compaction';
   // Not the run id alone: while one segment of a run is hydrated and the next is not, a group row
   // and a folded row of the same run sit side by side, and two rows sharing a key drop one.
   if (row.kind === 'folded') return `fold:${row.summaries[0]?.id ?? row.run.id}`;
@@ -593,13 +591,15 @@ export function ChatScreen({
   // A finished run's work folds under one row (its header), which is why the list is built from
   // rows and not from raw items: a collapsed group is one row, an open one renders its children
   // inside it -- docs/run-grouping.md.
-  const rows = useMemo(() => buildRows(items), [items]);
-  // The rule goes above the send parked behind this compaction, and only stays at the bottom of
-  // the thread while nothing is parked -- `compactionRuleBefore`.
   const ruleBefore = useMemo(
     () => (compactingSince === undefined ? undefined : compactionRuleBefore(items)),
     [compactingSince, items],
   );
+  // A finished run's work folds under one row (its header), which is why the list is built from
+  // rows and not from raw items: a collapsed group is one row, an open one renders its children
+  // inside it -- docs/run-grouping.md. The compaction rule is a row too, inserted above the send
+  // it holds -- `withCompactionRule`.
+  const rows = useMemo(() => withCompactionRule(buildRows(items), ruleBefore), [items, ruleBefore]);
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
 
   /**
@@ -706,6 +706,12 @@ export function ChatScreen({
 
   const renderRowContent = useCallback(
     (row: ChatRow) => {
+      // The live compaction rule, a row of its own: drawing it inside a cell put it on the wrong
+      // side of the bubble it belongs to, because an inverted cell lays its children out in
+      // `column-reverse` under a scaleY flip (docs/compaction-indicator.md).
+      if (row.kind === 'rule') {
+        return compactingSince === undefined ? null : <CompactionRunning since={compactingSince} />;
+      }
       if (row.kind === 'item') {
         // Grouping is a property of reading order, so it is still computed oldest-first and the
         // item index is looked up rather than derived from the row position.
@@ -740,7 +746,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun],
+    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compactingSince],
   );
 
   /**
@@ -750,14 +756,9 @@ export function ChatScreen({
    */
   const renderRow = useCallback(
     (row: ChatRow) => (
-      <RowBoundary itemId={keyOfRow(row)}>
-        {ruleBefore !== undefined && compactingSince !== undefined && firstItemOfRow(row) === ruleBefore ? (
-          <CompactionRunning since={compactingSince} />
-        ) : null}
-        {renderRowContent(row)}
-      </RowBoundary>
+      <RowBoundary itemId={keyOfRow(row)}>{renderRowContent(row)}</RowBoundary>
     ),
-    [renderRowContent, ruleBefore, compactingSince],
+    [renderRowContent],
   );
 
   /**
