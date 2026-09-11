@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useStatus } from '../core/status';
+import { withoutEndpoint } from '../core/model';
 import { subAgentsUsage } from '../core/usage';
 import type { StatusPayload, UsageAgent, UsageModelRow, UsageOwn, UsageTotals } from '../core/protocol';
 
@@ -74,6 +75,34 @@ function rowLine(row: UsageModelRow): string {
   return `${row.calls}× · ${short(row.promptTokens)} in${
     row.cacheReadTokens > 0 ? ` · ${short(row.cacheReadTokens)} cached` : ''
   } · ${short(row.completionTokens)} out${row.errors > 0 ? ` · ${row.errors} err` : ''}`;
+}
+
+/**
+ * Where the calls went, without the route: `streamlake · fp8`, `api.anthropic.com`. Absent on a
+ * server that predates the field, which is why it is optional rather than defaulted.
+ */
+function rowRoute(row: UsageModelRow): string {
+  return [row.provider, row.variant].filter(Boolean).join(' · ');
+}
+
+/**
+ * The models behind a figure, each over two lines: the name and its price first, where the calls
+ * went, which rung priced them, and what they cost in tokens under that.
+ */
+function rowDetail(row: UsageModelRow): string {
+  return [rowRoute(row), rowLine(row), row.costSource].filter(Boolean).join(' · ');
+}
+
+/**
+ * The model's own name: the tail of the reference once its endpoint pin is off.
+ *
+ * The pin is a route (`@streamlake/fp8`), not part of the name, and it is where a name cut from the
+ * whole reference used to come from: `fp8` is a quantization and `flex` a service tier, and both
+ * were being drawn as models of their own.
+ */
+function rowName(row: UsageModelRow): string {
+  const bare = withoutEndpoint(row.model);
+  return bare.split('/').pop() ?? bare;
 }
 
 export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -324,8 +353,8 @@ function MainUsage({ own }: { own: UsageOwn }): React.JSX.Element {
 }
 
 /**
- * The models behind a figure, each over two lines: the name takes the width the numbers used to
- * share with it, and the numbers move under it. Squeezed onto one line the name had about five
+ * The models behind a figure, each over two lines: the name and its price first, where the calls
+ * went and what they cost in tokens under them. Squeezed onto one line the name had about five
  * characters, which is not a model anybody can tell from its neighbour.
  */
 function ModelTable({ rows }: { rows: UsageModelRow[] }): React.JSX.Element {
@@ -337,12 +366,12 @@ function ModelTable({ rows }: { rows: UsageModelRow[] }): React.JSX.Element {
         <View key={`${row.model}-${index}`} style={styles.modelRow}>
           <View style={styles.modelTop}>
             <Text style={styles.modelName} numberOfLines={1}>
-              {row.model.split('/').pop()}
+              {rowName(row)}
             </Text>
             <Text style={styles.modelCost}>{rowCost(row)}</Text>
           </View>
           <Text style={styles.modelNums} numberOfLines={1}>
-            {rowLine(row)}
+            {rowDetail(row)}
           </Text>
         </View>
       ))}
@@ -459,8 +488,35 @@ function UsageRow({
   );
 }
 
+/** Where a model choice comes from, spelled. `agent-file` and `agent` are two ways of saying a pin. */
+const MODEL_ORIGIN: Record<string, string> = {
+  session: 'this conversation',
+  agent: 'the agent config',
+  'agent-file': 'the agent file',
+  global: 'the global default',
+};
+
+/** The rung an effort comes from, spelled: the level alone cannot say which one is answering. */
+const EFFORT_RUNG: Record<string, string> = {
+  session: 'this conversation',
+  tag: 'the model tag',
+  scope: 'the agent',
+  config: 'the global default',
+  'api-default': 'the API default',
+  'provider-default': 'the provider default',
+  unsupported: 'discarded by the model',
+};
+
+/** The effort with its rung, or the reason there is none. */
+function effortValue(model: StatusPayload['model']): string {
+  const rung = EFFORT_RUNG[model.effortSource ?? ''] ?? model.effortSource ?? '';
+  if (model.effortSource === 'unsupported') return rung;
+  return model.effort ? `${model.effort} · ${rung}` : `none set · ${rung}`;
+}
+
 /** Everything true but rarely asked: dates, ids, window provenance, tuning, approvals. */
 function DetailsFold({ payload }: { payload: StatusPayload }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
   const s = payload.session;
   const r = payload.runtime;
   const c = payload.context;
@@ -478,8 +534,22 @@ function DetailsFold({ payload }: { payload: StatusPayload }): React.JSX.Element
         <Row label="context limit" value={`${short(payload.model.contextLimit)} · ${payload.model.contextNotes.join(', ')}`} />
         <Row label="estimated" value={`${short(c.estimated)} · chars/4, under-counts`} />
         <Row label="request wall" value={payload.model.timeout} />
-        {payload.model.configDefault ? <Row label="config default" value={payload.model.configDefault} /> : null}
-        {payload.model.effort ? <Row label="effort" value={payload.model.effort} /> : null}
+        <Row label="current model" value={payload.model.current} monospace />
+        {payload.model.source ? (
+          <Row label="picked by" value={MODEL_ORIGIN[payload.model.source] ?? payload.model.source} />
+        ) : null}
+        {payload.model.defaultModel ? (
+          <Row label="default model" value={payload.model.defaultModel} monospace />
+        ) : null}
+        {payload.model.defaultModel ? (
+          <Text style={styles.codeNote}>
+            The default is the fallback: it runs here unless this conversation picks its own, and it
+            takes over when a model above it stops resolving.
+          </Text>
+        ) : null}
+        {payload.model.effortSource ? (
+          <Row label="current effort" value={effortValue(payload.model)} />
+        ) : null}
         {payload.model.selfHosted ? <Row label="billing" value="self-hosted, no marginal cost" /> : null}
         <Row label="verbose" value={r.verbose ? 'on' : 'off'} />
         {r.approvedTools.length > 0 ? <Row label="approved" value={r.approvedTools.join(', ')} /> : null}

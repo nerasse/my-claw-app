@@ -30,6 +30,10 @@ const PAYLOAD: StatusPayload = {
   },
   model: {
     current: 'claude-opus-5',
+    source: 'session',
+    defaultModel: 'kimi-k26-turbo',
+    effort: 'high',
+    effortSource: 'config',
     selfHosted: false,
     contextLimit: 512000,
     contextNotes: ['declared', 'capped from 1,000,000'],
@@ -56,8 +60,8 @@ const PAYLOAD: StatusPayload = {
       unpriced: 0,
       durationMs: 4000,
       rows: [
-        { model: 'anthropic/claude-opus-5', calls: 3, errors: 0, promptTokens: 900_000, cacheReadTokens: 200_000, completionTokens: 40_000, costUsd: 5, costBilled: false, costApproximate: false },
-        { model: 'fireworks/kimi-k2p6-turbo', calls: 1, errors: 0, promptTokens: 100_000, cacheReadTokens: 0, completionTokens: 10_000, costUsd: 2, costBilled: true, costApproximate: false },
+        { model: 'anthropic/claude-opus-5', provider: 'api.anthropic.com', calls: 3, errors: 0, promptTokens: 900_000, cacheReadTokens: 200_000, completionTokens: 40_000, costUsd: 5, costBilled: false, costApproximate: false },
+        { model: 'fireworks/kimi-k2p6-turbo', provider: 'api.fireworks.ai', calls: 1, errors: 0, promptTokens: 100_000, cacheReadTokens: 0, completionTokens: 10_000, costUsd: 2, costBilled: true, costApproximate: false },
       ],
     },
     agents: [
@@ -76,7 +80,7 @@ const PAYLOAD: StatusPayload = {
         billedUsd: 0,
         referenceUsd: 0.25,
         unpriced: 0,
-        rows: [{ model: 'anthropic/claude-opus-5', calls: 4, errors: 0, promptTokens: 250_000, cacheReadTokens: 0, completionTokens: 8_000, costUsd: 0.25, costBilled: false, costApproximate: false }],
+        rows: [{ model: 'anthropic/claude-opus-5', provider: 'api.anthropic.com', calls: 4, errors: 0, promptTokens: 250_000, cacheReadTokens: 0, completionTokens: 8_000, costUsd: 0.25, costBilled: false, costApproximate: false }],
       },
       {
         sessionId: 'subagent/coder-c3d4',
@@ -93,12 +97,33 @@ const PAYLOAD: StatusPayload = {
         billedUsd: 0,
         referenceUsd: 0.05,
         unpriced: 0,
-        rows: [{ model: 'anthropic/claude-opus-5', calls: 1, errors: 0, promptTokens: 50_000, cacheReadTokens: 0, completionTokens: 2_000, costUsd: 0.05, costBilled: false, costApproximate: false }],
+        rows: [{ model: 'anthropic/claude-opus-5', provider: 'api.anthropic.com', calls: 1, errors: 0, promptTokens: 50_000, cacheReadTokens: 0, completionTokens: 2_000, costUsd: 0.05, costBilled: false, costApproximate: false }],
       },
     ],
   },
   runtime: { runs: [], compacting: false, verbose: true, approvedTools: ['bash'] },
 };
+
+/** One per-model line, as the server sends it. */
+function rowFixture(
+  model: string,
+  provider?: string,
+  costSource?: string,
+): StatusPayload['usage'] extends null ? never : NonNullable<StatusPayload['usage']>['own']['rows'][number] {
+  return {
+    model,
+    ...(provider ? { provider } : {}),
+    ...(costSource ? { costSource } : {}),
+    calls: 1,
+    errors: 0,
+    promptTokens: 1000,
+    cacheReadTokens: 0,
+    completionTokens: 100,
+    costUsd: 1,
+    costBilled: false,
+    costApproximate: false,
+  };
+}
 
 function emit(frame: Record<string, unknown>): Promise<void> {
   return ReactTestRenderer.act(async () => {
@@ -325,6 +350,151 @@ test('a model name gets its own line, not the tail of the numbers line', async (
   // The calls and tokens that used to squeeze it onto a five-character budget moved under it.
   expect(line).not.toContain('100k');
   expect(line).not.toContain('cached');
+
+  await unmount(tree);
+});
+
+// The model reference carries its endpoint pin, and the pin is a route: `fp8` is a quantization and
+// `flex` a service tier. A name cut from the whole reference read them as models of their own.
+test('a routed model is named by its model, and says which provider served it', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree);
+  await pressLabel(tree, 'Status');
+  await emit({
+    type: 'status.result',
+    threadId: THREAD,
+    status: {
+      ...PAYLOAD,
+      usage: {
+        ...PAYLOAD.usage!,
+        own: {
+          ...PAYLOAD.usage!.own,
+          rows: [
+            {
+              model: 'z-ai/glm-5.2@streamlake/fp8',
+              provider: 'streamlake',
+              variant: 'fp8',
+              calls: 889,
+              errors: 0,
+              promptTokens: 73_600_000,
+              cacheReadTokens: 36_600_000,
+              completionTokens: 3_000_000,
+              costUsd: 5,
+              costBilled: false,
+              costApproximate: false,
+            },
+            // No pin: the route is the base OpenRouter picked from.
+            {
+              model: 'google/gemini-3.7-flash',
+              provider: 'openrouter.ai',
+              calls: 7,
+              errors: 0,
+              promptTokens: 459_000,
+              cacheReadTokens: 439_000,
+              completionTokens: 9_897,
+              costBilled: false,
+              costApproximate: false,
+            },
+          ],
+        },
+      },
+    },
+  });
+  await waitFor(() => textsOf(tree).includes('glm-5.2'));
+
+  const page = textsOf(tree);
+  expect(page).toContain('glm-5.2');
+  // The quantization is a route, not a model: it never stands alone as a name.
+  expect(page).not.toContain('fp8');
+  expect(page).toContain('gemini-3.7-flash');
+  // Where the calls went leads the line under the name.
+  expect(page.some(text => text.startsWith('streamlake · fp8 · 889×'))).toBe(true);
+  expect(page.some(text => text.startsWith('openrouter.ai · 7×'))).toBe(true);
+
+  await unmount(tree);
+});
+
+// A figure nothing could price and a figure guessed from the cross-market median look the same on
+// a page that does not say which rung answered. The server had the trace all along.
+test('a model line says which rung of the price ladder priced it', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree);
+  await pressLabel(tree, 'Status');
+  await emit({
+    type: 'status.result',
+    threadId: THREAD,
+    status: {
+      ...PAYLOAD,
+      usage: {
+        ...PAYLOAD.usage!,
+        own: {
+          ...PAYLOAD.usage!.own,
+          rows: [
+            { ...rowFixture('claude-opus-5', 'api.anthropic.com', 'engine anthropic'), calls: 3157 },
+            { ...rowFixture('gpt-5.6-luna', 'chatgpt.com', 'median of 28'), calls: 12 },
+          ],
+        },
+      },
+    },
+  });
+  await waitFor(() => textsOf(tree).some(text => text.includes('median of 28')));
+
+  const page = textsOf(tree);
+  expect(page.some(text => text.startsWith('api.anthropic.com · 3157×') && text.endsWith('engine anthropic'))).toBe(true);
+  expect(page.some(text => text.endsWith('median of 28'))).toBe(true);
+
+  await unmount(tree);
+});
+
+test('two providers of one model are two rows, told apart by the provider', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree);
+  await pressLabel(tree, 'Status');
+  await emit({
+    type: 'status.result',
+    threadId: THREAD,
+    status: {
+      ...PAYLOAD,
+      usage: {
+        ...PAYLOAD.usage!,
+        own: {
+          ...PAYLOAD.usage!.own,
+          rows: [
+            { ...rowFixture('claude-opus-5', 'api.anthropic.com'), calls: 3157 },
+            { ...rowFixture('claude-opus-5', 'claude-sdk'), calls: 8436 },
+          ],
+        },
+      },
+    },
+  });
+  await waitFor(() => textsOf(tree).includes('claude-opus-5'));
+
+  const page = textsOf(tree);
+  // Two rows, one model id, and the provider is the only thing that tells them apart.
+  expect(page.some(text => text.startsWith('api.anthropic.com · 3157×'))).toBe(true);
+  expect(page.some(text => text.startsWith('claude-sdk · 8436×'))).toBe(true);
+
+  await unmount(tree);
+});
+
+test('details name the current model, where it is picked from, and the effort with its rung', async () => {
+  const tree = await renderApp();
+  await openReport(tree);
+  await pressLabel(tree, 'details');
+
+  const page = textsOf(tree);
+  expect(page).toContain('current model');
+  expect(page).toContain('claude-opus-5');
+  // Reading the model without its source is how a chat inherited a pin and still showed the
+  // global default.
+  expect(page).toContain('picked by');
+  expect(page).toContain('this conversation');
+  // What it is pinned away from, and the one line saying that is the fallback.
+  expect(page).toContain('default model');
+  expect(page).toContain('kimi-k26-turbo');
+  expect(page.some(text => text.startsWith('The default is the fallback'))).toBe(true);
+  expect(page).toContain('current effort');
+  expect(page).toContain('high · the global default');
 
   await unmount(tree);
 });

@@ -88,6 +88,26 @@ describe('the sub-agents as one figure', () => {
     expect(merged?.costUsd).toBeCloseTo(0.15);
   });
 
+  it('keeps two providers of one model apart, and two routes of it too', () => {
+    // The SQL groups by model *and* base: the same id reached through two providers is billed at
+    // two rates, and a merge on the model alone would collapse on the client what the server
+    // deliberately kept apart. A route is the same story one level down -- `fp8` and `bf16` are two
+    // services, not one.
+    const recap = subAgentsUsage([
+      agent({ sessionId: 'a', rows: [row({ model: 'claude-opus-5', provider: 'api.anthropic.com', costUsd: 1 })] }),
+      agent({ sessionId: 'b', rows: [row({ model: 'claude-opus-5', provider: 'claude-sdk' })] }),
+      agent({ sessionId: 'c', rows: [row({ model: 'z-ai/glm-5.2@streamlake/fp8', provider: 'streamlake', variant: 'fp8' })] }),
+      agent({ sessionId: 'd', rows: [row({ model: 'z-ai/glm-5.2@streamlake/bf16', provider: 'streamlake', variant: 'bf16' })] }),
+      // And the same model on the same provider is still one line, its calls added.
+      agent({ sessionId: 'e', rows: [row({ model: 'claude-opus-5', provider: 'api.anthropic.com', calls: 2, costUsd: 3 })] }),
+    ]);
+    expect(recap?.rows).toHaveLength(4);
+    expect(recap?.rows.map(r => r.variant).filter(Boolean).sort()).toEqual(['bf16', 'fp8']);
+    expect(recap?.rows.find(r => r.provider === 'api.anthropic.com')).toMatchObject({ calls: 3 });
+    expect(recap?.rows.find(r => r.provider === 'api.anthropic.com')?.costUsd).toBeCloseTo(4);
+    expect(recap?.rows.find(r => r.provider === 'claude-sdk')?.costUsd).toBeUndefined();
+  });
+
   it('keeps the markers of a row that carries them, and the price of a row that has one', () => {
     const recap = subAgentsUsage([
       agent({ sessionId: 'a', rows: [row({ model: 'm', costUsd: 0.2, costBilled: true })] }),

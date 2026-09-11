@@ -19,18 +19,27 @@ of the my-claw repository.
   - `this conversation`, always open: calls, in, out, cost, the wall time spent in the API, and the
     models behind it.
   - the sub-agents as one figure: how many, what they cost together in calls, tokens and money,
-    with the models they ran on merged by model id, so a model six workers drove is one line.
+    with the models they ran on merged by model **and provider**, so a model six workers drove is
+    one line while the same model on two providers stays two.
   - `by sub-agent`, folded one tap below: a row per sub-agent (name, type, a dot while it runs,
     `gone` once its session was killed), a sub-agent's own sub-agents indented under it, each row
     unfolding into its own models.
 
-  A model line is drawn over two lines: the name and its price first, the calls and tokens under
-  them. On one line the name had whatever the numbers left it, about five characters, which is not
-  a model anyone can tell from its neighbour. Each price carries its markers (`*` not a charge, `~`
-  a neighbouring model's price). `since <date> (90 days)` closes the card when the conversation is
-  older than the analytics.
+  A model line is drawn over two lines: the name and its price first, where the calls went, which
+  rung of the price ladder priced them, and what they cost in tokens under that. The name is the
+  model alone -- the endpoint pin is a route (`@streamlake/fp8`: a provider and a quantization),
+  never part of a name, which is what a name read off the whole reference used to say. The line
+  under it opens with that provider, so two rows of one model served by two providers
+  (`api.anthropic.com` and `claude-sdk`) can be told apart; the server sends them apart for the same
+  reason it prices them apart. It closes with the rung that answered (`engine anthropic`, `median of
+  28`, `endpoint streamlake/fp8`), because a figure nothing could price and a figure guessed from
+  the cross-market median look identical on a page that does not say which one it is. Each price
+  carries its markers (`*` not a charge, `~` a neighbouring model's price), and `since <date> (90
+  days)` closes the card when the conversation is older than the analytics.
 - **Details**, folded: started, last active, turns, session id, who spawned a sub-agent, the
-  window's provenance, the estimate, the request wall, config default, effort, verbose, approved.
+  window's provenance, the estimate, the request wall, **the current model with where it is picked
+  from and the default it falls back to, and the current effort with the rung it comes from**,
+  verbose, approved.
 
 `this conversation` is open because it is the figure every other one is read against: folding it
 asked for a tap to answer the page's own question. The sub-agents are the other way round, since

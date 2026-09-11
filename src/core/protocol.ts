@@ -1058,6 +1058,24 @@ export interface SendAckedFrame {
 /** One model as one session used it, priced when a price is on record. */
 export interface UsageModelRow {
   model: string;
+  /**
+   * Where the calls went: the endpoint pin's provider for a routed call (`streamlake`), otherwise
+   * the host of the base that was reached (`api.anthropic.com`, `claude-sdk`). Absent on a server
+   * that predates the field.
+   */
+  provider?: string;
+  /**
+   * The rest of the endpoint pin, when it has one: the quantization or service tier the route was
+   * served as (`fp8`, `global/flex`). Never part of the model name.
+   */
+  variant?: string;
+  /**
+   * Which rung of the price ladder answered, so a figure that looks wrong can be explained: the
+   * cost frozen on the row when the call was made, a pinned endpoint's own tariff, the OpenRouter
+   * catalogue, an engine, the base that was reached, or the cross-market median. Absent on a row
+   * nothing could price, and on a server that predates the field.
+   */
+  costSource?: string;
   calls: number;
   errors: number;
   promptTokens: number;
@@ -1132,9 +1150,30 @@ export interface StatusPayload {
     current: string;
     /** Set when the current model is a `tag:` reference, naming the tag. */
     tag?: string;
-    /** The agent's configured default, present when the session overrides it. */
-    configDefault?: string;
+    /**
+     * Which of the three picked it: this chat's own model, an agent pin, or the default. Absent
+     * when nothing resolved, and on a server that predates the field.
+     */
+    source?: 'session' | 'agent' | 'agent-file' | 'global';
+    /**
+     * What runs here without a chat pin: the agent's configured default, else the global one.
+     * Absent on a server that predates the field.
+     */
+    defaultModel?: string;
+    /** The effort a run would send, "" when the model discards it. Absent on a server that predates the field. */
     effort?: string;
+    /**
+     * The rung `effort` comes from: session > tag > agent > the global default > what the API or
+     * the provider does on its own. Absent on a server that predates the field.
+     */
+    effortSource?:
+      | 'session'
+      | 'tag'
+      | 'scope'
+      | 'config'
+      | 'api-default'
+      | 'provider-default'
+      | 'unsupported';
     selfHosted: boolean;
     contextLimit: number;
     /** Why the window is what it is ("declared", "capped from …", …). */

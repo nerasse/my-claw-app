@@ -26,6 +26,11 @@ function zeroTotals(): UsageTotals {
  * conversation's own calls. Rows merge rather than stack because the same model driven by six
  * workers is one line read once, not six lines read once each.
  *
+ * A row is keyed by its model and the provider that served it, never by the model alone: the
+ * server groups its own rows that way because the same id reached through two providers is billed
+ * at two rates, and merging them here would collapse on the client what it deliberately kept
+ * apart.
+ *
  * Returns null when there is nothing to sum, so the page leaves the section out instead of
  * drawing a row of zeroes.
  */
@@ -43,9 +48,10 @@ export function subAgentsUsage(agents: UsageAgent[]): UsageGroup | null {
     totals.referenceUsd += agent.referenceUsd;
     totals.unpriced += agent.unpriced;
     for (const row of agent.rows) {
-      const seen = byModel.get(row.model);
+      const key = `${row.model}\u0000${row.provider ?? ""}\u0000${row.variant ?? ""}`;
+      const seen = byModel.get(key);
       if (!seen) {
-        byModel.set(row.model, { ...row });
+        byModel.set(key, { ...row });
         continue;
       }
       seen.calls += row.calls;
