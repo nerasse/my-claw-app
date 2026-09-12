@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { QuestionAskFrame, QuestionInfoFrame } from '../core/protocol';
 import { questionStore, useQuestionDraft, type QuestionDraft } from '../core/questionStore';
 import { useQuestionKeys } from '../core/questionKeys';
@@ -45,17 +45,9 @@ const RECAP_LINES = 3;
 export function QuestionCard({
   request,
   onReply,
-  onRevealField,
 }: {
   request: QuestionAskFrame;
   onReply: (id: string, answers: string[][]) => void;
-  /**
-   * Called when the free-text field takes focus, so the surface holding this card can bring it
-   * above the keyboard. The card cannot do it: it does not know it is in a list, and Android
-   * stopped doing it for us -- the app draws edge to edge, so `adjustResize` never resizes the
-   * window and the native scroll-the-focused-view-into-view never fires.
-   */
-  onRevealField?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const draft = useQuestionDraft(request.id);
@@ -64,6 +56,23 @@ export function QuestionCard({
   const page = draftPage(draft, request);
   const recap = isRecapPage(request, page);
   const answered = draftAnsweredCount(draft, request);
+
+  /**
+   * The card's own scroll area, and the only one: the form used to be a row of the conversation,
+   * where the thread is the scroll area and a scroller inside the inverted list loses every drag
+   * to the list (docs/text-selection.md). It is a surface of its own now, so this one is
+   * uncontested, and it is what keeps the question, the field and Send reachable when the keyboard
+   * leaves a third of the pane.
+   *
+   * Only the middle scrolls. The title and the footer are outside, which is what puts Send under
+   * the thumb rather than at the end of a form nobody can see the bottom of.
+   */
+  const bodyRef = useRef<ScrollView>(null);
+  /** Whether the free-text field currently holds the caret, so only *its* growth scrolls. */
+  const fieldFocused = useRef(false);
+  const revealField = useCallback(() => {
+    bodyRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
   /**
    * The pending auto-advance. One at a time and cleared on unmount: two quick picks would
@@ -133,22 +142,37 @@ export function QuestionCard({
         <Text style={styles.waiting}>waiting for you</Text>
       </View>
 
-      {recap ? (
-        <Recap request={request} draft={draft} onEdit={goto} styles={styles} />
-      ) : (
-        <QuestionBlock
-          // Keyed by page: the free-text field of question 2 must not be re-seeded with the text
-          // of question 1 (`defaultValue` is read once, at mount).
-          key={page}
-          id={request.id}
-          question={request.questions[page] as QuestionInfoFrame}
-          index={page}
-          draft={draft}
-          onPicked={onPicked}
-          onRevealField={onRevealField}
-          styles={styles}
-        />
-      )}
+      <ScrollView
+        ref={bodyRef}
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
+        // A multiline field grows as it is typed into, and the caret has to stay with it. Only
+        // while it holds the caret: a form scrolled up to re-read an option must not be yanked
+        // back to the bottom by the next layout pass.
+        onContentSizeChange={() => {
+          if (fieldFocused.current) revealField();
+        }}>
+        {recap ? (
+          <Recap request={request} draft={draft} onEdit={goto} styles={styles} />
+        ) : (
+          <QuestionBlock
+            // Keyed by page: the free-text field of question 2 must not be re-seeded with the text
+            // of question 1 (`defaultValue` is read once, at mount).
+            key={page}
+            id={request.id}
+            question={request.questions[page] as QuestionInfoFrame}
+            index={page}
+            draft={draft}
+            onPicked={onPicked}
+            onFieldFocus={focused => {
+              fieldFocused.current = focused;
+              if (focused) revealField();
+            }}
+            styles={styles}
+          />
+        )}
+      </ScrollView>
 
       <View style={styles.foot}>
         {paged && page > 0 ? (
@@ -264,7 +288,7 @@ function QuestionBlock({
   index,
   draft,
   onPicked,
-  onRevealField,
+  onFieldFocus,
   styles,
 }: {
   id: string;
@@ -272,7 +296,7 @@ function QuestionBlock({
   index: number;
   draft: QuestionDraft;
   onPicked: (question: QuestionInfoFrame) => void;
-  onRevealField?: () => void;
+  onFieldFocus: (focused: boolean) => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   const custom = questionAllowsCustom(question);
@@ -349,7 +373,7 @@ function QuestionBlock({
           question={question}
           index={index}
           draft={draft}
-          onRevealField={onRevealField}
+          onFieldFocus={onFieldFocus}
           styles={styles}
         />
       ) : null}
@@ -368,14 +392,15 @@ function CustomField({
   question,
   index,
   draft,
-  onRevealField,
+  onFieldFocus,
   styles,
 }: {
   id: string;
   question: QuestionInfoFrame;
   index: number;
   draft: QuestionDraft;
-  onRevealField?: () => void;
+  /** The card reveals this field; the field only says where the caret is. */
+  onFieldFocus: (focused: boolean) => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   return (
@@ -387,7 +412,8 @@ function CustomField({
       placeholderTextColor="#888"
       autoFocus
       multiline
-      onFocus={onRevealField}
+      onFocus={() => onFieldFocus(true)}
+      onBlur={() => onFieldFocus(false)}
       accessibilityLabel={`Free-form answer to ${question.header}`}
     />
   );
@@ -402,7 +428,13 @@ const createStyles = (palette: Palette) =>
       backgroundColor: palette.surface,
       padding: space.sm,
       gap: space.sm,
+      // The card gives room the way its body does: one that is told to shrink and cannot pass the
+      // instruction down overflows its own cap instead.
+      flexShrink: 1,
     },
+    /** The middle of the card, the only part that gives up room when the keyboard takes some. */
+    body: { flexShrink: 1 },
+    bodyContent: { gap: space.xs },
     head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     title: { fontSize: font.body, fontWeight: '600', color: palette.accent },
     waiting: { fontSize: font.small, color: palette.textMuted },

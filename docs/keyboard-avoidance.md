@@ -55,9 +55,47 @@ The bottom sheets are absolute layers rendered outside this view, so nothing lif
 themselves through `useSheetBottomInset`, and `combineBottomInset` carries the platform asymmetry
 (`src/core/keyboard.ts`). That is a separate mechanism on purpose, and it is stateless too.
 
+## The rule, and where it is checked
+
+**A focusable surface either fits the space above the keyboard, or scrolls inside itself with its
+actions pinned outside that scroll. Nothing is allowed to be unreachable.** A surface rendered
+outside the shell's `KeyboardAvoidingView` pads itself with `useSheetBottomInset`.
+
+Two traps make this less obvious than it sounds on Android:
+
+- **`adjustResize` is inert here.** The app draws edge to edge -- and it does so whether or not
+  `edgeToEdgeEnabled` says otherwise: RN forces the flag on API 36 (`WindowUtil.kt`), and on API 35
+  it derives it from the theme, which declares no opt-out. So Android never resizes the window for
+  the keyboard and **never scrolls a focused input into view** either. `AndroidManifest.xml`
+  already carries `adjustResize` for Android 14 and below, where the window really does shrink; it
+  is left there for that, not for this.
+- **The thread is the scroll area, and it will not share.** A scroller inside the inverted list
+  loses every drag to the list, which is measured, not feared (`docs/text-selection.md`). A surface
+  that needs to scroll therefore cannot be a row of the conversation.
+
+That second trap is what moved the question form. It used to be a row of the thread, at the point
+the run stopped, and the pane left by the keyboard is smaller than the form: the thread could show
+the question or the field, never both, and the reveal could only choose a slice. It is a surface
+above the composer now (`ChatScreen`), capped at `70%` of the pane and scrolling itself, with its
+title and its Send pinned outside that scroll, so the field and Send are both visible while it is
+typed into. The thread keeps the tool call, which is the record of what was asked.
+
+| Surface | Container | Why it is fine |
+| --- | --- | --- |
+| Conversation, editors, settings | the one `KeyboardAvoidingView` | it gives up exactly the overlap |
+| ActionSheet, PromptSheet | absolute, outside it | pad themselves (`useSheetBottomInset`) |
+| Drawer, ModelSheet | absolute, outside it | their field is at the top, nothing under the keyboard |
+| The question form | above the composer | capped, scrolls itself, title and Send pinned |
+| Long forms (ProviderEdit, ModelEdit, AgentFile) | a scroller each | reachable by scrolling; nothing is auto-revealed, and a field you cannot see is a field you cannot tap |
+
 ## Test
 
 `src/app/__tests__/keyboardAvoidance.test.tsx` drives the real component: a layout, then the same
 keyboard announcement twice, then a taller one, then the hide. It asserts the room left for the
 conversation rather than the style that produced it, so it holds whichever way the avoidance is
 spelled. Put `behavior="height"` back and it reports 240 where it wanted 1290.
+
+`src/app/__tests__/questionKeyboard.test.tsx` holds the form's half of the rule: the form is drawn
+above the composer and outside the list, the reveal happens in the card's own scroll area, and the
+thread is not scrolled for it. `src/components/__tests__/questionCard.test.tsx` holds the pinning:
+the title and Send are outside the scroller, the question is inside it.

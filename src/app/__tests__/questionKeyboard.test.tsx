@@ -1,16 +1,19 @@
 /**
  * A free-text answer must be visible while it is typed.
  *
- * The question card is at the bottom of an inverted list, under the composer and, once the field
- * takes focus, under the keyboard. Android used to reveal a focused input on its own: the app
- * draws edge to edge, so `adjustResize` never resizes the window and that never fires. Nothing
- * scrolled, and the owner typed into a field off screen.
+ * The form is not a row of the thread any more, and it cannot be: a form with its options and its
+ * field is taller than what the keyboard leaves of the pane, and the thread is a scroll area where
+ * a scroller inside the inverted list loses every drag to the list (docs/text-selection.md). It is
+ * a surface of its own above the composer now, and it reveals its own field: Android stopped
+ * revealing a focused input when the app went edge to edge, and it never scrolled a row of a
+ * conversation into view either way.
  */
 
 import React from 'react';
-import { FlatList, TextInput } from 'react-native';
+import { FlatList, ScrollView, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { ChatScreen } from '../ChatScreen';
+import { QuestionCard } from '../../components/QuestionCard';
 import { chatStore } from '../../core/chat';
 import { questionStore } from '../../core/questionStore';
 import { ThemeContext } from '../../theme';
@@ -84,21 +87,49 @@ describe('a pending question and the keyboard', () => {
     });
   });
 
-  it('scrolls the thread back to the bottom when the free-text field takes focus', () => {
+  it('draws the form above the composer, and out of the list', () => {
+    const tree = render();
+    const card = tree.root.findAllByType(QuestionCard)[0];
+    if (!card) throw new Error('the pending question is nowhere on the chat screen');
+
+    // Out of the list, or the thread would be its scroll area and would win every drag.
+    for (let node: typeof card | null = card.parent; node; node = node.parent) {
+      if (node.type === FlatList) throw new Error('the form is a row of the conversation again');
+    }
+
+    // Above the composer: drawn earlier in the column, which is what above means here.
+    const order = tree.root.findAll(() => true);
+    const composer = tree.root.findAll(
+      node => node.props.accessibilityLabel === 'Message to send',
+    )[0];
+    if (!composer) throw new Error('no composer to sit above');
+    expect(order.indexOf(card)).toBeLessThan(order.indexOf(composer));
+
+    act(() => tree.unmount());
+  });
+
+  it('reveals the field in the card, and leaves the thread where it is', () => {
     const tree = render();
     const list = tree.root.findAllByType(FlatList)[0];
     if (!list) throw new Error('no FlatList on the chat screen');
     const scrollToOffset = jest.fn();
-    // The ref the screen scrolls through: the pill beside this field uses the very same handle.
     list.instance.scrollToOffset = scrollToOffset;
 
     press(tree, 'Type your own answer');
     const field = tree.root.findAllByType(TextInput)[0];
     if (!field) throw new Error('the free-text field did not open');
 
-    expect(scrollToOffset).not.toHaveBeenCalled();
+    // The card's own scroll area, found by walking up from the field it has to reveal.
+    let body = field.parent;
+    while (body && body.type !== ScrollView) body = body.parent;
+    if (!body) throw new Error('the free-text field is in no scroll area');
+    const scrollToEnd = jest.fn();
+    body.instance.scrollToEnd = scrollToEnd;
+
+    expect(scrollToEnd).not.toHaveBeenCalled();
     act(() => field.props.onFocus());
-    expect(scrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: true });
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
+    expect(scrollToOffset).not.toHaveBeenCalled();
 
     act(() => tree.unmount());
   });

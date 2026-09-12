@@ -122,3 +122,9 @@ Traps:
   still capped at 200 frames: past that `send()` returns false and the bubble is marked failed.
 - Errors are swallowed in several places (`.catch(() => {})`). The global handler is a last
   resort, it does not catch those.
+- **Nothing may hide behind the keyboard, and Android will not rescue it.** `adjustResize` is inert
+  (the app is edge to edge whatever `edgeToEdgeEnabled` says) and the thread is the only scroll area
+  in a conversation: a scroller inside the inverted list loses every drag to it. So a focusable
+  surface either fits the space above the keyboard or scrolls itself with its actions pinned, and
+  whatever sits outside the shell's `KeyboardAvoidingView` pads itself (`useSheetBottomInset`).
+  `docs/keyboard-avoidance.md`
