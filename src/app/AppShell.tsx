@@ -156,6 +156,7 @@ import { declareModel, modelStore, undeclareModel, useModelCatalog, useThreadMod
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
+import { deleteProviderCascadeLabel, deleteProviderPreview, tagRoutesSuffix, tagRoutesThroughProvider } from '../core/providerRefs';
 import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
 import { sessionInstructionsStore, useSessionInstructions } from '../core/sessionInstructions';
@@ -389,6 +390,12 @@ export function AppShell(): React.JSX.Element {
     keyEnv?: string;
     /** Declared models under it, counted when the sheet opens: they are what the server refuses on. */
     declaredModels: string[];
+    /**
+     * Tags whose route steps through it, with the candidate that does. Counted here for the same
+     * reason as the models: the server refuses on them too, and a cascade the owner was not shown
+     * is a route that quietly stops meaning what it says.
+     */
+    tagRoutes: Array<{ tag: string; model: string }>;
   } | null>(null);
   /** Which workspace the workspace page shows. The instruction editor and the layer screen hang
    *  under it, so it outlives them: back walks down to this page, not to a list. */
@@ -3642,6 +3649,11 @@ export function AppShell(): React.JSX.Element {
                     setProviderToDelete({
                       key: providerEdit.key ?? '',
                       declaredModels: declaredModelIds(providerEdit.key ?? ''),
+                      tagRoutes: tagRoutesThroughProvider(
+                        tagsState.tags ?? [],
+                        providerEdit.key ?? '',
+                        (agentsConfig?.providers ?? []).map(provider => provider.key),
+                      ),
                       ...(providerEdit.key
                         ? { keyEnv: agentsConfig?.providers.find(p => p.key === providerEdit.key)?.keyEnv }
                         : {}),
@@ -4496,16 +4508,12 @@ export function AppShell(): React.JSX.Element {
 
       {providerToDelete ? (
         <ActionSheet
-          preview={
-            providerToDelete.declaredModels.length > 0
-              ? `Delete the provider "${providerToDelete.key}"? It still declares ${providerToDelete.declaredModels.length} model${providerToDelete.declaredModels.length === 1 ? '' : 's'}, which cannot run without it: ${providerToDelete.declaredModels.join(', ')}.`
-              : `Delete the provider "${providerToDelete.key}"? Its discovered models leave with the catalog refresh, and a re-auth recreates the SDK providers.`
-          }
+          preview={`${deleteProviderPreview(providerToDelete)}${tagRoutesSuffix(providerToDelete.tagRoutes)}`}
           options={[
-            ...(providerToDelete.declaredModels.length > 0
+            ...(providerToDelete.declaredModels.length > 0 || providerToDelete.tagRoutes.length > 0
               ? [
                   {
-                    label: `Delete and remove its ${providerToDelete.declaredModels.length} declared model${providerToDelete.declaredModels.length === 1 ? '' : 's'}`,
+                    label: deleteProviderCascadeLabel(providerToDelete),
                     danger: true,
                     onPress: () => deleteProviderConfirmed(false, true),
                   },
