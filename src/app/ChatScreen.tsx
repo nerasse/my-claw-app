@@ -4,6 +4,7 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
 import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
+import { FocusRequestHost, RowKey } from '../components/RowFocus';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
@@ -43,6 +44,12 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   const type: AttachmentMeta['type'] = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'file';
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
+
+  /**
+   * How close to the newest message counts as "following it". One number, used twice: the anchor
+   * threshold of the list and the line under which the store may drop its oldest items.
+   */
+  const NEAR_BOTTOM_PX = 120;
 
 const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
@@ -589,6 +596,47 @@ export function ChatScreen({
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
 
   /**
+   * The rows as they are now, for a scroll asked from a gesture rather than from the store.
+   *
+   * Held in a ref on purpose: `focusRow` has to keep one identity or the row renderer stops being
+   * pure and every cell on screen re-renders on each arrival (see `renderListItem` below). The
+   * index of a row is a fact about the list at the moment of the tap, never a value to capture.
+   */
+  const rowsRef = useRef(reversedRows);
+  useEffect(() => {
+    rowsRef.current = reversedRows;
+  }, [reversedRows]);
+
+  /**
+   * Brings a row to the top of the reading area, called by whatever just changed its fold.
+   *
+   * Both directions, for two different reasons: opening, so the revealed content is read from its
+   * first line instead of by scrolling up to hunt for it; closing, so the row stays where the
+   * reader left it -- it came to the top when it opened -- rather than dropping them somewhere
+   * else in the thread.
+   *
+   * `viewPosition: 1`, not the usual 0. The axis is flipped along with the content, so on an
+   * inverted list `0` means the bottom edge and `1` the top one (VirtualizedList computes
+   * `offset = cellOffset - viewPosition * (viewport - cellHeight)`).
+   */
+  const focusRow = useCallback((key: string) => {
+    const index = rowsRef.current.findIndex(row => keyOfRow(row) === key);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex({ index, viewPosition: 1, animated: true });
+  }, []);
+
+  /**
+   * `scrollToIndex` without `getItemLayout` asserts unless it is given one of these, and it fires
+   * for a row past everything measured. Heights here are unknowable -- markdown, images, tool
+   * output -- so there is no offset to compute from: ask again once the window has caught up.
+   */
+  const onScrollToIndexFailed = useCallback((info: { index: number }) => {
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: info.index, viewPosition: 1, animated: true });
+    }, 120);
+  }, []);
+
+  /**
    * Which run groups the reader has opened, by run id.
    *
    * Here rather than inside `RunGroup` because the row is remounted under their fingers: a folded
@@ -686,7 +734,10 @@ export function ChatScreen({
             run={row.run}
             summaries={row.summaries}
             open={expandedRuns.has(row.run.id)}
-            onToggle={toggleRun}
+            onToggle={run => {
+              toggleRun(run);
+              focusRow(keyOfRow(row));
+            }}
             onOpen={openRun}
           />
         );
@@ -698,7 +749,10 @@ export function ChatScreen({
           run={row.run}
           items={row.items}
           open={expandedRuns.has(row.run.id)}
-          onToggle={toggleRun}
+          onToggle={run => {
+            toggleRun(run);
+            focusRow(keyOfRow(row));
+          }}
           renderItem={(item, index, children) => {
             const childGrouped = isGrouped(children, index);
             return renderItemContent(item, childGrouped, !isGrouped(children, index + 1));
@@ -706,7 +760,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compacting],
+    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compacting, focusRow],
   );
 
   /**
@@ -715,9 +769,16 @@ export function ChatScreen({
    * the item is in the store, reopening the thread hit the same one again.
    */
   const renderRow = useCallback(
-    (row: ChatRow) => (
-      <RowBoundary itemId={keyOfRow(row)}>{renderRowContent(row)}</RowBoundary>
-    ),
+    (row: ChatRow) => {
+      const key = keyOfRow(row);
+      return (
+        <RowBoundary itemId={key}>
+          {/* Its own name, so anything inside that folds can ask the list to move without knowing
+              where it is. A string, so this stays cheap: the row renderer must keep one identity. */}
+          <RowKey id={key}>{renderRowContent(row)}</RowKey>
+        </RowBoundary>
+      );
+    },
     [renderRowContent],
   );
 
@@ -769,7 +830,7 @@ export function ChatScreen({
   // scroll range. That is the whole point of inverting it — no scrollToEnd on open, no content
   // height to estimate, and the keyboard shrinking the viewport leaves offset 0 where it was.
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-    const nearBottom = event.nativeEvent.contentOffset.y <= 120;
+    const nearBottom = event.nativeEvent.contentOffset.y <= NEAR_BOTTOM_PX;
     if (nearBottom !== atBottom) setAtBottom(nearBottom);
     // Only while the reader is on the newest message may the store drop its oldest items:
     // that is what keeps a long session light without ever taking a visible bubble away.
@@ -928,11 +989,22 @@ export function ChatScreen({
                 left is the middle of nowhere in the one arriving. It also fired onEndReached at
                 once, paging in old entries nobody asked for, over recycled cells still holding
                 the previous thread's rows. */}
+            <FocusRequestHost onRequestFocus={focusRow}>
             <FlatList
               key={threadId}
               ref={listRef}
               {...scrollProps}
               inverted
+              // The whole fix for "the page moves while I read": the list adjusts its own offset so
+              // the first thing the reader can see keeps its place, and only follows the newest
+              // message when they are already near it (minIndexForVisible 0 = every row, including
+              // the newest, is a candidate; the threshold is the same 120 as "near the bottom").
+              // docs/thread-scroll.md
+              maintainVisibleContentPosition={{
+                minIndexForVisible: 0,
+                autoscrollToTopThreshold: NEAR_BOTTOM_PX,
+              }}
+              onScrollToIndexFailed={onScrollToIndexFailed}
               data={reversedRows}
               keyExtractor={keyOfRow}
               contentContainerStyle={styles.listContent}
@@ -951,6 +1023,7 @@ export function ChatScreen({
               // removeClippedSubviews is deliberately off: the ⋯ menu sits absolutely positioned
               // outside its bubble, and Android clips exactly that away.
             />
+            </FocusRequestHost>
 
         {indicator}
 

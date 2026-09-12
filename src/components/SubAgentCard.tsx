@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
+import { useRowFocus } from './RowFocus';
 import { formatDuration } from '../core/utils';
 import { requestToolOutput } from '../core/toolOutput';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
@@ -43,6 +44,8 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   expandTools?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // See ToolCard: a card that unfolds asks the thread to bring it to the top.
+  const focus = useRowFocus();
   const [open, setOpen] = useState(false);
   const userTookControl = useRef(false);
 
@@ -98,6 +101,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           onPress={() => {
             setOpen(value => !value);
             userTookControl.current = true;
+            focus?.();
           }}
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}

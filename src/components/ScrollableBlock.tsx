@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
+import { useRowFocus } from './RowFocus';
 
 /**
  * How tall a block inside a tool card is allowed to grow before it is folded. Roughly fourteen
@@ -39,6 +40,9 @@ export function ScrollableBlock({
   // Measured, not guessed from the character count: a wrapped line and a font size are the
   // renderer's business, and a block that fits must not offer to be unfolded.
   const [natural, setNatural] = useState(0);
+  // Unfolding a long block is the same gesture as unfolding a card: the thread is asked to bring
+  // the row into view. Absent outside a thread.
+  const focus = useRowFocus();
   const [expanded, setExpanded] = useState(false);
   const clipped = natural > BLOCK_MAX_HEIGHT;
 
@@ -77,7 +81,10 @@ export function ScrollableBlock({
       {clipped ? (
         <Pressable
           style={styles.more}
-          onPress={() => setExpanded(value => !value)}
+          onPress={() => {
+            setExpanded(value => !value);
+            focus?.();
+          }}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           accessibilityLabel={`${expanded ? 'Fold' : 'Unfold'} ${title.toLowerCase()}`}>
