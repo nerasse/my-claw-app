@@ -94,25 +94,30 @@ test('a reopened conversation replays the reasoning it stored', () => {
   expect(reply?.kind === 'text' ? reply.reasoning : undefined).toBe('comparing the decimal parts');
 });
 
+/** A span the clock can measure, without waiting on one: the server's instant, in the past. */
+function ago(ms: number): string {
+  return new Date(Date.now() - ms).toISOString();
+}
+
 describe('the thinking is timed', () => {
   test('the span opens on the first thought and closes on the first word of the answer', () => {
     const before = Date.now();
     chatStore.startStream(THREAD, 's1');
     expect(first().reasoningStartedAt).toBeUndefined();
 
-    chatStore.appendReasoning(THREAD, 's1', 'weighing');
+    chatStore.appendReasoning(THREAD, 's1', 'weighing', false, ago(40));
     const startedAt = first().reasoningStartedAt;
-    expect(startedAt).toBeGreaterThanOrEqual(before);
+    expect(startedAt).toBeLessThanOrEqual(before);
     // Still climbing: nothing has sealed it, which is what makes the counter run.
     expect(first().reasoningMs).toBeUndefined();
 
     chatStore.appendDelta(THREAD, 's1', 'answer');
-    expect(first().reasoningMs).toBeGreaterThanOrEqual(0);
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(40);
   });
 
   test('the answer does not keep re-timing the thinking on every token', () => {
     chatStore.startStream(THREAD, 's1');
-    chatStore.appendReasoning(THREAD, 's1', 'thought');
+    chatStore.appendReasoning(THREAD, 's1', 'thought', false, ago(40));
     chatStore.appendDelta(THREAD, 's1', 'one');
     const sealed = first().reasoningMs;
     chatStore.appendDelta(THREAD, 's1', ' two');
@@ -122,16 +127,16 @@ describe('the thinking is timed', () => {
 
   test('a turn that thought and then said nothing still reports a duration', () => {
     chatStore.startStream(THREAD, 's1');
-    chatStore.appendReasoning(THREAD, 's1', 'thought');
+    chatStore.appendReasoning(THREAD, 's1', 'thought', false, ago(40));
     chatStore.endStream(THREAD, 's1');
-    expect(first().reasoningMs).toBeGreaterThanOrEqual(0);
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(40);
   });
 
   test('an interrupted turn keeps the thinking it had already done', () => {
     chatStore.startStream(THREAD, 's1');
-    chatStore.appendReasoning(THREAD, 's1', 'thought');
+    chatStore.appendReasoning(THREAD, 's1', 'thought', false, ago(40));
     chatStore.abortStream(THREAD, 's1', 'stopped');
-    expect(first().reasoningMs).toBeGreaterThanOrEqual(0);
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(40);
   });
 
   test('a turn that never thought carries no span at all', () => {
@@ -139,6 +144,66 @@ describe('the thinking is timed', () => {
     chatStore.appendDelta(THREAD, 's1', 'answer');
     chatStore.endStream(THREAD, 's1');
     expect(first().reasoningStartedAt).toBeUndefined();
+    expect(first().reasoningMs).toBeUndefined();
+  });
+
+  test('the server says when the thinking began, and it wins over the local clock', () => {
+    const before = Date.now();
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'weighing', false, ago(5_000));
+    // The phase began five seconds before this frame landed, and the counter has to say so.
+    expect(first().reasoningStartedAt).toBeLessThanOrEqual(before - 4_000);
+  });
+
+  test('a window that reloads mid-thought resumes the span instead of restarting it', () => {
+    // The case the field exists for: nothing of the run is on the device, the server replays the
+    // turn in flight, and the merged delta carries the instant the phase opened.
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'forty seconds of thinking', true, ago(40_000));
+    chatStore.endStream(THREAD, 's1');
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(40_000);
+  });
+
+  test('a server that sends no instant leaves the local clock in charge', () => {
+    const before = Date.now();
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'weighing');
+    expect(first().reasoningStartedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  test('an instant that does not parse is treated as absent, never written as it is', () => {
+    const before = Date.now();
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'weighing', false, 'the day before yesterday');
+    const startedAt = first().reasoningStartedAt;
+    // NaN on the item would draw a counter of NaN for as long as the bubble lives.
+    expect(Number.isFinite(startedAt)).toBe(true);
+    expect(startedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  test('the chunks inside a phase do not move the start of the span they belong to', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'weighing ', false, ago(5_000));
+    const opened = first().reasoningStartedAt;
+    chatStore.appendReasoning(THREAD, 's1', 'options');
+    expect(first().reasoningStartedAt).toBe(opened);
+  });
+
+  test('a redacted engine is timed too: the count carries the same instant', () => {
+    const before = Date.now();
+    chatStore.startStream(THREAD, 's1');
+    chatStore.setReasoningTokens(THREAD, 's1', 512, ago(5_000));
+    expect(first().reasoningStartedAt).toBeLessThanOrEqual(before - 4_000);
+    chatStore.endStream(THREAD, 's1');
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(5_000);
+  });
+
+  test('a span that does not measure as positive is not written at all', () => {
+    // A device running ahead of the server dates the phase in its own future. Zero is what a phase
+    // that never happened looks like, and the server refuses to store one for the same reason.
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'thought', false, new Date(Date.now() + 30_000).toISOString());
+    chatStore.endStream(THREAD, 's1');
     expect(first().reasoningMs).toBeUndefined();
   });
 

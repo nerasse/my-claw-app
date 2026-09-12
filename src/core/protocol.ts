@@ -148,6 +148,13 @@ export interface ReasoningDeltaFrame {
   text: string;
   /** Whole text rather than a chunk. See StreamDeltaFrame.replay. */
   replay?: boolean;
+  /**
+   * ISO instant the server opened this thinking phase, on the frame that opens it and on the
+   * replay of that frame. It is what lets a window that reloads mid-thought resume the counter
+   * where it stands instead of restarting it at zero. Absent on a server that predates the field,
+   * and on the frames inside an open phase -- the start of a running span must not move.
+   */
+  since?: string;
 }
 
 /**
@@ -159,6 +166,9 @@ export interface ReasoningTokensFrame {
   id: string;
   threadId: string;
   tokens: number;
+  /** ISO instant the phase opened. Same rule as ReasoningDeltaFrame.since: the thinking is just as
+   *  long when the engine reports a count and no text. */
+  since?: string;
 }
 
 export interface StreamDoneFrame {

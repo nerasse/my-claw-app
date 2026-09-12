@@ -322,10 +322,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       chatStore.appendDelta(frame.threadId, frame.id, frame.text, frame.replay);
       break;
     case 'chat.reasoning.delta':
-      chatStore.appendReasoning(frame.threadId, frame.id, frame.text, frame.replay);
+      chatStore.appendReasoning(frame.threadId, frame.id, frame.text, frame.replay, frame.since);
       break;
     case 'chat.reasoning.tokens':
-      chatStore.setReasoningTokens(frame.threadId, frame.id, frame.tokens);
+      chatStore.setReasoningTokens(frame.threadId, frame.id, frame.tokens, frame.since);
       break;
     case 'chat.stream.done':
       chatStore.endStream(frame.threadId, frame.id);

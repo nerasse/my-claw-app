@@ -1524,15 +1524,11 @@ class ChatStoreImpl {
    * Reasoning accumulates on the bubble it belongs to. Keyed off `streams` like the text is, so a
    * frame arriving for a closed bubble is dropped instead of resurrecting it.
    */
-  appendReasoning(threadId: string, id: string, text: string, replay = false): void {
+  appendReasoning(threadId: string, id: string, text: string, replay = false, since?: string): void {
     if (!this.streams.has(id)) return;
-    if (!this.reasoningStart.has(id)) {
-      const startedAt = Date.now();
-      this.reasoningStart.set(id, startedAt);
-      // Unthrottled, unlike the body below: this is what puts the counter on screen, and it must
-      // not wait for the next batched delta to appear.
-      this.patch(threadId, id, { reasoningStartedAt: startedAt });
-    }
+    // Unthrottled, unlike the body below: this is what puts the counter on screen, and it must
+    // not wait for the next batched delta to appear.
+    this.openReasoningSpan(threadId, id, since);
     const current = this.reasoning.get(id) ?? '';
     const next = replay ? text : current + text;
     this.reasoning.set(id, next);
@@ -1540,9 +1536,36 @@ class ChatStoreImpl {
   }
 
   /** Latest estimate from a redacted engine; the server sends a running total, so it replaces. */
-  setReasoningTokens(threadId: string, id: string, tokens: number): void {
+  setReasoningTokens(threadId: string, id: string, tokens: number, since?: string): void {
     if (!this.streams.has(id)) return;
+    this.openReasoningSpan(threadId, id, since);
     this.patch(threadId, id, { reasoningTokens: tokens });
+  }
+
+  /**
+   * When this thinking phase began: the server's instant when the frame carries one, the local
+   * clock otherwise.
+   *
+   * The server dates the frame that opens a phase (`since`), which is the only way a window that
+   * reloads mid-thought can resume the counter rather than start a new one from its own arrival --
+   * and the replayed frame carries that same instant. A server that predates the field sends none,
+   * and so does every frame inside an open phase, which is why the local start is kept then: it is
+   * the one already running.
+   *
+   * An unparseable instant is treated as absent rather than written: `NaN` on the item would draw
+   * a counter of `NaN` for as long as the bubble lives.
+   */
+  private openReasoningSpan(threadId: string, id: string, since?: string): void {
+    const reported = since === undefined ? undefined : Date.parse(since);
+    const startedAt =
+      reported !== undefined && Number.isFinite(reported)
+        ? reported
+        : this.reasoningStart.has(id)
+          ? undefined
+          : Date.now();
+    if (startedAt === undefined || this.reasoningStart.get(id) === startedAt) return;
+    this.reasoningStart.set(id, startedAt);
+    this.patch(threadId, id, { reasoningStartedAt: startedAt });
   }
 
   /**
@@ -1553,7 +1576,11 @@ class ChatStoreImpl {
     const startedAt = this.reasoningStart.get(id);
     if (startedAt === undefined) return;
     this.reasoningStart.delete(id);
-    this.patch(threadId, id, { reasoningMs: Date.now() - startedAt });
+    const span = Date.now() - startedAt;
+    // A span that does not measure as positive is not a span: it is the same tick, or a device
+    // running ahead of the server whose instant opened it. The server applies the same rule to the
+    // duration it stores, so a thought too short to time reads the same live and replayed.
+    if (span > 0) this.patch(threadId, id, { reasoningMs: span });
   }
 
   endStream(threadId: string, id: string): void {
