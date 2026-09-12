@@ -185,11 +185,25 @@ export function ChatScreen({
   // list rather than as an item in it (CompactionRunning says why).
   const compacting = useCompacting(threadId);
   // The questions waiting on this conversation, from the store rather than a prop: the form is a
-  // surface of its own above the composer, so it must survive this screen being unmounted and
-  // remounted, and it must be drawn whether or not the tool call it answers is in the page of
-  // history this screen holds.
+  // row of the list, so it must survive this screen being unmounted and remounted.
   const questions = useThreadQuestions(threadId);
   const questionPending = questions.length > 0;
+  // Keyed by the tool card the ask belongs to. A run blocked on a question stopped right there,
+  // so drawing the form on that card puts it where the thread actually stops.
+  const questionByCard = useMemo(() => {
+    const map = new Map<string, (typeof questions)[number]>();
+    for (const ask of questions) if (ask.replyToId) map.set(ask.replyToId, ask);
+    return map;
+  }, [questions]);
+  // An ask with no card to sit on: a provider that sent no tool call id, or a card that is not in
+  // the page this screen holds. Rather than lose the question, those are drawn under the thread --
+  // the list is inverted, so its header is the bottom of the screen. Nothing is scanned while no
+  // question is pending, which is almost always.
+  const questionsLoose = useMemo(() => {
+    if (questions.length === 0) return questions;
+    const ids = new Set(items.map(item => item.id));
+    return questions.filter(ask => !ask.replyToId || !ids.has(ask.replyToId));
+  }, [questions, items]);
   const [draft, setDraft] = useState(() => draftTextOf(threadId));
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -667,9 +681,35 @@ export function ChatScreen({
    * Draws one bubble or card. `groupedFlag`/`showTimeFlag` are passed in rather than read from
    * the global index so the same code serves free rows and the children of a run group.
    */
+  /**
+   * Bring the bottom of the thread back under the keyboard when a free-text answer opens.
+   *
+   * The pending question is at the bottom -- the pill that jumps to it scrolls to the same
+   * offset, and an inverted list pins offset 0 to the bottom edge whatever the keyboard leaves
+   * of the viewport. The field is the last thing in the card, so this puts it right above the
+   * composer instead of off screen under the keyboard.
+   */
+  const revealQuestionField = useCallback(() => {
+    setAtBottom(true);
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
   const renderItemContent = useCallback(
     (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean) => {
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
+      // A `question` card with an ask still pending is the form itself. Once answered or
+      // canceled the ask leaves the store and the card falls back to its settled rendering,
+      // which is the record of what was asked -- no second card, no state to reconcile.
+      if (item.kind === 'tool' && item.name === 'question') {
+        const ask = questionByCard.get(item.id);
+        if (ask) {
+          return (
+            <View style={toolColumn}>
+              <QuestionCard request={ask} onReply={onQuestionReply} onRevealField={revealQuestionField} />
+            </View>
+          );
+        }
+      }
       if (item.kind === 'tool' && isSubAgentTool(item.name)) {
         return (
           <View style={toolColumn}>
@@ -709,7 +749,7 @@ export function ChatScreen({
         </View>
       );
     },
-    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onResend, onOpenSubAgent, openAttachment, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onResend, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const renderRowContent = useCallback(
@@ -797,17 +837,27 @@ export function ChatScreen({
    */
   const renderListItem = useCallback(({ item }: { item: ChatRow }) => renderRow(item), [renderRow]);
 
-  // The list is inverted, so its header is the bottom of the screen: the compaction rule sits
-  // under the newest message, where the thread actually stops. The questions are not here: they
-  // are above the composer, out of the list, so that the keyboard cannot bury their form.
+  // The list is inverted, so its header is the bottom of the screen: the loose questions sit under
+  // the newest message, where the thread actually stops, and so does the compaction rule as long as
+  // no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
   const listHeader = useMemo(
     () =>
-      compacting !== undefined && ruleBefore === undefined ? (
+      (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
-          <CompactionRunning since={compacting.since} text={compacting.text} />
+          {compacting !== undefined && ruleBefore === undefined ? (
+            <CompactionRunning since={compacting.since} text={compacting.text} />
+          ) : null}
+          {questionsLoose.map(ask => (
+            <QuestionCard
+              key={ask.id}
+              request={ask}
+              onReply={onQuestionReply}
+              onRevealField={revealQuestionField}
+            />
+          ))}
         </View>
       ) : null,
-    [compacting, ruleBefore, styles.looseQuestions],
+    [compacting, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
   );
 
   const listFooter = useMemo(
@@ -1041,20 +1091,25 @@ export function ChatScreen({
         ) : null}
         </View>
 
-        {/* The form lives here, above the composer, and no longer in the thread. It is taller than
-            what the keyboard leaves of the pane, and the thread is a scroll area it cannot share:
-            a scroller inside the inverted list loses every drag to the list
-            (docs/text-selection.md). It is a child of the pane rather than of the composer's own
-            column, which is what gives the percentage cap a height to resolve against. */}
-        {questions.length > 0 ? (
-          <View style={[column, styles.questionSurface]}>
-            {questions.map(ask => (
-              <QuestionCard key={ask.id} request={ask} onReply={onQuestionReply} />
-            ))}
-          </View>
-        ) : null}
-
         <View style={column}>
+        {questionPending ? (
+          // A card can be far up a long thread, and the only hint otherwise is a placeholder in
+          // the composer. The run is blocked on the answer, so the form is the last thing in the
+          // thread: the bottom of the list is where it is.
+          <Pressable
+            style={styles.questionPill}
+            onPress={() => {
+              setAtBottom(true);
+              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Go to the pending question">
+            <Text style={styles.questionPillText}>
+              {questions.length > 1 ? `${questions.length} questions waiting` : 'A question is waiting'}
+            </Text>
+            <Text style={styles.questionPillGlyph}>↓</Text>
+          </Pressable>
+        ) : null}
         <Composer
           value={draft}
           onChange={changeDraft}
@@ -1186,10 +1241,7 @@ const createStyles = (palette: Palette) => ({
   },
   connWarn: { color: palette.warn, backgroundColor: palette.surfaceAlt },
   connBad: { color: palette.danger, backgroundColor: palette.surfaceAlt },
-  // The conversation keeps a floor while a form is up: enough to see that it is there, not enough
-  // to take the room the form needs. It is the knob on the whole trade, and the form grows into
-  // everything above it.
-  listWrap: { flex: 1, minHeight: 56 },
+  listWrap: { flex: 1 },
   // The list is inverted, so its content box is upside down too: what is written as the top
   // padding is drawn under the newest message.
   // The horizontal padding used to come free with the reading column, which was narrower than
@@ -1204,10 +1256,22 @@ const createStyles = (palette: Palette) => ({
     paddingBottom: space.xl,
   },
   looseQuestions: { paddingTop: space.sm, gap: space.sm },
-  // The form takes its own height, which is its content, and the shrink chain takes it down when
-  // the pane is smaller than that. No percentage cap: the list's floor is the reservation, and a
-  // cap on top of it only cost the form room it could have used.
-  questionSurface: { flexShrink: 1, gap: space.sm, marginBottom: space.sm },
+  questionPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: space.sm,
+    marginHorizontal: space.sm,
+    marginBottom: space.xs,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: palette.accent,
+    backgroundColor: palette.surface,
+  },
+  questionPillText: { fontSize: font.small, color: palette.accent },
+  questionPillGlyph: { fontSize: font.small, color: palette.accent },
   jump: {
     position: 'absolute' as const,
     right: 0,

@@ -57,9 +57,13 @@ themselves through `useSheetBottomInset`, and `combineBottomInset` carries the p
 
 ## The rule, and where it is checked
 
-**A focusable surface either fits the space above the keyboard, or scrolls inside itself with its
-actions pinned outside that scroll. Nothing is allowed to be unreachable.** A surface rendered
-outside the shell's `KeyboardAvoidingView` pads itself with `useSheetBottomInset`.
+**Nothing is allowed to be unreachable, and the thread is the only scroll area in a conversation.**
+The question form is a row of the thread, so scrolling the conversation scrolls it: a form pinned
+above the composer was tried (`0.6.58` to `0.6.60`) and rejected by the owner, because a form that
+does not move with the thread reads as an overlay the conversation slides behind. What that costs is
+that a form taller than what the keyboard leaves is read in slices, by scrolling the thread, which
+is the accepted price of having one scroll area. A surface outside the shell's `KeyboardAvoidingView`
+pads itself with `useSheetBottomInset`.
 
 Two traps make this less obvious than it sounds on Android:
 
@@ -73,28 +77,19 @@ Two traps make this less obvious than it sounds on Android:
   loses every drag to the list, which is measured, not feared (`docs/text-selection.md`). A surface
   that needs to scroll therefore cannot be a row of the conversation.
 
-That second trap is what moved the question form. It used to be a row of the thread, at the point
-the run stopped, and the pane left by the keyboard is smaller than the form: the thread could show
-the question or the field, never both, and the reveal could only choose a slice. It is a surface
-above the composer now (`ChatScreen`), with its title and its Send pinned outside a scroll that
-holds the question, its options and its field, so the field and Send are both visible while it is
-typed into. The thread keeps the tool call, which is the record of what was asked.
-
-How tall the form is took one more correction. A scroll view offers a flex parent **no height at
-all**, so the body asked for nothing and the form came out as a strip of title and Send with the
-pane above it empty. The body now measures its content (`onContentSizeChange`) and asks for exactly
-that, which is what makes a form as tall as it needs and no taller. When the pane cannot hold it,
-the shrink chain takes it down, through `flexShrink` on the surface, the card and the body, and the
-body is what absorbs it: the title and the footer keep their height. The reservation on the other
-side is the conversation's own floor (`listWrap > minHeight`), which is the knob on the whole
-trade, and the one number here that no test can check.
+That second trap is why the form reveals its field by scrolling the thread, and why it is a row of
+the thread rather than a surface of its own. It was moved out, above the composer, with its own
+scroll and its title and Send pinned (`0.6.58` to `0.6.60`), and the owner rejected it: a block
+pinned over the thread does not move when the conversation is scrolled, so the conversation appeared
+to slide behind it. The reveal on focus is what keeps it usable in place, since the field is the
+last thing in the form and sits under the keyboard the moment it opens.
 
 | Surface | Container | Why it is fine |
 | --- | --- | --- |
 | Conversation, editors, settings | the one `KeyboardAvoidingView` | it gives up exactly the overlap |
+| The question form | a row of the thread | the thread is its scroll area, and the reveal brings the field up |
 | ActionSheet, PromptSheet | absolute, outside it | pad themselves (`useSheetBottomInset`) |
 | Drawer, ModelSheet | absolute, outside it | their field is at the top, nothing under the keyboard |
-| The question form | above the composer | takes its content's height, gives it back when the pane is small, title and Send pinned |
 | Long forms (ProviderEdit, ModelEdit, AgentFile) | a scroller each | reachable by scrolling; nothing is auto-revealed, and a field you cannot see is a field you cannot tap |
 
 ## Test
@@ -104,7 +99,7 @@ keyboard announcement twice, then a taller one, then the hide. It asserts the ro
 conversation rather than the style that produced it, so it holds whichever way the avoidance is
 spelled. Put `behavior="height"` back and it reports 240 where it wanted 1290.
 
-`src/app/__tests__/questionKeyboard.test.tsx` holds the form's half of the rule: the form is drawn
-above the composer and outside the list, the reveal happens in the card's own scroll area, and the
-thread is not scrolled for it. `src/components/__tests__/questionCard.test.tsx` holds the pinning:
-the title and Send are outside the scroller, the question is inside it.
+`src/app/__tests__/questionKeyboard.test.tsx` holds the form's half of the rule: the form is a row
+of the thread, focusing its field scrolls the thread, and the card itself never scrolls. The
+table above is the audit of the other surfaces: each one is either inside the one
+`KeyboardAvoidingView`, or pads itself, or keeps its field at the top.

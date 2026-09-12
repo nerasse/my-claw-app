@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { ScrollView, Text, TextInput } from 'react-native';
+import { Text, TextInput } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { QuestionCard } from '../QuestionCard';
 import { questionStore } from '../../core/questionStore';
@@ -40,15 +40,16 @@ const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
 function render(request: QuestionAskFrame = ask) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   const onReply = jest.fn();
+  const onRevealField = jest.fn();
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
       <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
-        <QuestionCard request={request} onReply={onReply} />
+        <QuestionCard request={request} onReply={onReply} onRevealField={onRevealField} />
       </ThemeContext.Provider>,
     );
   });
   mounted.push(tree);
-  return { tree, onReply };
+  return { tree, onReply, onRevealField };
 }
 
 /** Pressables are matched by the text they carry: `Pressable` itself is not findable by type. */
@@ -201,88 +202,17 @@ describe('QuestionCard', () => {
     expect(onReply).toHaveBeenCalledWith('que_1', [[], []]);
   });
 
-  // The field is the last thing in the form and the form is taller than the pane once the keyboard
-  // is up, so the card scrolls itself. It cannot ask the thread to do it: the thread is a scroll
-  // area and a scroller inside the inverted list loses every drag to the list, which is why the
-  // form is a surface of its own now (docs/keyboard-avoidance.md).
-  it('reveals the free-text field in its own scroll area when it takes focus', () => {
-    const { tree } = render();
-    const body = tree.root.findAllByType(ScrollView)[0];
-    if (!body) throw new Error('the card draws no scroll area');
-    const scrollToEnd = jest.fn();
-    body.instance.scrollToEnd = scrollToEnd;
-
+  // The card cannot scroll itself into view: it does not know it is in a list, and the app draws
+  // edge to edge, so Android never resizes the window and never reveals the focused input either.
+  it('asks to be revealed when the free-text field takes focus', () => {
+    const { tree, onRevealField } = render();
+    expect(onRevealField).not.toHaveBeenCalled();
     press(tree, 'Type your own answer');
-    const field = tree.root.findAllByType(TextInput)[0]!;
-    scrollToEnd.mockClear();
+    const input = tree.root.findAllByType(TextInput)[0]!;
     ReactTestRenderer.act(() => {
-      field.props.onFocus?.();
+      input.props.onFocus?.();
     });
-    expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
-  });
-
-  // A form scrolled up to re-read an option must stay where it was put: the multiline field grows
-  // on every keystroke, and its growth is what re-reveals it, so the growth must not reveal
-  // anything while the caret is elsewhere.
-  it('leaves the form where it was scrolled to while nothing has the caret', () => {
-    const { tree } = render();
-    const body = tree.root.findAllByType(ScrollView)[0];
-    if (!body) throw new Error('the card draws no scroll area');
-    const scrollToEnd = jest.fn();
-    body.instance.scrollToEnd = scrollToEnd;
-
-    ReactTestRenderer.act(() => {
-      body.props.onContentSizeChange?.();
-    });
-    expect(scrollToEnd).not.toHaveBeenCalled();
-  });
-
-  // Left to itself a scroll view offers a flex parent no height at all, so the form came out as a
-  // strip of title and Send with the pane above it empty. The body asks for the height of what it
-  // holds; the shrink chain takes it down when the pane cannot hold it.
-  it('asks for the height of its content, so the form is as tall as it needs to be', () => {
-    const { tree } = render(single);
-    const body = tree.root.findAllByType(ScrollView)[0];
-    if (!body) throw new Error('the card draws no scroll area');
-
-    ReactTestRenderer.act(() => {
-      body.props.onContentSizeChange?.(360, 420);
-    });
-    const again = tree.root.findAllByType(ScrollView)[0]!;
-    const height = [again.props.style].flat(2).find(
-      part => part && typeof part === 'object' && 'height' in part,
-    ) as { height?: number } | undefined;
-    expect(height?.height).toBe(420);
-    // The half it has to keep whatever happens: the shrinkage is the pane's business, and the
-    // style stays the one that fits.
-    expect([again.props.style].flat(2).some(part => part && typeof part === 'object' && 'flexShrink' in part)).toBe(true);
-  });
-
-  it('keeps the title and Send out of the scroll area, so neither is ever scrolled away', () => {
-    const { tree } = render(single);
-    const body = tree.root.findAllByType(ScrollView)[0];
-    if (!body) throw new Error('the card draws no scroll area');
-
-    const inside = (node: ReactTestRenderer.ReactTestInstance | null): boolean => {
-      for (let up = node?.parent ?? null; up; up = up.parent) if (up === body) return true;
-      return false;
-    };
-    const send = tree.root.findAll(n => n.props.accessibilityLabel === 'Send the answers')[0];
-    if (!send) throw new Error('no Send on the page');
-    // The pinned footer is the whole point: the recap is the tallest page and Send is the only way
-    // out of the form, so it cannot sit at the end of a scroll nobody can see the bottom of.
-    expect(inside(send)).toBe(false);
-    const text = (needle: string): ReactTestRenderer.ReactTestInstance | undefined =>
-      tree.root.findAll(
-        n => n.type === Text && [n.props.children].flat(2).some(part => part === needle),
-      )[0];
-    const title = text('Question');
-    if (!title) throw new Error('no title on the page');
-    expect(inside(title)).toBe(false);
-    // And the question itself is inside it, or nothing scrolls and the cap does nothing.
-    const block = text('FR ou EN ?');
-    if (!block) throw new Error('the question is not on the page');
-    expect(inside(block)).toBe(true);
+    expect(onRevealField).toHaveBeenCalled();
   });
 
   it('a long answer is cut in the recap and opens on tap', () => {

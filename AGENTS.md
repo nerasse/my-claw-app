@@ -53,8 +53,13 @@ npx react-native symbolicate crash.txt \
   --sourcemap android/app/build/generated/sourcemaps/react/release/index.android.bundle.map
 ```
 
-`extraPackagerArgs` in `android/app/build.gradle` is what emits the map at all; keep it. Strings,
-not Files — a File breaks Gradle's configuration cache.
+The composed source map is emitted by the React Native plugin itself: `BundleHermesCTask` writes the
+packager map into `intermediates/sourcemaps/react/release/`, hermes writes the compiler map beside
+it, and `compose-source-maps.js` merges both into
+`generated/sourcemaps/react/release/index.android.bundle.map`. Do **not** add an `extraPackagerArgs`
+with a second `--sourcemap-output`: the CLI keeps the last one, so the packager map is never
+rewritten, the merge reads whatever it finds there (a month old on this machine, which is how the
+build kept passing), and a clean checkout cannot build a release at all.
 
 ## Server logs
 
@@ -124,7 +129,7 @@ Traps:
   resort, it does not catch those.
 - **Nothing may hide behind the keyboard, and Android will not rescue it.** `adjustResize` is inert
   (the app is edge to edge whatever `edgeToEdgeEnabled` says) and the thread is the only scroll area
-  in a conversation: a scroller inside the inverted list loses every drag to it. So a focusable
-  surface either fits the space above the keyboard or scrolls itself with its actions pinned, and
+  in a conversation: a scroller inside the inverted list loses every drag to it. So a row that holds
+  a field reveals it by scrolling the thread on focus (Android no longer does that for us), and
   whatever sits outside the shell's `KeyboardAvoidingView` pads itself (`useSheetBottomInset`).
   `docs/keyboard-avoidance.md`

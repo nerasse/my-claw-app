@@ -50,15 +50,13 @@ react {
     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
     // hermesFlags = ["-O", "-output-source-map"]
 
-    // Hermes ships bytecode, so a release stack trace is a list of addresses. The composed source
-    // map is the only thing that can turn one back into file:line, and it can only be the map of
-    // the exact build that crashed -- hence emitted here and archived next to the APK by
-    // scripts/release.sh. Without this, a crash report from a release build is unreadable, for good.
-    // Strings, not Files: the property is a List<String> and a File breaks the configuration cache.
-    extraPackagerArgs = [
-        "--sourcemap-output",
-        "${project.layout.buildDirectory.get().asFile}/generated/sourcemaps/react/release/index.android.bundle.map".toString(),
-    ]
+    // Nothing here: the compiled map is emitted by the plugin itself (`BundleHermesCTask`), which
+    // writes the packager map into `intermediates/sourcemaps` and the compiler map next to it, then
+    // merges both into `generated/sourcemaps/react/release/index.android.bundle.map` with
+    // `compose-source-maps.js`. A second `--sourcemap-output` here used to point at that last path,
+    // and the CLI keeps the last flag: the packager map was never rewritten, the compose step read
+    // whatever it found there (a month old, on this machine), and a clean checkout could not build
+    // a release at all. See AGENTS.md, "Symbolicating a release stack".
 
     /* Autolinking */
     autolinkLibrariesWithApp()
