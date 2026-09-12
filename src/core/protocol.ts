@@ -430,6 +430,20 @@ export interface ChatCompactingFrame {
   threadId: string;
   /** ISO instant the operation began. Absent means it is over. */
   since?: string;
+  /**
+   * The summary written so far, on a replayed frame only.
+   *
+   * A window that reloads mid-compaction is handed one frame with everything written up to that
+   * point; the live text arrives as `chat.compacting.delta` fragments the client appends.
+   */
+  text?: string;
+}
+
+/** A fragment of the summary a compaction is writing, live. */
+export interface ChatCompactingDeltaFrame {
+  type: 'chat.compacting.delta';
+  threadId: string;
+  text: string;
 }
 
 export interface ChatHistoryFrame {
@@ -1860,6 +1874,7 @@ export type ServerFrame =
   | ChatUserFrame
   | ChatCompactionFrame
   | ChatCompactingFrame
+  | ChatCompactingDeltaFrame
   | LocationCapabilitiesFrame
   | ChatLocationFrame
   | LocationPreviewResultFrame
@@ -1955,6 +1970,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.user',
   'chat.compaction',
   'chat.compacting',
+  'chat.compacting.delta',
   'location.capabilities',
   'chat.location',
   'location.preview.result',

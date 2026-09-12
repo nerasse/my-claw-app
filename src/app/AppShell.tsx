@@ -641,8 +641,8 @@ export function AppShell(): React.JSX.Element {
   // holds the session for one to two minutes with no run behind it: the same button reaches it
   // (the server's stop aborts a compaction as it does a run).
   const running = useActiveRun(activeThread);
-  const compactingSince = useCompacting(activeThread);
-  const streaming = running || compactingSince !== undefined;
+  const compacting = useCompacting(activeThread);
+  const streaming = running || compacting !== undefined;
 
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.

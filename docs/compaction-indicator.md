@@ -7,7 +7,10 @@ drawn as a rule**, not a bubble in the list. The server side (gates, summarizer,
 ## What the owner sees
 
 - While the summarizer runs: one rule across the bottom of the thread,
-  `Compacting the context · 3m 18s`, counting from the server's start instant (`since`).
+  `Compacting the context · 3m 18s`, counting from the server's start instant (`since`), and the
+  summary it is writing folded underneath (`Writing the summary…`), appended fragment by fragment
+  as it arrives. Folded because it is thousands of tokens by the end, and the rule sits under the
+  newest message, where the reader is looking.
 - When it is done: the rule the history draws, `Context compacted · 971 turns summarized`, with
   the summary folded under it (`CompactionBoundary`). Live and after a reload it is the same row,
   keyed by the server's entry id.
@@ -98,6 +101,22 @@ that holds whatever a cell does with its children.
 The counter is `useElapsed(since)`, refreshed every second while the app is in the foreground.
 React Native pauses JS timers while the app is in the background, so a counter can read stale on
 the first frame after a resume; it catches up on the next tick.
+
+## The summary being written
+
+The operation is one to two minutes of nothing on the wire, and a rule with a counter is
+indistinguishable from a stuck app. The summarizer streams (server ≥ 0.7.13, because a one-shot
+call made the transport's "time without a byte" budget a hard ceiling on the whole operation), so
+the text is there to show.
+
+Two frames, one state. `chat.compacting.delta` carries **fragments** the store appends
+(`chatStore.appendCompactionText`), never a running total: re-sending the whole text per batch
+would cost the square of the summary's length. The replayed `chat.compacting` carries `text` --
+everything written so far -- so a window that opens mid-compaction is handed it at once instead of
+seeing the operation with none of its words.
+
+A fragment for a thread with no known compaction is dropped: building the rule out of a partial
+state would leave a counter with no start instant to count from.
 
 ## Tests
 

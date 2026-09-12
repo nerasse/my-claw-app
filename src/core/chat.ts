@@ -278,6 +278,17 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
 }
 
 /**
+ * A compaction running on a thread: when it started (server clock) and the summary so far.
+ *
+ * The text is written live by the summarizer since 2026-09-12 and shown under the rule, so the
+ * minutes the operation takes are readable rather than a bare counter.
+ */
+export interface CompactionRun {
+  since: number;
+  text: string;
+}
+
+/**
  * How long a sent bubble the page does not carry is taken to be a turn still on its way in. Long
  * enough for preprocessing, gates and a prompt build; short enough that a bubble the server is
  * never going to mirror does not outlive the screen it was typed on.
@@ -315,7 +326,7 @@ class ChatStoreImpl {
    * through a run an hour after the compaction had ended. As state there is one per thread by
    * construction, nothing moves it, and every sign that the operation is over can end it.
    */
-  private compacting = new Map<string, number>();
+  private compacting = new Map<string, CompactionRun>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
@@ -1328,13 +1339,16 @@ class ChatStoreImpl {
    * arrives late instead of restarting from zero. The end frame is one way for it to stop; the
    * boundary it wrote, the end of its run, a stream opening and a fresh page are the others, so
    * an end lost with the socket cannot leave the rule up for good.
+   *
+   * `text` is the summary as it is written, when the server streams one. A replayed frame carries
+   * everything written so far; the live ones are fragments the client appends.
    */
-  setCompacting(threadId: string, since: number | undefined): void {
+  setCompacting(threadId: string, since: number | undefined, text = ''): void {
     if (since === undefined) {
       if (this.compacting.delete(threadId)) this.emit();
       return;
     }
-    this.compacting.set(threadId, since);
+    this.compacting.set(threadId, { since, text });
     // The notice of the /compact that started it, when it won the race (the server sends it after
     // 400ms, the compaction announces itself once the session log is loaded): one sign of the
     // operation, and a successful /compact answers with no bubble, so nothing would close it.
@@ -1342,8 +1356,22 @@ class ChatStoreImpl {
     this.emit();
   }
 
-  /** The server's start instant of the compaction running on the thread, if one is. */
-  getCompacting(threadId: string): number | undefined {
+  /**
+   * One fragment of the summary being written.
+   *
+   * A no-op when no compaction is known on the thread: a fragment for an operation the client was
+   * never told about would create the rule from a partial state, with no start instant to count
+   * from.
+   */
+  appendCompactionText(threadId: string, text: string): void {
+    const current = this.compacting.get(threadId);
+    if (!current || !text) return;
+    this.compacting.set(threadId, { ...current, text: current.text + text });
+    this.emit();
+  }
+
+  /** The compaction running on the thread, if one is. */
+  getCompacting(threadId: string): CompactionRun | undefined {
     return this.compacting.get(threadId);
   }
 
@@ -1876,7 +1904,7 @@ export function useActiveRun(threadId: string | null): boolean {
 }
 
 /** When the compaction running on the thread started (server time), or undefined when none is. */
-export function useCompacting(threadId: string | null): number | undefined {
+export function useCompacting(threadId: string | null): CompactionRun | undefined {
   const snapshot = useCallback(() => (threadId ? chatStore.getCompacting(threadId) : undefined), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }

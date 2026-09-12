@@ -176,7 +176,7 @@ export function ChatScreen({
   const items = useChatItems(threadId);
   // A compaction running on this conversation: thread state, drawn as a rule at the bottom of the
   // list rather than as an item in it (CompactionRunning says why).
-  const compactingSince = useCompacting(threadId);
+  const compacting = useCompacting(threadId);
   // The questions waiting on this conversation, from the store rather than a prop: the form is a
   // row of the list, so it must survive this screen being unmounted and remounted.
   const questions = useThreadQuestions(threadId);
@@ -592,8 +592,8 @@ export function ChatScreen({
   // rows and not from raw items: a collapsed group is one row, an open one renders its children
   // inside it -- docs/run-grouping.md.
   const ruleBefore = useMemo(
-    () => (compactingSince === undefined ? undefined : compactionRuleBefore(items)),
-    [compactingSince, items],
+    () => (compacting === undefined ? undefined : compactionRuleBefore(items)),
+    [compacting, items],
   );
   // A finished run's work folds under one row (its header), which is why the list is built from
   // rows and not from raw items: a collapsed group is one row, an open one renders its children
@@ -710,7 +710,7 @@ export function ChatScreen({
       // side of the bubble it belongs to, because an inverted cell lays its children out in
       // `column-reverse` under a scaleY flip (docs/compaction-indicator.md).
       if (row.kind === 'rule') {
-        return compactingSince === undefined ? null : <CompactionRunning since={compactingSince} />;
+        return compacting === undefined ? null : <CompactionRunning since={compacting.since} text={compacting.text} />;
       }
       if (row.kind === 'item') {
         // Grouping is a property of reading order, so it is still computed oldest-first and the
@@ -746,7 +746,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compactingSince],
+    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compacting],
   );
 
   /**
@@ -781,10 +781,10 @@ export function ChatScreen({
   // no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
   const listHeader = useMemo(
     () =>
-      (compactingSince !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
+      (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
-          {compactingSince !== undefined && ruleBefore === undefined ? (
-            <CompactionRunning since={compactingSince} />
+          {compacting !== undefined && ruleBefore === undefined ? (
+            <CompactionRunning since={compacting.since} text={compacting.text} />
           ) : null}
           {questionsLoose.map(ask => (
             <QuestionCard
@@ -796,7 +796,7 @@ export function ChatScreen({
           ))}
         </View>
       ) : null,
-    [compactingSince, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
+    [compacting, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
   );
 
   const listFooter = useMemo(

@@ -315,12 +315,12 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     // construction, nothing moves it, and several signs of life can end it.
     const started = Date.now() - 42_000;
     chatStore.setCompacting(THREAD, started);
-    expect(chatStore.getCompacting(THREAD)).toBe(started);
+    expect(chatStore.getCompacting(THREAD)).toMatchObject({ since: started });
     expect(chatStore.getItems(THREAD)).toHaveLength(0);
 
     // A replay names the same start; a second compaction names its own. Last word wins.
     chatStore.setCompacting(THREAD, started + 5_000);
-    expect(chatStore.getCompacting(THREAD)).toBe(started + 5_000);
+    expect(chatStore.getCompacting(THREAD)).toMatchObject({ since: started + 5_000 });
 
     chatStore.setCompacting(THREAD, undefined);
     expect(chatStore.getCompacting(THREAD)).toBeUndefined();
@@ -368,7 +368,7 @@ describe('an injected send waits for the run to read it, not for it to speak', (
 
     chatStore.setCompacting(THREAD, 1_800_000_000_000);
     chatStore.handleSyncResult(THREAD, [], 'u1', 'u1', false);
-    expect(chatStore.getCompacting(THREAD)).toBe(1_800_000_000_000);
+    expect(chatStore.getCompacting(THREAD)).toMatchObject({ since: 1_800_000_000_000 });
 
     chatStore.clearThread(THREAD);
     expect(chatStore.getCompacting(THREAD)).toBeUndefined();
@@ -383,7 +383,7 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
     chatStore.setCompacting(THREAD, 1_800_000_000_000);
     expect(chatStore.getItems(THREAD).map(item => (item as { text?: string }).text)).toEqual(['/compact']);
-    expect(chatStore.getCompacting(THREAD)).toBe(1_800_000_000_000);
+    expect(chatStore.getCompacting(THREAD)).toMatchObject({ since: 1_800_000_000_000 });
 
     chatStore.addCommandPending(THREAD, 'send-1', 'Running /compact...');
     expect(chatStore.getItems(THREAD).map(item => (item as { text?: string }).text)).toEqual(['/compact']);

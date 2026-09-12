@@ -242,7 +242,13 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'chat.compacting':
       // Same silence as the boundary above: a placeholder in the thread, nothing in the tray.
-      chatStore.setCompacting(frame.threadId, frame.since ? Date.parse(frame.since) : undefined);
+      // `text` is set on a replayed frame only, where it is everything written so far.
+      chatStore.setCompacting(frame.threadId, frame.since ? Date.parse(frame.since) : undefined, frame.text ?? '');
+      break;
+    case 'chat.compacting.delta':
+      // The summary as it is written. Appended, like a reasoning or a tool fragment: the server
+      // sends what has just been produced, never a running total.
+      chatStore.appendCompactionText(frame.threadId, frame.text);
       break;
     case 'chat.run.start':
       // A run opening on this thread means the compaction that held its trigger is over: the
