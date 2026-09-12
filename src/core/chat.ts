@@ -66,6 +66,12 @@ export interface TextItem {
    * the owner did not write this.
    */
   summaryOf?: number;
+  /**
+   * How long the compaction took, when the server recorded it. Drawn beside the boundary label,
+   * the way a replayed thinking phase draws its own span (`formatThinkingSpan`); absent on a
+   * boundary written before it was measured, and then nothing is drawn rather than a zero.
+   */
+  compactionMs?: number;
   /** The run this bubble belongs to, when it sits inside one -- docs/run-grouping.md. */
   run?: RunInfo;
   ts: number;
@@ -271,6 +277,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.details ? { details: entry.details } : {}),
       ...(entry.error ? { error: entry.error } : {}),
       ...(entry.summaryOf ? { summaryOf: entry.summaryOf } : {}),
+      ...(entry.compactionMs !== undefined ? { compactionMs: entry.compactionMs } : {}),
       ...(entry.run ? { run: runInfoOf(entry.run) } : {}),
       ts,
     };

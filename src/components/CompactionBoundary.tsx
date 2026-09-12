@@ -2,7 +2,8 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { CollapsibleAside } from './CollapsibleAside';
-import { formatElapsed, useElapsed } from './CommandElapsed';
+import { useElapsed } from './CommandElapsed';
+import { formatThinkingSpan } from '../core/utils';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 function turns(count: number): string {
@@ -40,6 +41,11 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
           body={item.text}
           showHint="Show what the compaction kept"
           hideHint="Hide the summary"
+          trailing={
+            item.compactionMs !== undefined ? (
+              <Text style={styles.span}>{formatThinkingSpan(item.compactionMs)}</Text>
+            ) : undefined
+          }
         />
       ) : null}
     </View>
@@ -65,7 +71,7 @@ export function CompactionRunning({ since, text }: { since: number; text?: strin
     <View style={styles.row} accessibilityRole="summary">
       <View style={styles.rule}>
         <View style={styles.line} />
-        <Text style={styles.label}>Compacting the context · {formatElapsed(elapsed)}</Text>
+        <Text style={styles.label}>Compacting the context · {formatThinkingSpan(elapsed)}</Text>
         <View style={styles.line} />
       </View>
       {/*
@@ -91,4 +97,5 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   rule: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   line: { flex: 1, height: 1, backgroundColor: palette.border },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
+  span: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
 });

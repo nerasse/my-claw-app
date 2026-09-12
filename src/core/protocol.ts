@@ -371,6 +371,11 @@ export type HistoryEntry =
        * summary alone, and the turns it stands for are still replayed above it in full.
        */
       summaryOf?: number;
+      /**
+       * How long the summary took to write, in milliseconds. Carried so a boundary replayed from
+       * history shows its duration the way a replayed thinking phase does.
+       */
+      compactionMs?: number;
       /** The run this entry belongs to, when it sits inside one. */
       run?: RunMeta;
     }
