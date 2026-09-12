@@ -237,6 +237,27 @@ describe('QuestionCard', () => {
     expect(scrollToEnd).not.toHaveBeenCalled();
   });
 
+  // Left to itself a scroll view offers a flex parent no height at all, so the form came out as a
+  // strip of title and Send with the pane above it empty. The body asks for the height of what it
+  // holds; the shrink chain takes it down when the pane cannot hold it.
+  it('asks for the height of its content, so the form is as tall as it needs to be', () => {
+    const { tree } = render(single);
+    const body = tree.root.findAllByType(ScrollView)[0];
+    if (!body) throw new Error('the card draws no scroll area');
+
+    ReactTestRenderer.act(() => {
+      body.props.onContentSizeChange?.(360, 420);
+    });
+    const again = tree.root.findAllByType(ScrollView)[0]!;
+    const height = [again.props.style].flat(2).find(
+      part => part && typeof part === 'object' && 'height' in part,
+    ) as { height?: number } | undefined;
+    expect(height?.height).toBe(420);
+    // The half it has to keep whatever happens: the shrinkage is the pane's business, and the
+    // style stays the one that fits.
+    expect([again.props.style].flat(2).some(part => part && typeof part === 'object' && 'flexShrink' in part)).toBe(true);
+  });
+
   it('keeps the title and Send out of the scroll area, so neither is ever scrolled away', () => {
     const { tree } = render(single);
     const body = tree.root.findAllByType(ScrollView)[0];

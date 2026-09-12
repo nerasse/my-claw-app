@@ -1113,9 +1113,10 @@ const createStyles = (palette: Palette) => ({
   },
   connWarn: { color: palette.warn, backgroundColor: palette.surfaceAlt },
   connBad: { color: palette.danger, backgroundColor: palette.surfaceAlt },
-  // The list keeps a few lines whatever the form above it wants: a question waiting is not a
-  // reason to lose sight of what was being discussed.
-  listWrap: { flex: 1, minHeight: 120 },
+  // The conversation keeps a floor while a form is up: enough to see that it is there, not enough
+  // to take the room the form needs. It is the knob on the whole trade, and the form grows into
+  // everything above it.
+  listWrap: { flex: 1, minHeight: 56 },
   // The list is inverted, so its content box is upside down too: what is written as the top
   // padding is drawn under the newest message.
   // The horizontal padding used to come free with the reading column, which was narrower than
@@ -1130,9 +1131,10 @@ const createStyles = (palette: Palette) => ({
     paddingBottom: space.xl,
   },
   looseQuestions: { paddingTop: space.sm, gap: space.sm },
-  // `flexShrink` alone would leave the cap to whatever the form happens to measure, and a form is
-  // unbounded: the `maxHeight` is what gives the conversation its share back.
-  questionSurface: { flexShrink: 1, maxHeight: '70%' as const, gap: space.sm, marginBottom: space.sm },
+  // The form takes its own height, which is its content, and the shrink chain takes it down when
+  // the pane is smaller than that. No percentage cap: the list's floor is the reservation, and a
+  // cap on top of it only cost the form room it could have used.
+  questionSurface: { flexShrink: 1, gap: space.sm, marginBottom: space.sm },
   jump: {
     position: 'absolute' as const,
     right: 0,

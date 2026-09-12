@@ -68,6 +68,16 @@ export function QuestionCard({
    * the thumb rather than at the end of a form nobody can see the bottom of.
    */
   const bodyRef = useRef<ScrollView>(null);
+  /**
+   * The height the form's content actually asks for.
+   *
+   * A scroll view has no height of its own to offer a flex parent: left to itself it collapses
+   * onto its frame, and the form came out as a strip of title and Send with half the pane empty
+   * above it. The content knows its own size, so it says it here, and that size is what the body
+   * asks for below. When it does not fit, the shrink chain takes it down to the room the pane
+   * leaves and the body scrolls, which is the only case the scroll was ever for.
+   */
+  const [natural, setNatural] = useState(0);
   /** Whether the free-text field currently holds the caret, so only *its* growth scrolls. */
   const fieldFocused = useRef(false);
   const revealField = useCallback(() => {
@@ -144,13 +154,14 @@ export function QuestionCard({
 
       <ScrollView
         ref={bodyRef}
-        style={styles.body}
+        style={[styles.body, natural > 0 ? { height: natural } : null]}
         contentContainerStyle={styles.bodyContent}
         keyboardShouldPersistTaps="handled"
         // A multiline field grows as it is typed into, and the caret has to stay with it. Only
         // while it holds the caret: a form scrolled up to re-read an option must not be yanked
         // back to the bottom by the next layout pass.
-        onContentSizeChange={() => {
+        onContentSizeChange={(_width, height) => {
+          setNatural(current => (current === height ? current : height));
           if (fieldFocused.current) revealField();
         }}>
         {recap ? (
@@ -432,7 +443,10 @@ const createStyles = (palette: Palette) =>
       // instruction down overflows its own cap instead.
       flexShrink: 1,
     },
-    /** The middle of the card, the only part that gives up room when the keyboard takes some. */
+    /**
+     * The middle of the card: as tall as its content (the height is set from the measurement in
+     * the component), and the one part that gives room back when the pane cannot hold it all.
+     */
     body: { flexShrink: 1 },
     bodyContent: { gap: space.xs },
     head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

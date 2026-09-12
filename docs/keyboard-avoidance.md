@@ -76,16 +76,25 @@ Two traps make this less obvious than it sounds on Android:
 That second trap is what moved the question form. It used to be a row of the thread, at the point
 the run stopped, and the pane left by the keyboard is smaller than the form: the thread could show
 the question or the field, never both, and the reveal could only choose a slice. It is a surface
-above the composer now (`ChatScreen`), capped at `70%` of the pane and scrolling itself, with its
-title and its Send pinned outside that scroll, so the field and Send are both visible while it is
+above the composer now (`ChatScreen`), with its title and its Send pinned outside a scroll that
+holds the question, its options and its field, so the field and Send are both visible while it is
 typed into. The thread keeps the tool call, which is the record of what was asked.
+
+How tall the form is took one more correction. A scroll view offers a flex parent **no height at
+all**, so the body asked for nothing and the form came out as a strip of title and Send with the
+pane above it empty. The body now measures its content (`onContentSizeChange`) and asks for exactly
+that, which is what makes a form as tall as it needs and no taller. When the pane cannot hold it,
+the shrink chain takes it down, through `flexShrink` on the surface, the card and the body, and the
+body is what absorbs it: the title and the footer keep their height. The reservation on the other
+side is the conversation's own floor (`listWrap > minHeight`), which is the knob on the whole
+trade, and the one number here that no test can check.
 
 | Surface | Container | Why it is fine |
 | --- | --- | --- |
 | Conversation, editors, settings | the one `KeyboardAvoidingView` | it gives up exactly the overlap |
 | ActionSheet, PromptSheet | absolute, outside it | pad themselves (`useSheetBottomInset`) |
 | Drawer, ModelSheet | absolute, outside it | their field is at the top, nothing under the keyboard |
-| The question form | above the composer | capped, scrolls itself, title and Send pinned |
+| The question form | above the composer | takes its content's height, gives it back when the pane is small, title and Send pinned |
 | Long forms (ProviderEdit, ModelEdit, AgentFile) | a scroller each | reachable by scrolling; nothing is auto-revealed, and a field you cannot see is a field you cannot tap |
 
 ## Test
