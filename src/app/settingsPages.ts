@@ -6,6 +6,41 @@ import {
 } from '../core/protocol';
 
 /**
+ * Every page the settings stack can show. The shell holds it as state and the back cascade walks
+ * it one level at a time, so both need the same names: this is where they are written down.
+ */
+export type SettingsPage =
+  | 'index'
+  | 'general'
+  | 'agents'
+  | 'agent'
+  | 'providers'
+  | 'provider'
+  | 'provider-edit'
+  | 'provider-env'
+  | 'model-edit'
+  | 'tags'
+  | 'skills'
+  | 'devices'
+  | 'approvals'
+  | 'workspaces'
+  | 'workspace'
+  | 'instruction'
+  | 'instruction-layer'
+  | 'tools'
+  | 'mcps'
+  | 'other'
+  | 'diagnostics'
+  | 'scope'
+  | 'workspace-picker'
+  | 'number'
+  | 'file'
+  | 'newagent'
+  | 'config'
+  | 'model-picker'
+  | 'tag-editor';
+
+/**
  * The pages that call a configured name "removed" when it is missing from the skills or MCP
  * catalog. Naming them once is the point: an unfetched catalog is not evidence that a name is
  * gone, so a page that paints that verdict red has to be a page that asks for the list.

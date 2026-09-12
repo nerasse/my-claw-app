@@ -9,7 +9,6 @@ import {
   AppState,
   KeyboardAvoidingView,
   Linking,
-  Platform,
   StatusBar,
   View,
 } from 'react-native';
@@ -224,7 +223,7 @@ import { UndoSheet } from '../components/UndoSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { AppUpdateModal } from './AppUpdateModal';
-import { ModelSheet, pickerBack, pickerStart, type PickerState } from '../components/ModelSheet';
+import { ModelSheet, pickerStart, type PickerState } from '../components/ModelSheet';
 import { ModelTuneSheet } from '../components/ModelTuneSheet';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
@@ -239,7 +238,9 @@ import {
   readsAgentsConfig,
   PAGE_REQUESTS,
   READS_INSTRUCTIONS_PAGES,
+  type SettingsPage,
 } from './settingsPages';
+import { closeTopLayer } from './backCascade';
 import { AgentModelPickerPage } from './AgentModelPickerPage';
 import { TagEditorPage } from './TagEditorPage';
 import { setPageTitle } from '../core/pageTitle';
@@ -340,37 +341,7 @@ export function AppShell(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
-  const [settingsPage, setSettingsPage] = useState<
-    | 'index'
-    | 'general'
-    | 'agents'
-    | 'agent'
-    | 'providers'
-    | 'provider'
-    | 'provider-edit'
-    | 'provider-env'
-    | 'model-edit'
-    | 'tags'
-    | 'skills'
-    | 'devices'
-    | 'approvals'
-    | 'workspaces'
-    | 'workspace'
-    | 'instruction'
-    | 'instruction-layer'
-    | 'tools'
-    | 'mcps'
-    | 'other'
-    | 'diagnostics'
-    | 'scope'
-    | 'workspace-picker'
-    | 'number'
-    | 'file'
-    | 'newagent'
-    | 'config'
-    | 'model-picker'
-    | 'tag-editor'
-  >('index');
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>('index');
   /** The agent detail page shows this key, taken from the last agents.config.result. */
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   /** The provider page shows this key's models, filtered from the shared catalog. */
@@ -1209,373 +1180,169 @@ export function AppShell(): React.JSX.Element {
    * Written once, read by three inputs that all mean the same thing: Android's back key, the
    * browser's Back button and the Escape key. `false` is "nothing left to close", which is what
    * lets the platform do its own thing (leave the app, leave the page).
+   *
+   * The order of the layers is `backCascade.ts`; what stays here is when the snapshot it reads is
+   * taken, which is what the dependency list below decides. `docs/back-cascade.md`.
    */
-  const handleBack = useCallback((): boolean => {
-    // The selection viewer covers everything, including whatever opened it.
-    if (selection) {
-      setSelection(null);
-      return true;
-    }
-    // A confirmation is the topmost thing on screen when it is up.
-    if (subagentAction) {
-      setSubagentAction(null);
-      return true;
-    }
-    if (subagentMenuOpen) {
-      setSubagentMenuOpen(false);
-      return true;
-    }
-    // The roster is an absolute layer like the status page, so it closes before anything under it.
-    if (agentsOpen) {
-      setAgentsOpen(false);
-      return true;
-    }
-    if (agentsGlobalOpen) {
-      setAgentsGlobalOpen(false);
-      return true;
-    }
-    if (statusOpen) {
-      closeStatus();
-      return true;
-    }
-    if (instructionsPageOpen) {
-      // The editor stacks over the report: back leaves the editor first, the page second.
-      if (instructionsPageEditing) {
-        instructionsStore.closeEditor();
-        setInstructionsPageEditing(false);
-        return true;
-      }
-      sessionInstructionsStore.close();
-      setInstructionsPageOpen(false);
-      return true;
-    }
-    if (jobsOpen) {
-      // The runs page and the editor stack over the jobs list: back leaves them first.
-      if (jobsEditor) {
-        setJobsEditor(null);
-        return true;
-      }
-      if (jobSessions) {
-        setJobSessions(null);
-        jobSessionsRef.current = null;
-        setJobRuns(null);
-        return true;
-      }
-      setJobsOpen(false);
-      return true;
-    }
-    if (imageViewer) {
-      setImageViewer(null);
-      return true;
-    }
-    if (textViewer) {
-      setTextViewer(null);
-      return true;
-    }
-    if (videoViewer) {
-      setVideoViewer(null);
-      return true;
-    }
-    if (fileViewer) {
-      setFileViewer(null);
-      return true;
-    }
-    if (approvals.length > 0) {
-      setApprovals(current => current.slice(1));
-      return true;
-    }
-    if (fileToDelete) {
-      setFileToDelete(null);
-      return true;
-    }
-    // Innermost first: the rename sheet sits over the menu that opened it.
-    if (threadToRename) {
-      setThreadToRename(null);
-      return true;
-    }
-    if (modelOpen) {
-      // The picker is a flow of its own: back walks out of a group, then one step back through
-      // the model/effort/context screens, and only then closes the sheet.
-      const previous = pickerBack(modelPicker);
-      if (previous) {
-        setModelPicker(previous);
-        return true;
-      }
-      setModelOpen(false);
-      return true;
-    }
-    if (tuneOpen) {
-      setTuneOpen(false);
-      return true;
-    }
-    if (newTagPrompt) {
-      setNewTagPrompt(false);
-      return true;
-    }
-    if (tagToDelete) {
-      setTagToDelete(null);
-      return true;
-    }
-    if (providerToDelete) {
-      setProviderToDelete(null);
-      return true;
-    }
-    if (commandMenuOpen) {
-      setCommandMenuOpen(false);
-      return true;
-    }
-    if (moreOpen) {
-      setMoreOpen(false);
-      return true;
-    }
-    if (bubbleMenu || threadMenu) {
-      setBubbleMenu(null);
-      setThreadMenu(null);
-      return true;
-    }
-    // A pinned list is not a layer: closing it would eat the press and change nothing on screen.
-    if (drawerOpen && !layout.pinnedDrawer) {
-      setDrawerOpen(false);
-      return true;
-    }
-    if (skillMenu || skillTargets || skillReplace) {
-      setSkillMenu(null);
-      setSkillTargets(null);
-      setSkillReplace(null);
-      return true;
-    }
-    if (skillViewer) {
-      setSkillViewer(null);
-      return true;
-    }
-    if (settingsOpen) {
-      // Innermost page first: the back key walks the settings stack one level at a time,
-      // so a habit press from a subpage can never fall through to the launcher.
-      if (settingsPage === 'index') {
-        setSettingsOpen(false);
-        return true;
-      }
-      // The picker pages are flows of their own: back walks out of a group, then one step
-      // back through the model/effort/context screens, and only then leaves the page. The
-      // model picker returns where it was opened from: the agents list for "global" and
-      // "fallback", the agent page for an agent key.
-      if (settingsPage === 'model-picker') {
-        const previous = pickerBack(agentPicker);
-        if (previous) {
-          setAgentPicker(previous);
-          return true;
-        }
-        const from = agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent';
-        setAgentModelFor(null);
-        setSettingsPage(from);
-        return true;
-      }
-      if (settingsPage === 'tag-editor') {
-        if (tagEditor?.picker) {
-          const previous = pickerBack(tagEditor.picker);
-          if (previous) {
-            setTagEditor({ ...tagEditor, picker: previous });
-          } else {
-            setTagEditor({ ...tagEditor, picker: null, pickerIndex: null });
-          }
-          return true;
-        }
-        if (tagEditorDirty) {
-          setTagEditorDiscard(true);
-        } else {
-          setTagEditor(null);
-          setSettingsPage('tags');
-        }
-        return true;
-      }
-      if (settingsPage === 'agent') {
-        setSettingsPage('agents');
-        return true;
-      }
-      if (settingsPage === 'provider') {
-        if (providerSearch.current.query) {
-          providerSearch.current.clear();
-          return true;
-        }
-        setSettingsPage('providers');
-        return true;
-      }
-      if (settingsPage === 'provider-env') {
-        setSettingsPage('provider-edit');
-        return true;
-      }
-      if (settingsPage === 'model-edit') {
-        setSettingsPage('provider');
-        setModelEdit(null);
-        return true;
-      }
-      if (settingsPage === 'provider-edit') {
-        if (providerEdit?.mode === 'create') setSettingsPage('providers');
-        else setSettingsPage('provider');
-        setProviderEdit(null);
-        return true;
-      }
-      if (settingsPage === 'providers') {
-        setSettingsPage('index');
-        return true;
-      }
-      if (settingsPage === 'tags') {
-        setSettingsPage('providers');
-        return true;
-      }
-      if (settingsPage === 'agents') {
-        setSettingsPage('index');
-        return true;
-      }
-      if (settingsPage === 'scope') {
-        setSettingsPage(scopeEditor?.target === 'file' ? 'file' : 'agent');
-        setScopeEditor(null);
-        return true;
-      }
-      if (settingsPage === 'workspace-picker' || settingsPage === 'number') {
-        setSettingsPage(tagContextEditor ? 'tags' : 'agent');
-        return true;
-      }
-      if (settingsPage === 'file') {
-        agentsFileStore.close();
-        setSettingsPage('agent');
-        return true;
-      }
-      if (settingsPage === 'newagent') {
-        setSettingsPage('agents');
-        return true;
-      }
-      if (settingsPage === 'mcps' || settingsPage === 'config') {
-        setSettingsPage('index');
-        return true;
-      }
-      if (settingsPage === 'instruction-layer') {
-        setLayerTarget(null);
-        instructionsStore.closeLayer();
-        setSettingsPage('workspace');
-        return true;
-      }
-      if (settingsPage === 'instruction') {
-        instructionsStore.closeEditor();
-        setSettingsPage('workspace');
-        return true;
-      }
-      // The workspace page is reached from the list, or straight from an agent pinned to it.
-      if (settingsPage === 'workspace') {
-        setSettingsPage(workspaceFrom === 'agent' ? 'agent' : 'workspaces');
-        return true;
-      }
-      // Workspaces is its own index entry; diagnostics lives under Other. Back lands where
-      // they came from.
-      if (settingsPage === 'workspaces') {
-        setSettingsPage('index');
-        return true;
-      }
-      if (settingsPage === 'diagnostics') {
-        setSettingsPage('other');
-        return true;
-      }
-      setSettingsPage('index');
-      return true;
-    }
-    if (archivesOpen) {
-      setArchivesOpen(false);
-      return true;
-    }
-    if (browserOpen) {
-      setBrowserOpen(false);
-      return true;
-    }
-    if (filesOpen) {
-      setFilesOpen(false);
-      return true;
-    }
-    // A conversation opened from the archived list goes back there: backing out of it
-    // would otherwise fall through and close the app.
-    // A sub-agent chat backs out to the conversation that reached it, which is exactly what its
-    // header says it will do.
-    if (subagentRef.current) {
-      leaveSubAgent();
-      return true;
-    }
-    if (fromArchivesRef.current) {
-      fromArchivesRef.current = false;
-      selectThread(null);
-      setArchivesOpen(true);
-      return true;
-    }
-    // A run opened from a job's runs page goes back to that page, then on to the jobs list.
-    if (fromJobSessionsRef.current) {
-      fromJobSessionsRef.current = false;
-      selectThread(null);
-      setJobsOpen(true);
-      const page = jobSessionsRef.current;
-      if (page) {
-        setJobSessions(page);
-        // The runs are still in state from the page that opened the run; no refetch needed.
-        setJobRuns(current => current);
-      }
-      return true;
-    }
-    // A chat open on a phone: back goes home, not out of the app.
-    if (Platform.OS !== 'web' && !layout.pinnedDrawer && activeThreadRef.current && !settingsOpen
-        && !archivesOpen && !filesOpen && !subagentRef.current) {
-      selectThread(null);
-      return true;
-    }
-    return false;
-  }, [
-    approvals.length,
-    agentModelFor,
-    agentPicker,
-    agentsGlobalOpen,
-    agentsOpen,
-    archivesOpen,
-    browserOpen,
-    bubbleMenu,
-    closeStatus,
-    commandMenuOpen,
-    drawerOpen,
-    fileToDelete,
-    filesOpen,
-    imageViewer,
-    moreOpen,
-    instructionsPageEditing,
-    instructionsPageOpen,
-    workspaceFrom,
-    jobSessions,
-    jobsEditor,
-    jobsOpen,
-    modelOpen,
-    modelPicker,
-    tuneOpen,
-    newTagPrompt,
-    providerEdit,
-    providerToDelete,
-    scopeEditor,
-    selection,
-    selectThread,
-    settingsOpen,
-    settingsPage,
-    skillMenu,
-    skillReplace,
-    skillTargets,
-    skillViewer,
-    statusOpen,
-    subagentAction,
-    subagentMenuOpen,
-    leaveSubAgent,
-    tagContextEditor,
-    tagEditor,
-    tagEditorDirty,
-    tagToDelete,
-    textViewer,
-    threadMenu,
-    threadToRename,
-    videoViewer,
-    fileViewer,
-    layout.pinnedDrawer,
-  ]);
+  const handleBack = useCallback(
+    (): boolean =>
+      closeTopLayer({
+        selection,
+        setSelection,
+        subagentAction,
+        setSubagentAction,
+        subagentMenuOpen,
+        setSubagentMenuOpen,
+        agentsOpen,
+        setAgentsOpen,
+        agentsGlobalOpen,
+        setAgentsGlobalOpen,
+        statusOpen,
+        closeStatus,
+        instructionsPageOpen,
+        setInstructionsPageOpen,
+        instructionsPageEditing,
+        setInstructionsPageEditing,
+        jobsOpen,
+        setJobsOpen,
+        jobsEditor,
+        setJobsEditor,
+        jobSessions,
+        setJobSessions,
+        jobSessionsRef,
+        setJobRuns,
+        imageViewer,
+        setImageViewer,
+        textViewer,
+        setTextViewer,
+        videoViewer,
+        setVideoViewer,
+        fileViewer,
+        setFileViewer,
+        approvalCount: approvals.length,
+        setApprovals,
+        fileToDelete,
+        setFileToDelete,
+        threadToRename,
+        setThreadToRename,
+        modelOpen,
+        setModelOpen,
+        modelPicker,
+        setModelPicker,
+        tuneOpen,
+        setTuneOpen,
+        newTagPrompt,
+        setNewTagPrompt,
+        tagToDelete,
+        setTagToDelete,
+        providerToDelete,
+        setProviderToDelete,
+        commandMenuOpen,
+        setCommandMenuOpen,
+        moreOpen,
+        setMoreOpen,
+        bubbleMenu,
+        setBubbleMenu,
+        threadMenu,
+        setThreadMenu,
+        drawerOpen,
+        setDrawerOpen,
+        pinnedDrawer: layout.pinnedDrawer,
+        skillMenu,
+        setSkillMenu,
+        skillTargets,
+        setSkillTargets,
+        skillReplace,
+        setSkillReplace,
+        skillViewer,
+        setSkillViewer,
+        settingsOpen,
+        setSettingsOpen,
+        settingsPage,
+        setSettingsPage,
+        agentPicker,
+        setAgentPicker,
+        agentModelFor,
+        setAgentModelFor,
+        tagEditor,
+        setTagEditor,
+        tagEditorDirty,
+        setTagEditorDiscard,
+        providerSearch,
+        providerEdit,
+        setProviderEdit,
+        setModelEdit,
+        scopeEditor,
+        setScopeEditor,
+        tagContextEditor,
+        workspaceFrom,
+        setLayerTarget,
+        archivesOpen,
+        setArchivesOpen,
+        browserOpen,
+        setBrowserOpen,
+        filesOpen,
+        setFilesOpen,
+        subagentRef,
+        leaveSubAgent,
+        fromArchivesRef,
+        fromJobSessionsRef,
+        activeThreadRef,
+        selectThread,
+      }),
+    [
+      approvals.length,
+      agentModelFor,
+      agentPicker,
+      agentsGlobalOpen,
+      agentsOpen,
+      archivesOpen,
+      browserOpen,
+      bubbleMenu,
+      closeStatus,
+      commandMenuOpen,
+      drawerOpen,
+      fileToDelete,
+      filesOpen,
+      imageViewer,
+      moreOpen,
+      instructionsPageEditing,
+      instructionsPageOpen,
+      workspaceFrom,
+      jobSessions,
+      jobsEditor,
+      jobsOpen,
+      modelOpen,
+      modelPicker,
+      tuneOpen,
+      newTagPrompt,
+      providerEdit,
+      providerToDelete,
+      scopeEditor,
+      selection,
+      selectThread,
+      settingsOpen,
+      settingsPage,
+      skillMenu,
+      skillReplace,
+      skillTargets,
+      skillViewer,
+      statusOpen,
+      subagentAction,
+      subagentMenuOpen,
+      leaveSubAgent,
+      tagContextEditor,
+      tagEditor,
+      tagEditorDirty,
+      tagToDelete,
+      textViewer,
+      threadMenu,
+      threadToRename,
+      videoViewer,
+      fileViewer,
+      layout.pinnedDrawer,
+    ],
+  );
 
   useHardwareBack(handleBack);
 
