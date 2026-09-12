@@ -506,8 +506,10 @@ test('a compaction in flight is one rule at the bottom, and its boundary takes i
   await emit({ type: 'chat.compacting', threadId: THREAD, since });
   await waitFor(() => textLines(tree).some(text => text.includes('Compacting the context')), 60);
   expect(tree.root.findAllByType(CompactionRunning)).toHaveLength(1);
-  // Counted from the server's start, not from when this window heard of it.
-  expect(textLines(tree).some(text => text.includes('Compacting the context · 42s'))).toBe(true);
+  // Counted from the server's start, not from when this window heard of it, and written with the
+  // two decimals the thinking spans use: the two counters sit on the same line of the same kind of
+  // aside, so one format for both.
+  expect(textLines(tree).some(text => /Compacting the context · 42\.\d\ds/.test(text))).toBe(true);
   // A rule across the thread, like the boundary it becomes: not a bubble, so nothing to long-press.
   expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.role === 'agent')).toHaveLength(0);
 
