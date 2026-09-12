@@ -91,7 +91,16 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   private var locationListener: LocationListener? = null
   private var bestLocation: Location? = null
   private val locationHandler = Handler(Looper.getMainLooper())
-  private val mainHandler = Handler(Looper.getMainLooper())
+
+  /**
+   * Where an update is verified and committed. PackageInstaller accepts a call from any thread;
+   * the UI thread does not, and both halves are expensive: verifying parses the whole 45 MB
+   * archive, committing copies it into a session and fsyncs it. Run here, the app froze on
+   * "100% of 45.7 MB" and only proposed the install once the owner had left and come back
+   * (2026-09-12). One worker, because two installs at once is not a thing.
+   */
+  private val installWorker: java.util.concurrent.ExecutorService =
+    java.util.concurrent.Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "claw-apk-install") }
   private val locationTimeout = Runnable { finishLocation() }
 
   // Uploads can be slow on mobile data; only the connect timeout stays short.
@@ -1142,6 +1151,8 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    * system screen); the outcome is emitted on claw:update:install by InstallResultReceiver.
    * This promise resolves once the session is committed, not when the install finishes: the
    * app is being replaced, so after success the process dies and only the reopen matters.
+   *
+   * All of it runs on installWorker, never on the UI thread -- see that field for why.
    */
   @ReactMethod
   fun installStagedApk(promise: Promise) {
@@ -1167,7 +1178,7 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     // install we refuse is one the system would have accepted. Android documents the real
     // behaviour: when the permission is missing, the package installer shows its own dialog with
     // a link to the settings. So commit, and only treat a SecurityException as a refusal.
-    mainHandler.post {
+    installWorker.execute {
       try {
         val pkg = reactContext.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
