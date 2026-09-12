@@ -15,7 +15,12 @@ import { Text } from 'react-native';
 import { ThemeContext } from '../../theme';
 import { darkPalette } from '../../theme/palettes';
 import { CompactionBoundary } from '../CompactionBoundary';
+import { resetAsideExpansion } from '../../core/asideExpansion';
 import type { TextItem } from '../../core/chat';
+
+beforeEach(() => {
+  resetAsideExpansion();
+});
 
 const item = (over: Partial<TextItem> = {}): TextItem => ({
   kind: 'text',
@@ -61,4 +66,23 @@ test('the span is drawn beside the summary, with the two decimals the thinking s
 
 test('a boundary nobody timed draws no span, rather than a zero', () => {
   expect(texts(mount({ item: item() }))).not.toContain('0.00s');
+});
+
+test('the summary stays open when the cell is unmounted and rebuilt', () => {
+  const toggle = (tree: ReactTestRenderer.ReactTestRenderer): void => {
+    const button = tree.root.findAll(n => n.props.accessibilityRole === 'button')[0]!;
+    ReactTestRenderer.act(() => {
+      button.props.onPress();
+    });
+  };
+
+  const first = mount({ item: item() });
+  expect(texts(first)).not.toContain('Prior work');
+  toggle(first);
+  expect(texts(first)).toContain('Prior work');
+
+  // The rebuild: a fresh instance of the same item, exactly what a move between the list header and
+  // a row produces.
+  const rebuilt = mount({ item: item() });
+  expect(texts(rebuilt)).toContain('Prior work');
 });

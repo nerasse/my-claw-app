@@ -102,6 +102,23 @@ The counter is `useElapsed(since)`, refreshed every second while the app is in t
 React Native pauses JS timers while the app is in the background, so a counter can read stale on
 the first frame after a resume; it catches up on the next tick.
 
+## The duration, and the fold that has to survive a rebuild
+
+The counter climbs beside the label while the summarizer runs, and the span it ends on is written by
+the server into the boundary entry (`compactionMs`) -- so a thread opened an hour later shows how
+long it took, the way a replayed thinking phase shows its own span. Both are drawn with
+`formatThinkingSpan` (two decimals): the two counters sit on the same line of the same kind of
+aside, and reading `1m 24.50s` next to `5.90s` in two different formats would be an accident of
+history, not a choice. A boundary from before the field exists draws nothing, never a `0.00s`.
+
+The fold lives in `asideExpansion`, keyed by the entry id (or the server's start instant for the
+live rule), and not in the component. It has to: the live rule is rendered in the list header *or*
+as a row of the list depending on whether a send is parked behind the compaction, and moving between
+the two is a new position in the tree, so React mounts a new instance and a `useState` fold came
+back closed. The owner expanded the summary, a message arrived, and it folded itself -- 2026-09-12.
+
+Nothing is persisted: the fold belongs to the reading session, not the conversation.
+
 ## The summary being written
 
 The operation is one to two minutes of nothing on the wire, and a rule with a counter is

@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
 import { chatSelectable } from '../core/platform';
+import { setAsideExpanded, useStoredAsideExpansion } from '../core/asideExpansion';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -29,6 +30,7 @@ export function CollapsibleAside({
   showHint,
   hideHint,
   defaultOpen = false,
+  persistKey,
 }: {
   label: string;
   /**
@@ -42,19 +44,33 @@ export function CollapsibleAside({
   hideHint: string;
   /** Initial expansion state; used by the "always expand reasoning" pref. */
   defaultOpen?: boolean;
+  /**
+   * The aside's name across rebuilds, when it has one. Given a key, the fold lives in
+   * `asideExpansion` instead of in this component, so a cell that is unmounted and rebuilt -- the
+   * live compaction rule moves between the list header and a row -- comes back as the reader left
+   * it. `defaultOpen` does not apply to a keyed aside: the key is the only truth.
+   */
+  persistKey?: string;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [open, setOpen] = useState(defaultOpen);
+  const [localOpen, setLocalOpen] = useState(defaultOpen);
+  const storedOpen = useStoredAsideExpansion(persistKey);
+  const open = persistKey === undefined ? localOpen : storedOpen;
+  const setOpen = (next: boolean): void => {
+    if (persistKey === undefined) setLocalOpen(next);
+    else setAsideExpanded(persistKey, next);
+  };
 
   // A pref flipped while this aside is on screen should be honoured, not wait for the next turn:
   // one collapse cycle after the change lands, the aside starts from the pref again.
   const prevDefault = useRef(defaultOpen);
   useEffect(() => {
+    if (persistKey !== undefined) return;
     if (prevDefault.current !== defaultOpen) {
-      setOpen(defaultOpen);
+      setLocalOpen(defaultOpen);
       prevDefault.current = defaultOpen;
     }
-  }, [defaultOpen]);
+  }, [defaultOpen, persistKey]);
 
 
   return (
@@ -64,7 +80,7 @@ export function CollapsibleAside({
       <View style={styles.head}>
         <Pressable
           style={styles.line}
-          onPress={() => setOpen(value => !value)}
+          onPress={() => setOpen(!open)}
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
           accessibilityLabel={label}

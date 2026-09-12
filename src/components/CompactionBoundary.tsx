@@ -41,6 +41,7 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
           body={item.text}
           showHint="Show what the compaction kept"
           hideHint="Hide the summary"
+          persistKey={`compaction:${item.id}`}
           trailing={
             item.compactionMs !== undefined ? (
               <Text style={styles.span}>{formatThinkingSpan(item.compactionMs)}</Text>
@@ -86,6 +87,7 @@ export function CompactionRunning({ since, text }: { since: number; text?: strin
           body={summary}
           showHint="Show what the compaction is writing"
           hideHint="Hide what the compaction is writing"
+          persistKey={`compaction-live:${since}`}
         />
       ) : null}
     </View>
