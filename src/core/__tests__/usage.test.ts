@@ -108,6 +108,31 @@ describe('the sub-agents as one figure', () => {
     expect(recap?.rows.find(r => r.provider === 'claude-sdk')?.costUsd).toBeUndefined();
   });
 
+  it('merges a named read with a bare one, since the name is decoration and the tag is the key', () => {
+    // The server reads the display name from a cache it never waits on, so the same route is
+    // reported named once and bare the next time. Keyed on the name, those two reads would be two
+    // lines of one provider -- which is what the merge key deliberately avoids.
+    const recap = subAgentsUsage([
+      agent({ sessionId: 'a', rows: [row({ model: 'z-ai/glm-5.2@streamlake/fp8', provider: 'streamlake', variant: 'fp8' })] }),
+      agent({
+        sessionId: 'b',
+        rows: [
+          row({
+            model: 'z-ai/glm-5.2@streamlake/fp8',
+            provider: 'streamlake',
+            variant: 'fp8',
+            providerName: 'StreamLake',
+            calls: 4,
+          }),
+        ],
+      }),
+    ]);
+    expect(recap?.rows).toHaveLength(1);
+    expect(recap?.rows[0]).toMatchObject({ provider: 'streamlake', calls: 5 });
+    // The name survives the merge whichever read carried it, rather than depending on agent order.
+    expect(recap?.rows[0]?.providerName).toBe('StreamLake');
+  });
+
   it('keeps the markers of a row that carries them, and the price of a row that has one', () => {
     const recap = subAgentsUsage([
       agent({ sessionId: 'a', rows: [row({ model: 'm', costUsd: 0.2, costBilled: true })] }),

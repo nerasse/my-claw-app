@@ -31,7 +31,12 @@ of the my-claw repository.
   never part of a name, which is what a name read off the whole reference used to say. The line
   under it opens with that provider, so two rows of one model served by two providers
   (`api.anthropic.com` and `claude-sdk`) can be told apart; the server sends them apart for the same
-  reason it prices them apart. It closes with the rung that answered (`engine anthropic`, `median of
+  reason it prices them apart. It is drawn with the provider's own spelling (`StreamLake`, `Z.AI`)
+  when the server resolved one and with the verbatim tag when it did not -- the server reads those
+  names from a cache it never waits on, so the same route arrives named one minute and bare the
+  next. The name is decoration only: the rows are merged on the tag, or one cold read and one warm
+  read of a provider would be drawn as two lines of it.
+  It closes with the rung that answered (`engine anthropic`, `median of
   28`, `endpoint streamlake/fp8`), because a figure nothing could price and a figure guessed from
   the cross-market median look identical on a page that does not say which one it is. Each price
   carries its markers (`*` not a charge, `~` a neighbouring model's price), and `since <date> (90

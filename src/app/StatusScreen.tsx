@@ -78,11 +78,18 @@ function rowLine(row: UsageModelRow): string {
 }
 
 /**
- * Where the calls went, without the route: `streamlake · fp8`, `api.anthropic.com`. Absent on a
+ * Where the calls went, without the route: `StreamLake · fp8`, `api.anthropic.com`. Absent on a
  * server that predates the field, which is why it is optional rather than defaulted.
+ *
+ * The provider's own name when the server resolved one, the verbatim tag when it did not: the tag
+ * is always right and sometimes unreadable (`z-ai`), and the name is only known while the server's
+ * catalogue is warm. Never both -- they name one thing.
+ *
+ * Exported for its own test: the fallback is the whole behaviour of the field, and reaching it
+ * through the page means rendering the report to read one string.
  */
-function rowRoute(row: UsageModelRow): string {
-  return [row.provider, row.variant].filter(Boolean).join(' · ');
+export function rowRoute(row: UsageModelRow): string {
+  return [row.providerName ?? row.provider, row.variant].filter(Boolean).join(' · ');
 }
 
 /**

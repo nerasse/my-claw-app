@@ -31,6 +31,11 @@ function zeroTotals(): UsageTotals {
  * at two rates, and merging them here would collapse on the client what it deliberately kept
  * apart.
  *
+ * The key is the verbatim tag and never the display name beside it. The server reads that name
+ * from a cache it refuses to wait on, so one route arrives named and the next arrival of the same
+ * route may not: keyed on the name, a cold read and a warm read of one provider would be drawn as
+ * two lines.
+ *
  * Returns null when there is nothing to sum, so the page leaves the section out instead of
  * drawing a row of zeroes.
  */
@@ -54,6 +59,9 @@ export function subAgentsUsage(agents: UsageAgent[]): UsageGroup | null {
         byModel.set(key, { ...row });
         continue;
       }
+      // Same route, and only one of the two reads was warm enough to name it: keep the name rather
+      // than leaving the merged line on the slug because of the order the agents came in.
+      if (seen.providerName === undefined && row.providerName !== undefined) seen.providerName = row.providerName;
       seen.calls += row.calls;
       seen.errors += row.errors;
       seen.promptTokens += row.promptTokens;

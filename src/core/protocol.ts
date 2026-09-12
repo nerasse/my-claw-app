@@ -1091,6 +1091,13 @@ export interface UsageModelRow {
    */
   variant?: string;
   /**
+   * How that provider spells its own name (`Z.AI`, `Amazon Bedrock`), when the server knows it.
+   * Decoration drawn instead of the tag, never a key: the server reads it from a cache it never
+   * waits on, so the same route arrives named once and bare the next time, and merging on it would
+   * split one line in two. Absent on a server that predates the field.
+   */
+  providerName?: string;
+  /**
    * Which rung of the price ladder answered, so a figure that looks wrong can be explained: the
    * cost frozen on the row when the call was made, a pinned endpoint's own tariff, the OpenRouter
    * catalogue, an engine, the base that was reached, or the cross-market median. Absent on a row
