@@ -158,8 +158,27 @@ describe('ToolCard arguments fold', () => {
     const shown = texts(tree);
     expect(shown).toContain('Patched, +3');
     // The preview line, not the serialized call.
-    expect(shown).toContain(summarizeArgs(PATCH));
+    expect(shown).toContain(summarizeArgs(PATCH).text);
     expect(shown.some(t => t.includes('"edits"'))).toBe(false);
+  });
+
+  // `+N` says the call carried N arguments more than the one on screen. Glued to the preview it
+  // sat at the tail of a `flex: 1` line clipped at the pixel, so the denser the call the surer
+  // the count was the first thing cut -- and a reader had no way to tell a one-argument call from
+  // a nine-argument one.
+  it('keeps the count of the hidden arguments out of the line the layout clips', () => {
+    const item = makeItem({ name: 'mcp__thing__do', args: { first: 'x'.repeat(400), second: 2, third: 3 } });
+    const tree = renderTool(item);
+    const nodes = tree.root.findAllByType(Text);
+    const joined = (node: ReactTestRenderer.ReactTestInstance): string => [node.props.children].flat().join('');
+
+    const count = nodes.filter(node => joined(node) === '+2');
+    expect(count).toHaveLength(1);
+    // Its own node, outside any clipped one: a sibling is measured before the line that shrinks.
+    expect(count[0]!.props.numberOfLines).toBeUndefined();
+    expect(nodes.filter(node => node.props.numberOfLines !== undefined).some(node => joined(node).includes('+2'))).toBe(
+      false,
+    );
   });
 
   it('unfolds the arguments on tap and folds them back', () => {

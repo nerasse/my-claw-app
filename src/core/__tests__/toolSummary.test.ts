@@ -48,12 +48,28 @@ it('hands the preview over whole, so the layout is what decides where it ends', 
   expect(unknown.detail).not.toContain('…');
 });
 
+// The count used to be a ` +N` appended to the preview, past the guard: `clamp` then cut the
+// string back to the guard and ate it, and on a row it sat at the very tail the layout clips.
+// Either way the reader lost the one word saying the call had more to it.
+it('keeps the count of what it hides out of the string that gets cut', () => {
+  const preview = summarizeArgs({ body: 'z'.repeat(50_000), a: 1, b: 2 });
+  expect(preview.text.length).toBe(PREVIEW_GUARD);
+  expect(preview.extraArgs).toBe(2);
+  expect(preview.text).not.toContain('+2');
+
+  const summary = summarizeTool('some_mcp_tool', {}, preview);
+  expect(summary.extraArgs).toBe(2);
+  expect(summary.detail).not.toContain('+2');
+  // The whole preview survived the count, and the count survived the cut.
+  expect(summary.detail.length).toBe(PREVIEW_GUARD);
+});
+
 // A tool called with a whole file as its first argument would otherwise be flattened and measured
 // in full on every render.
 it('still refuses to build a preview no row could ever draw', () => {
   const huge = summarizeTool('bash', { command: 'z'.repeat(50_000) });
   expect(huge.detail.length).toBe(PREVIEW_GUARD);
-  expect(summarizeArgs({ body: 'z'.repeat(50_000) }).length).toBe(PREVIEW_GUARD);
+  expect(summarizeArgs({ body: 'z'.repeat(50_000) }).text.length).toBe(PREVIEW_GUARD);
 });
 
 it('marks a path, a command or a pattern as code and a bare verb as prose', () => {
@@ -66,15 +82,22 @@ it('marks a path, a command or a pattern as code and a bare verb as prose', () =
 it('draws no mark of its own: the row already has a chevron', () => {
   // A per-family glyph was tried and read as a stray arrow beside the chevron, not as a category.
   for (const call of [['read', { path: 'a' }], ['bash', { command: 'ls' }], ['some_mcp_tool', { a: 1 }]] as const) {
-    expect(Object.keys(summarizeTool(call[0], call[1])).sort()).toEqual(['block', 'detail', 'mono']);
+    expect(Object.keys(summarizeTool(call[0], call[1])).sort()).toEqual(['block', 'detail', 'extraArgs', 'mono']);
   }
 });
 
 it('falls back to the generic preview for a tool it has never heard of', () => {
   // An MCP server's tool, or a plugin: unknown here, and still readable.
-  expect(summarizeTool('mcp__thing__do', { whatever: 'x' }, 'x +2').detail).toBe('x +2');
-  // Known tool, argument missing: better the generic preview than an empty line.
-  expect(summarizeTool('read', {}, 'fallback').detail).toBe('fallback');
+  const unknown = summarizeTool('mcp__thing__do', { whatever: 'x' }, { text: 'x', extraArgs: 2 });
+  expect(unknown.detail).toBe('x');
+  expect(unknown.extraArgs).toBe(2);
+  // Known tool, argument missing: better the generic preview than an empty line, and the count
+  // that came with it is the fallback's too.
+  const missing = summarizeTool('read', {}, { text: 'fallback', extraArgs: 1 });
+  expect(missing.detail).toBe('fallback');
+  expect(missing.extraArgs).toBe(1);
+  // A tool that names its argument hides the rest on purpose: nothing to count.
+  expect(summarizeTool('read', { path: '/a.ts' }, { text: 'x', extraArgs: 3 }).extraArgs).toBe(0);
 });
 
 describe('content arguments', () => {

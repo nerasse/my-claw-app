@@ -11,7 +11,7 @@
  * first-argument preview, and an MCP tool or a plugin therefore still reads sensibly.
  */
 
-import { PREVIEW_GUARD } from './utils';
+import { PREVIEW_GUARD, type ArgsPreview } from './utils';
 
 /**
  * What kind of thing a tool touches. Not drawn: a per-family glyph in the card head was tried and
@@ -211,6 +211,15 @@ function clamp(text: string): string {
 export interface ToolSummary {
   /** What the call did, in as few characters as identify it. May be empty. */
   detail: string;
+  /**
+   * How many arguments `detail` does not show, for the row to draw beside it. Zero unless the
+   * preview came from the generic fallback, which is the only one that hides arguments.
+   *
+   * A number, not a ` +N` glued to `detail`: the tail of that string is precisely what the row
+   * clips, so the count was the first thing to go and the reader lost the only word that said
+   * there was more. `docs/tool-preview.md`.
+   */
+  extraArgs: number;
   /** Whether `detail` is code (a path, a command, a pattern) and wants the monospace face. */
   mono: boolean;
   /**
@@ -229,10 +238,14 @@ export interface ToolSummary {
  * @param fallback What to show when the tool is unknown here: the caller passes `summarizeArgs`
  * so this module owes nothing to the generic preview and can be tested on its own.
  */
-export function summarizeTool(name: string, args: Record<string, unknown>, fallback = ''): ToolSummary {
+export function summarizeTool(
+  name: string,
+  args: Record<string, unknown>,
+  fallback: ArgsPreview = { text: '', extraArgs: 0 },
+): ToolSummary {
   const family = FAMILY[name];
   const keys = KEYS[name];
-  if (!keys) return { detail: clamp(fallback), mono: false, block: false };
+  if (!keys) return { detail: clamp(fallback.text), extraArgs: fallback.extraArgs, mono: false, block: false };
 
   const verb = firstString(args, VERB_KEYS);
   let target = firstString(args, keys);
@@ -242,7 +255,10 @@ export function summarizeTool(name: string, args: Record<string, unknown>, fallb
 
   const detail = [verb, target].filter(Boolean).join(' ');
   return {
-    detail: clamp(detail || fallback),
+    detail: clamp(detail || fallback.text),
+    // A named argument is the call, and what it leaves out is folded on purpose rather than
+    // counted: the count belongs to the fallback, which shows whichever argument came first.
+    extraArgs: detail ? 0 : fallback.extraArgs,
     // A verb on its own is a word, not code. Anything carrying a target is a path, a command or
     // a pattern, and reads wrong in the prose face.
     mono: Boolean(target) && family !== undefined && family !== 'agent',

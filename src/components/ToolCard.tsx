@@ -168,6 +168,7 @@ export const ToolCard = React.memo(function ToolCardView({
           ) : (
             <View style={styles.spacer} />
           )}
+          {!open && summary.extraArgs > 0 ? <ExtraArgs count={summary.extraArgs} /> : null}
           {!item.ok && !running ? <Text style={styles.failed}>failed</Text> : null}
           {running ? (
             <View style={styles.spinner}>
@@ -228,6 +229,7 @@ export const ToolCard = React.memo(function ToolCardView({
               ) : (
                 <View style={styles.spacer} />
               )}
+              {!argsOpen && summary.extraArgs > 0 ? <ExtraArgs count={summary.extraArgs} /> : null}
             </View>
           </Pressable>
           ) : null}
@@ -260,6 +262,19 @@ export const ToolCard = React.memo(function ToolCardView({
     </View>
   );
 });
+
+/**
+ * How many arguments the preview beside it is not showing.
+ *
+ * Its own node, and that is the fix: the preview is `flex: 1` with `numberOfLines={1}`, so it is
+ * the row's only shrinking child and the pixel clip lands on it. A sibling is measured at its
+ * natural width first, which is what keeps `+3` on screen whatever the preview costs. Appended to
+ * the preview string instead, it was the first thing the row dropped. `docs/tool-preview.md`.
+ */
+function ExtraArgs({ count }: { count: number }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return <Text style={styles.extraArgs}>{`+${count}`}</Text>;
+}
 
 /**
  * The history face of a `question` card: the questions asked, with the answers that came back.
@@ -344,6 +359,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // the real width, so this is the one truncation that knows what it is cutting.
   previewBlock: { flex: 0, marginTop: 2, marginLeft: 8 + space.sm },
   spacer: { flex: 1 },
+  extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
   duration: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   failed: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },

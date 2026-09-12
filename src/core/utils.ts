@@ -85,16 +85,30 @@ export function formatThinkingSpan(ms: number): string {
  */
 export const PREVIEW_GUARD = 512;
 
+/**
+ * What a collapsed card knows about a call it has no table entry for.
+ *
+ * Two fields rather than one string, and that is the whole point: `text` is clipped by the row
+ * that draws it, the count must not be. It used to be a ` +N` suffix appended past the guard,
+ * so the very cut that shortened the preview also erased how much it was hiding. See
+ * `docs/tool-preview.md`.
+ */
+export interface ArgsPreview {
+  /** The first argument, flattened to one line. Where it ends is the layout's business. */
+  text: string;
+  /** How many arguments `text` does not show. Zero when it shows them all. */
+  extraArgs: number;
+}
+
 /** One-line preview of tool arguments for the collapsed card. */
-export function summarizeArgs(args: Record<string, unknown>): string {
+export function summarizeArgs(args: Record<string, unknown>): ArgsPreview {
   // The type says this is always an object; the wire does not. A tool card whose `args` never
   // arrived used to throw here and take the whole conversation down with it.
-  if (!args || typeof args !== 'object') return '';
+  if (!args || typeof args !== 'object') return { text: '', extraArgs: 0 };
   const entries = Object.entries(args);
-  if (entries.length === 0) return '';
+  if (entries.length === 0) return { text: '', extraArgs: 0 };
   const first = entries[0]!;
   const value = typeof first[1] === 'string' ? first[1] : JSON.stringify(first[1]);
   const preview = (value ?? '').replace(/\s+/g, ' ').trim();
-  const suffix = entries.length > 1 ? ` +${entries.length - 1}` : '';
-  return `${preview.slice(0, PREVIEW_GUARD)}${suffix}`;
+  return { text: preview.slice(0, PREVIEW_GUARD), extraArgs: entries.length - 1 };
 }
