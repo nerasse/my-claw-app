@@ -83,6 +83,14 @@ Three things about it are load-bearing:
   provider takes a figure off the line, never the line. The flag wins over any figure left beside
   it, and a missing figure is never rendered anyway -- `$NaN` is the failure mode this replaces.
 
+**`provider not reached` is transient, and the page fixes itself.** The first report of a freshly
+opened page is drawn before the read it started can land, so that is what it says. When the reading
+arrives the server pushes a fresh report and the figures appear, with nothing typed and nothing
+tapped -- which is the whole reason this page is pushed rather than asked for. It happens **once per
+reading**, never on the five-minute cache that serves the redraws in between: a line that woke the
+phone twelve times an hour to repeat itself would be a battery drain wearing the costume of
+liveness.
+
 ## Where it opens
 
 A page of the shell like settings or files: in the pane beside the conversation on a wide window
@@ -111,3 +119,7 @@ and the push. Both are gone.
 
 A watch belongs to a socket. `resumeFrames` re-watches the page still open when a new socket comes
 up, or a phone back from the background would keep the report of the moment the old socket died.
+
+One push names no conversation at all: a provider's ledger reading (`llm:account:refreshed` server
+side) moves the reconciliation line of **every** open page, since that money belongs to the key and
+not to a thread. It is the one thing that refreshes a page whose conversation is doing nothing.
