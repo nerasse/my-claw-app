@@ -47,9 +47,22 @@ export function withCompactionRule(rows: ChatRow[], before: string | undefined):
 /**
  * Bubbles that never belong inside a run group: the owner's own turns (which split the group
  * around them, so an answer to a question stays readable when the work folds), command output
- * and system notices (the agent did not write them), and compaction boundaries (a divider across
- * the thread, not a bubble). Everything else -- tool cards, thinking phases, interim prose -- is
- * the run's work and folds with it.
+ * and system notices (the agent did not write them), compaction boundaries (a divider across the
+ * thread, not a bubble), and anything carrying an error. Everything else -- tool cards, thinking
+ * phases, interim prose -- is the run's work and folds with it.
+ *
+ * The error is the one that is not about authorship: it is why the run stopped, which is the
+ * first thing the owner has to read, and a group is closed by default. A run that died after
+ * `chat.stream.start` but before its first token has that message patched onto the phase itself
+ * (`abortStream`), and that phase carries the run -- so without this the reason was folded out of
+ * sight under a header that only said "error".
+ *
+ * Hoisted, not elected as the run's answer: an answer leaves the group and is drawn *after* it,
+ * which would move the failure away from the moment it happened. A hoisted row keeps its place
+ * and cuts the group in two around it, so the order the thread was written in survives.
+ *
+ * A tool call that failed is not this: `kind` stops it on the first line, because a command that
+ * came back non-zero is the run's work and belongs in the fold with the rest of it.
  */
 export function isHoisted(item: ChatItem): boolean {
   if (item.kind !== 'text') return false;
@@ -57,8 +70,25 @@ export function isHoisted(item: ChatItem): boolean {
     item.role === 'user' ||
     item.command === true ||
     item.notice === true ||
-    item.summaryOf !== undefined
+    item.summaryOf !== undefined ||
+    item.error !== undefined
   );
+}
+
+/**
+ * Prose the agent actually wrote, which is the only thing a run's answer can be.
+ *
+ * A phase the model only thought in is a `text` item all the same -- that item is what carries the
+ * reasoning the row draws -- but its `text` is empty. Matching on the kind alone read such a phase
+ * as the answer: it was hoisted out of the group and drawn under it, after every tool call it had
+ * come before. Measured on a run that died with four thinking phases and no prose at all, where
+ * the reasoning card ended up between the folded work and the error that killed the run
+ * (2026-09-13).
+ *
+ * Whitespace is not prose either: a phase whose text is a stray newline says nothing.
+ */
+export function isAgentProse(item: ChatItem): boolean {
+  return item.kind === 'text' && item.role === 'agent' && item.text.trim() !== '';
 }
 
 /**
@@ -86,9 +116,10 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  *   grouped while the run answers.
  * - Inside a terminal run, hoisted bubbles (see `isHoisted`) stay rows and cut the group into
  *   segments around them.
- * - The last phase of a run is its answer, not its work: it leaves the group and stands as the
- *   row after it. A run whose entries are all cards never answered, and keeps everything. The
- *   answer is found by *kind*, not by position: an entry that landed after it does not demote it.
+ * - The last prose of a run is its answer, not its work: it leaves the group and stands as the
+ *   row after it. A run that wrote none -- all cards, or phases that only thought -- never
+ *   answered, and keeps everything folded. The answer is found by *content*, not by position: an
+ *   entry that landed after it does not demote it.
  * - A segment with nothing left in it produces no group: a run that only ever wrote its answer
  *   renders as plain bubbles, never as an empty header.
  */
@@ -108,12 +139,15 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
       // then read a card as the run's answer -- so the real answer stayed inside the group, under
       // a header that had moved below it. Measured on a real thread, 2026-09-10.
       //
-      // A run whose entries are all cards died before writing anything, and then nothing is
-      // hoisted out: everything stays in the group.
+      // A run that wrote no prose -- all cards, or phases that only thought -- died before saying
+      // anything, and then nothing is hoisted out: everything stays in the group.
+      //
+      // The scan walks back over what is not prose rather than stopping at it, so a thinking phase
+      // the model produced after its answer cannot demote that answer, exactly as a stray card
+      // cannot.
       let answerAt = -1;
       for (let i = current.length - 1; i >= 0; i -= 1) {
-        const item = current[i]!;
-        if (item.kind === 'text' && item.role === 'agent') {
+        if (isAgentProse(current[i]!)) {
           answerAt = i;
           break;
         }
