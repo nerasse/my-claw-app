@@ -18,6 +18,7 @@ import { instructionsStore } from './instructions';
 import { sessionInstructionsStore } from './sessionInstructions';
 import { providersEnvStore } from './providers';
 import { statusStore } from './status';
+import { statsStore } from './stats';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
 import { notificationPermission, registerForPush } from './notifications';
@@ -625,6 +626,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // is open on that thread, and drops a late one for a page since closed or moved.
       statusStore.receive(frame);
       break;
+    case 'stats.result':
+      // The answer to one `stats.get`, and there is nothing else it could be: no thread owns it,
+      // so the store matches it against the window the page last asked for.
+      statsStore.receive(frame);
+      break;
     case 'session.instructions.result':
       // Accept both the first fetch (loading) and the answer to a set (ready): a control the
       // page just applied must land, and the report it carries is the fresh truth.
@@ -766,6 +772,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         setBrowserError(refusal);
       } else if (frame.scope === 'status') {
         statusStore.fail(refusal);
+      } else if (frame.scope === 'stats') {
+        // A window the server does not know, or an install with no analytics at all: the page says
+        // so where it was asked for instead of spinning on an answer that will never come.
+        statsStore.fail(refusal);
       } else if (frame.scope === 'agents') {
         agentsStore.fail(refusal);
         // A file edit can fail while the file page is open: the editor shows it where it

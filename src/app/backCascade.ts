@@ -163,6 +163,8 @@ export interface BackLayers {
   setArchivesOpen: (value: boolean) => void;
   browserOpen: boolean;
   setBrowserOpen: (value: false) => void;
+  statsOpen: boolean;
+  closeStats: () => void;
   filesOpen: boolean;
   setFilesOpen: (value: false) => void;
   subagentRef: Cell<unknown>;
@@ -280,6 +282,8 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setArchivesOpen,
     browserOpen,
     setBrowserOpen,
+    statsOpen,
+    closeStats,
     filesOpen,
     setFilesOpen,
     subagentRef,
@@ -598,6 +602,12 @@ export function closeTopLayer(layers: BackLayers): boolean {
   }
   if (browserOpen) {
     setBrowserOpen(false);
+    return true;
+  }
+  // Closed by its own function rather than by a setter: the report is dropped with the page, so
+  // the next opening asks again instead of drawing figures from the last visit.
+  if (statsOpen) {
+    closeStats();
     return true;
   }
   if (filesOpen) {

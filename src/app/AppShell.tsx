@@ -213,6 +213,7 @@ import { ArchivesScreen } from './ArchivesScreen';
 import { BrowserScreen } from './BrowserScreen';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
+import { StatsScreen } from './StatsScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
 import { JobSessionsScreen } from './JobSessionsScreen';
@@ -228,6 +229,7 @@ import { ModelTuneSheet } from '../components/ModelTuneSheet';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
+import { statsStore } from '../core/stats';
 import { messageSelectionBody, TextSelectionContext, type SelectionTarget } from '../core/textSelection';
 import { useLayout } from '../core/layout';
 import { useHardwareBack } from '../core/hardwareBack';
@@ -523,7 +525,7 @@ export function AppShell(): React.JSX.Element {
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [browserError, setBrowserError] = useState<string | null>(null);
-  /** The More sheet in the drawer footer: Archived, Agents, Jobs, Settings. */
+  /** The More sheet in the drawer footer: Archived, Agents, Jobs, Browser, Statistics, Settings. */
   const [moreOpen, setMoreOpen] = useState(false);
   const [diagSnapshot, setDiagSnapshot] = useState('');
   const [diagLogs, setDiagLogs] = useState('');
@@ -545,6 +547,8 @@ export function AppShell(): React.JSX.Element {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   /** The fullscreen status page of a conversation, an absolute layer over everything else. */
   const [statusOpen, setStatusOpen] = useState(false);
+  /** The install-wide statistics page, reached from More: about every conversation, not one. */
+  const [statsOpen, setStatsOpen] = useState(false);
   /** The instructions page of a conversation, and whether one of its files is being edited. */
   const [instructionsPageOpen, setInstructionsPageOpen] = useState(false);
   const [instructionsPageEditing, setInstructionsPageEditing] = useState(false);
@@ -673,6 +677,10 @@ export function AppShell(): React.JSX.Element {
       setDrawerOpen(false);
       setSettingsOpen(false);
       setArchivesOpen(false);
+      // An install-wide page must not stay on top of the conversation the owner just picked: on a
+      // phone the pages cover the chat, so it would look like the tap did nothing.
+      statsStore.close();
+      setStatsOpen(false);
       setAgentsOpen(false);
       setAgentsGlobalOpen(false);
       // The run that raised a notification is the one now on screen: clear it, whichever way the
@@ -797,6 +805,16 @@ export function AppShell(): React.JSX.Element {
     statusStore.close();
     setStatusOpen(false);
     connection.send(encodeStatusUnwatch()).catch(() => {});
+  }, []);
+
+  /**
+   * Nothing to unwatch: the statistics are answered once per request, so leaving the page is
+   * only a matter of dropping the report. The screen asks again on its next opening, which is
+   * what an install-wide figure that nothing pushes has to do to stay true.
+   */
+  const closeStats = useCallback(() => {
+    statsStore.close();
+    setStatsOpen(false);
   }, []);
 
   /**
@@ -1291,6 +1309,8 @@ export function AppShell(): React.JSX.Element {
         setArchivesOpen,
         browserOpen,
         setBrowserOpen,
+        statsOpen,
+        closeStats,
         filesOpen,
         setFilesOpen,
         subagentRef,
@@ -1342,6 +1362,8 @@ export function AppShell(): React.JSX.Element {
       skillTargets,
       skillViewer,
       statusOpen,
+      statsOpen,
+      closeStats,
       subagentAction,
       subagentMenuOpen,
       leaveSubAgent,
@@ -3112,7 +3134,8 @@ export function AppShell(): React.JSX.Element {
   );
 
   /** Something other than the conversation is showing: settings, the archives, the files. */
-  const pageOpen = settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || instructionsPageOpen;
+  const pageOpen =
+    settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || instructionsPageOpen;
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -3716,6 +3739,8 @@ export function AppShell(): React.JSX.Element {
             />
           ) : statusOpen ? (
             <StatusScreen onClose={closeStatus} />
+          ) : statsOpen ? (
+            <StatsScreen onClose={closeStats} />
           ) : instructionsPageOpen ? (
             instructionsPageEditing && instructions.editor ? (
               <InstructionEditorScreen
@@ -4203,6 +4228,17 @@ export function AppShell(): React.JSX.Element {
                 setDrawerOpen(false);
                 setBrowserError(null);
                 setBrowserOpen(true);
+              },
+            },
+            {
+              // Beside Settings rather than beside the conversation actions: this reads the whole
+              // install, deleted conversations included, and belongs to no thread at all.
+              label: 'Statistics',
+              hint: 'every conversation, deleted included',
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                setStatsOpen(true);
               },
             },
             {

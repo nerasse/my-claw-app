@@ -1297,6 +1297,185 @@ export interface StatusResultFrame {
 }
 
 /**
+ * The windows the statistics page offers. `all` is the only one that reaches past the 90-day
+ * retention wall, through the permanent monthly rollup.
+ */
+export type StatsPeriod = '7d' | '30d' | '90d' | 'all';
+
+/**
+ * The app asks for the install-wide statistics over one period. Answered once with `stats.result`
+ * and never pushed: this page is about everything, so no session event can say it moved.
+ */
+export interface StatsGetFrame {
+  type: 'stats.get';
+  period: StatsPeriod;
+}
+
+/** Calls, tokens, money and API time over one set of rows. */
+export interface StatsTotals {
+  calls: number;
+  errors: number;
+  promptTokens: number;
+  completionTokens: number;
+  /** Subsets of `promptTokens`, billed at their own rate. */
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** What was charged: pay-as-you-go endpoints. */
+  billedUsd: number;
+  /** What it would have cost at list price: flat plans, subscriptions, self-hosted. Not a charge. */
+  referenceUsd: number;
+  /** Calls no rung of the pricing ladder could price: counted here, absent from the money. */
+  unpriced: number;
+  /** Wall time spent inside the API. */
+  durationMs: number;
+}
+
+/** One model on one route. `provider` is the endpoint pin when there is one, else the host. */
+export interface StatsModelRow extends StatsTotals {
+  model: string;
+  provider: string;
+  /** How OpenRouter spells the provider tag. Decoration: `provider` is the key. */
+  providerName?: string;
+  /** The rest of the endpoint pin: a quantization or a service tier, never part of the model. */
+  variant?: string;
+}
+
+/** One endpoint, every model it served folded together. */
+export interface StatsProviderRow extends StatsTotals {
+  provider: string;
+  providerName?: string;
+}
+
+/** Where a session's label came from, so the page can render an id as an id. */
+export type StatsLabelSource = 'title' | 'first-message' | 'id';
+
+/**
+ * One conversation's spend, including the conversations that no longer exist on disk: their calls
+ * outlive them, and a ranking that dropped them would not add up to the total above it.
+ */
+export interface StatsSessionRow extends StatsTotals {
+  sessionId: string;
+  /** The title if the session is alive, its opening message if the archive still has it, else the id. */
+  label: string;
+  labelSource: StatsLabelSource;
+  /** The session is gone from disk. Its rows are not, and this is what says so. */
+  deleted: boolean;
+  firstAt: string;
+  lastAt: string;
+}
+
+/** One day of the window. Bounded by `detailSince`: the rollup is monthly and cannot fill a day. */
+export interface StatsDayRow extends StatsTotals {
+  /** `YYYY-MM-DD`. */
+  date: string;
+}
+
+/**
+ * How often one model, or one host, failed and how long it took.
+ *
+ * `avgDurationMs` and nothing finer: the rollup keeps sums, not distributions, so a percentile
+ * would be available for the live window and silently missing for everything older.
+ */
+export interface StatsReliabilityRow {
+  /** A model id when `kind` is `model`, a host when it is `provider`. */
+  key: string;
+  kind: 'model' | 'provider';
+  calls: number;
+  errors: number;
+  errorRatePct: number;
+  avgDurationMs: number;
+}
+
+/** How much of the input was served from cache, and how much was written into it. */
+export interface StatsCache {
+  promptTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** `cacheReadTokens / promptTokens`, already a percentage. 0 when nothing was read. */
+  readSharePct: number;
+  /** `cacheWriteTokens / promptTokens`, already a percentage. */
+  writeSharePct: number;
+}
+
+/** One caller: the orchestrator, the sub-agents it spawned, the browser, the compactions. */
+export interface StatsCallerRow extends StatsTotals {
+  caller: string;
+}
+
+/**
+ * What a provider's own ledger says the key spent, beside what we recorded for it.
+ *
+ * One entry per provider that publishes a ledger, and only those: a host we can only compare with
+ * itself is a row of the provider ranking, not a reconciliation. The gap is not an error to fix --
+ * a key's counter runs from the day it was made, and a BYOK route is charged by the upstream
+ * provider that the aggregator never billed for.
+ */
+export interface StatsReconciliation {
+  /** The host the figures are about, as the page should name it (`openrouter.ai`). */
+  provider: string;
+  /** Our own rows for that host over the period, priced like every other figure on the page. */
+  recordedUsd: number;
+  /** How many recorded calls that sum covers. Zero is a reading: nothing went there. */
+  calls: number;
+  /** What the provider says the key spent since it was created. Absent when it was not read. */
+  providerUsd?: number;
+  /** `providerUsd - recordedUsd`, sent rather than subtracted on the page. Absent with it. */
+  deltaUsd?: number;
+  /** Credits bought minus credits spent. Absent when the provider publishes no balance. */
+  balanceUsd?: number;
+  /**
+   * The ledger was not read, so the entry carries our sum alone. True for an API that is down and
+   * for a cache nothing has warmed yet alike: the page never waits on a third party, so both are
+   * the same statement -- we do not have their number right now.
+   */
+  providerUnread: boolean;
+}
+
+/**
+ * Everything this install has spent, over one period.
+ *
+ * Two horizons, and the page must show both or it lies about one of them. `totals`, `models`,
+ * `providers`, `reliability`, `cache` and `callers` reach back to `totalsSince` when the period is
+ * `all`, because the purge folds every row it deletes into a permanent monthly rollup before
+ * deleting it. `sessions` and `daily` stop at `detailSince`: the rollup has no session on its key
+ * and no day in it, so nothing older can be broken down that way.
+ */
+export interface StatsPayload {
+  period: StatsPeriod;
+  /** Oldest per-call row still on disk. Everything below `sessions` and `daily` starts here. */
+  detailSince?: string;
+  /** First month (`YYYY-MM`) the rollup holds. Absent until a purge has run. */
+  totalsSince?: string;
+  /** The totals on this payload include rolled-up months. Only ever true for `all`. */
+  rollupIncluded: boolean;
+  totals: StatsTotals;
+  /** Ranked by spend, billed first then reference. */
+  models: StatsModelRow[];
+  /** Ranked by spend. */
+  providers: StatsProviderRow[];
+  /** Ranked by spend. Bounded by `detailSince`. */
+  sessions: StatsSessionRow[];
+  /** Oldest day first. Bounded by `detailSince`. */
+  daily: StatsDayRow[];
+  /** Models first, then hosts; each half ranked by error rate. */
+  reliability: StatsReliabilityRow[];
+  cache: StatsCache;
+  /** Ranked by calls. */
+  callers: StatsCallerRow[];
+  /** Empty when no provider with a readable ledger is configured. */
+  reconciliation: StatsReconciliation[];
+}
+
+/**
+ * The answer to one `stats.get`. It carries no `threadId` on purpose: the statistics are the
+ * install's, not a conversation's, so nothing here is addressed to a thread.
+ */
+export interface StatsResultFrame {
+  type: 'stats.result';
+  stats: StatsPayload;
+}
+
+/**
  * One layer of the system prompt a conversation runs on, as the server composes it. The four
  * prompt files carry an origin and an `edit` target; the derived layers carry neither.
  */
@@ -1613,6 +1792,8 @@ export type ErrorScope =
   | 'config'
   | 'workspaces'
   | 'status'
+  // Every stats.get refusal: an unknown period, a server with no analytics, a read that threw.
+  | 'stats'
   | 'jobs'
   | 'tags'
   // Sent by the server for every subagents.* refusal, kill and reset included. It was missing
@@ -1992,6 +2173,7 @@ export type ServerFrame =
   | ConfigResultFrame
   | ConfigSavedFrame
   | StatusResultFrame
+  | StatsResultFrame
   | SessionInstructionsResultFrame
   | JobsListResultFrame
   | JobsRunsResultFrame
@@ -2079,6 +2261,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'config.result',
   'config.saved',
   'status.result',
+  'stats.result',
   'session.instructions.result',
   'jobs.list.result',
   'browser.info.result',
@@ -2774,6 +2957,15 @@ export function encodeStatusWatch(threadId: string): string {
 
 export function encodeStatusUnwatch(): string {
   return JSON.stringify({ type: 'status.unwatch' });
+}
+
+/**
+ * Asks for the install-wide statistics over one window. Answered once, never pushed, and the
+ * period travels with the request: the server refuses a window it does not know rather than
+ * trimming it, so a page that dropped the field would be reading somebody else's window.
+ */
+export function encodeStatsGet(period: StatsPeriod): string {
+  return JSON.stringify({ type: 'stats.get', period });
 }
 
 export interface JobFieldsOut {
