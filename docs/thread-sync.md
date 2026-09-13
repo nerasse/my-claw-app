@@ -62,3 +62,24 @@ already had is never rearranged and a plain fresh frame -- the common case -- st
   as part of its collapsed work. An item whose run is folded by the incoming page is dropped.
 
 Everything else inside the range defers to the window. That is the point: it is the truth there.
+
+## The one state a delta cannot infer
+
+`session.sync.result` carries `compacting` -- the compaction running on the thread, if any. The
+router applies it in **both** directions: present, the rule is raised; absent, it is taken down. The
+absence is the half that matters.
+
+The app raised that rule from a frame and lowered it from a frame, and a frame that never arrives
+lowers nothing. The end of a compaction is broadcast once, to the windows connected at that second,
+and a phone whose socket drops every ten to forty minutes is regularly not one of them. Everything
+else on the thread corrects a window that missed it: the boundary is in the history, the end of a run
+arrives with the run, a fresh page predates whatever was in flight, a stream opening proves the
+compaction holding the run is behind. A compaction that ends while the thread is quiet has none of
+those, and the rule stayed up with its counter still climbing from the start.
+
+Measured on the owner's phone, 2026-09-13: a `/compact` that succeeded at 18:57 was still drawn at
+19:13, eighteen minutes fifty-nine on the counter, next to the boundary it had written. `/stop`
+answered "Nothing running", which was true, and read as the server losing the plot.
+
+It is said on every sync rather than once, because the case that matters is precisely the one with no
+event to carry it.
