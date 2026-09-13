@@ -82,6 +82,14 @@ export interface ToolItem extends ToolCallPayload {
   ts: number;
   /** The run this card belongs to, when it sits inside one -- docs/run-grouping.md. */
   run?: RunInfo;
+  /**
+   * The run ended while this call was still in flight, so its result frame is never coming.
+   *
+   * Client-side only: the server has no such state, it writes the call it settled. The card is
+   * terminal (no spinner, a frozen duration) and says so rather than claiming a failure, which
+   * is a verdict only a result can carry.
+   */
+  interrupted?: boolean;
 }
 
 /**
@@ -747,8 +755,46 @@ class ChatStoreImpl {
     return true;
   }
 
+  /**
+   * Cards of a run that ended while they were still in flight.
+   *
+   * Their result frame is never coming: the run died on an API error, a Stop cut it, or its end
+   * was lost and the server's own view closed it. Left running, the spinner spins for good and
+   * `RunningFor` keeps measuring from `ts` against the current clock -- a call the server had
+   * settled in 25 s read "220m 25s" on the phone three hours later. The duration is frozen here,
+   * at the run's end, which is the last instant the call is known to have been alive, and no
+   * terminal card ever counts from the current clock again.
+   *
+   * Sub-agent cards are left alone: their lifecycle is the spawn state machine's (`startSpawn`,
+   * `settleSpawn`, `reconcileSpawnRoster`, whose guards exist to survive delayed frames), they
+   * draw no counter, and the router refetches the roster at every run end.
+   */
+  private interruptInFlightTools(threadId: string, runId: string, endTs: number): void {
+    const items = this.threads.get(threadId);
+    if (!items) return;
+    let changed = false;
+    const next = items.map(item => {
+      if (item.kind !== 'tool' || item.running !== true) return item;
+      if (item.run?.id !== runId || isSubAgentTool(item.name)) return item;
+      changed = true;
+      return {
+        ...item,
+        running: false,
+        interrupted: true,
+        durationMs: item.durationMs ?? Math.max(0, endTs - item.ts),
+      };
+    });
+    if (!changed) return;
+    this.threads.set(threadId, next);
+    this.emitSoon();
+  }
+
   /** Marks every item of a run with its terminal state. */
   private sealRun(threadId: string, runId: string, status: RunStatus, endTs: number): void {
+    // A run reaching a terminal state is the only thing that says a card in flight will never
+    // settle, and every door that closes a run comes through here: the end frame, a page the
+    // server serves with no active run, and the session list no longer holding the thread.
+    if (status !== 'running') this.interruptInFlightTools(threadId, runId, endTs);
     const items = this.threads.get(threadId);
     if (!items) return;
     let changed = false;
@@ -812,6 +858,13 @@ class ChatStoreImpl {
       const items = this.threads.get(threadId) ?? EMPTY_ITEMS;
       const running = [...items].reverse().find(item => item.run?.status === 'running');
       if (running?.run) this.sealRun(threadId, running.run.id, 'done', running.run.endTs ?? Date.now());
+      // And the cards of that run, whether or not the seal above had anything to do: the rename
+      // may have carried the page's terminal status onto them already, which leaves no run marked
+      // running for the search to find while a card of it is still in flight. The server says no
+      // run is answering, so that card never reported and never will.
+      const settled = this.threads.get(threadId) ?? EMPTY_ITEMS;
+      const trailing = [...settled].reverse().find(item => item.run)?.run;
+      if (trailing) this.interruptInFlightTools(threadId, trailing.id, trailing.endTs ?? Date.now());
     }
   }
 
@@ -1685,6 +1738,11 @@ class ChatStoreImpl {
         ...payload,
         ...(terminalSpawn ? { spawn: terminalSpawn } : {}),
         running: false,
+        // A settled call from the server beats anything the client wrote on the card when the run
+        // ended without one: output, duration and outcome are the server's, so the local
+        // "interrupted" mark goes with them. Left set, the card the history brings back complete
+        // would still read interrupted, with a duration this device measured.
+        interrupted: false,
       });
       return;
     }

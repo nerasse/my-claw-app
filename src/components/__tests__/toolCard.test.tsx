@@ -260,4 +260,35 @@ describe('ToolCard elapsed time while running', () => {
     expect(textsOf(tree)).not.toContain('1m 2s');
     expect(textsOf(tree).some(text => text.includes('62.4s') || text.includes('1m'))).toBe(true);
   });
+
+  /**
+   * The run died with this call in flight. The store settles it with the duration it had earned;
+   * the card must stop counting there, whatever the clock does afterwards -- a card left running
+   * read "220m 25s" on a call the server had settled in 25 s.
+   */
+  test('an interrupted card says so, and holds the duration the run ended on', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-06T13:25:25.000Z'));
+    const started = Date.now() - 25_000;
+    const tree = renderTool(makeItem({ running: true, ts: started }));
+    expect(textsOf(tree)).toContain('25s');
+
+    updateItem(tree, makeItem({ running: false, ok: false, interrupted: true, ts: started, durationMs: 25_000 }));
+    expect(textsOf(tree)).toContain('interrupted');
+    // "failed" is a verdict only a result can carry: this call never returned one.
+    expect(textsOf(tree)).not.toContain('failed');
+    expect(textsOf(tree)).toContain('25s');
+
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(3 * 60 * 60 * 1000);
+    });
+    expect(textsOf(tree)).toContain('25s');
+    expect(textsOf(tree).some(text => text.includes('m') && text.endsWith('s') && text !== '25s')).toBe(false);
+  });
+
+  test('a call that ran and came back with an error still reads failed', () => {
+    const tree = renderTool(makeItem({ running: false, ok: false, output: 'boom', durationMs: 300 }));
+    expect(textsOf(tree)).toContain('failed');
+    expect(textsOf(tree)).not.toContain('interrupted');
+  });
 });

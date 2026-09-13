@@ -1290,19 +1290,40 @@ describe('handleSyncResult: tool cards in flight', () => {
     chatStore.startToolCall(T, 'call-2', 'read', { path: '/etc/hosts' });
     expect(chatStore.getItems(T)[0]).toMatchObject({ kind: 'tool', running: true });
 
-    // A reset arrives, but the running card is not in the server's entries yet
+    // A reset arrives, but the running card is not in the server's entries yet. The run is still
+    // answering, which is the only thing that makes the card live rather than abandoned.
     chatStore.handleSyncResult(
       T,
       [{ id: 'h-1', role: 'user', text: 'hello', ts: '2026-01-01T00:00:00.000Z', attachments: [] }],
       'h-1',
       'h-1',
-      false,
+      true,
       'unknown-cursor', // reset
     );
 
     // Running tool card survives a reset (it's still running, server doesn't have it yet)
     const items = chatStore.getItems(T);
     expect(items.find(i => i.id === 'call-2')).toMatchObject({ kind: 'tool', running: true });
+  });
+
+  test('the same reset, with no run answering, settles that card instead of keeping its spinner', () => {
+    // `activeRun: false` is the server saying nothing is executing on this thread, so a card the
+    // page does not carry is one whose result frame was lost with the run. Kept running it spun
+    // for good and counted from its own start against the current clock.
+    chatStore.startToolCall(T, 'call-3', 'read', { path: '/etc/hosts' });
+    chatStore.handleSyncResult(
+      T,
+      [{ id: 'h-1', role: 'user', text: 'hello', ts: '2026-01-01T00:00:00.000Z', attachments: [] }],
+      'h-1',
+      'h-1',
+      false,
+      'unknown-cursor',
+    );
+    expect(chatStore.getItems(T).find(i => i.id === 'call-3')).toMatchObject({
+      kind: 'tool',
+      running: false,
+      interrupted: true,
+    });
   });
 });
 

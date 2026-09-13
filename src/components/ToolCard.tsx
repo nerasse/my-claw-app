@@ -73,6 +73,10 @@ export const ToolCard = React.memo(function ToolCardView({
   const rest = useMemo(() => (open ? labelArgs(item.name, item.args) : null), [open, item.name, item.args]);
   const args = open && argsOpen && rest ? JSON.stringify(rest, null, 2) : '';
   const running = item.running === true;
+  // The run ended before this call reported: a terminal state of its own, and not a failure. The
+  // store froze the duration at the run's end, so the head draws that number like any settled
+  // card instead of counting from `ts` against the current clock.
+  const interrupted = !running && item.interrupted === true;
   // A tool output carrying a unified diff (apply_patch) renders as colour-coded lines instead of
   // a plain monospace block. splitDiff only runs while the card is expanded (a collapsed card has
   // nothing to paint).
@@ -147,7 +151,7 @@ export const ToolCard = React.memo(function ToolCardView({
   }, [open]);
 
   return (
-    <View style={[styles.card, !item.ok && !running && styles.cardError, open && styles.cardOpen]}>
+    <View style={[styles.card, !item.ok && !running && !interrupted && styles.cardError, open && styles.cardOpen]}>
       <Pressable
         onPress={() => {
           setOpen(value => !value);
@@ -156,7 +160,7 @@ export const ToolCard = React.memo(function ToolCardView({
         }}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${!item.ok && !running ? ', failed' : ''}`}
+        accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${interrupted ? ', interrupted' : !item.ok && !running ? ', failed' : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
@@ -169,7 +173,8 @@ export const ToolCard = React.memo(function ToolCardView({
             <View style={styles.spacer} />
           )}
           {!open && summary.extraArgs > 0 ? <ExtraArgs count={summary.extraArgs} /> : null}
-          {!item.ok && !running ? <Text style={styles.failed}>failed</Text> : null}
+          {interrupted ? <Text style={styles.interrupted}>interrupted</Text> : null}
+          {!item.ok && !running && !interrupted ? <Text style={styles.failed}>failed</Text> : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
@@ -254,7 +259,7 @@ export const ToolCard = React.memo(function ToolCardView({
           ) : null}
           {!hasDiff ? (
             <ScrollableBlock title={`${item.name} output`} style={styles.code}>
-              <Text style={styles.codeText}>{item.output.trim() || '(empty)'}</Text>
+              <Text style={styles.codeText}>{item.output.trim() || (interrupted ? '(no result: the run ended)' : '(empty)')}</Text>
             </ScrollableBlock>
           ) : null}
         </View>
@@ -362,6 +367,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
   duration: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
   failed: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
+  // Not `danger`: the call was cut off, which is not the same statement as a tool that ran and
+  // came back with an error.
+  interrupted: { fontSize: scaleFont(font.micro, scale), color: palette.warn, fontWeight: '600' as const },
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
