@@ -41,6 +41,9 @@ of the my-claw repository.
   the cross-market median look identical on a page that does not say which one it is. Each price
   carries its markers (`*` not a charge, `~` a neighbouring model's price), and `since <date> (90
   days)` closes the card when the conversation is older than the analytics.
+- **The reconciliation line**, ruled off at the foot of the card: `openrouter.ai · they charged
+  $12.50 · we recorded $2.00 · gap +$10.50`, with `12 calls · 90 days · their figure runs from the
+  key, not the window · balance $7.50` under it. See "The provider's own ledger" below.
 - **Details**, folded: started, last active, turns, session id, who spawned a sub-agent, the
   window's provenance, the estimate, the request wall, **the current model with where it is picked
   from and the default it falls back to, and the current effort with the rung it comes from**,
@@ -55,6 +58,30 @@ What was taken out when the page was redrawn (0.6.45): the grid of session count
 `cost · 90 days` card showed the same calls and tokens the usage card shows; `active run` was in
 three places; `platform · dm` never varied; the raw text of the chat command was a dump of the
 same numbers. Duplicates are not context, they are noise to scan past.
+
+## The provider's own ledger
+
+Everything else on the page is what the server *deduced* a call cost. This one line is the other
+half: what a provider says it charged the key, beside our sum, and the gap. It is drawn from
+`reconciliation` on the report -- an optional field, so a server that predates it costs the page one
+line and nothing else.
+
+Three things about it are load-bearing:
+
+- **It is the account's money, not the conversation's.** A provider bills the key, so both halves
+  are install-wide and the line sits apart from the figures above it, under a rule. It is therefore
+  drawn even on a conversation that has spent nothing, where the card otherwise reads "nothing has
+  been called here yet".
+- **The gap is not an error.** It is the distance between a ledger and an inference, and the second
+  line says why it is expected to be non-zero: our window is ninety days and theirs runs from the
+  day the key was made. It is drawn **signed** -- `+` is money the provider took that we did not
+  account for, `-` is money we recorded that it never billed (a BYOK route, charged by the upstream
+  provider instead), and which way it leans is the whole information.
+- **A number that was not read is never drawn.** The server reads the ledger from a cache it
+  refuses to wait on, so an API that is down and a cache nothing has warmed yet both arrive as
+  `providerUnread`. The line then carries our own sum and `provider not reached`: an unreachable
+  provider takes a figure off the line, never the line. The flag wins over any figure left beside
+  it, and a missing figure is never rendered anyway -- `$NaN` is the failure mode this replaces.
 
 ## Where it opens
 

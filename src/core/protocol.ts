@@ -1127,6 +1127,36 @@ export interface UsageModelRow {
   costApproximate: boolean;
 }
 
+/**
+ * Two figures for the same money, and the gap between them: what a provider says it charged the
+ * key, and what the server deduced for it. Absent on a server that predates the field, and on one
+ * where no provider publishing its own ledger is configured.
+ *
+ * Account-wide on both halves -- a provider bills the key, not the conversation -- so this line
+ * describes the install and not the thread the page is open on.
+ */
+export interface UsageReconciliation {
+  /** The host the two figures are about (`openrouter.ai`). */
+  provider: string;
+  /** The server's own rows for that provider, over every conversation its analytics still hold. */
+  recordedUsd: number;
+  /** How many recorded calls that sum covers. Zero is a reading: nothing went there yet. */
+  calls: number;
+  /** How far back `recordedUsd` reaches. The provider's figure has no such bound. */
+  windowDays: number;
+  /** What the provider says the key spent since it was created. Absent when it was not read. */
+  providerUsd?: number;
+  /** `providerUsd - recordedUsd`, negative when the server recorded more than the provider billed. */
+  deltaUsd?: number;
+  /** Credits bought minus credits spent, when the provider publishes a balance. */
+  balanceUsd?: number;
+  /**
+   * The provider's ledger was not read. True for an API that is down and for a cache nothing has
+   * warmed yet alike: the server never waits on the network, so both say the same thing.
+   */
+  providerUnread: boolean;
+}
+
 /** Calls, tokens and money over one set of rows. */
 export interface UsageTotals {
   calls: number;
@@ -1247,6 +1277,8 @@ export interface StatusPayload {
     /** Analytics keep 90 days. Set when the conversation is older: the figures start here, not at its creation. */
     since?: string;
   } | null;
+  /** What the provider says it charged, beside what the server deduced. Absent on an older server. */
+  reconciliation?: UsageReconciliation;
   runtime: {
     /** The live run tree of this conversation: `main` at depth 0, each sub-agent below it. */
     runs: Array<{ label: string; depth: number; startedAt: string }>;

@@ -5,7 +5,14 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { useStatus } from '../core/status';
 import { withoutEndpoint } from '../core/model';
 import { subAgentsUsage } from '../core/usage';
-import type { StatusPayload, UsageAgent, UsageModelRow, UsageOwn, UsageTotals } from '../core/protocol';
+import type {
+  StatusPayload,
+  UsageAgent,
+  UsageModelRow,
+  UsageOwn,
+  UsageReconciliation,
+  UsageTotals,
+} from '../core/protocol';
 
 /**
  * The status page of a conversation, drawn from the structured `/status` report the server pushes
@@ -52,6 +59,45 @@ function duration(ms: number): string {
 /** The one figure for a set of rows: what was charged plus what it would have cost. */
 function cost(t: UsageTotals): number {
   return t.billedUsd + t.referenceUsd;
+}
+
+/**
+ * A gap, signed, because its direction is the whole information: `+` is money the provider took
+ * that we did not account for, `-` is money we recorded that it never billed (a BYOK route, where
+ * the upstream provider charged instead). Rounded to nothing under a cent rather than to `-$0.00`.
+ */
+function gap(usd: number): string {
+  if (Math.abs(usd) < 0.01) return '<$0.01';
+  const sign = usd < 0 ? '-' : '+';
+  return `${sign}${money(Math.abs(usd))}`;
+}
+
+/**
+ * What a provider says it charged, beside what the server deduced, over two lines.
+ *
+ * Both halves are the whole account, never this conversation, so the line says whose money it is
+ * before it says how much. The provider's figure is drawn only when there is one: the server reads
+ * it from a cache it refuses to wait on, so an API that is down and a cache nothing has warmed yet
+ * both leave the line standing on the recorded sum alone, and neither may turn it into `$NaN`.
+ *
+ * The gap is not an error being reported. It is the distance between a ledger and an inference,
+ * and the second line names the two reasons it is expected to be non-zero: our window is bounded
+ * and theirs is not, and a BYOK call is billed by somebody they never charged for.
+ *
+ * Exported for its own test: the fallbacks are the whole behaviour of the field, and reaching them
+ * through the page means rendering a report to read two strings.
+ */
+export function reconciliationLines(r: UsageReconciliation): string[] {
+  const window = `${r.calls} call${r.calls === 1 ? '' : 's'} · ${r.windowDays} days`;
+  if (r.providerUnread || r.providerUsd === undefined || r.deltaUsd === undefined) {
+    return [`${r.provider} · we recorded ${money(r.recordedUsd)}`, `${window} · provider not reached`];
+  }
+  return [
+    `${r.provider} · they charged ${money(r.providerUsd)} · we recorded ${money(r.recordedUsd)} · gap ${gap(r.deltaUsd)}`,
+    [window, 'their figure runs from the key, not the window', r.balanceUsd === undefined ? null : `balance ${money(r.balanceUsd)}`]
+      .filter(Boolean)
+      .join(' · '),
+  ];
 }
 
 /** A priced row's cost with its markers: `*` not a charge, `~` a neighbouring model's price. */
@@ -296,6 +342,7 @@ function UsageCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
       <Card>
         <CardHead title="usage" />
         <Text style={styles.cardNote}>nothing has been called here yet.</Text>
+        <Reconciliation reconciliation={payload.reconciliation} />
       </Card>
     );
   }
@@ -328,7 +375,24 @@ function UsageCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
         <SubAgents agents={u.agents} />
       </View>
       {legend.length > 0 ? <Text style={styles.codeNote}>{legend.join(' · ')}</Text> : null}
+      <Reconciliation reconciliation={payload.reconciliation} />
     </Card>
+  );
+}
+
+/**
+ * The account's own ledger beside ours. Drawn under the card's own figures because it is about the
+ * key and not this conversation, and left out entirely by a server that sends no such field.
+ */
+function Reconciliation({ reconciliation }: { reconciliation?: UsageReconciliation }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  if (!reconciliation) return null;
+  const [figures, note] = reconciliationLines(reconciliation);
+  return (
+    <View style={styles.reconcile}>
+      <Text style={styles.cardNote}>{figures}</Text>
+      <Text style={styles.codeNote}>{note}</Text>
+    </View>
   );
 }
 
@@ -646,6 +710,8 @@ const createStyles = (palette: Palette) => ({
   meterFill: { height: 6, borderRadius: radius.pill },
   barFill: { color: palette.accent },
   barWarn: { color: palette.warn },
+  // Ruled off above: the figures under it are the account's, not the conversation's.
+  reconcile: { marginTop: space.xs, paddingTop: space.xs, borderTopWidth: 1, borderTopColor: palette.border, gap: space.xxs },
   tree: { marginTop: space.xs, borderTopWidth: 1, borderTopColor: palette.border },
   usageRow: { borderBottomWidth: 1, borderBottomColor: palette.border },
   usageHead: {
