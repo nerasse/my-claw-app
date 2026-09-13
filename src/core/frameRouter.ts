@@ -468,6 +468,14 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         frame.hasMore,
         frame.nextBefore,
       );
+      // The thread's compaction state, in both directions: the operation if one runs, and its
+      // absence otherwise. Only the first travels as an event, so a window that was not connected
+      // when the compaction ended hears it here or nowhere -- and the rule it drew would stay up.
+      chatStore.setCompacting(
+        frame.threadId,
+        frame.compacting ? Date.parse(frame.compacting.since) : undefined,
+        frame.compacting?.text ?? '',
+      );
       const rosterSync = subAgentStore.get(frame.threadId);
       if (rosterSync.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, rosterSync.agents);
       chatStore.markRead(frame.threadId);

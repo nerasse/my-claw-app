@@ -2880,6 +2880,14 @@ export interface SessionSyncResultFrame {
   /** The id of the last entry in the file (may differ from leaf after a branch). */
   head: string | null;
   activeRun?: boolean;
+  /**
+   * The compaction running on this thread, when one is.
+   *
+   * Said on every answer, and the absence is what carries the information: the end is broadcast
+   * once, to the windows connected at that second, so one that was down would otherwise draw the
+   * rule for good. Applied in both directions -- see `routeServerFrame`.
+   */
+  compacting?: { since: string; text?: string };
   /** Why the delta was replaced by a full page. Absent means append. */
   reset?: 'unknown-cursor' | 'branch-switch';
   /** Whether entries were truncated by the limit. */
