@@ -10,9 +10,11 @@
  * drawer over the conversation, innermost first, and only an empty stack lets Android have the
  * press.
  *
- * These tests are written against the behaviour as it stands, including the parts of it that look
- * like accidents. Where that is the case the comment says so: they are observations, not
- * endorsements. `docs/back-cascade.md`.
+ * Four surfaces of the cascade are pinned where their own harness lives, because a test that has
+ * to rebuild a jobs editor or a sub-agent chat to press one key is a test nobody maintains:
+ * `Jobs.test.tsx` (the delete confirmation over the editor), `Tags.test.tsx` (the discard sheet),
+ * `SubAgents.test.tsx` (the hand-back sheet) and `Skills.test.tsx` (the transfer notice).
+ * `docs/back-cascade.md` holds the whole list.
  */
 
 import ReactTestRenderer from 'react-test-renderer';
@@ -106,6 +108,10 @@ function sheetShows(tree: Tree, label: string): boolean {
   return labelsOf(tree).includes(label);
 }
 
+function sentFrames(): Array<{ type: string }> {
+  return bridge.sendMessage.mock.calls.map(([frame]) => JSON.parse(String(frame)) as { type: string });
+}
+
 /** The chat screen's 40ms scroll timer must fire before unmount, or the next test crashes. */
 async function settleAndUnmount(tree: Tree): Promise<void> {
   await ReactTestRenderer.act(async () => {
@@ -193,30 +199,51 @@ test('a menu outranks the drawer under it, and a screen outranks the conversatio
 });
 
 /**
- * Observed, not endorsed.
+ * A confirmation is a question, and a back press is an answer to it: "no".
  *
- * The cascade lists the layers it knows by name. A confirmation sheet that is not in that list
- * (here the delete confirmation, and `workspacePicker`, `handoff`, `jobToDelete`,
- * `tagEditorDiscard` alike) is invisible to a back press: the press reaches straight through it
- * and closes whatever sits underneath, leaving the sheet on screen over a shell that moved. This
- * test exists so the extraction cannot change it by accident, not because it is right.
+ * Until these entered the cascade the press went straight through them and closed the layer
+ * underneath -- the drawer went, the question stayed on screen over a shell that had moved, and
+ * the next press aimed at the question hit whatever was under that.
  */
-test('a sheet the cascade does not name lets the press through to the layer under it', async () => {
-  const tree = await renderApp();
-  await listSessions();
-  await openThreadMenu(tree);
+describe('sheets the cascade used to let the press through', () => {
+  test('the delete confirmation goes, and the drawer under it does not', async () => {
+    const tree = await renderApp();
+    await listSessions();
+    await openThreadMenu(tree);
 
-  await pressLabel(tree, 'Delete');
-  await waitFor(() => textsOf(tree).some(text => text.startsWith('Delete this conversation?')));
-  // The menu closed itself on the way: the confirmation is the only layer the owner can see.
-  expect(sheetShows(tree, 'Rename…')).toBe(false);
-  expect(drawerVisible(tree)).toBe(true);
+    await pressLabel(tree, 'Delete');
+    await waitFor(() => textsOf(tree).some(text => text.startsWith('Delete this conversation?')));
+    // The menu closed itself on the way: the confirmation is the only layer the owner can see.
+    expect(sheetShows(tree, 'Rename…')).toBe(false);
+    expect(drawerVisible(tree)).toBe(true);
 
-  expect(await hardwareBack()).toBe(true);
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => !textsOf(tree).some(text => text.startsWith('Delete this conversation?')));
 
-  // The drawer went. The confirmation the press was aimed at is still there.
-  expect(drawerVisible(tree)).toBe(false);
-  expect(textsOf(tree).some(text => text.startsWith('Delete this conversation?'))).toBe(true);
+    // Nothing else moved: the drawer is where it was, and the conversation was not deleted.
+    expect(drawerVisible(tree)).toBe(true);
+    expect(chatVisible(tree)).toBe(true);
+    expect(sentFrames().some(frame => frame.type === 'session.delete')).toBe(false);
 
-  await settleAndUnmount(tree);
+    await settleAndUnmount(tree);
+  });
+
+  test('the workspace picker goes, and the drawer under it does not', async () => {
+    const tree = await renderApp();
+    await listSessions();
+    await openThreadMenu(tree);
+
+    await pressLabel(tree, 'Change workspace');
+    await waitFor(() => sheetShows(tree, 'Manage workspaces…'));
+    expect(drawerVisible(tree)).toBe(true);
+
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => !sheetShows(tree, 'Manage workspaces…'));
+
+    expect(drawerVisible(tree)).toBe(true);
+    expect(chatVisible(tree)).toBe(true);
+    expect(sentFrames().some(frame => frame.type === 'session.workspace')).toBe(false);
+
+    await settleAndUnmount(tree);
+  });
 });

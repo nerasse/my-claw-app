@@ -82,6 +82,7 @@ export function JobsEditorScreen({
   onBack,
   onSave,
   onDelete,
+  deleting,
 }: {
   /** The job being edited, or null for a new one. */
   job: JobEntry | null;
@@ -94,6 +95,12 @@ export function JobsEditorScreen({
   onBack: () => void;
   onSave: (fields: JobFieldsOut) => void;
   onDelete: (job: JobEntry) => void;
+  /**
+   * Whether the shell is asking the owner to confirm the deletion of this job. The sheet is the
+   * shell's, drawn over this screen, and this screen holds the back key: without knowing, it
+   * would answer the press by closing itself and leave the question hanging over the jobs list.
+   */
+  deleting: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const layerFrame = useLayerFrame();
@@ -111,6 +118,8 @@ export function JobsEditorScreen({
   // a press from the scope picker must close the picker, not the whole editor.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Not ours to answer: declining hands the press to the shell, which owns that sheet.
+      if (deleting) return false;
       if (scopeEditor) {
         setScopeEditor(null);
         return true;
@@ -132,7 +141,7 @@ export function JobsEditorScreen({
       return true;
     });
     return () => sub.remove();
-  }, [pickerState, modelPicker, onBack, scopeEditor, workspacePicker]);
+  }, [pickerState, modelPicker, onBack, scopeEditor, workspacePicker, deleting]);
 
   const invalid = scheduleInvalid(draft.schedule);
   const promptMissing = !draft.prompt.trim();

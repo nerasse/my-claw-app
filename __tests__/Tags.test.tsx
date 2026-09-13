@@ -356,3 +356,55 @@ test('/tag new "opus" in the composer opens the ordered route editor', async () 
   await pressLabel(tree, 'Full: 400k');
   await settleAndUnmount(tree);
 });
+
+/** The Android layer calls the last registered handler and stops when it returns true. */
+async function hardwareBack(): Promise<boolean> {
+  const handlers = backHandler().__handlers;
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]!();
+  });
+  return handled;
+}
+
+/** The route toggle is the cheapest edit that makes the editor dirty. */
+async function toggleGlobalFallback(tree: Tree): Promise<void> {
+  const toggle = tree.root.findAll(
+    node => node.props.accessibilityRole === 'checkbox' && typeof node.props.onPress === 'function',
+    { deep: true },
+  )[0];
+  if (!toggle) throw new Error('no route toggle on the tag editor');
+  await ReactTestRenderer.act(async () => toggle.props.onPress());
+}
+
+test('back on the discard question closes it and keeps the editor, changes and all', async () => {
+  // A tag with a route opens the editor; a single-model tag opens the picker flow instead.
+  const tree = await bootToTagsPage(tagsResult({
+    tags: [
+      { name: 'Default', model: 'fast-1' },
+      { name: 'opus', model: 'fast-1', route: [{ model: 'fast-1', effort: 'high' }], fallbackToGlobalDefault: false },
+    ],
+  }));
+  await pressLabel(tree, 'Open tag opus');
+  await waitFor(() => textsOf(tree).includes('Fallback order'));
+  await toggleGlobalFallback(tree);
+
+  // The press out of a dirty editor asks instead of leaving. That question is a layer of the
+  // shell drawn over the page, and the page is still there underneath.
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => textsOf(tree).includes('Discard the unsaved route changes?'));
+
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => !textsOf(tree).includes('Discard the unsaved route changes?'));
+
+  // Still on the editor, still dirty: nothing was discarded and nothing was saved.
+  expect(textsOf(tree)).toContain('Fallback order');
+  expect(labelsOf(tree)).toContain('Add model');
+  expect(sentFrames().some(frame => frame.type === 'tags.save')).toBe(false);
+
+  // And the question can be asked again, which is the proof the editor kept its changes.
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => textsOf(tree).includes('Discard the unsaved route changes?'));
+
+  await settleAndUnmount(tree);
+});

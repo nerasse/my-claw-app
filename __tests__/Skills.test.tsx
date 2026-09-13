@@ -393,3 +393,37 @@ test('a move closes the open reader, whose URL points at the tier the skill just
 
   await settleAndUnmount(tree);
 });
+
+/**
+ * The transfer notice is a line on the page, not a layer: it takes no press of its own, and the
+ * back key leaves the page in one press like anywhere else. It is dropped on the way out all the
+ * same -- the screen's own back arrow always did, the hardware key did not, and the stale line
+ * came back the next time the page was opened.
+ */
+test('the back key leaves the skills page in one press, and does not keep the notice for next time', async () => {
+  const tree = await renderApp();
+  await openSkillsWith(tree, SHADOWED);
+  await waitFor(() => labelsOf(tree).includes('Open skill forgejo'));
+
+  await longPressLabel(tree, 'Open skill forgejo');
+  await pressLabel(tree, 'Move to…');
+  await waitFor(() => labelsOf(tree).includes('Workspace · default'));
+  await pressLabel(tree, 'Workspace · default');
+  await waitFor(() => textsOf(tree).some(text => text.includes('forgejo moved to')));
+
+  // One press, and it is the page that goes: the notice never gets a press of its own.
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = hardwareBack();
+  });
+  expect(handled).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open skills'));
+  expect(textsOf(tree).some(text => text.includes('forgejo moved to'))).toBe(false);
+
+  await openSkills(tree);
+  await emit({ type: 'skills.list.result', skills: SHADOWED });
+  await waitFor(() => labelsOf(tree).includes('Open skill forgejo'));
+  expect(textsOf(tree).some(text => text.includes('forgejo moved to'))).toBe(false);
+
+  await settleAndUnmount(tree);
+});

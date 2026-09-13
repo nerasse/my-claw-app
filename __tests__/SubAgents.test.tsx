@@ -416,6 +416,58 @@ describe('handing an answer back to a caller', () => {
     await settleAndUnmount(tree);
   });
 
+  /**
+   * Android tries the handlers last registered first. The shell's is the only one here, but the
+   * helper walks the list the way the platform does so a screen that declines a press is visible.
+   */
+  async function androidBack(): Promise<boolean> {
+    // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+    const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+      default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+    };
+    const handlers = back.default.__handlers;
+    let handled = false;
+    await ReactTestRenderer.act(async () => {
+      for (let i = handlers.length - 1; i >= 0; i--) {
+        if (handlers[i]!()) {
+          handled = true;
+          break;
+        }
+      }
+    });
+    return handled;
+  }
+
+  it('back closes the sheet and stays in the sub-agent, then hands back to the parent', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await openHandoff(tree);
+    await ReactTestRenderer.act(async () => {
+      subAgentCallersStore.receive({
+        type: 'subagents.callers.result',
+        threadId: handleFor('subagent/digger-a1b2'),
+        callers: [caller()],
+      });
+    });
+    await waitFor(() => textsOf(tree).some(t => t.includes('Send for action (1)')));
+
+    // The sheet is a layer over the sub-agent chat. The press used to walk straight past it and
+    // leave the sub-agent, which is the one move that also closed the sheet -- by unmounting the
+    // conversation it belonged to.
+    expect(await androidBack()).toBe(true);
+    await waitFor(() => !textsOf(tree).some(t => t.includes('Send for action (1)')));
+    expect(textsOf(tree)).toContain('digger-a1b2 \u00b7 research');
+    expect(
+      bridge.sendMessage.mock.calls.map(([frame]) => String(frame)).some(frame => frame.includes('"subagents.handoff"')),
+    ).toBe(false);
+
+    // Only then does the next press leave the sub-agent for the conversation that called it.
+    expect(await androidBack()).toBe(true);
+    await waitFor(() => labelsOf(tree).includes('1 sub-agent'));
+    expect(textsOf(tree)).not.toContain('digger-a1b2 \u00b7 research');
+
+    await settleAndUnmount(tree);
+  });
+
   it('takes several callers at once, and files them as a note when asked', async () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
     await openHandoff(tree);

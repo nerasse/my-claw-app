@@ -59,6 +59,8 @@ export interface BackLayers {
   setSubagentAction: (value: null) => void;
   subagentMenuOpen: boolean;
   setSubagentMenuOpen: (value: false) => void;
+  handoff: unknown;
+  setHandoff: (value: null) => void;
   agentsOpen: boolean;
   setAgentsOpen: (value: false) => void;
   agentsGlobalOpen: boolean;
@@ -69,6 +71,8 @@ export interface BackLayers {
   setInstructionsPageOpen: (value: false) => void;
   instructionsPageEditing: boolean;
   setInstructionsPageEditing: (value: false) => void;
+  jobToDelete: unknown;
+  setJobToDelete: (value: null) => void;
   jobsOpen: boolean;
   setJobsOpen: (value: boolean) => void;
   jobsEditor: unknown;
@@ -94,6 +98,12 @@ export interface BackLayers {
   setApprovals: (update: (current: ApprovalRequestFrame[]) => ApprovalRequestFrame[]) => void;
   fileToDelete: unknown;
   setFileToDelete: (value: null) => void;
+  confirmDelete: unknown;
+  setConfirmDelete: (value: null) => void;
+  workspacePicker: unknown;
+  setWorkspacePicker: (value: null) => void;
+  tagEditorDiscard: boolean;
+  setTagEditorDiscard: (value: boolean) => void;
   threadToRename: unknown;
   setThreadToRename: (value: null) => void;
   modelOpen: boolean;
@@ -128,6 +138,7 @@ export interface BackLayers {
   setSkillReplace: (value: null) => void;
   skillViewer: unknown;
   setSkillViewer: (value: null) => void;
+  setSkillsNotice: (value: null) => void;
   settingsOpen: boolean;
   setSettingsOpen: (value: false) => void;
   settingsPage: SettingsPage;
@@ -139,7 +150,6 @@ export interface BackLayers {
   tagEditor: TagEditorState | null;
   setTagEditor: (value: TagEditorState | null) => void;
   tagEditorDirty: boolean;
-  setTagEditorDiscard: (value: true) => void;
   providerSearch: Cell<ProviderSearch>;
   providerEdit: { mode: 'create' | 'edit' } | null;
   setProviderEdit: (value: null) => void;
@@ -172,6 +182,8 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setSubagentAction,
     subagentMenuOpen,
     setSubagentMenuOpen,
+    handoff,
+    setHandoff,
     agentsOpen,
     setAgentsOpen,
     agentsGlobalOpen,
@@ -182,6 +194,8 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setInstructionsPageOpen,
     instructionsPageEditing,
     setInstructionsPageEditing,
+    jobToDelete,
+    setJobToDelete,
     jobsOpen,
     setJobsOpen,
     jobsEditor,
@@ -202,6 +216,12 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setApprovals,
     fileToDelete,
     setFileToDelete,
+    confirmDelete,
+    setConfirmDelete,
+    workspacePicker,
+    setWorkspacePicker,
+    tagEditorDiscard,
+    setTagEditorDiscard,
     threadToRename,
     setThreadToRename,
     modelOpen,
@@ -235,6 +255,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setSkillReplace,
     skillViewer,
     setSkillViewer,
+    setSkillsNotice,
     settingsOpen,
     setSettingsOpen,
     settingsPage,
@@ -246,7 +267,6 @@ export function closeTopLayer(layers: BackLayers): boolean {
     tagEditor,
     setTagEditor,
     tagEditorDirty,
-    setTagEditorDiscard,
     providerSearch,
     providerEdit,
     setProviderEdit,
@@ -284,6 +304,12 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setSubagentMenuOpen(false);
     return true;
   }
+  // The hand-back sheet sits over the sub-agent chat it was opened from, and under the menu that
+  // covers both: a press here must not hand the conversation back to its parent instead.
+  if (handoff) {
+    setHandoff(null);
+    return true;
+  }
   // The roster is an absolute layer like the status page, so it closes before anything under it.
   if (agentsOpen) {
     setAgentsOpen(false);
@@ -306,6 +332,13 @@ export function closeTopLayer(layers: BackLayers): boolean {
     }
     sessionInstructionsStore.close();
     setInstructionsPageOpen(false);
+    return true;
+  }
+  // Before the page it covers, like every confirmation here, and that is the whole point: the
+  // editor underneath used to take the press and leave the question hanging over the list.
+  // `JobsEditorScreen` owns the back key while it is up, so it hands this one case back.
+  if (jobToDelete) {
+    setJobToDelete(null);
     return true;
   }
   if (jobsOpen) {
@@ -345,6 +378,20 @@ export function closeTopLayer(layers: BackLayers): boolean {
   }
   if (fileToDelete) {
     setFileToDelete(null);
+    return true;
+  }
+  if (confirmDelete) {
+    setConfirmDelete(null);
+    return true;
+  }
+  if (workspacePicker) {
+    setWorkspacePicker(null);
+    return true;
+  }
+  // Asked by this very cascade when it walks out of a dirty tag editor. Closing it returns to the
+  // editor with the changes intact: answering the question is the only way past it.
+  if (tagEditorDiscard) {
+    setTagEditorDiscard(false);
     return true;
   }
   // Innermost first: the rename sheet sits over the menu that opened it.
@@ -445,6 +492,14 @@ export function closeTopLayer(layers: BackLayers): boolean {
         setTagEditor(null);
         setSettingsPage('tags');
       }
+      return true;
+    }
+    // The notice is a line on the page, not a layer: it never takes a press of its own. It is
+    // dropped on the way out all the same, the way the screen's own back arrow drops it, or it
+    // comes back stale the next time the page opens.
+    if (settingsPage === 'skills') {
+      setSkillsNotice(null);
+      setSettingsPage('index');
       return true;
     }
     if (settingsPage === 'agent') {
@@ -577,8 +632,11 @@ export function closeTopLayer(layers: BackLayers): boolean {
     return true;
   }
   // A chat open on a phone: back goes home, not out of the app.
-  if (Platform.OS !== 'web' && !pinnedDrawer && activeThreadRef.current && !settingsOpen
-      && !archivesOpen && !filesOpen && !subagentRef.current) {
+  //
+  // Settings, the archive, the files screen and a sub-agent chat are not tested here although they
+  // all cover the conversation: each of them returns further up, so reaching this line already
+  // means none of them is open. The checks were there and read as if they could be false.
+  if (Platform.OS !== 'web' && !pinnedDrawer && activeThreadRef.current) {
     selectThread(null);
     return true;
   }

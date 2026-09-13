@@ -682,3 +682,55 @@ test('a cron job opens in repeat mode with its fields pre-filled', async () => {
   expect(textsOf(tree)).toEqual(expect.arrayContaining(['9', 'Mon']));
   await unmount(tree);
 });
+
+/**
+ * Android tries the handlers last registered first and stops at the first that takes the press.
+ * The editor registers its own over the shell's, so a test that only calls the last one cannot
+ * see a press the editor declines.
+ */
+async function androidBack(): Promise<boolean> {
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean>; exitApp: jest.Mock };
+  };
+  const handlers = back.default.__handlers;
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    for (let i = handlers.length - 1; i >= 0; i--) {
+      if (handlers[i]!()) {
+        handled = true;
+        break;
+      }
+    }
+  });
+  return handled;
+}
+
+test('back answers the delete confirmation, and leaves the editor under it open', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emit({ type: 'jobs.list.result', jobs: [job()] });
+  await pressLabel(tree, 'Edit job Morning report');
+  await waitFor(() => labelsOf(tree).includes('Delete job'));
+
+  await pressLabel(tree, 'Delete job');
+  await waitFor(() => textsOf(tree).some(text => text.includes('task stops running')));
+
+  // Anything at all re-rendering the shell, and it is a conversation list arriving here. The
+  // editor's back handler is rebuilt on every render of the shell (its `onBack` is an inline
+  // arrow), while the shell's own is rebuilt only when the cascade's dependencies move -- so one
+  // unrelated render is enough to leave the editor's handler the last registered, and Android
+  // asks the last one first. That is the race the `deleting` flag answers.
+  await emit({ type: 'session.list.result', sessions: [] });
+
+  // The editor owns the back key while it is up, so it has to decline this one: the confirmation
+  // is the shell's, and answering the press by closing the editor left the question over the list.
+  expect(await androidBack()).toBe(true);
+  await waitFor(() => !textsOf(tree).some(text => text.includes('task stops running')));
+
+  expect(labelsOf(tree)).toContain('Delete job');
+  expect(labelsOf(tree)).toContain('Job name');
+  expect(sentOfType('jobs.delete').length).toBe(0);
+
+  await unmount(tree);
+});
