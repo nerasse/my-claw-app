@@ -215,6 +215,7 @@ import { BrowserScreen } from './BrowserScreen';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { StatsScreen } from './StatsScreen';
+import { SystemFilesScreen } from './SystemFilesScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
 import { JobSessionsScreen } from './JobSessionsScreen';
@@ -231,6 +232,7 @@ import { space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
 import { statsStore } from '../core/stats';
+import { fsStore } from '../core/fsStore';
 import { messageSelectionBody, TextSelectionContext, type SelectionTarget } from '../core/textSelection';
 import { useLayout } from '../core/layout';
 import { useHardwareBack } from '../core/hardwareBack';
@@ -267,7 +269,7 @@ const EMPTY_UNAVAILABLE: UnavailableModel[] = [];
 Object.freeze(EMPTY_UNAVAILABLE);
 
 /** The session-level actions both menus draw from; see `sessionEntries`. */
-type SessionEntryKey = 'refresh' | 'model' | 'tune' | 'stop' | 'instructions' | 'files' | 'status' | 'transcript';
+type SessionEntryKey = 'refresh' | 'model' | 'tune' | 'stop' | 'instructions' | 'files' | 'systemFiles' | 'status' | 'transcript';
 
 /**
  * The chat on screen is a sub-agent rather than a conversation. Carries the parent so the header
@@ -550,6 +552,7 @@ export function AppShell(): React.JSX.Element {
   const [statusOpen, setStatusOpen] = useState(false);
   /** The install-wide statistics page, reached from More: about every conversation, not one. */
   const [statsOpen, setStatsOpen] = useState(false);
+  const [systemFilesOpen, setSystemFilesOpen] = useState(false);
   /** The instructions page of a conversation, and whether one of its files is being edited. */
   const [instructionsPageOpen, setInstructionsPageOpen] = useState(false);
   const [instructionsPageEditing, setInstructionsPageEditing] = useState(false);
@@ -816,6 +819,16 @@ export function AppShell(): React.JSX.Element {
   const closeStats = useCallback(() => {
     statsStore.close();
     setStatsOpen(false);
+  }, []);
+
+  /**
+   * Closed by its own function for the same reason the statistics page is: what it held (the
+   * listing, the open file, the watch) is dropped with it, so a later opening starts from the
+   * machine rather than from a stale drawing of it.
+   */
+  const closeSystemFiles = useCallback(() => {
+    fsStore.close();
+    setSystemFilesOpen(false);
   }, []);
 
   /**
@@ -1312,6 +1325,8 @@ export function AppShell(): React.JSX.Element {
         setBrowserOpen,
         statsOpen,
         closeStats,
+        systemFilesOpen,
+        closeSystemFiles,
         filesOpen,
         setFilesOpen,
         subagentRef,
@@ -1365,6 +1380,8 @@ export function AppShell(): React.JSX.Element {
       statusOpen,
       statsOpen,
       closeStats,
+      systemFilesOpen,
+      closeSystemFiles,
       subagentAction,
       subagentMenuOpen,
       leaveSubAgent,
@@ -2187,6 +2204,17 @@ export function AppShell(): React.JSX.Element {
           if (threadId) openFilesFor(threadId);
         },
       },
+      systemFiles: {
+        // Distinct from "Session files", which is this conversation's own attachments: this one is
+        // the machine, and it starts where the session works -- docs/files-page.md.
+        label: 'System files',
+        hint: 'the machine this runs on',
+        onPress: () => {
+          close();
+          if (threadId) fsStore.openFromSession(threadId);
+          setSystemFilesOpen(true);
+        },
+      },
       status: {
         label: 'Status',
         hint: 'context, tokens, cost',
@@ -2248,6 +2276,7 @@ export function AppShell(): React.JSX.Element {
       // answer in it, the files are one of their outputs.
       shared.instructions,
       shared.files,
+                shared.systemFiles,
       {
         label: 'Change workspace',
         hint: `current: ${workspaceOf(target.threadId)}`,
@@ -3136,7 +3165,7 @@ export function AppShell(): React.JSX.Element {
 
   /** Something other than the conversation is showing: settings, the archives, the files. */
   const pageOpen =
-    settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || instructionsPageOpen;
+    settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -3745,6 +3774,8 @@ export function AppShell(): React.JSX.Element {
             <StatusScreen onClose={closeStatus} />
           ) : statsOpen ? (
             <StatsScreen onClose={closeStats} />
+          ) : systemFilesOpen ? (
+            <SystemFilesScreen onClose={closeSystemFiles} />
           ) : instructionsPageOpen ? (
             instructionsPageEditing && instructions.editor ? (
               <InstructionEditorScreen
@@ -4116,6 +4147,7 @@ export function AppShell(): React.JSX.Element {
                 ...(streaming ? [shared.stop] : []),
                 shared.instructions,
                 shared.files,
+      shared.systemFiles,
                 shared.status,
                 shared.refresh,
                 shared.transcript,
@@ -4243,6 +4275,20 @@ export function AppShell(): React.JSX.Element {
                 setMoreOpen(false);
                 setDrawerOpen(false);
                 setStatsOpen(true);
+              },
+            },
+            {
+              // Beside the statistics rather than beside the conversation actions: this reads the
+              // machine my-claw runs on, not the thread on screen. Opened from a session it starts
+              // at that session's workspace instead, which is the only difference between the two
+              // entries -- docs/files-page.md.
+              label: 'Files',
+              hint: 'every file on this machine',
+              onPress: () => {
+                setMoreOpen(false);
+                setDrawerOpen(false);
+                fsStore.open();
+                setSystemFilesOpen(true);
               },
             },
             {

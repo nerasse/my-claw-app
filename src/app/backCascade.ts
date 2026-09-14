@@ -165,6 +165,8 @@ export interface BackLayers {
   setBrowserOpen: (value: false) => void;
   statsOpen: boolean;
   closeStats: () => void;
+  systemFilesOpen: boolean;
+  closeSystemFiles: () => void;
   filesOpen: boolean;
   setFilesOpen: (value: false) => void;
   subagentRef: Cell<unknown>;
@@ -284,6 +286,8 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setBrowserOpen,
     statsOpen,
     closeStats,
+    systemFilesOpen,
+    closeSystemFiles,
     filesOpen,
     setFilesOpen,
     subagentRef,
@@ -608,6 +612,10 @@ export function closeTopLayer(layers: BackLayers): boolean {
   // the next opening asks again instead of drawing figures from the last visit.
   if (statsOpen) {
     closeStats();
+    return true;
+  }
+  if (systemFilesOpen) {
+    closeSystemFiles();
     return true;
   }
   if (filesOpen) {

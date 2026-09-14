@@ -1,0 +1,397 @@
+/**
+ * The system files page.
+ *
+ * It is the only screen that can edit anything on the machine my-claw runs on, so the tests are
+ * about what it refuses: a binary is never offered to the editor, a conflicting save is never
+ * silent (both ways out are on screen), a change under an editor never replaces the document,
+ * and a dirty buffer never leaves without being asked about.
+ *
+ * CodeMirror is mocked -- a real one is a WebView and a device, and the page's contract with it
+ * is only `value`/`readOnly`/`language` and one `onChange` -- and the frames are handed to the
+ * store directly, because the router wiring is the shell's side of this page.
+ */
+
+import React from 'react';
+import ReactTestRenderer from 'react-test-renderer';
+import { Text } from 'react-native';
+import { SystemFilesScreen } from '../SystemFilesScreen';
+import { fsStore } from '../../core/fsStore';
+import { connection } from '../../core/connection';
+import { deviceBridge } from '../../core/nativeBridge';
+import type { FsEntry, FsListResultFrame, FsReadResultFrame, FsWriteResultFrame, ServerFrame } from '../../core/protocol';
+
+// The real singleton owns a socket and its reconnect timers; reaching it from a screen test
+// leaks them past the run.
+jest.mock('../../core/connection', () => ({
+  connection: { send: jest.fn(() => Promise.resolve(true)) },
+}));
+
+// The host would mount a WebView and a real CodeMirror page: what the page is held to is the
+// props it hands over, and one `onChange` coming back.
+jest.mock('../../components/CodeEditor', () => {
+  const ReactMock = require('react');
+  const { View } = require('react-native');
+  return {
+    CodeEditor: (props: Record<string, unknown>) => ReactMock.createElement(View, { testID: 'code-editor', ...props }),
+  };
+});
+
+// The picker resolves a TurboModule at module evaluation, which does not exist under jest.
+jest.mock('@react-native-documents/picker', () => ({
+  pick: jest.fn(async () => []),
+  isErrorWithCode: jest.fn(() => false),
+  errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' },
+  types: { allFiles: '*/*' },
+}));
+
+type Tree = ReactTestRenderer.ReactTestRenderer;
+
+const send = connection.send as jest.MockedFunction<typeof connection.send>;
+const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
+
+function sent(): Array<Record<string, unknown>> {
+  return send.mock.calls.map(([frame]) => JSON.parse(String(frame)) as Record<string, unknown>);
+}
+
+function texts(tree: Tree): string[] {
+  return tree.root
+    .findAllByType(Text)
+    .flatMap(node => (typeof node.props.children === 'string' ? [node.props.children as string] : []));
+}
+
+function labels(tree: Tree): string[] {
+  const all = tree.root
+    .findAll(node => typeof node.props.accessibilityLabel === 'string', { deep: true })
+    .map(node => node.props.accessibilityLabel as string);
+  // The renderer exposes both the composite and the host node under it: one label, once.
+  return Array.from(new Set(all));
+}
+
+function press(tree: Tree, label: string): void {
+  const targets = tree.root.findAll(
+    node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
+    { deep: true },
+  );
+  if (targets.length === 0) throw new Error(`no pressable labelled ${label}`);
+  ReactTestRenderer.act(() => {
+    targets[0].props.onPress();
+  });
+}
+
+function receive(frame: ServerFrame): void {
+  ReactTestRenderer.act(() => {
+    fsStore.receive(frame);
+  });
+}
+
+function editorProps(tree: Tree): Record<string, unknown> {
+  const found = tree.root.findAllByProps({ testID: 'code-editor' });
+  if (found.length === 0) throw new Error('no editor on screen');
+  return found[0].props as Record<string, unknown>;
+}
+
+const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
+
+function entry(over: Partial<FsEntry> & { name: string; path: string }): FsEntry {
+  return { kind: 'file', size: 10, mtimeMs: 1_700_000_000_000, mode: 0o644, textHint: true, ...over };
+}
+
+const HOME: FsListResultFrame = {
+  type: 'fs.list.result',
+  path: '/home/neras',
+  parent: '/home',
+  entries: [
+    entry({ name: 'notes.md', path: '/home/neras/notes.md', size: 2_048 }),
+    entry({ name: 'dev', kind: 'dir', path: '/home/neras/dev' }),
+    entry({ name: 'logo.png', path: '/home/neras/logo.png', size: 51_200 }),
+    entry({ name: '.git', kind: 'dir', path: '/home/neras/.git' }),
+  ],
+  truncated: false,
+};
+
+function readResult(over: Partial<FsReadResultFrame> = {}): FsReadResultFrame {
+  return {
+    type: 'fs.read.result',
+    path: '/home/neras/notes.md',
+    etag: '111-8',
+    size: 8,
+    mtimeMs: 111,
+    encoding: 'utf8',
+    eol: 'lf',
+    text: '# notes\n',
+    lines: 1,
+    from: 0,
+    nextFrom: null,
+    truncated: false,
+    ...over,
+  };
+}
+
+describe('SystemFilesScreen', () => {
+  let mounted: Tree | null = null;
+
+  /** The store is module-level and its listeners outlive a test: a tree left mounted is still
+   *  subscribed, so the next reset() re-renders it outside any act() and prints as an error. */
+  async function render(onClose: () => void = () => {}): Promise<Tree> {
+    let tree!: Tree;
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<SystemFilesScreen onClose={onClose} />);
+    });
+    // The page lands on the remembered directory through the prefs bridge: one promise hop.
+    await ReactTestRenderer.act(async () => {
+      await flush();
+    });
+    mounted = tree;
+    return tree;
+  }
+
+  afterEach(async () => {
+    if (mounted) {
+      await ReactTestRenderer.act(async () => mounted?.unmount());
+    }
+    mounted = null;
+    fsStore.reset();
+    jest.clearAllMocks();
+  });
+
+  beforeEach(() => {
+    send.mockResolvedValue(true);
+    // The page opens on the directory the prefs bridge remembered: the screen tests all work
+    // from there, and the "first visit" landing is the store suite's business.
+    bridge.prefsGetAll.mockResolvedValue({ fsLastDir: '/home/neras' });
+  });
+
+  test('the listing is the directory the server echoed, and nothing is hidden', async () => {
+    const tree = await render();
+    expect(sent()).toContainEqual({ type: 'fs.list', path: '/home/neras' });
+
+    receive(HOME);
+    expect(labels(tree)).toContain('Open /home/neras/.git');
+    expect(labels(tree)).toContain('Open /home/neras/dev');
+    expect(labels(tree)).toContain('Open /home/neras/notes.md');
+    // The breadcrumb is built from the normalised path the answer carried, and every segment
+    // is a way back up.
+    expect(labels(tree)).toContain('Go to /home');
+    expect(labels(tree)).toContain('Go to /home/neras');
+    // Directories first, then names.
+    expect(labels(tree).filter(label => label.startsWith('Open '))).toEqual([
+      'Open /home/neras/.git',
+      'Open /home/neras/dev',
+      'Open /home/neras/logo.png',
+      'Open /home/neras/notes.md',
+    ]);
+    expect(texts(tree).join('\n')).toContain('4 entries');
+  });
+
+  test('a tap opens a text file in the read-only editor, with its cursor line in the header', async () => {
+    const tree = await render();
+    receive(HOME);
+
+    press(tree, 'Open /home/neras/notes.md');
+    expect(sent()).toContainEqual({ type: 'fs.read', path: '/home/neras/notes.md' });
+
+    receive(readResult());
+    const editor = editorProps(tree);
+    expect(editor.value).toBe('# notes\n');
+    expect(editor.readOnly).toBe(true);
+    expect(editor.language).toBe('markdown');
+    expect(texts(tree).join('\n')).toContain('ln 1');
+  });
+
+  test('a binary shows its metadata and is never offered to the editor', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/logo.png');
+    receive(
+      readResult({
+        path: '/home/neras/logo.png',
+        binary: { reason: 'nul' },
+        text: undefined,
+        size: 51_200,
+      }),
+    );
+
+    const shown = texts(tree).join('\n');
+    expect(shown).toContain('binary file (NUL byte) · nothing to edit');
+    expect(shown).toContain('50.0 KB');
+    expect(labels(tree)).not.toContain('Edit file');
+    expect(tree.root.findAllByProps({ testID: 'code-editor' })).toHaveLength(0);
+  });
+
+  test('a truncated read says so with the real size, and stays read-only', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult({ truncated: true, nextFrom: 2_000_000, size: 5_000_000 }));
+
+    expect(texts(tree).join('\n')).toContain('showing the first read window only · the file is 4.8 MB on disk');
+    expect(labels(tree)).not.toContain('Edit file');
+  });
+
+  test('a conflicting save offers both ways out, and neither is silent', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult());
+    press(tree, 'Edit file');
+
+    const editor = editorProps(tree);
+    expect(editor.readOnly).toBe(false);
+    ReactTestRenderer.act(() => {
+      (editor.onChange as (text: string) => void)('mine');
+    });
+    expect(texts(tree)).toContain('modified');
+
+    press(tree, 'Save file');
+    expect(sent()).toContainEqual({
+      type: 'fs.write',
+      path: '/home/neras/notes.md',
+      text: 'mine',
+      etag: '111-8',
+      encoding: 'utf8',
+      eol: 'lf',
+    });
+
+    const conflict: FsWriteResultFrame = {
+      type: 'fs.write.result',
+      path: '/home/neras/notes.md',
+      etag: '999-99',
+      size: 99,
+      mtimeMs: 999,
+      conflict: { etag: '999-99', size: 99, mtimeMs: 999 },
+    };
+    receive(conflict);
+
+    expect(texts(tree).join('\n')).toContain('nothing was overwritten');
+    expect(labels(tree)).toContain('Reload from disk');
+    expect(labels(tree)).toContain('Overwrite anyway');
+    // The buffer is still there, and still the owner's.
+    expect(editorProps(tree).value).toBe('mine');
+
+    press(tree, 'Overwrite anyway');
+    expect(sent()).toContainEqual({
+      type: 'fs.write',
+      path: '/home/neras/notes.md',
+      text: 'mine',
+      etag: '111-8',
+      force: true,
+      encoding: 'utf8',
+      eol: 'lf',
+    });
+  });
+
+  test('a change under the editor raises a banner and leaves the document alone', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult());
+    press(tree, 'Edit file');
+    const editor = editorProps(tree);
+    ReactTestRenderer.act(() => {
+      (editor.onChange as (text: string) => void)('mine');
+    });
+    send.mockClear();
+
+    receive({ type: 'fs.changed', path: '/home/neras/notes.md', kind: 'changed', size: 99, mtimeMs: 999 });
+
+    expect(texts(tree)).toContain('the file changed on the server while you were editing');
+    // Reloading here would delete what the owner is typing: the document is untouched and
+    // nothing was asked of the server.
+    expect(editorProps(tree).value).toBe('mine');
+    expect(sent()).toEqual([]);
+  });
+
+  test('a dirty buffer does not leave the editor without a confirmation', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult());
+    press(tree, 'Edit file');
+    const editor = editorProps(tree);
+    ReactTestRenderer.act(() => {
+      (editor.onChange as (text: string) => void)('mine');
+    });
+
+    press(tree, 'Back to files');
+    expect(texts(tree)).toContain('Discard your changes?');
+
+    // Cancel: still editing, buffer intact.
+    press(tree, 'Close menu');
+    expect(labels(tree)).toContain('Save file');
+    expect(editorProps(tree).value).toBe('mine');
+
+    press(tree, 'Back to files');
+    press(tree, 'Discard changes');
+    // Back on the listing, and nothing was written on the way out.
+    expect(labels(tree)).toContain('Close files');
+    expect(sent().filter(frame => frame.type === 'fs.write')).toHaveLength(0);
+    expect(tree.root.findAllByProps({ testID: 'code-editor' })).toHaveLength(0);
+  });
+
+  test('a clean buffer leaves without a question', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult());
+    press(tree, 'Back to files');
+
+    expect(labels(tree)).toContain('Close files');
+    expect(labels(tree)).not.toContain('Save file');
+  });
+
+  test('the row sheet offers the whole vocabulary on a file', async () => {
+    const tree = await render();
+    receive(HOME);
+
+    // A long press opens the sheet; the sheet's own rows are pressables too.
+    const row = tree.root.findAll(
+      node => node.props.accessibilityLabel === 'Open /home/neras/notes.md' && typeof node.props.onLongPress === 'function',
+      { deep: true },
+    )[0];
+    ReactTestRenderer.act(() => {
+      row.props.onLongPress();
+    });
+
+    const shown = labels(tree);
+    for (const label of ['Open', 'Edit', 'Rename…', 'Move…', 'Copy path', 'Download', 'Delete…']) {
+      expect(shown).toContain(label);
+    }
+    // A file has no "send files here": that belongs to a directory.
+    expect(shown).not.toContain('Send files here…');
+  });
+
+  test('the row sheet on a directory offers creating and sending inside it', async () => {
+    const tree = await render();
+    receive(HOME);
+
+    const row = tree.root.findAll(
+      node => node.props.accessibilityLabel === 'Open /home/neras/dev' && typeof node.props.onLongPress === 'function',
+      { deep: true },
+    )[0];
+    ReactTestRenderer.act(() => {
+      row.props.onLongPress();
+    });
+
+    const shown = labels(tree);
+    expect(shown).toContain('New file…');
+    expect(shown).toContain('New folder…');
+    expect(shown).toContain('Send files here…');
+    expect(shown).toContain('Delete folder…');
+    expect(shown).not.toContain('Edit');
+  });
+
+  test('a directory the server could not read says so instead of drawing an empty one', async () => {
+    const tree = await render();
+    receive({
+      type: 'fs.list.result',
+      path: '/home/neras',
+      parent: '/home',
+      entries: [],
+      truncated: false,
+      error: 'EACCES: permission denied',
+    });
+
+    expect(texts(tree).join('\n')).toContain('EACCES: permission denied');
+    expect(labels(tree)).toContain('Ask again');
+  });
+});

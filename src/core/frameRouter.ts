@@ -19,6 +19,7 @@ import { sessionInstructionsStore } from './sessionInstructions';
 import { providersEnvStore } from './providers';
 import { statusStore } from './status';
 import { statsStore } from './stats';
+import { fsStore } from './fsStore';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
 import { notificationPermission, registerForPush } from './notifications';
@@ -636,6 +637,21 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // so the store matches it against the window the page last asked for.
       statsStore.receive(frame);
       break;
+
+    // The system files page. Nine frames, all of them matched by the path they echo: the store
+    // holds one directory and one open file, so an answer for a path the owner has left is
+    // dropped rather than drawn under the one he is reading.
+    case 'fs.list.result':
+    case 'fs.read.result':
+    case 'fs.write.result':
+    case 'fs.mkdir.result':
+    case 'fs.move.result':
+    case 'fs.remove.result':
+    case 'fs.watch.result':
+    case 'fs.changed':
+    case 'fs.session.root.result':
+      fsStore.receive(frame);
+      break;
     case 'session.instructions.result':
       // Accept both the first fetch (loading) and the answer to a set (ready): a control the
       // page just applied must land, and the report it carries is the fresh truth.
@@ -781,6 +797,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         // A window the server does not know, or an install with no analytics at all: the page says
         // so where it was asked for instead of spinning on an answer that will never come.
         statsStore.fail(refusal);
+      } else if (frame.scope === 'fs') {
+        // A protected path, a directory that cannot be read, a watch that cannot attach: the page
+        // says so where it was asked for. Nothing here belongs in a chat bubble.
+        fsStore.fail(refusal);
       } else if (frame.scope === 'agents') {
         agentsStore.fail(refusal);
         // A file edit can fail while the file page is open: the editor shows it where it

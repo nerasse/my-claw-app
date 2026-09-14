@@ -56,6 +56,81 @@ export interface OutgoingAttachment {
   durationMs?: number;
 }
 
+/** One local file on its way to the server's filesystem, as the picker handed it over. */
+export interface FsLocalFile {
+  /** content:// or file:// — read by the native networking module, never by JS fetch(). */
+  uri: string;
+  name: string;
+  type: string;
+}
+
+/** What one uploaded file weighs, as the server wrote it. */
+export interface FsUploadedFile {
+  name: string;
+  size: number;
+}
+
+/**
+ * Pushes files into a directory of the machine my-claw runs on (`POST /fs/upload`).
+ *
+ * The transfer is HTTP with the same credential `/app-update/apk` uses -- the `device`/`token`
+ * query pair, built by the one function that builds it -- because base64 over the WebSocket is a
+ * tax on a phone connection and one frame-size limit away from a corrupt file.
+ *
+ * The body is multipart, and each part is React Native's `{uri, name, type}` shape: the native
+ * networking module opens the `content://` uri through the ContentResolver, so the bytes never
+ * cross the JS heap and a file the app cannot read as a `file://` url still uploads. `fetch`
+ * (whatwg-fetch over the native XMLHttpRequest) is what carries it; the Content-Type is left to
+ * the platform, which is the only side that knows the multipart boundary.
+ */
+export async function uploadToFs(
+  mediaBase: string,
+  deviceInfo: DeviceInfo | null,
+  dir: string,
+  files: FsLocalFile[],
+): Promise<{ path: string; files: FsUploadedFile[] }> {
+  const query = deviceInfo ? authQuery(deviceInfo) : '';
+  const url = `${mediaBase}/fs/upload?path=${encodeURIComponent(dir)}${query ? `&${query}` : ''}`;
+  const attempt = async (): Promise<{ path: string; files: FsUploadedFile[] }> => {
+    const form = new FormData();
+    for (const file of files) {
+      // The DOM typings have no shape for a native file part; this is the documented RN one and
+      // the cast is only saying so. A string part would be read as the text "[object Object]".
+      form.append('file', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+    }
+    const response = await fetch(url, { method: 'POST', body: form });
+    if (!response.ok) {
+      throw new UploadRefused(response.status, await response.text().catch(() => ''));
+    }
+    return (await response.json()) as { path: string; files: FsUploadedFile[] };
+  };
+  try {
+    return await attempt();
+  } catch (err) {
+    // Same one retry as `uploadMedia`, for the same reason: a browser never replays a POST on a
+    // connection the other end had closed, and the first upload after an idle tab dies silently.
+    if (!isTransportFailure(err)) throw err;
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    return await attempt();
+  }
+}
+
+/**
+ * Saves one file from the machine into the phone's Downloads (`GET /fs/download`), through the
+ * same relay and the same credential as the APK download. Resolves the stored location.
+ */
+export async function downloadFsFile(
+  mediaBase: string,
+  deviceInfo: DeviceInfo | null,
+  path: string,
+  filename: string,
+): Promise<string> {
+  const query = deviceInfo ? authQuery(deviceInfo) : '';
+  const url = `${mediaBase}/fs/download?path=${encodeURIComponent(path)}${query ? `&${query}` : ''}`;
+  const result = await deviceBridge.downloadFile(url, filename, false, `fs-${Date.now()}`);
+  return result.path;
+}
+
 /**
  * Pushes a local file to the server as raw bytes (the endpoint reads the body as-is), then
  * returns the media id to reference in chat.send.

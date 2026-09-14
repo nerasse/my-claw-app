@@ -1523,6 +1523,121 @@ export interface StatsResultFrame {
 }
 
 /**
+ * The system files page: the whole machine, from the phone. The protocol is the server's --
+ * `docs/files-page.md` of the my-claw repository.
+ *
+ * No request id anywhere: a result echoes the path it answers, exactly as `stats.result` echoes
+ * its period. The page holds one directory at a time, so a listing for one the owner has already
+ * left is dropped rather than drawn under the new one, and nothing has to be correlated.
+ */
+export type FsEncoding = 'utf8' | 'utf8-bom' | 'latin1' | 'utf16le' | 'utf16be';
+export type FsEol = 'lf' | 'crlf' | 'mixed';
+
+export interface FsEntry {
+  name: string;
+  path: string;
+  kind: 'file' | 'dir' | 'symlink' | 'other';
+  /** The resolved kind when `kind` is "symlink" and it resolves. */
+  targetKind?: 'file' | 'dir' | 'other';
+  size: number;
+  mtimeMs: number;
+  mode: number;
+  /**
+   * A guess from the name, for the icon only, because sampling 5000 files to draw a list is a
+   * syscall storm: `fs.read` decides for real.
+   */
+  textHint: boolean;
+}
+
+export interface FsListResultFrame {
+  type: 'fs.list.result';
+  /** The normalised absolute path, so the breadcrumb is built from what the server walked. */
+  path: string;
+  /** Null at the filesystem root. */
+  parent: string | null;
+  entries: FsEntry[];
+  truncated: boolean;
+  /** The directory could not be read (gone, unreadable): `entries` is empty and this says why. */
+  error?: string;
+}
+
+export interface FsReadResultFrame {
+  type: 'fs.read.result';
+  path: string;
+  /** `${mtimeMs}-${size}`, the conflict contract every write echoes back. */
+  etag?: string;
+  size?: number;
+  mtimeMs?: number;
+  /** Returned so a write can put the file back the way it was. */
+  encoding?: FsEncoding;
+  /** The dominant line ending: CodeMirror normalises to `\n`, so the server restores this. */
+  eol?: FsEol;
+  /** Absent for a binary file, where `binary` says why instead. */
+  text?: string;
+  /** Lines in the returned window. */
+  lines?: number;
+  from: number;
+  /** Byte offset to continue at, always a line start. Null at the end of the file. */
+  nextFrom: number | null;
+  truncated: boolean;
+  binary?: { reason: 'nul' | 'control' };
+  error?: string;
+}
+
+export interface FsWriteResultFrame {
+  type: 'fs.write.result';
+  path: string;
+  /** Absent when nothing was written at all: there is no new state to report. */
+  etag?: string;
+  size?: number;
+  mtimeMs?: number;
+  error?: string;
+  /** The file changed since the read: the page offers reload or overwrite. */
+  conflict?: { etag: string; size: number; mtimeMs: number };
+}
+
+export interface FsMkdirResultFrame {
+  type: 'fs.mkdir.result';
+  path: string;
+}
+
+export interface FsMoveResultFrame {
+  type: 'fs.move.result';
+  from: string;
+  to: string;
+}
+
+export interface FsRemoveResultFrame {
+  type: 'fs.remove.result';
+  path: string;
+}
+
+export interface FsWatchResultFrame {
+  type: 'fs.watch.result';
+  path: string;
+  /** False when the cap is reached or the watch could not attach: grey the eye, no error. */
+  watching: boolean;
+}
+
+/**
+ * Pushed while the page watches a file. Read mode follows it, edit mode raises a banner and never
+ * touches the document: reloading a file under an editor deletes what the owner is typing.
+ */
+export interface FsChangedFrame {
+  type: 'fs.changed';
+  path: string;
+  kind: 'changed' | 'removed';
+  size: number;
+  mtimeMs: number;
+}
+
+export interface FsSessionRootResultFrame {
+  type: 'fs.session.root.result';
+  threadId: string;
+  path: string;
+}
+
+/**
  * One layer of the system prompt a conversation runs on, as the server composes it. The four
  * prompt files carry an origin and an `edit` target; the derived layers carry neither.
  */
@@ -1826,6 +1941,9 @@ export interface SubAgentsHandoffResultFrame {
 export type ErrorScope =
   | 'chat'
   | 'files'
+  // The system files page: a refusal there (a protected path, a directory that cannot be read)
+  // belongs on that page, never as an error bubble in whichever conversation was open.
+  | 'fs'
   | 'session'
   | 'diag'
   | 'logs'
@@ -2221,6 +2339,15 @@ export type ServerFrame =
   | ConfigSavedFrame
   | StatusResultFrame
   | StatsResultFrame
+  | FsListResultFrame
+  | FsReadResultFrame
+  | FsWriteResultFrame
+  | FsMkdirResultFrame
+  | FsMoveResultFrame
+  | FsRemoveResultFrame
+  | FsWatchResultFrame
+  | FsChangedFrame
+  | FsSessionRootResultFrame
   | SessionInstructionsResultFrame
   | JobsListResultFrame
   | JobsRunsResultFrame
@@ -2309,6 +2436,15 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'config.saved',
   'status.result',
   'stats.result',
+  'fs.list.result',
+  'fs.read.result',
+  'fs.write.result',
+  'fs.mkdir.result',
+  'fs.move.result',
+  'fs.remove.result',
+  'fs.watch.result',
+  'fs.changed',
+  'fs.session.root.result',
   'session.instructions.result',
   'jobs.list.result',
   'browser.info.result',
@@ -3016,6 +3152,74 @@ export function encodeStatsGet(period: StatsPeriod, filter: StatsFilter = {}): s
   // to validate to learn what it already knows.
   const body = { type: 'stats.get' as const, period, ...(Object.keys(filter).length === 0 ? {} : { filter }) };
   return JSON.stringify(body);
+}
+
+/** Opens a directory. Answered with `fs.list.result` for that path, or not answered at all. */
+export function encodeFsList(path: string): string {
+  return JSON.stringify({ type: 'fs.list' as const, path });
+}
+
+/** Reads a file, or the next window of one: `from` is a byte offset a previous read returned. */
+export function encodeFsRead(path: string, window: { from?: number; maxBytes?: number } = {}): string {
+  return JSON.stringify({
+    type: 'fs.read' as const,
+    path,
+    ...(window.from ? { from: window.from } : {}),
+    ...(window.maxBytes ? { maxBytes: window.maxBytes } : {}),
+  });
+}
+
+/**
+ * Writes a file back, with the etag the read returned. An editor that saved a version it never
+ * read would overwrite whatever the agent changed in between, which is the whole point of the
+ * round trip; `force` is the owner's override, offered only after a conflict.
+ */
+export function encodeFsWrite(write: {
+  path: string;
+  text: string;
+  etag: string;
+  force?: boolean;
+  encoding?: FsEncoding;
+  eol?: FsEol;
+}): string {
+  return JSON.stringify({
+    type: 'fs.write' as const,
+    path: write.path,
+    text: write.text,
+    etag: write.etag,
+    ...(write.force ? { force: true } : {}),
+    // Echoed so the server can put the file back the way it was: a latin1 file rewritten as UTF-8
+    // corrupts every accent in it, and CodeMirror hands us `\n` for a file that was CRLF.
+    ...(write.encoding ? { encoding: write.encoding } : {}),
+    ...(write.eol ? { eol: write.eol } : {}),
+  });
+}
+
+export function encodeFsMkdir(path: string): string {
+  return JSON.stringify({ type: 'fs.mkdir' as const, path });
+}
+
+export function encodeFsMove(from: string, to: string): string {
+  return JSON.stringify({ type: 'fs.move' as const, from, to });
+}
+
+/** Deleting a directory needs `recursive`, and the sheet asks before it is set. */
+export function encodeFsRemove(path: string, recursive = false): string {
+  return JSON.stringify({ type: 'fs.remove' as const, path, ...(recursive ? { recursive: true } : {}) });
+}
+
+/** Watches a file, so a log that grows arrives as `fs.changed` instead of a poll. */
+export function encodeFsWatch(path: string): string {
+  return JSON.stringify({ type: 'fs.watch' as const, path });
+}
+
+export function encodeFsUnwatch(path: string): string {
+  return JSON.stringify({ type: 'fs.unwatch' as const, path });
+}
+
+/** Where a conversation or a sub-agent works: the page opens there when one asks for it. */
+export function encodeFsSessionRoot(threadId: string): string {
+  return JSON.stringify({ type: 'fs.session.root' as const, threadId });
 }
 
 export interface JobFieldsOut {
