@@ -47,11 +47,21 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
 
-  /**
-   * How close to the newest message counts as "following it". One number, used twice: the anchor
-   * threshold of the list and the line under which the store may drop its oldest items.
-   */
-  const NEAR_BOTTOM_PX = 120;
+/**
+ * How close to the newest message counts as "following it". One number, used twice: the line under
+ * which the reader is following, and the line under which the store may drop its oldest items.
+ */
+const NEAR_BOTTOM_PX = 120;
+
+/**
+ * The list's threshold while the reader follows, and it is not a distance. The native helper reads
+ * the offset *before* it corrects it, and its own correction pushes that offset past any distance
+ * we could name: at 120, the first correction after an arriving item took the follow away for good,
+ * and the answer streaming under it never gave it back (2026-09-14). The largest 32-bit signed
+ * integer, so Android's getInt reads it back exactly, means "always". What ends the follow is a
+ * gesture, never a correction. docs/thread-scroll.md
+ */
+const FOLLOW_THRESHOLD = 2_147_483_647;
 
 const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
@@ -210,6 +220,9 @@ export function ChatScreen({
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const [atBottom, setAtBottom] = useState(true);
+  // Whether the reader is following the newest message. Not `atBottom`: that one is re-read on
+  // every scroll event, corrections included, so it cannot answer "did a hand put me here".
+  const [following, setFollowing] = useState(true);
   /** Where the list is, because the reveal has to know what it is lifting from. */
   const offsetRef = useRef(0);
   const commands = useCommands();
@@ -240,6 +253,7 @@ export function ChatScreen({
     // whatever the previous thread left, which showed the jump pill on a thread already at its
     // end and, worse, withheld the trim permission from a thread that had earned it.
     setAtBottom(true);
+    setFollowing(true);
     chatStore.setTrimAllowed(threadId, true);
   }, [threadId]);
 
@@ -704,6 +718,7 @@ export function ChatScreen({
     if (field === null) return;
     probedRef.current = false;
     setAtBottom(true);
+    setFollowing(true);
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
@@ -932,7 +947,20 @@ export function ChatScreen({
     // that is what keeps a long session light without ever taking a visible bubble away.
     chatStore.setTrimAllowed(threadId, nearBottom);
   }, [atBottom, threadId]);
-  const { scrollProps, indicator } = useScrollIndicator({ onScroll: handleScroll, inverted: true });
+  /**
+   * A hand left the screen, and that is the only thing that decides whether the reader follows.
+   * Reading it from `handleScroll` instead would cut the follow on the first item the list drew:
+   * the list corrects its own offset when content arrives, and a correction emits a scroll.
+   */
+  const endGesture = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    setFollowing(event.nativeEvent.contentOffset.y <= NEAR_BOTTOM_PX);
+  }, []);
+  const { scrollProps, indicator } = useScrollIndicator({
+    onScroll: handleScroll,
+    onScrollEndDrag: endGesture,
+    onMomentumScrollEnd: endGesture,
+    inverted: true,
+  });
 
   return (
     <View style={styles.screen}>
@@ -1098,13 +1126,13 @@ export function ChatScreen({
               // been put above it.
               scrollsChildToFocus={false}
               // The whole fix for "the page moves while I read": the list adjusts its own offset so
-              // the first thing the reader can see keeps its place, and only follows the newest
-              // message when they are already near it (minIndexForVisible 0 = every row, including
-              // the newest, is a candidate; the threshold is the same 120 as "near the bottom").
+              // the first thing the reader can see keeps its place. The threshold is the other half,
+              // and it means "the reader follows", not "how far": carried while a hand last left the
+              // list at the bottom, taken away the moment a hand leaves it anywhere else.
               // docs/thread-scroll.md
               maintainVisibleContentPosition={{
                 minIndexForVisible: 0,
-                autoscrollToTopThreshold: NEAR_BOTTOM_PX,
+                ...(following ? { autoscrollToTopThreshold: FOLLOW_THRESHOLD } : {}),
               }}
               onScrollToIndexFailed={onScrollToIndexFailed}
               data={reversedRows}
@@ -1134,6 +1162,7 @@ export function ChatScreen({
             style={styles.jump}
             onPress={() => {
               setAtBottom(true);
+              setFollowing(true);
               listRef.current?.scrollToOffset({ offset: 0, animated: true });
             }}
             accessibilityRole="button"
@@ -1152,6 +1181,7 @@ export function ChatScreen({
             style={styles.questionPill}
             onPress={() => {
               setAtBottom(true);
+              setFollowing(true);
               listRef.current?.scrollToOffset({ offset: 0, animated: true });
             }}
             accessibilityRole="button"

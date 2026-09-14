@@ -70,9 +70,63 @@ test('the thread anchors what the reader is looking at', async () => {
   // whole bug -- a new item or a growing answer moved the paragraph being read.
   expect(list.props.maintainVisibleContentPosition).toBeDefined();
   expect(list.props.maintainVisibleContentPosition.minIndexForVisible).toBe(0);
-  // Near the newest message the reader is following, not reading: keep following, with the same
-  // 120 the jump-to-latest button already uses for "near the bottom".
-  expect(list.props.maintainVisibleContentPosition.autoscrollToTopThreshold).toBe(120);
+  // A thread opens on its newest message, so the reader is following by definition, and the
+  // threshold is not a distance any more: the native helper compares it to the offset it is
+  // about to correct, which its own correction pushes past any distance we could name. A huge
+  // value means "always", and the follow is carried by the gesture below, not by this number.
+  expect(list.props.maintainVisibleContentPosition.autoscrollToTopThreshold).toBe(2_147_483_647);
+});
+
+/**
+ * At 120, the stream took the follow away for good: the helper reads the offset *before* it
+ * corrects it, so the first correction (which the reader asked for) put the value above the
+ * threshold, and every correction after that found the door closed. The follow is an intention,
+ * and an intention is only ever changed by a hand on the screen.
+ */
+test('a compensation does not take the follow away', async () => {
+  const tree = await renderThread();
+  const list = threadList(tree);
+
+  // What the list emits on its own when an item arrives and the anchor moves. The reader did not
+  // touch anything.
+  ReactTestRenderer.act(() => {
+    list.props.onScroll({ nativeEvent: { contentOffset: { y: 480 } } });
+  });
+
+  const list2 = threadList(tree);
+  expect(list2.props.maintainVisibleContentPosition.autoscrollToTopThreshold).toBe(2_147_483_647);
+});
+
+test('a gesture that leaves the reader above the newest message takes the threshold away', async () => {
+  const tree = await renderThread();
+  const list = threadList(tree);
+
+  ReactTestRenderer.act(() => {
+    list.props.onScrollEndDrag({ nativeEvent: { contentOffset: { y: 480 } } });
+  });
+
+  // No threshold: the prop keeps its other half (the anchor holds still) and stops following.
+  expect(threadList(tree).props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 0 });
+});
+
+test('the jump button brings the follow back', async () => {
+  const tree = await renderThread();
+  const list = threadList(tree);
+
+  ReactTestRenderer.act(() => {
+    list.props.onScroll({ nativeEvent: { contentOffset: { y: 480 } } });
+    list.props.onScrollEndDrag({ nativeEvent: { contentOffset: { y: 480 } } });
+  });
+  expect(threadList(tree).props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 0 });
+
+  const jump = tree.root.find(
+    node => node.props.accessibilityLabel === 'Jump to latest message',
+  );
+  ReactTestRenderer.act(() => {
+    jump.props.onPress();
+  });
+
+  expect(threadList(tree).props.maintainVisibleContentPosition.autoscrollToTopThreshold).toBe(2_147_483_647);
 });
 
 test('an index the list has never measured is asked for again rather than crashing', async () => {

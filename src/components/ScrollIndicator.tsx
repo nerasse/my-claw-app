@@ -23,6 +23,13 @@ const HIDE_DELAY_MS = 1000;
 
 export interface ScrollIndicatorOptions {
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /**
+   * The ends of a gesture, the only events where a hand was demonstrably on the screen. A list
+   * that corrects its own offset cannot tell "the reader moved" from "content arrived" by
+   * reading a scroll event, so whoever needs to tell them apart listens here instead.
+   */
+  onScrollEndDrag?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onMomentumScrollEnd?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   onContentSizeChange?: (width: number, height: number) => void;
   onLayout?: (event: LayoutChangeEvent) => void;
   /**
@@ -35,6 +42,8 @@ export interface ScrollIndicatorOptions {
 
 export function useScrollIndicator({
   onScroll,
+  onScrollEndDrag,
+  onMomentumScrollEnd,
   onContentSizeChange,
   onLayout,
   inverted = false,
@@ -46,8 +55,8 @@ export function useScrollIndicator({
     onLayout: (event: LayoutChangeEvent) => void;
     onContentSizeChange: (width: number, height: number) => void;
     onScrollBeginDrag: () => void;
-    onScrollEndDrag: () => void;
-    onMomentumScrollEnd: () => void;
+    onScrollEndDrag: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+    onMomentumScrollEnd: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   };
   indicator: React.JSX.Element | null;
 } {
@@ -117,6 +126,22 @@ export function useScrollIndicator({
     [onContentSizeChange],
   );
 
+  const handleScrollEndDrag = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scheduleHide();
+      onScrollEndDrag?.(event);
+    },
+    [onScrollEndDrag, scheduleHide],
+  );
+
+  const handleMomentumScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scheduleHide();
+      onMomentumScrollEnd?.(event);
+    },
+    [onMomentumScrollEnd, scheduleHide],
+  );
+
   // Held stable. This object is spread onto every list in the app, and a fresh onLayout /
   // onContentSizeChange on each render made those lists look changed to React even when their
   // data had not moved.
@@ -128,10 +153,10 @@ export function useScrollIndicator({
       onLayout: handleLayout,
       onContentSizeChange: handleContentSize,
       onScrollBeginDrag: show,
-      onScrollEndDrag: scheduleHide,
-      onMomentumScrollEnd: scheduleHide,
+      onScrollEndDrag: handleScrollEndDrag,
+      onMomentumScrollEnd: handleMomentumScrollEnd,
     }),
-    [handleContentSize, handleLayout, onScrollEvent, scheduleHide, show],
+    [handleContentSize, handleLayout, onScrollEvent, handleScrollEndDrag, handleMomentumScrollEnd, show],
   );
 
   return {
