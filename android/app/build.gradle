@@ -137,3 +137,38 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
+
+/**
+ * The code editor's WebView page.
+ *
+ * `assets/codeditor/index.html` is built by `node scripts/build-codeditor.js` and committed; the
+ * two tasks below mirror it into the app's own assets at preBuild, so a build always carries the
+ * page that matches the checkout. Deliberately not an Expo config plugin and not `expo prebuild`:
+ * `android/` is committed and customised, and prebuild regenerates what it touches.
+ *
+ * The verify step exists because the failure mode is invisible: an APK without the page builds
+ * fine and shows a blank editor on the device, with nothing in the build log to read.
+ */
+tasks.register('verifyCodeditorAssets') {
+    description = 'Fails the build when the code editor page has not been built'
+    def page = file("$rootDir/../assets/codeditor/index.html")
+    doLast {
+        if (!page.exists() || page.length() == 0) {
+            throw new GradleException(
+                "missing ${page} -- run `node scripts/build-codeditor.js` at the repository root")
+        }
+    }
+}
+
+tasks.register('copyCodeditorAssets', Copy) {
+    description = 'Copies the code editor WebView page into the app assets'
+    dependsOn('verifyCodeditorAssets')
+    from file("$rootDir/../assets/codeditor")
+    into file("$projectDir/src/main/assets/codeditor")
+}
+
+tasks.configureEach { task ->
+    if (task.name == 'preBuild') {
+        task.dependsOn('copyCodeditorAssets')
+    }
+}

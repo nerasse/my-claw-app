@@ -77,3 +77,6 @@ yarn-error.log
 # Web bundle build output, published as a release asset
 dist-web/
 dist-web.tar.gz
+
+# Copied from assets/codeditor/ by the Gradle preBuild task: the committed page is the source.
+android/app/src/main/assets/codeditor/

@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      maximum-scale pins the zoom so that focusing the editor does not zoom the page on Android.
+      The soft keyboard is the host's business: it lifts the WebView container (CodeEditor.native.tsx),
+      which is why nothing here listens for keyboard events.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <title>codeditor</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        /* Chrome's pull-to-refresh and glow at the edges belong to a page, not an editor. */
+        overscroll-behavior: none;
+      }
+      .cm-editor {
+        height: 100%;
+      }
+      .cm-scroller {
+        overflow: auto;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Consolas, 'Roboto Mono',
+          monospace;
+      }
+    </style>
+  </head>
+  <body></body>
+  <!--
+    The bundle is inlined here by scripts/build-codeditor.js: one file, no second request, and
+    nothing to fetch over file:// where XHR and fetch are restricted.
+  -->
+  <script>
+    /*__CODEEDITOR_BUNDLE__*/
+  </script>
+</html>
