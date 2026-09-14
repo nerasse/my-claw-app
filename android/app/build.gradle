@@ -90,8 +90,8 @@ android {
         applicationId "com.myclawapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 247
-        versionName "0.6.68"
+        versionCode 248
+        versionName "0.6.69"
     }
     // Debug only. The release key is never here: a keystore Gradle can read is a keystore the
     // repository can leak, and this one shipped every release signed with the React Native
