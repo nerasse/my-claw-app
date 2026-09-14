@@ -9,6 +9,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { ThemeContext } from '../../theme';
 import { darkPalette } from '../../theme/palettes';
 import { ReasoningLine } from '../ReasoningLine';
+import { resetAsideExpansion, setAsideExpanded } from '../../core/asideExpansion';
 
 function render(props: React.ComponentProps<typeof ReasoningLine>) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
@@ -105,4 +106,34 @@ test('a redacted engine gets the counter too, beside its token estimate', () => 
 test('nothing to say, nothing drawn', () => {
   const tree = render({ streaming: true, startedAt: Date.now() });
   expect(tree.toJSON()).toBeNull();
+});
+
+/**
+ * A reasoning section the reader opened mid-stream must still be open when the stream ends.
+ *
+ * Reported by the owner on 2026-09-14: "quand on a expand la section de raisonnement en stream et
+ * que ca fini ca referme la section sous un autre nom". Two causes in one call. The aside carried
+ * no `persistKey`, so its open state lived in a `useState` that the live-to-history transition
+ * threw away -- the component's own contract says the key is the only truth for a keyed aside.
+ * And the label moved from "Thinking..." to "Reasoning" at the same instant, so what the reader
+ * saw was their section vanishing and a different, closed one taking its place.
+ */
+test('a reasoning section opened while it streams is still open once it ends', () => {
+  resetAsideExpansion();
+  setAsideExpanded('reasoning:bubble-1', true);
+
+  const streaming = render({ id: 'bubble-1', reasoning: 'step one, then two', streaming: true, startedAt: Date.now() });
+  expect(textOf(streaming)).toContain('step one, then two');
+
+  // The same bubble, sealed: same key, same open section.
+  const done = render({ id: 'bubble-1', reasoning: 'step one, then two', streaming: false, durationMs: 4_200 });
+  expect(textOf(done)).toContain('step one, then two');
+});
+
+test('the reasoning of one bubble does not open the reasoning of another', () => {
+  resetAsideExpansion();
+  setAsideExpanded('reasoning:bubble-1', true);
+
+  const other = render({ id: 'bubble-2', reasoning: 'a different thought', streaming: false, durationMs: 900 });
+  expect(textOf(other)).not.toContain('a different thought');
 });

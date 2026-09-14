@@ -301,6 +301,14 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
 export interface CompactionRun {
   since: number;
   text: string;
+  /**
+   * What the summarizer has thought so far.
+   *
+   * Its own field, not folded into `text`: the thinking comes first and is a different thing on
+   * screen. A compaction inheriting the session's effort spends a minute here with nothing to
+   * show, and a bare counter reads the same whether a model is thinking or a provider is dead.
+   */
+  reasoning: string;
 }
 
 /**
@@ -1403,12 +1411,12 @@ class ChatStoreImpl {
    * `text` is the summary as it is written, when the server streams one. A replayed frame carries
    * everything written so far; the live ones are fragments the client appends.
    */
-  setCompacting(threadId: string, since: number | undefined, text = ''): void {
+  setCompacting(threadId: string, since: number | undefined, text = '', reasoning = ''): void {
     if (since === undefined) {
       if (this.compacting.delete(threadId)) this.emit();
       return;
     }
-    this.compacting.set(threadId, { since, text });
+    this.compacting.set(threadId, { since, text, reasoning });
     // The notice of the /compact that started it, when it won the race (the server sends it after
     // 400ms, the compaction announces itself once the session log is loaded): one sign of the
     // operation, and a successful /compact answers with no bubble, so nothing would close it.
@@ -1427,6 +1435,14 @@ class ChatStoreImpl {
     const current = this.compacting.get(threadId);
     if (!current || !text) return;
     this.compacting.set(threadId, { ...current, text: current.text + text });
+    this.emit();
+  }
+
+  /** One fragment of the thinking that precedes the summary. Same rule: no rule, no fragment. */
+  appendCompactionReasoning(threadId: string, reasoning: string): void {
+    const current = this.compacting.get(threadId);
+    if (!current || !reasoning) return;
+    this.compacting.set(threadId, { ...current, reasoning: current.reasoning + reasoning });
     this.emit();
   }
 

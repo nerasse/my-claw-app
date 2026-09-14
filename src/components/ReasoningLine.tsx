@@ -36,6 +36,7 @@ function ThinkingElapsed({ since }: { since: number }): React.JSX.Element {
  * See the server's docs/reasoning-visibility.md.
  */
 export function ReasoningLine({
+  id,
   reasoning,
   tokens,
   startedAt,
@@ -43,6 +44,14 @@ export function ReasoningLine({
   streaming,
   expandReasoning,
 }: {
+  /**
+   * The bubble this reasoning belongs to, which is what keeps a section the reader opened open.
+   *
+   * Without it the open state lived in local component state, and the live-to-history transition
+   * threw it away: a section expanded mid-stream slammed shut the moment the run ended. The id is
+   * stable across that transition -- the live bubble's id is the entry's id.
+   */
+  id?: string;
   reasoning?: string;
   tokens?: number;
   /** When the thinking started, while it is still running. */
@@ -89,6 +98,7 @@ export function ReasoningLine({
       showHint="Show the model's reasoning"
       hideHint="Hide the model's reasoning"
       defaultOpen={expandReasoning ?? false}
+      {...(id ? { persistKey: `reasoning:${id}` } : {})}
     />
   );
 }

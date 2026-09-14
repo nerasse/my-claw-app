@@ -64,10 +64,11 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
  * per thread by construction, and it goes when the boundary it becomes arrives, or when anything
  * else shows the operation is over.
  */
-export function CompactionRunning({ since, text }: { since: number; text?: string }): React.JSX.Element {
+export function CompactionRunning({ since, text, reasoning }: { since: number; text?: string; reasoning?: string }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const elapsed = useElapsed(since);
   const summary = text?.trim() ?? '';
+  const thinking = reasoning?.trim() ?? '';
   return (
     <View style={styles.row} accessibilityRole="summary">
       <View style={styles.rule}>
@@ -75,6 +76,21 @@ export function CompactionRunning({ since, text }: { since: number; text?: strin
         <Text style={styles.label}>Compacting the context · {formatThinkingSpan(elapsed)}</Text>
         <View style={styles.line} />
       </View>
+      {/*
+        What it is thinking, before a word of the summary exists. A summarizer that inherits the
+        session's effort spends its first minute here, and the rule with a counter was all there
+        was to see: a model thinking hard read exactly like a dead provider, which is what the
+        owner was staring at while deepseek answered nothing at all (2026-09-14).
+      */}
+      {thinking ? (
+        <CollapsibleAside
+          label="Thinking…"
+          body={thinking}
+          showHint="Show what the compaction is thinking"
+          hideHint="Hide what the compaction is thinking"
+          persistKey={`compaction-think:${since}`}
+        />
+      ) : null}
       {/*
         The summary as the summarizer writes it, folded like every other aside. It is what makes
         the minute or two readable instead of a spinner: the owner can see the shape of what is

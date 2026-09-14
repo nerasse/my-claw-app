@@ -63,3 +63,31 @@ test('the counter keeps two decimals, like a thinking span', () => {
   const tree = render({ since: Date.now() - 5_000 });
   expect(textOf(tree)).toMatch(/Compacting the context · \d+\.\d\ds/);
 });
+
+/**
+ * The thinking phase, which is where the wait actually is.
+ *
+ * A summarizer inheriting `reasoning_effort: max` thinks for a minute before its first word. That
+ * reasoning was dropped on the floor server side, so the rule with a counter was the whole story
+ * and a thinking model looked exactly like the dead provider the owner was chasing (2026-09-14).
+ */
+test('what the compaction is thinking is on screen before a word of the summary exists', () => {
+  const tree = render({ since: Date.now(), reasoning: 'weighing which turns matter' });
+
+  expect(textOf(tree)).toContain('Thinking');
+  expect(textOf(tree)).not.toContain('Writing the summary');
+});
+
+test('the thinking and the summary stand as two asides, not one', () => {
+  const tree = render({ since: Date.now(), reasoning: 'weighing it', text: 'The user was' });
+
+  const shown = textOf(tree);
+  expect(shown).toContain('Thinking');
+  expect(shown).toContain('Writing the summary');
+});
+
+test('a compaction that thinks nothing shows nothing of it', () => {
+  const tree = render({ since: Date.now(), text: 'The user was' });
+
+  expect(textOf(tree)).not.toContain('Thinking');
+});

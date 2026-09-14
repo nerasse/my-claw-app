@@ -452,13 +452,23 @@ export interface ChatCompactingFrame {
    * point; the live text arrives as `chat.compacting.delta` fragments the client appends.
    */
   text?: string;
+  /**
+   * What the summarizer has thought so far, on a replayed frame only.
+   *
+   * Same contract as `text`, for the phase before it: the thinking is where a compaction spends
+   * its first minute, and a window opening into it must be told the wait is progress.
+   */
+  reasoning?: string;
 }
 
-/** A fragment of the summary a compaction is writing, live. */
+/** A fragment of what a compaction is writing or thinking, live. */
 export interface ChatCompactingDeltaFrame {
   type: 'chat.compacting.delta';
   threadId: string;
-  text: string;
+  /** A piece of the summary. */
+  text?: string;
+  /** A piece of the thinking that precedes it. */
+  reasoning?: string;
 }
 
 export interface ChatHistoryFrame {
@@ -3333,7 +3343,7 @@ export interface SessionSyncResultFrame {
    * once, to the windows connected at that second, so one that was down would otherwise draw the
    * rule for good. Applied in both directions -- see `routeServerFrame`.
    */
-  compacting?: { since: string; text?: string };
+  compacting?: { since: string; text?: string; reasoning?: string };
   /** Why the delta was replaced by a full page. Absent means append. */
   reset?: 'unknown-cursor' | 'branch-switch';
   /** Whether entries were truncated by the limit. */

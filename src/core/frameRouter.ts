@@ -244,13 +244,21 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'chat.compacting':
       // Same silence as the boundary above: a placeholder in the thread, nothing in the tray.
-      // `text` is set on a replayed frame only, where it is everything written so far.
-      chatStore.setCompacting(frame.threadId, frame.since ? Date.parse(frame.since) : undefined, frame.text ?? '');
+      // `text` and `reasoning` are set on a replayed frame only, where they are everything
+      // produced so far.
+      chatStore.setCompacting(
+        frame.threadId,
+        frame.since ? Date.parse(frame.since) : undefined,
+        frame.text ?? '',
+        frame.reasoning ?? '',
+      );
       break;
     case 'chat.compacting.delta':
-      // The summary as it is written. Appended, like a reasoning or a tool fragment: the server
-      // sends what has just been produced, never a running total.
-      chatStore.appendCompactionText(frame.threadId, frame.text);
+      // The summary as it is written, and the thinking that precedes it. Appended, like a
+      // reasoning or a tool fragment: the server sends what has just been produced, never a
+      // running total. One field or the other, never both on one frame.
+      if (frame.text) chatStore.appendCompactionText(frame.threadId, frame.text);
+      if (frame.reasoning) chatStore.appendCompactionReasoning(frame.threadId, frame.reasoning);
       break;
     case 'chat.run.start':
       // A run opening on this thread means the compaction that held its trigger is over: the
@@ -482,6 +490,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         frame.threadId,
         frame.compacting ? Date.parse(frame.compacting.since) : undefined,
         frame.compacting?.text ?? '',
+        frame.compacting?.reasoning ?? '',
       );
       const rosterSync = subAgentStore.get(frame.threadId);
       if (rosterSync.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, rosterSync.agents);

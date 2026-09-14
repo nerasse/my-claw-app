@@ -818,7 +818,7 @@ export function ChatScreen({
       // side of the bubble it belongs to, because an inverted cell lays its children out in
       // `column-reverse` under a scaleY flip (docs/compaction-indicator.md).
       if (row.kind === 'rule') {
-        return compacting === undefined ? null : <CompactionRunning since={compacting.since} text={compacting.text} />;
+        return compacting === undefined ? null : <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} />;
       }
       if (row.kind === 'item') {
         // Grouping is a property of reading order, so it is still computed oldest-first and the
@@ -905,7 +905,7 @@ export function ChatScreen({
       (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
           {compacting !== undefined && ruleBefore === undefined ? (
-            <CompactionRunning since={compacting.since} text={compacting.text} />
+            <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} />
           ) : null}
           {questionsLoose.map(ask => (
             <QuestionCard

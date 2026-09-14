@@ -126,6 +126,7 @@ export const Bubble = React.memo(function BubbleView({
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
           <ReasoningLine
+            id={item.id}
             reasoning={item.reasoning}
             tokens={item.reasoningTokens}
             startedAt={item.reasoningStartedAt}
