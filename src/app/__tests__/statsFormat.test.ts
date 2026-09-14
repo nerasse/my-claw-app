@@ -7,8 +7,8 @@
  * Two of them are the reason the page exists at all. The install has two horizons -- the monthly
  * rollup survives the 90-day purge, the per-call rows do not -- so a per-session ranking silently
  * starts months after the total printed above it, and a page that does not say so lies about one
- * of its two halves. And `billedUsd` is an invoice while `referenceUsd` is a catalogue: added
- * together they make a figure nobody owes.
+ * of its two halves. And the hero is a valuation: it adds what was charged to what the flat-plan
+ * half would have cost, which is one figure only because the parts are named under it.
  *
  * The other two are about what a row actually is: a conversation that no longer exists still spent
  * money, and a label the server could only fill with a session id is an id, not a title.
@@ -22,6 +22,7 @@ import type {
 } from '../../core/protocol';
 import {
   horizonNote,
+  listPrice,
   rowMoney,
   sessionLabel,
   sessionRowLabel,
@@ -60,6 +61,8 @@ function payload(over: Partial<StatsPayload> = {}): StatsPayload {
     cache: { promptTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, readSharePct: 0, writeSharePct: 0 },
     callers: [],
     reconciliation: [],
+    filter: {},
+    facets: { models: [], providers: [], callers: [], sessions: [] },
     ...over,
   };
 }
@@ -92,18 +95,21 @@ test('there is no frontier to draw when both halves cover the same ground', () =
   expect(horizonNote(payload({ totalsSince: '2026-05' }))).toBeNull();
 });
 
-test('what was charged and what it would have cost are two figures, never their sum', () => {
+test('the hero is the valuation, and the two figures it adds are named under it', () => {
   const lines = totalsMoneyLines(totals({ billedUsd: 12, referenceUsd: 3 }));
-  expect(lines[0]).toBe('billed $12.00 · what was actually charged');
-  expect(lines[1]).toBe('reference $3.00 · list price, not a charge');
-  // $15.00 is the number that does not exist: nobody was charged it and no catalogue quotes it.
+  expect(lines[0]).toBe('$12.00 charged · metered endpoints');
+  expect(lines[1]).toBe('$3.00 on a flat plan · subscription or plan, never billed per token');
+  // The parts are a partition of the hero, never a second figure beside it: a page showing $12,
+  // $3 and a $15 total would be quoting three answers to one question.
+  expect(listPrice(totals({ billedUsd: 12, referenceUsd: 3 }))).toBeCloseTo(15, 6);
   expect(lines.join(' ')).not.toContain('$15.00');
 });
 
-test('a ranking row keeps the two apart too, and marks the one that is not a charge', () => {
-  expect(rowMoney(totals({ billedUsd: 12, referenceUsd: 3 }))).toBe('$12.00 · *$3.00');
-  expect(rowMoney(totals({ billedUsd: 12 }))).toBe('$12.00');
-  expect(rowMoney(totals({ referenceUsd: 3 }))).toBe('*$3.00');
+test('a ranking row makes the same valuation, and names the part that was taken', () => {
+  expect(rowMoney(totals({ billedUsd: 12, referenceUsd: 3 }))).toBe('$15.00 · $12.00 charged');
+  // Nothing charged: the flat-plan half stands alone, with no word for a charge that never was.
+  expect(rowMoney(totals({ billedUsd: 12 }))).toBe('$12.00 charged');
+  expect(rowMoney(totals({ referenceUsd: 3 }))).toBe('$3.00');
 });
 
 test('calls no ladder could price are stated, since they are counted but carry no money', () => {

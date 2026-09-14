@@ -1,14 +1,28 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { connection } from '../core/connection';
 import { statsStore, useStats, DEFAULT_STATS_PERIOD } from '../core/stats';
 import { encodeStatsGet } from '../core/protocol';
+import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
+import {
+  FILTER_CHIPS,
+  chipValue,
+  choicesOf,
+  filterCount,
+  filterSummary,
+  isChoice,
+  noFilter,
+  toggleFlag,
+  withChoice,
+  type FilterChoiceKey,
+} from '../core/statsFilter';
 import type {
   StatsCache,
   StatsCallerRow,
   StatsDayRow,
+  StatsFilter,
   StatsModelRow,
   StatsPayload,
   StatsPeriod,
@@ -27,17 +41,39 @@ import type {
  * It is not `/status`. That page is one conversation's, and the provider reconciliation that used
  * to sit at the foot of it was account-wide from the first day: a chat running entirely on
  * api.anthropic.com was shown an OpenRouter line. The figure was never wrong, it was on the wrong
- * page. It lives here, at the bottom, with the rest of what is true of the key rather than of a
- * thread.
+ * page.
  *
- * One request, one answer: nothing pushes an install-wide total, so the page asks on open and on
- * every period press, and says so when the answer is refused.
+ * Six tabs, on one window and one filter. The page is a lot of figures and the folds were the wrong
+ * shape for it -- a screen that unrolled nine sections in a column buried the eight below the third.
+ * A tab answers one question at a time, and the filter row above them holds the same six dimensions
+ * wherever it is used: the narrowing happens in SQL, on the server, so every figure on the tab
+ * describes the same smaller population and none of them is a re-scaled total.
+ *
+ * One request per period, per filter, per opening: nothing pushes an install-wide total, so the page
+ * asks, and says so when the answer is refused.
  */
 
 const PERIODS: readonly StatsPeriod[] = ['7d', '30d', '90d', 'all'];
 
+type StatsTab = 'overview' | 'models' | 'hosts' | 'conversations' | 'cache' | 'reliability';
+
+const TABS: ReadonlyArray<{ key: StatsTab; label: string }> = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'models', label: 'Models' },
+  { key: 'hosts', label: 'Hosts' },
+  { key: 'conversations', label: 'Conversations' },
+  { key: 'cache', label: 'Cache' },
+  { key: 'reliability', label: 'Reliability' },
+];
+
 /** How many conversations the ranking draws before it folds the rest into one line. */
 const SESSION_ROWS = 12;
+
+/** How many models the overview draws before the exact ranking takes over. */
+const OVERVIEW_ROWS = 4;
+
+/** The only sheets long enough to need a search row: forty models, a hundred and fifty threads. */
+const SEARCHED: readonly FilterChoiceKey[] = ['model', 'sessionId'];
 
 /** Height of the daily bars, in points: the track is fixed so a bar can be a share of it. */
 const CHART_HEIGHT = 44;
@@ -107,10 +143,24 @@ export function horizonNote(stats: StatsPayload): string | null {
 }
 
 /**
- * The money of a set of rows, on separate lines, and that is the point: `billedUsd` is what
- * something charged and `referenceUsd` is what the same traffic would have cost at list price.
- * One is an invoice and the other is a catalogue. Added together they would make a figure nobody
- * owes and nobody has, so they never share a line, let alone a sum.
+ * What the window's traffic is worth at the rates it ran at: the one sum this page accepts.
+ *
+ * The two figures it adds are a partition -- every priced call is in exactly one of them, so the
+ * addition double counts nothing -- and they are not the same kind of thing. `billedUsd` is what
+ * somebody was asked to pay on a metered endpoint; `referenceUsd` is what the flat-plan half would
+ * have cost had it been metered, which is a price and never a charge.
+ *
+ * Added as an invoice, that is nonsense. Added as a valuation, it is the figure an owner means by
+ * "what does this cost me in API terms", and it is the only one that answers on an install whose
+ * traffic is almost all subscription. Its two parts are named under the hero, so the sum hides
+ * nothing: no reader is left thinking four thousand dollars left a card.
+ */
+export function listPrice(t: StatsTotals): number {
+  return t.billedUsd + t.referenceUsd;
+}
+
+/**
+ * The hero's parts, one line each, and they add up to it -- which is the page's one promise.
  *
  * `unpriced` rides with them because calls counted with no money behind them are information: the
  * totals above include their tokens, the amounts below do not.
@@ -118,9 +168,10 @@ export function horizonNote(stats: StatsPayload): string | null {
  * Exported for its own test.
  */
 export function totalsMoneyLines(t: StatsTotals): string[] {
-  const lines = [`billed ${money(t.billedUsd)} · what was actually charged`];
+  const lines: string[] = [];
+  if (t.billedUsd > 0) lines.push(`${money(t.billedUsd)} charged · metered endpoints`);
   if (t.referenceUsd > 0) {
-    lines.push(`reference ${money(t.referenceUsd)} · list price, not a charge`);
+    lines.push(`${money(t.referenceUsd)} on a flat plan · subscription or plan, never billed per token`);
   }
   if (t.unpriced > 0) {
     lines.push(`${t.unpriced} call${t.unpriced === 1 ? '' : 's'} nothing could price · counted above, absent from the money`);
@@ -129,17 +180,27 @@ export function totalsMoneyLines(t: StatsTotals): string[] {
 }
 
 /**
- * One row's money in the width a ranking has: the billed sum, then the reference sum marked `*`.
- * Two figures side by side, never one -- the separator is a `·` and not a `+` for that reason.
+ * One row's money in the width a ranking has: the same valuation the hero makes, with the charged
+ * part named beside it when there is one.
+ *
+ * `charged` appears only where something was actually taken, which is a minority of rows on an
+ * install that runs on subscriptions -- so the ranking stays readable and the money that left a
+ * card is never quietly lost inside a sum.
  *
  * Exported for its own test.
  */
 export function rowMoney(t: StatsTotals): string {
-  const parts: string[] = [];
-  if (t.billedUsd > 0) parts.push(money(t.billedUsd));
-  if (t.referenceUsd > 0) parts.push(`*${money(t.referenceUsd)}`);
-  if (parts.length > 0) return parts.join(' · ');
-  return t.unpriced > 0 ? 'unpriced' : money(0);
+  const total = listPrice(t);
+  if (total === 0) return t.unpriced > 0 ? 'unpriced' : money(0);
+  if (t.billedUsd <= 0) return money(t.referenceUsd);
+  if (t.referenceUsd <= 0) return `${money(t.billedUsd)} charged`;
+  return `${money(total)} · ${money(t.billedUsd)} charged`;
+}
+
+/** The legend the money of a ranking owes: what the figure is, and what the word beside it means. */
+function MoneyLegend(): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return <Text style={styles.codeNote}>everything at list price · “charged” names what was actually taken</Text>;
 }
 
 /**
@@ -218,18 +279,64 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
   const stats = useStats();
   useDismissKeyboard();
 
-  const ask = useCallback((period: StatsPeriod) => {
-    statsStore.open(period);
-    connection.send(encodeStatsGet(period)).catch(() => {});
+  const [tab, setTab] = useState<StatsTab>('overview');
+  const [sheet, setSheet] = useState<FilterChoiceKey | null>(null);
+  const [query, setQuery] = useState('');
+
+  const ask = useCallback((period: StatsPeriod, filter: StatsFilter) => {
+    statsStore.open(period, filter);
+    connection.send(encodeStatsGet(period, filter)).catch(() => {});
   }, []);
 
   // Asked on every opening: these are install-wide figures and nothing pushes them, so a payload
   // kept from a previous visit would be however old that visit is.
   useEffect(() => {
-    ask(DEFAULT_STATS_PERIOD);
+    ask(DEFAULT_STATS_PERIOD, noFilter());
   }, [ask]);
 
+  // The filter lives in the store rather than here: it is half of what was asked, and an answer
+  // has to agree with both halves before the page may draw it (see `core/stats.ts`).
+  const filter = stats.filter;
   const payload = stats.payload;
+  const facets = payload?.facets;
+  const narrowing = filterCount(filter) > 0;
+
+  const undo = useCallback(() => {
+    ask(stats.period, noFilter());
+  }, [ask, stats.period]);
+
+  /** The rows of the sheet on screen: the way back to "everything", then the values the server
+   *  sent for this window. Built from the facets and not from the answer, or the list would shrink
+   *  to the one choice already made and leave no way to any other. */
+  const sheetOptions = useMemo(() => {
+    if (sheet === null) return [];
+    const options: SheetEntry[] = [
+      {
+        label: 'Everything',
+        hint: 'drop this dimension',
+        selected: filter[sheet] === undefined,
+        onPress: () => {
+          setSheet(null);
+          ask(stats.period, withChoice(filter, sheet, undefined));
+        },
+      },
+    ];
+    const needle = query.trim().toLowerCase();
+    for (const choice of choicesOf(facets, sheet)) {
+      if (needle !== '' && !choice.label.toLowerCase().includes(needle)) continue;
+      options.push({
+        key: choice.value,
+        label: choice.label,
+        selected: filter[sheet] === choice.value,
+        onPress: () => {
+          setSheet(null);
+          ask(stats.period, withChoice(filter, sheet, choice.value));
+        },
+      });
+    }
+    return options;
+  }, [ask, facets, filter, query, sheet, stats.period]);
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -243,7 +350,9 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title}>Statistics</Text>
-          <Text style={styles.headerSub}>{`every conversation of this install · ${periodLabel(stats.period)}`}</Text>
+          <Text style={styles.headerSub}>
+            {`every conversation of this install · ${periodLabel(stats.period)}${narrowing ? ' · filtered' : ''}`}
+          </Text>
         </View>
       </View>
 
@@ -251,7 +360,7 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
         {PERIODS.map(period => (
           <Pressable
             key={period}
-            onPress={() => ask(period)}
+            onPress={() => ask(period, filter)}
             style={[styles.period, period === stats.period && styles.periodOn]}
             accessibilityRole="button"
             accessibilityState={{ selected: period === stats.period }}
@@ -261,13 +370,74 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
         ))}
       </View>
 
+      {/* One row of dimensions, above the tabs because it narrows all of them. A chip carries its
+          value once set -- `Model · glm-5.2` -- so the row is also the state of the report. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}
+        keyboardShouldPersistTaps="handled">
+        {narrowing ? (
+          <Pressable
+            onPress={undo}
+            style={[styles.chip, styles.chipClear]}
+            accessibilityRole="button"
+            accessibilityLabel="Clear every filter">
+            <Text style={styles.chipClearText}>{'✕ clear'}</Text>
+          </Pressable>
+        ) : null}
+        {FILTER_CHIPS.map(chip => {
+          const value = chipValue(filter, chip.key, facets);
+          const on = value !== '';
+          return (
+            <Pressable
+              key={chip.key}
+              onPress={() => {
+                // A choice opens its list; a predicate is its own list, so a tap is the answer.
+                if (isChoice(chip.key)) {
+                  setQuery('');
+                  setSheet(chip.key);
+                  return;
+                }
+                ask(stats.period, toggleFlag(filter, chip.key));
+              }}
+              style={[styles.chip, on && styles.chipOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={on ? `${chip.label} filter, ${value}, tap to change` : `${chip.label} filter, off`}>
+              <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>
+                {on ? `${chip.label} · ${value}` : chip.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabs}
+        keyboardShouldPersistTaps="handled">
+        {TABS.map(entry => (
+          <Pressable
+            key={entry.key}
+            onPress={() => setTab(entry.key)}
+            style={[styles.tab, entry.key === tab && styles.tabOn]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: entry.key === tab }}
+            accessibilityLabel={entry.label}>
+            <Text style={[styles.tabText, entry.key === tab && styles.tabTextOn]}>{entry.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
       {stats.fetch === 'loading' ? (
         <Text style={styles.empty}>asking the server…</Text>
       ) : stats.fetch === 'error' ? (
         <View style={styles.failure}>
           <Text style={styles.empty}>{stats.error}</Text>
           <Pressable
-            onPress={() => ask(stats.period)}
+            onPress={() => ask(stats.period, filter)}
             style={styles.retry}
             accessibilityRole="button"
             accessibilityLabel="Ask again">
@@ -276,20 +446,46 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
         </View>
       ) : payload ? (
         payload.totals.calls === 0 ? (
-          <Text style={styles.empty}>{`nothing was called in this window (${periodLabel(payload.period)}).`}</Text>
+          <View style={styles.none}>
+            <Text style={styles.empty}>
+              {narrowing
+                ? `nothing matches ${filterSummary(filter, facets)}.`
+                : `nothing was called in this window (${periodLabel(payload.period)}).`}
+            </Text>
+            {narrowing ? (
+              <Pressable onPress={undo} style={styles.retry} accessibilityRole="button" accessibilityLabel="Clear every filter">
+                <Text style={styles.retryText}>clear the filter</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : (
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-            <TotalsCard stats={payload} />
-            <Timeline stats={payload} />
-            <Sessions stats={payload} />
-            <Models rows={payload.models} />
-            <Providers rows={payload.providers} />
-            <Callers rows={payload.callers} />
-            <CacheFold cache={payload.cache} />
-            <Reliability rows={payload.reliability} />
-            <Reconciliation entries={payload.reconciliation} />
+            {tab === 'overview' ? <Overview stats={payload} /> : null}
+            {tab === 'models' ? <Models rows={payload.models} /> : null}
+            {tab === 'hosts' ? (
+              <>
+                <Providers rows={payload.providers} />
+                <Reconciliation entries={payload.reconciliation} />
+              </>
+            ) : null}
+            {tab === 'conversations' ? <Sessions stats={payload} /> : null}
+            {tab === 'cache' ? <CacheFold cache={payload.cache} /> : null}
+            {tab === 'reliability' ? <Reliability rows={payload.reliability} /> : null}
           </ScrollView>
         )
+      ) : null}
+
+      {sheet !== null ? (
+        <ActionSheet
+          preview={FILTER_CHIPS.find(chip => chip.key === sheet)?.sheet ?? 'Filter'}
+          options={sheetOptions}
+          search={
+            SEARCHED.includes(sheet)
+              ? { value: query, onChange: setQuery, placeholder: sheet === 'model' ? 'Search models' : 'Search conversations' }
+              : null
+          }
+          onClose={() => setSheet(null)}
+        />
       ) : null}
     </View>
   );
@@ -310,41 +506,7 @@ function CardHead({ title, trailing }: { title: string; trailing?: string }): Re
   );
 }
 
-function Fold({
-  label,
-  hint,
-  initiallyOpen,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  initiallyOpen?: boolean;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
-  const [open, setOpen] = useState(initiallyOpen === true);
-  return (
-    <View style={styles.fold}>
-      <Pressable
-        onPress={() => setOpen(value => !value)}
-        style={styles.foldHead}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={label}>
-        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
-        <Text style={styles.foldLabel}>{label}</Text>
-        {hint ? (
-          <Text style={styles.foldHint} numberOfLines={1}>
-            {hint}
-          </Text>
-        ) : null}
-      </Pressable>
-      {open ? <View style={styles.foldBody}>{children}</View> : null}
-    </View>
-  );
-}
-
-/** One ranking line: a name, what it cost, and the volume behind it. */
+/** One ranking line: a name, what it is worth, and the volume behind it. */
 function RankRow({
   name,
   detail,
@@ -380,37 +542,56 @@ function RankRow({
 }
 
 /**
- * What the install spent, and the two figures that must never become one. The hero is the billed
- * sum because that is the only one anybody was actually asked to pay; the reference sits under it,
- * named for what it is.
+ * The Overview tab: what the window is worth, the shape of the traffic, who drove it, and the head
+ * of the model ranking. One screen, and every figure on it is a fold of the same rows.
  */
-function TotalsCard({ stats }: { stats: StatsPayload }): React.JSX.Element {
+function Overview({ stats }: { stats: StatsPayload }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const t = stats.totals;
   const reach = stats.rollupIncluded && stats.totalsSince ? `from ${stats.totalsSince}, rollup included` : null;
   return (
-    <Card>
-      <CardHead title={`total · ${periodLabel(stats.period)}`} trailing={`${t.calls} calls`} />
-      <View style={styles.heroRow}>
-        <Text style={styles.hero}>{money(t.billedUsd)}</Text>
-        <Text style={styles.heroUnit}>billed</Text>
-      </View>
-      {totalsMoneyLines(t)
-        .slice(1)
-        .map(line => (
+    <>
+      <Card>
+        <CardHead title={`total · ${periodLabel(stats.period)}`} trailing={`${t.calls} calls`} />
+        <View style={styles.heroRow}>
+          <Text style={styles.hero}>{money(listPrice(t))}</Text>
+          <Text style={styles.heroUnit}>at list price</Text>
+        </View>
+        {totalsMoneyLines(t).map(line => (
           <Text key={line} style={styles.cardNote}>
             {line}
           </Text>
         ))}
-      <Text style={styles.cardNote}>
-        {`${short(t.promptTokens)} in · ${short(t.completionTokens)} out · ${short(t.cacheReadTokens)} cache read · ${short(
-          t.cacheWriteTokens,
-        )} cache written`}
-      </Text>
-      <Text style={styles.cardNote}>
-        {`${duration(t.durationMs)} inside the API${t.errors > 0 ? ` · ${t.errors} errors` : ' · no errors'}`}
-      </Text>
-      {reach ? <Text style={styles.codeNote}>{reach}</Text> : null}
+        <Text style={[styles.cardNote, styles.spacer]}>
+          {`${short(t.promptTokens)} in · ${short(t.completionTokens)} out · ${short(t.cacheReadTokens)} cache read · ${short(
+            t.cacheWriteTokens,
+          )} cache written`}
+        </Text>
+        <Text style={styles.cardNote}>
+          {`${duration(t.durationMs)} inside the API${t.errors > 0 ? ` · ${t.errors} errors` : ' · no errors'}`}
+        </Text>
+        {reach ? <Text style={styles.codeNote}>{reach}</Text> : null}
+      </Card>
+      <Timeline stats={stats} />
+      <Callers rows={stats.callers} />
+      <TopModels rows={stats.models.slice(0, OVERVIEW_ROWS)} rest={Math.max(0, stats.models.length - OVERVIEW_ROWS)} />
+    </>
+  );
+}
+
+/** The head of the ranking, with the door to the whole one: an overview is a shape, not a list. */
+function TopModels({ rows, rest }: { rows: StatsModelRow[]; rest: number }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  if (rows.length === 0) return null;
+  return (
+    <Card>
+      <CardHead title="top models" trailing={rest > 0 ? `+ ${rest} more` : undefined} />
+      <View style={styles.rank}>
+        {rows.map(row => (
+          <RankRow key={`${row.model}\u0000${row.provider}\u0000${row.variant ?? ''}`} name={row.model} detail={routeOf(row)} totals={row} />
+        ))}
+      </View>
+      <MoneyLegend />
     </Card>
   );
 }
@@ -505,14 +686,15 @@ function Models({ rows }: { rows: StatsModelRow[] }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   if (rows.length === 0) return null;
   return (
-    <Fold label="models" hint={`${rows.length} · top ${rows[0].model}`} initiallyOpen>
+    <Card>
+      <CardHead title="models" trailing={`${rows.length} · by what they are worth`} />
       <View style={styles.rank}>
         {rows.map(row => (
           <RankRow key={`${row.model}\u0000${row.provider}\u0000${row.variant ?? ''}`} name={row.model} detail={routeOf(row)} totals={row} />
         ))}
       </View>
-      <Text style={styles.codeNote}>* list price, not a charge</Text>
-    </Fold>
+      <MoneyLegend />
+    </Card>
   );
 }
 
@@ -520,13 +702,16 @@ function Providers({ rows }: { rows: StatsProviderRow[] }): React.JSX.Element | 
   const styles = useThemedStyles(createStyles);
   if (rows.length === 0) return null;
   return (
-    <Fold label="providers" hint={`${rows.length} · top ${routeOf(rows[0])}`}>
+    <Card>
+      <CardHead title="providers" trailing={`${rows.length} · by what they are worth`} />
+      <Text style={styles.cardNote}>An endpoint pin where the model carries one (`streamlake/fp8`), the host otherwise.</Text>
       <View style={styles.rank}>
         {rows.map(row => (
           <RankRow key={row.provider} name={routeOf(row)} totals={row} />
         ))}
       </View>
-    </Fold>
+      <MoneyLegend />
+    </Card>
   );
 }
 
@@ -536,7 +721,8 @@ function Callers({ rows }: { rows: StatsCallerRow[] }): React.JSX.Element | null
   if (rows.length === 0) return null;
   const total = rows.reduce((sum, row) => sum + row.calls, 0) || 1;
   return (
-    <Fold label="callers" hint={rows.map(row => `${row.caller} ${Math.round((row.calls / total) * 100)}%`).join(' · ')}>
+    <Card>
+      <CardHead title="callers" trailing={`${rows.length}`} />
       <View style={styles.rank}>
         {rows.map(row => (
           <View key={row.caller}>
@@ -545,14 +731,15 @@ function Callers({ rows }: { rows: StatsCallerRow[] }): React.JSX.Element | null
           </View>
         ))}
       </View>
-    </Fold>
+    </Card>
   );
 }
 
 function CacheFold({ cache }: { cache: StatsCache }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return (
-    <Fold label="cache" hint={`${cache.readSharePct.toFixed(1)}% read · ${cache.writeSharePct.toFixed(1)}% written`}>
+    <Card>
+      <CardHead title="cache" trailing={`${cache.readSharePct.toFixed(1)}% read · ${cache.writeSharePct.toFixed(1)}% written`} />
       <View style={styles.cacheBody}>
         <Text style={styles.cardNote}>{`${short(cache.promptTokens)} prompt tokens in total`}</Text>
         <Text style={styles.cardNote}>{`${short(cache.cacheReadTokens)} served from cache · ${cache.readSharePct.toFixed(1)}%`}</Text>
@@ -561,7 +748,7 @@ function CacheFold({ cache }: { cache: StatsCache }): React.JSX.Element {
         <Meter pct={cache.writeSharePct} />
         <Text style={styles.codeNote}>both are subsets of the prompt tokens above, billed at their own rate.</Text>
       </View>
-    </Fold>
+    </Card>
   );
 }
 
@@ -571,9 +758,11 @@ function Reliability({ rows }: { rows: StatsReliabilityRow[] }): React.JSX.Eleme
   if (rows.length === 0) return null;
   const worst = rows.reduce((best, row) => (row.errorRatePct > best.errorRatePct ? row : best), rows[0]);
   return (
-    <Fold
-      label="reliability"
-      hint={worst.errors > 0 ? `worst ${worst.key} ${worst.errorRatePct.toFixed(1)}%` : 'no error recorded'}>
+    <Card>
+      <CardHead
+        title="reliability"
+        trailing={worst.errors > 0 ? `worst ${worst.key} ${worst.errorRatePct.toFixed(1)}%` : 'no error recorded'}
+      />
       <View style={styles.rank}>
         {rows.map(row => (
           <View key={`${row.kind}\u0000${row.key}`} style={styles.rankRow}>
@@ -591,7 +780,7 @@ function Reliability({ rows }: { rows: StatsReliabilityRow[] }): React.JSX.Eleme
         ))}
       </View>
       <Text style={styles.codeNote}>mean latency only: the rollup keeps sums, not distributions.</Text>
-    </Fold>
+    </Card>
   );
 }
 
@@ -660,7 +849,29 @@ const createStyles = (palette: Palette) => ({
   periodOn: { backgroundColor: palette.accent },
   periodText: { fontSize: font.small, color: palette.textMuted },
   periodTextOn: { color: palette.accentText, fontWeight: '600' as const },
-  empty: { padding: space.xl, fontSize: font.body, color: palette.textFaint },
+  // The filter row sits above the tabs because it narrows all of them: one row of dimensions, six
+  // tabs answering through it.
+  chips: { flexDirection: 'row' as const, gap: space.xs, paddingTop: space.sm, alignItems: 'center' as const },
+  chip: {
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  chipOn: { backgroundColor: palette.accent, borderColor: palette.accent },
+  chipText: { fontSize: font.micro, color: palette.textMuted, maxWidth: 170 },
+  chipTextOn: { color: palette.accentText, fontWeight: '600' as const },
+  chipClear: { borderColor: palette.warn },
+  chipClearText: { fontSize: font.micro, color: palette.warn },
+  tabs: { flexDirection: 'row' as const, gap: space.md, paddingTop: space.md, alignItems: 'center' as const },
+  tab: { paddingBottom: space.xs, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabOn: { borderBottomColor: palette.accent },
+  tabText: { fontSize: font.meta, color: palette.textMuted },
+  tabTextOn: { color: palette.text, fontWeight: '600' as const },
+  empty: { paddingHorizontal: space.xl, paddingVertical: space.md, fontSize: font.body, color: palette.textFaint },
+  none: { alignItems: 'flex-start' as const, paddingTop: space.md },
+  spacer: { paddingTop: space.xs },
   failure: { alignItems: 'flex-start' as const, gap: space.sm },
   retry: {
     marginLeft: space.xl,
@@ -743,27 +954,4 @@ const createStyles = (palette: Palette) => ({
   },
   meterFill: { height: 6, borderRadius: radius.pill, backgroundColor: palette.accent },
   reconcileRow: { paddingTop: space.xs, gap: space.xxs },
-  fold: {
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.md,
-    backgroundColor: palette.surface,
-    overflow: 'hidden' as const,
-  },
-  foldHead: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    paddingHorizontal: space.md,
-    paddingVertical: space.md,
-  },
-  foldGlyph: { fontSize: font.meta, color: palette.textFaint, width: 12 },
-  foldLabel: {
-    fontSize: font.micro,
-    color: palette.textFaint,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-  },
-  foldHint: { flex: 1, fontSize: font.micro, color: palette.textFaint, textAlign: 'right' as const },
-  foldBody: { paddingHorizontal: space.sm, paddingBottom: space.sm },
 });

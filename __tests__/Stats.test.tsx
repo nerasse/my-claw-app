@@ -139,6 +139,16 @@ function report(period: StatsPeriod, over: Partial<StatsPayload> = {}): StatsPay
     reconciliation: [
       { provider: 'ledger.example', recordedUsd: 12, calls: 40, providerUsd: 17, deltaUsd: 5, balanceUsd: 6, providerUnread: false },
     ],
+    filter: {},
+    facets: {
+      models: ['vendor/model-big', 'vendor/model-small'],
+      providers: ['api.other.test', 'api.vendor.test'],
+      callers: ['orchestrator', 'subagent'],
+      sessions: [
+        { sessionId: 'fixture/alive', label: 'Plan de travail cuisine', labelSource: 'title', deleted: false },
+        { sessionId: 'fixture/gone', label: 'fixture/gone-7f3c1d', labelSource: 'id', deleted: true },
+      ],
+    },
     ...over,
   };
 }
@@ -195,20 +205,93 @@ test('the window the owner presses is the window that travels, and a stale answe
   }
 });
 
-test('what was charged and what it would have cost are two figures on the page, never their sum', async () => {
+test('the hero is the valuation, and its two parts are named under it', async () => {
   const tree = await renderAppHome();
   try {
     await openStats(tree);
     await emit({ type: 'stats.result', stats: report('30d') });
-    await waitFor(() => screen(tree).includes('$12.00'));
+    await waitFor(() => screen(tree).includes('at list price'));
 
     const text = screen(tree);
-    expect(text).toContain('$12.00');
-    expect(text).toContain('reference $3.00 · list price, not a charge');
-    // The sum of an invoice and a catalogue is a figure nobody owes: it must appear nowhere.
-    expect(text).not.toContain('$15.00');
+    // The figure an owner means by "what does this cost me in API terms", on an install whose
+    // traffic is almost all subscription: the parts add up to it, and both are named.
+    expect(text).toContain('$15.00');
+    expect(text).toContain('$12.00 charged · metered endpoints');
+    expect(text).toContain('$3.00 on a flat plan · subscription or plan, never billed per token');
     // Counted calls with no money behind them are stated rather than rounded away.
     expect(text).toContain('4 calls nothing could price');
+  } finally {
+    await unmount(tree);
+  }
+});
+
+test('the tabs answer one question at a time instead of unrolling every section', async () => {
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    await emit({ type: 'stats.result', stats: report('30d') });
+    await waitFor(() => screen(tree).includes('total · last 30 days'));
+
+    // The overview is a shape: the totals, the timeline, who called, and the head of the ranking.
+    expect(screen(tree)).toContain('top models');
+    expect(screen(tree)).not.toContain('reliability');
+
+    await pressLabel(tree, 'Models');
+    await waitFor(() => screen(tree).includes('vendor/model-big'));
+    expect(screen(tree)).toContain('by what they are worth');
+    expect(screen(tree)).not.toContain('top models');
+
+    await pressLabel(tree, 'Reliability');
+    await waitFor(() => screen(tree).includes('mean latency only'));
+    expect(screen(tree)).toContain('13.3%');
+
+    // The filter row is above the tabs, so it never leaves the screen with one of them.
+    expect(labelsOf(tree)).toContain('Model filter, off');
+  } finally {
+    await unmount(tree);
+  }
+});
+
+test('a filter travels with the window, and an answer has to agree with both', async () => {
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    await emit({ type: 'stats.result', stats: report('30d') });
+    await waitFor(() => screen(tree).includes('last 30 days'));
+
+    await pressLabel(tree, 'Model filter, off');
+    await waitFor(() => labelsOf(tree).includes('vendor/model-big'));
+    await pressLabel(tree, 'vendor/model-big');
+
+    expect(sentFrames()).toContainEqual({ type: 'stats.get', period: '30d', filter: { model: 'vendor/model-big' } });
+
+    // The answer to the unfiltered window cannot land under a page that asked for a filter.
+    await emit({ type: 'stats.result', stats: report('30d') });
+    expect(screen(tree)).toContain('asking the server…');
+
+    await emit({ type: 'stats.result', stats: report('30d', { filter: { model: 'vendor/model-big' } }) });
+    await waitFor(() => labelsOf(tree).includes('Model filter, model-big, tap to change'));
+
+    // A narrowed report that matches nothing says what narrowed it, and offers the way back.
+    await emit({
+      type: 'stats.result',
+      stats: report('30d', {
+        filter: { model: 'vendor/model-big', errorsOnly: true },
+        totals: { ...report('30d').totals, calls: 0 },
+      }),
+    });
+    // The filter it asked for and the one the answer carries differ: the page keeps what it has.
+    await waitFor(() => labelsOf(tree).includes('Model filter, model-big, tap to change'));
+
+    await emit({
+      type: 'stats.result',
+      stats: report('30d', {
+        filter: { model: 'vendor/model-big' },
+        totals: { ...report('30d').totals, calls: 0 },
+      }),
+    });
+    await waitFor(() => screen(tree).includes('nothing matches model model-big.'));
+    expect(labelsOf(tree)).toContain('Clear every filter');
   } finally {
     await unmount(tree);
   }
@@ -219,6 +302,7 @@ test('a conversation that no longer exists is listed and marked, never drawn as 
   try {
     await openStats(tree);
     await emit({ type: 'stats.result', stats: report('30d') });
+    await pressLabel(tree, 'Conversations');
     await waitFor(() => screen(tree).includes('Plan de travail cuisine'));
 
     const labels = labelsOf(tree);
@@ -245,10 +329,13 @@ test('on "all", the sections the rollup cannot fill say how far back they actual
     await waitFor(() => screen(tree).includes('everything recorded'));
 
     const frontier = 'counts from 2026-05-04 only · the totals above reach back to 2026-01';
-    // Once under the daily chart and once over the per-session ranking: they are the two views
-    // bounded by the per-call rows, and the totals above them are not.
-    expect(countText(tree, frontier)).toBe(2);
+    // Once under the daily chart, and once over the per-session ranking: they are the two views
+    // the per-call rows bound, and the tabs are what keeps them from being read as one screen.
+    expect(countText(tree, frontier)).toBe(1);
     expect(screen(tree)).toContain('from 2026-01, rollup included');
+    await pressLabel(tree, 'Conversations');
+    await waitFor(() => screen(tree).includes('Plan de travail cuisine'));
+    expect(countText(tree, frontier)).toBe(1);
   } finally {
     await unmount(tree);
   }
@@ -311,6 +398,7 @@ test('the page closes back to where it was opened from, and asks again on the ne
   try {
     await openStats(tree);
     await emit({ type: 'stats.result', stats: report('30d') });
+    await pressLabel(tree, 'Conversations');
     await waitFor(() => screen(tree).includes('Plan de travail cuisine'));
 
     await pressLabel(tree, 'Close statistics');

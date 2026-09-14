@@ -1309,6 +1309,49 @@ export type StatsPeriod = '7d' | '30d' | '90d' | 'all';
 export interface StatsGetFrame {
   type: 'stats.get';
   period: StatsPeriod;
+  /** Absent or empty is the whole window: the page opens unfiltered. */
+  filter?: StatsFilter;
+}
+
+/**
+ * What the report is narrowed to, each field a column of the server's `api_calls`.
+ *
+ * The narrowing happens in SQL before the aggregation, so every figure on the page describes the
+ * same smaller population. `errorsOnly` and `unpricedOnly` are row predicates too: only the calls
+ * that failed, not the routes that failed once.
+ *
+ * `provider` is a `base_url`, not the pin the page draws. The pin is part of the model id, so the
+ * `model` field narrows to it.
+ */
+export interface StatsFilter {
+  model?: string;
+  provider?: string;
+  caller?: string;
+  sessionId?: string;
+  errorsOnly?: boolean;
+  unpricedOnly?: boolean;
+}
+
+/**
+ * The values a filter may be set to, over the window, ignoring the filter on screen.
+ *
+ * The server sends them because the rows narrow when the report does: a list built from the current
+ * answer would shrink to the choice already made, and leave no way back to the others.
+ */
+export interface StatsFacets {
+  models: string[];
+  /** The hosts, as `base_url`: what the filter matches, not the pin the page draws. */
+  providers: string[];
+  callers: string[];
+  sessions: StatsFacetSession[];
+}
+
+/** A conversation as the filter sheet offers it: the same label the ranking uses. */
+export interface StatsFacetSession {
+  sessionId: string;
+  label: string;
+  labelSource: StatsLabelSource;
+  deleted: boolean;
 }
 
 /** Calls, tokens, money and API time over one set of rows. */
@@ -1464,6 +1507,10 @@ export interface StatsPayload {
   callers: StatsCallerRow[];
   /** Empty when no provider with a readable ledger is configured. */
   reconciliation: StatsReconciliation[];
+  /** What the report was narrowed to, echoed back: never inferred from the request on this side. */
+  filter: StatsFilter;
+  /** The values the filter may be set to, computed without it. */
+  facets: StatsFacets;
 }
 
 /**
@@ -2964,8 +3011,11 @@ export function encodeStatusUnwatch(): string {
  * period travels with the request: the server refuses a window it does not know rather than
  * trimming it, so a page that dropped the field would be reading somebody else's window.
  */
-export function encodeStatsGet(period: StatsPeriod): string {
-  return JSON.stringify({ type: 'stats.get', period });
+export function encodeStatsGet(period: StatsPeriod, filter: StatsFilter = {}): string {
+  // Sent only when it narrows: an empty object on every opening would be a filter the server has
+  // to validate to learn what it already knows.
+  const body = { type: 'stats.get' as const, period, ...(Object.keys(filter).length === 0 ? {} : { filter }) };
+  return JSON.stringify(body);
 }
 
 export interface JobFieldsOut {
