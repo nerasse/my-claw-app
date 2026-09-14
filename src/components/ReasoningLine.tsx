@@ -84,7 +84,13 @@ export function ReasoningLine({
   if (!hasBody) {
     return (
       <View style={styles.line}>
-        <Text style={styles.label}>{streaming ? `Thinking… ${count} tokens` : `Thought · ${count} tokens`}</Text>
+        {/*
+          One name in every state, like the aside below: the running counter is what says the
+          thinking is still going, and the word does not have to move to say it. It used to read
+          "Thinking... N tokens" live and "Thought - N tokens" once sealed, which renamed a thing
+          the reader was looking at instead of letting it hold still.
+        */}
+        <Text style={styles.label}>{`Reasoning · ${count} tokens`}</Text>
         {elapsed}
       </View>
     );
@@ -92,7 +98,7 @@ export function ReasoningLine({
 
   return (
     <CollapsibleAside
-      label={streaming ? 'Thinking…' : 'Reasoning'}
+      label="Reasoning"
       trailing={elapsed}
       body={body}
       showHint="Show the model's reasoning"

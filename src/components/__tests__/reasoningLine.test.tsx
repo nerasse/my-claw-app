@@ -44,7 +44,7 @@ function textOf(tree: ReactTestRenderer.ReactTestRenderer): string {
 test('the counter climbs while the model is thinking', () => {
   jest.useFakeTimers();
   const tree = render({ reasoning: 'weighing options', startedAt: Date.now() - 12_000, streaming: true });
-  expect(textOf(tree)).toContain('Thinking…');
+  expect(textOf(tree)).toContain('Reasoning');
   expect(textOf(tree)).toContain('12.00s');
 
   ReactTestRenderer.act(() => {
@@ -116,7 +116,8 @@ test('nothing to say, nothing drawn', () => {
  * no `persistKey`, so its open state lived in a `useState` that the live-to-history transition
  * threw away -- the component's own contract says the key is the only truth for a keyed aside.
  * And the label moved from "Thinking..." to "Reasoning" at the same instant, so what the reader
- * saw was their section vanishing and a different, closed one taking its place.
+ * saw was their section vanishing and a different, closed one taking its place. The label no longer
+ * moves at all: one name for the whole life of the section, so there is nothing to re-identify.
  */
 test('a reasoning section opened while it streams is still open once it ends', () => {
   resetAsideExpansion();

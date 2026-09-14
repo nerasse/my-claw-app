@@ -99,32 +99,35 @@ test('a reply that produced no reasoning shows no line at all', async () => {
   await unmount(tree);
 });
 
-test('a live run shows Thinking… before any text arrives', async () => {
+test('a live run shows Reasoning before any text arrives', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.startStream(THREAD, 's1');
     chatStore.appendReasoning(THREAD, 's1', THOUGHT);
   });
-  await waitFor(() => textsOf(tree).includes('Thinking…'));
+  await waitFor(() => textsOf(tree).includes('Reasoning'));
 
-  expect(textsOf(tree)).toContain('Thinking…');
+  expect(textsOf(tree)).toContain('Reasoning');
   expect(textsOf(tree)).not.toContain(THOUGHT);
   await unmount(tree);
 });
 
-test('the line becomes Reasoning once the run is over', async () => {
+test('the label holds still when the run ends', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.startStream(THREAD, 's1');
     chatStore.appendReasoning(THREAD, 's1', THOUGHT);
     chatStore.appendDelta(THREAD, 's1', 'the answer');
   });
-  await waitFor(() => textsOf(tree).includes('Thinking…'));
+  await waitFor(() => textsOf(tree).includes('Reasoning'));
 
   await ReactTestRenderer.act(async () => {
     chatStore.endStream(THREAD, 's1');
   });
-  await waitFor(() => textsOf(tree).includes('Reasoning'));
+  // One name for the whole life of the section: nothing renames itself under the reader when the
+  // stream seals, which is half of what made an expanded section read as a different, closed one.
+  await waitFor(() => textsOf(tree).includes('the answer'));
+  expect(textsOf(tree)).toContain('Reasoning');
   expect(textsOf(tree)).not.toContain('Thinking…');
   await unmount(tree);
 });
@@ -138,14 +141,14 @@ describe('a redacted engine', () => {
       chatStore.startStream(THREAD, 's1');
       chatStore.setReasoningTokens(THREAD, 's1', 1240);
     });
-    await waitFor(() => textsOf(tree).some(text => text.includes('Thinking…')));
+    await waitFor(() => textsOf(tree).some(text => text.includes('Reasoning')));
 
-    expect(textsOf(tree)).toContain('Thinking… 1.2k tokens');
-    expect(labelsOf(tree)).not.toContain('Thinking…');
+    expect(textsOf(tree)).toContain('Reasoning · 1.2k tokens');
+    expect(labelsOf(tree)).not.toContain('Reasoning');
     await unmount(tree);
   });
 
-  test('reads in the past tense once the run ended', async () => {
+  test('does not rename itself once the run ended', async () => {
     const tree = await renderApp();
     await ReactTestRenderer.act(async () => {
       chatStore.startStream(THREAD, 's1');
@@ -153,9 +156,9 @@ describe('a redacted engine', () => {
       chatStore.appendDelta(THREAD, 's1', 'done');
       chatStore.endStream(THREAD, 's1');
     });
-    await waitFor(() => textsOf(tree).some(text => text.includes('Thought')));
+    await waitFor(() => textsOf(tree).some(text => text.includes('Reasoning · 800 tokens')));
 
-    expect(textsOf(tree)).toContain('Thought · 800 tokens');
+    expect(textsOf(tree)).toContain('Reasoning · 800 tokens');
     await unmount(tree);
   });
 });
@@ -165,6 +168,6 @@ test('a replayed turn from a redacted engine still says it thought', async () =>
     { id: 'h-0', role: 'user', text: '9.11 ou 9.8 ?', ts: '2026-01-01T10:00:00.000Z' },
     { id: 'h-1', role: 'assistant', text: '9.11', ts: '2026-01-01T10:00:01.000Z', reasoningTokens: 12300 },
   ]);
-  await waitFor(() => textsOf(tree).some(text => text.includes('Thought · 12.3k tokens')), 60);
+  await waitFor(() => textsOf(tree).some(text => text.includes('Reasoning · 12.3k tokens')), 60);
   await unmount(tree);
 });
