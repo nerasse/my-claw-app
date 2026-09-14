@@ -269,7 +269,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // the push's business -- server-side skipDevice keeps the tray silent for the foreground
       // device on that thread, so the ring and the banner never double up. An end that closed
       // nothing (announced twice by an older server, or replayed) is not a second run ending.
-      if (ended && frame.threadId === activeThreadId()) onRunEndOnActiveThread?.(frame);
+      // A sub-agent is excluded: its thread is a thread like any other but it is not a conversation,
+      // and the owner asked for that run and is watching the card it lives on, so a ring there is
+      // noise rather than news (2026-09-14).
+      if (ended && frame.threadId === activeThreadId() && !isSubAgentThread(frame.threadId)) {
+        onRunEndOnActiveThread?.(frame);
+      }
       // A run may have spawned sub-agents; the roster is refetched at its end rather than
       // pushed, which keeps the counter honest without a live push path.
       const parent = subagentParent() ?? activeThreadId();

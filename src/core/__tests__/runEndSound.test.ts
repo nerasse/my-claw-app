@@ -72,3 +72,14 @@ it('no ring when no thread is on screen', () => {
   routeServerFrame(runEnd('t1'), serverHandlers);
   expect(state.runEnds).toBe(0);
 });
+
+it('a sub-agent stays silent, even when its thread is the one on screen', () => {
+  // A sub-agent is not a conversation: the owner asked for its run and is already looking at the
+  // card it lives on, so the ring is noise rather than news. It fired here because the rule was
+  // "the run ended on the thread on screen", and a sub-agent's thread is a thread like any other
+  // (2026-09-14: the owner was inside a sub-agent and heard a ring for its own end).
+  const { state, serverHandlers } = makeHandlers('sub-0123456789abcdef');
+  chatStore.startRun('sub-0123456789abcdef');
+  routeServerFrame(runEnd('sub-0123456789abcdef'), serverHandlers);
+  expect(state.runEnds).toBe(0);
+});
