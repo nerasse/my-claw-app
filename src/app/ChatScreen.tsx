@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Linking, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
@@ -17,6 +17,8 @@ import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
+import { recordDiag } from '../core/diagnostics';
+import { probeText, revealFieldAboveKeyboard } from '../core/revealField';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
 import { encodeCommandsList, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
@@ -208,6 +210,8 @@ export function ChatScreen({
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const [atBottom, setAtBottom] = useState(true);
+  /** Where the list is, because the reveal has to know what it is lifting from. */
+  const offsetRef = useRef(0);
   const commands = useCommands();
   const inCommandRef = useRef(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>(() => draftAttachmentsOf(threadId));
@@ -678,22 +682,63 @@ export function ChatScreen({
   }, []);
 
   /**
-   * Draws one bubble or card. `groupedFlag`/`showTimeFlag` are passed in rather than read from
-   * the global index so the same code serves free rows and the children of a run group.
+   * The field of a question card that holds focus, and whether its reveal has been measured yet.
+   *
+   * Here rather than in the card: a card is a row of the thread, so it unmounts when it scrolls
+   * out of the window, while the keyboard's own announcement arrives later still.
    */
+  const focusedFieldRef = useRef<TextInput | null>(null);
+  const probedRef = useRef(false);
+
   /**
    * Bring the bottom of the thread back under the keyboard when a free-text answer opens.
    *
    * The pending question is at the bottom -- the pill that jumps to it scrolls to the same
    * offset, and an inverted list pins offset 0 to the bottom edge whatever the keyboard leaves
-   * of the viewport. The field is the last thing in the card, so this puts it right above the
-   * composer instead of off screen under the keyboard.
+   * of the viewport. This is the half of the reveal that can run at focus. The other half waits
+   * for the keyboard: on Android its geometry does not exist yet here, and this scroll is a
+   * request against a viewport that is about to shrink.
    */
-  const revealQuestionField = useCallback(() => {
+  const revealQuestionField = useCallback((field: TextInput | null) => {
+    focusedFieldRef.current = field;
+    if (field === null) return;
+    probedRef.current = false;
     setAtBottom(true);
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
+  useEffect(() => {
+    // The measurement half. Android announces the keyboard once it is up, and only then is there
+    // a geometry to reveal against; iOS announces it before it moves, which is close enough for a
+    // measurement taken after the layout has been given the shrunk frame. Either way the field is
+    // measured rather than assumed, and the numbers go to the device diagnostics once per focus:
+    // a report of "still behind the keyboard" then arrives with the geometry attached instead of
+    // being reasoned about from a screenshot.
+    const event = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const subscription = Keyboard.addListener(event, () => {
+      const field = focusedFieldRef.current;
+      if (field === null) return;
+      // Reported once per focus; a re-announcement (the IME changing height) still re-runs the lift.
+      const probing = !probedRef.current;
+      probedRef.current = true;
+      revealFieldAboveKeyboard({
+        field,
+        metrics: Keyboard.metrics(),
+        offset: offsetRef.current,
+        scrollTo: offset => listRef.current?.scrollToOffset({ offset, animated: true }),
+      })
+        .then(probe => {
+          if (probing) recordDiag({ kind: 'js', at: Date.now(), message: probeText(probe) });
+        })
+        .catch(() => {});
+    });
+    return () => subscription.remove();
+  }, []);
+
+  /**
+   * Draws one bubble or card. `groupedFlag`/`showTimeFlag` are passed in rather than read from
+   * the global index so the same code serves free rows and the children of a run group.
+   */
   const renderItemContent = useCallback(
     (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean) => {
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
@@ -880,6 +925,7 @@ export function ChatScreen({
   // scroll range. That is the whole point of inverting it — no scrollToEnd on open, no content
   // height to estimate, and the keyboard shrinking the viewport leaves offset 0 where it was.
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    offsetRef.current = event.nativeEvent.contentOffset.y;
     const nearBottom = event.nativeEvent.contentOffset.y <= NEAR_BOTTOM_PX;
     if (nearBottom !== atBottom) setAtBottom(nearBottom);
     // Only while the reader is on the newest message may the store drop its oldest items:
@@ -1045,6 +1091,12 @@ export function ChatScreen({
               ref={listRef}
               {...scrollProps}
               inverted
+              // Android scrolls a scroll view to a child that takes focus on its own. That is fine
+              // for a form, and wrong here: this list is inverted, and the native delta is computed
+              // in layout coordinates, which the inversion mirrors. Two writers on one offset, one
+              // of them blind to the flip, is how a field ends up under the keyboard after having
+              // been put above it.
+              scrollsChildToFocus={false}
               // The whole fix for "the page moves while I read": the list adjusts its own offset so
               // the first thing the reader can see keeps its place, and only follows the newest
               // message when they are already near it (minIndexForVisible 0 = every row, including

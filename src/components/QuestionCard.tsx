@@ -50,12 +50,12 @@ export function QuestionCard({
   request: QuestionAskFrame;
   onReply: (id: string, answers: string[][]) => void;
   /**
-   * Called when the free-text field takes focus, so the surface holding this card can bring it
-   * above the keyboard. The card cannot do it: it does not know it is in a list, and Android
-   * stopped doing it for us -- the app draws edge to edge, so `adjustResize` never resizes the
-   * window and the native scroll-the-focused-view-into-view never fires.
+   * Called with the free-text field when it takes focus and with null when it loses it, so the
+   * surface holding this card can bring it above the keyboard. The card cannot do it: it does not
+   * know it is in a list, and the surface needs the field itself -- the reveal is measured on the
+   * node, not guessed from the row it happens to sit in.
    */
-  onRevealField?: () => void;
+  onRevealField?: (field: TextInput | null) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const draft = useQuestionDraft(request.id);
@@ -272,7 +272,7 @@ function QuestionBlock({
   index: number;
   draft: QuestionDraft;
   onPicked: (question: QuestionInfoFrame) => void;
-  onRevealField?: () => void;
+  onRevealField?: (field: TextInput | null) => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   const custom = questionAllowsCustom(question);
@@ -375,11 +375,13 @@ function CustomField({
   question: QuestionInfoFrame;
   index: number;
   draft: QuestionDraft;
-  onRevealField?: () => void;
+  onRevealField?: (field: TextInput | null) => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
+  const field = useRef<TextInput>(null);
   return (
     <TextInput
+      ref={field}
       style={styles.customInput}
       defaultValue={draftText(draft, index)}
       onChangeText={text => questionStore.patch(id, current => draftWriteCustom(current, question, index, text))}
@@ -387,7 +389,10 @@ function CustomField({
       placeholderTextColor="#888"
       autoFocus
       multiline
-      onFocus={onRevealField}
+      // The node, not the event: the reveal measures the field once the keyboard is up, and a
+      // blur says there is nothing left to reveal -- the row can outlive the focus by scrolling.
+      onFocus={() => onRevealField?.(field.current)}
+      onBlur={() => onRevealField?.(null)}
       accessibilityLabel={`Free-form answer to ${question.header}`}
     />
   );

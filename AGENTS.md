@@ -130,6 +130,10 @@ Traps:
 - **Nothing may hide behind the keyboard, and Android will not rescue it.** `adjustResize` is inert
   (the app is edge to edge whatever `edgeToEdgeEnabled` says) and the thread is the only scroll area
   in a conversation: a scroller inside the inverted list loses every drag to it. So a row that holds
-  a field reveals it by scrolling the thread on focus (Android no longer does that for us), and
-  whatever sits outside the shell's `KeyboardAvoidingView` pads itself (`useSheetBottomInset`).
+  a field reveals it itself, in two halves: a scroll to offset 0 at focus, then a lift measured with
+  `measureInWindow` at `keyboardDidShow` (`src/core/revealField.ts`), because on Android the
+  keyboard's geometry does not exist before that event. RN 0.86 scrolls a focused child into view on
+  its own (`scrollsChildToFocus`, default true) with deltas computed in layout coordinates, which an
+  inverted list mirrors, so the thread disables it rather than let two writers share one offset.
+  Whatever sits outside the shell's `KeyboardAvoidingView` pads itself (`useSheetBottomInset`).
   `docs/keyboard-avoidance.md`

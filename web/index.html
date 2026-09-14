@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<!-- interactive-widget=resizes-content: Chrome Android went back to resizing only the *visual*
+     viewport (108), so a layout sized in percentages keeps its height when the keyboard opens and
+the field under it is covered. react-native-web's KeyboardAvoidingView is a stub that does
+nothing, so on the web this meta tag is the whole keyboard avoidance. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
 <meta name="color-scheme" content="dark light" />
 <meta name="theme-color" content="#0b0d10" />
 <title>MyClaw</title>
