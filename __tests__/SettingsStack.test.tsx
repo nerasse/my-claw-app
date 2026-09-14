@@ -11,10 +11,42 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
+import { pairingStatus, resetPairingClient, startPairing } from '../src/core/pairingClient';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const KEPT = 'thread-kept';
+
+class PairingSocket {
+  static current: PairingSocket | null = null;
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+
+  constructor() {
+    PairingSocket.current = this;
+  }
+
+  send(): void {}
+
+  close(): void {
+    this.readyState = 3;
+    this.onclose?.();
+  }
+
+  open(): void {
+    this.readyState = 1;
+    this.onopen?.();
+  }
+
+  grant(): void {
+    this.onmessage?.({
+      data: JSON.stringify({ type: 'pair.granted', deviceId: 'app-test', token: 'token-test' }),
+    });
+  }
+}
 
 /** The Android layer calls the last registered handler and stops when it returns true. */
 function backHandler(): { __handlers: Array<() => boolean>; exitApp: jest.Mock } {
@@ -39,6 +71,22 @@ function emit(frame: Record<string, unknown>): Promise<void> {
   return ReactTestRenderer.act(async () => {
     DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify(frame) });
   });
+}
+
+async function completePairing(): Promise<void> {
+  const globals = globalThis as Record<string, unknown>;
+  const previousWebSocket = globals.WebSocket;
+  globals.WebSocket = PairingSocket;
+  try {
+    await ReactTestRenderer.act(async () => {
+      startPairing('http://server:8080', 'GW6E73PK');
+      PairingSocket.current?.open();
+      PairingSocket.current?.grant();
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+  } finally {
+    globals.WebSocket = previousWebSocket;
+  }
 }
 
 function summary(threadId: string, title: string) {
@@ -105,6 +153,7 @@ async function boot(): Promise<Tree> {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  resetPairingClient();
   chatStore.clearAll();
   bridge.sendMessage.mockResolvedValue(true);
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: KEPT });
@@ -282,5 +331,20 @@ test('the general page labels a connected server with its announced version', as
   await waitFor(() => textsOf(tree).includes('connected · v0.1.204'));
   // The device card names the running build alongside the announced server version.
   await waitFor(() => textsOf(tree).includes('0.0.1-test'));
+  await settleAndUnmount(tree);
+});
+
+test('Pair can be opened again after a completed pairing attempt', async () => {
+  const tree = await boot();
+  await completePairing();
+  await waitFor(() => pairingStatus().phase === 'granted');
+
+  await openSettings(tree);
+  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Pair this device with a server-minted code');
+
+  await waitFor(() => textsOf(tree).includes('Pair this device'));
+  expect(pairingStatus()).toEqual({ phase: 'idle' });
+
   await settleAndUnmount(tree);
 });

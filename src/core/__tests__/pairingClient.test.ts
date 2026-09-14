@@ -1,6 +1,7 @@
 import {
   startPairing,
   pairingStatus,
+  cancelPairing,
   resetPairingClient,
 } from '../pairingClient';
 import { deviceBridge } from '../nativeBridge';
@@ -80,6 +81,9 @@ describe('pairingClient', () => {
     expect(bridge.adoptCredentials).toHaveBeenCalledWith('app-abc1', 'the-token');
     expect((connection as unknown as { connect: jest.Mock }).connect).toHaveBeenCalledWith('ws://10.0.0.5:8080/my-claw-app');
     expect(pairingStatus()).toMatchObject({ phase: 'granted', deviceId: 'app-abc1' });
+
+    cancelPairing();
+    expect(pairingStatus()).toEqual({ phase: 'idle' });
   });
 
   test('a grant without a token is not adopted: the device stays unpaired', async () => {
