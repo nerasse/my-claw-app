@@ -44,6 +44,28 @@ connexion WS ──► frame notifications.info { vapidPublicKey }
   (`AppState`) et de thread actif : c'est ce qui permet au serveur de **taire** la notification
   du run que l'utilisateur regarde déjà.
 
+## Le son de fin de run
+
+En plus du push, l'app joue elle-même le son de notification (`playAlertSound`, le
+`RingtoneManager.TYPE_NOTIFICATION` du système) quand un run se termine **sur le fil affiché**.
+Le partage est net : un run sur un autre fil est l'affaire du push, et le serveur tait celui du
+fil que le téléphone regarde (`notifications.state`), donc jamais deux sons pour un même
+événement. Son et push sont indiscernables à l'oreille : pour savoir lequel a parlé, on
+s'abonne au topic ntfy et on regarde s'il sort un message.
+
+Deux règles particulières, l'une parce qu'elle prêtait à confusion, l'autre par choix :
+
+- **Le son suit le fil, pas le run.** Ouvrir un sous-agent et le regarder travailler, c'est
+  regarder un fil : sa fin sonnait donc, exactement comme une conversation (mesuré le
+  2026-09-14, en écartant le push au passage).
+- **Un sous-agent est muet** (depuis le 14/09). Son handle est un thread id comme un autre,
+  mais ce n'est pas une conversation : l'utilisateur a demandé ce run et la carte change d'état
+  sous ses yeux, donc le son est du bruit, pas une nouvelle. Un sous-agent qui **pose une
+  question** garde le son : là le run est bloqué sur une réponse, ce qui est précisément ce pour
+  quoi le son existe.
+
+Témoin : `src/core/__tests__/runEndSound.test.ts`.
+
 ## Le navigateur : une permission, et une seule occasion de la demander
 
 Le web a le même transport (Web Push, VAPID, `sw.js` pour l'affichage et le tap) et une
