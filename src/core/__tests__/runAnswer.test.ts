@@ -13,7 +13,11 @@
  * kind alone elected it. The answer is prose the agent wrote; a run that wrote none never
  * answered, and keeps all of its work folded.
  *
- * The second rule in this file is the other half of the same demand: an error is never folded
+ * And only a run that *finished* has an answer at all (2026-09-14). On a run that was stopped or
+ * died, the last prose is an interim step written before the calls that followed it, and electing
+ * it drew it under all of them: nothing is elected then, and the whole run folds in order.
+ *
+ * The other rule in this file is the other half of the same demand: an error is never folded
  * away. A run that died after its stream opened carries the message on the phase itself, inside
  * the run, and a group closed by default hid it.
  *
@@ -33,7 +37,7 @@ const runMeta = (status: 'running' | 'done' | 'error' = 'error') => ({
   ...(status === 'running' ? {} : { endTs: 9_000 }),
 });
 
-const tool = (id: string): ChatItem =>
+const tool = (id: string, status: 'running' | 'done' | 'error' = 'error'): ChatItem =>
   ({
     kind: 'tool',
     id,
@@ -43,11 +47,11 @@ const tool = (id: string): ChatItem =>
     ok: true,
     truncated: false,
     ts: 5,
-    run: runMeta(),
+    run: runMeta(status),
   }) as ChatItem;
 
 /** A phase the model only thought in: the reasoning is there, the prose is not. */
-const phase = (id: string, reasoning: string, text = ''): ChatItem =>
+const phase = (id: string, reasoning: string, text = '', status: 'running' | 'done' | 'error' = 'error'): ChatItem =>
   ({
     kind: 'text',
     id,
@@ -57,11 +61,11 @@ const phase = (id: string, reasoning: string, text = ''): ChatItem =>
     attachments: [],
     streaming: false,
     ts: 5,
-    run: runMeta(),
+    run: runMeta(status),
   }) as ChatItem;
 
-const prose = (id: string, text: string): ChatItem =>
-  ({ kind: 'text', id, role: 'agent', text, attachments: [], streaming: false, ts: 5, run: runMeta() }) as ChatItem;
+const prose = (id: string, text: string, status: 'running' | 'done' | 'error' = 'error'): ChatItem =>
+  ({ kind: 'text', id, role: 'agent', text, attachments: [], streaming: false, ts: 5, run: runMeta(status) }) as ChatItem;
 
 const userText = (id: string): ChatItem =>
   ({ kind: 'text', id, role: 'user', text: 'go', attachments: [], streaming: false, ts: 1 }) as ChatItem;
@@ -120,16 +124,25 @@ describe('the answer of a run is prose the agent wrote', () => {
     expect(groupItems(items)).toEqual(['t1', 'p1', 't2', 'p2']);
   });
 
-  test('a run that answered still hoists its answer, with the phase it thought in left folded', () => {
+  test('a run that died after writing prose keeps that prose folded, where it was written', () => {
+    // The owner's rule (2026-09-14): only a run that finished has an answer to elect. On a run
+    // that died, the prose came before whatever followed it, and hoisting it out drew it after
+    // all of that -- the group holds the whole run, in order.
     const items = [userText('u'), tool('t1'), phase('p1', 'how to say it'), prose('a', 'here is the answer')];
-    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'a']);
-    expect(groupItems(items)).toEqual(['t1', 'p1']);
+    expect(rowsOf(items)).toEqual(['u', 'g:r1']);
+    expect(groupItems(items)).toEqual(['t1', 'p1', 'a']);
   });
 
   test('a phase produced after the answer does not become the answer', () => {
     // The scan walks back from the end: stopping at the first agent item found the phase, and the
-    // real answer stayed inside the group under a header drawn below it.
-    const items = [userText('u'), tool('t1'), prose('a', 'here is the answer'), phase('p-after', 'second thoughts')];
+    // real answer stayed inside the group under a header drawn below it. A finished run, which is
+    // where the election lives at all -- a stopped or failed one elects nothing.
+    const items = [
+      userText('u'),
+      tool('t1', 'done'),
+      prose('a', 'here is the answer', 'done'),
+      phase('p-after', 'second thoughts', '', 'done'),
+    ];
     expect(rowsOf(items)).toEqual(['u', 'g:r1', 'a']);
     expect(groupItems(items)).toEqual(['t1', 'p-after']);
   });
@@ -309,19 +322,21 @@ describe('an error is never folded away', () => {
 
   test('an error in the middle of a run cuts the group in two, in order', () => {
     const items = [userText('u'), tool('t1'), failedPhase('p-dead', 'retrying'), tool('t2'), prose('a', 'recovered')];
-    // The row keeps its place: the work before the failure, the failure, the work after it, the
-    // answer. Hoisting it as the run's answer would have moved it under everything instead.
-    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'p-dead', 'g:r1', 'a']);
+    // The row keeps its place: the work before the failure, the failure, then the work after it.
+    // The run died, so the prose that follows the last call is work too -- nothing is elected,
+    // and the second segment holds it where it was written.
+    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'p-dead', 'g:r1']);
     const groups = buildRows(items).filter(row => row.kind === 'group');
-    expect(groups.map(group => (group.kind === 'group' ? group.items.map(i => i.id) : []))).toEqual([['t1'], ['t2']]);
+    expect(groups.map(group => (group.kind === 'group' ? group.items.map(i => i.id) : []))).toEqual([['t1'], ['t2', 'a']]);
   });
 
   test('a failed tool call is work and stays folded', () => {
     // A command that came back non-zero is what the run did, not why it stopped. `isHoisted`
-    // stops on the kind before it ever looks at an outcome.
+    // stops on the kind before it ever looks at an outcome. And the run died: the prose at its
+    // end is work as well, folded with the rest.
     const items = [userText('u'), tool('t1'), failedTool('t-bad'), prose('a', 'done anyway')];
-    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'a']);
-    expect(groupItems(items)).toEqual(['t1', 't-bad']);
+    expect(rowsOf(items)).toEqual(['u', 'g:r1']);
+    expect(groupItems(items)).toEqual(['t1', 't-bad', 'a']);
     expect(isHoisted(failedTool('t-bad'))).toBe(false);
   });
 

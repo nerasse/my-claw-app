@@ -144,14 +144,67 @@ describe('buildRows', () => {
     expect(rows.map(labelOfRow)).toEqual(['u1', 'g:r1', 'a1', 'u2', 'g:r2', 'a2']);
   });
 
-  test('an aborted run folds its work and keeps the partial answer outside', () => {
+  /**
+   * The owner's rule (2026-09-14): only a run that finished has an answer to elect. On a run that
+   * was stopped or died, the prose is an interim step written *before* the calls that followed it
+   * -- hoisting it out drew it under all of them, and the reading order lied about where the run
+   * actually stopped. Everything stays folded then, in the order it was written.
+   */
+  test('a stopped run elects nothing: its prose stays in the group, at the place it was written', () => {
+    const rows = buildRows(
+      [
+        userText('u'),
+        tool('t1', 'r1'),
+        agentText('a', 'half an answer, written before the last call', 'r1'),
+        tool('t2', 'r1'),
+      ].map(i => (i.id === 'u' ? i : { ...i, run: run('r1', 'aborted', 100, 200) })),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1', status: 'aborted' } });
+    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 'a', 't2']);
+  });
+
+  test('a run that died on an error elects nothing either', () => {
+    const rows = buildRows(
+      [
+        userText('u'),
+        tool('t1', 'r1'),
+        agentText('a', 'half an answer', 'r1'),
+        tool('t2', 'r1'),
+      ].map(i => (i.id === 'u' ? i : { ...i, run: run('r1', 'error', 100, 200) })),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1', status: 'error' } });
+    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 'a', 't2']);
+  });
+
+  test('a hoisted bubble still cuts a stopped run, and the prose stays on its side of it', () => {
+    const rows = buildRows(
+      [
+        userText('u'),
+        tool('t1', 'r1'),
+        userText('steer'),
+        tool('t2', 'r1'),
+        agentText('a', 'what it had written', 'r1'),
+      ].map(i => (i.id === 'u' || i.id === 'steer' ? i : { ...i, run: run('r1', 'aborted', 100, 200) })),
+    );
+    // The injected turn keeps its place and splits the group around it; nothing is hoisted out of
+    // the second segment, so the prose stays where it was written.
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'steer', 'g:r1']);
+    const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
+    expect(groups.map(group => group.items.map(i => i.id))).toEqual([['t1'], ['t2', 'a']]);
+  });
+
+  test('a finished run still elects its answer, even past a phase that follows it', () => {
+    // The nominal case, unchanged: the answer is found by content, not by position.
     const rows = buildRows([
       userText('u'),
       tool('t1', 'r1'),
-      agentText('a', 'half an answer', 'r1'),
-    ].map(i => (i.id === 't1' || i.id === 'a' ? { ...i, run: run('r1', 'aborted', 100, 200) } : i)));
-    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1', status: 'aborted' } });
-    expect(rows[2]).toMatchObject({ kind: 'item', item: { id: 'a' } });
+      agentText('a', 'here is the answer', 'r1'),
+      agentText('p-after', '', 'r1', { reasoning: 'second thoughts' }),
+    ]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a']);
+    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 'p-after']);
   });
 
   test('a command result inside a run is hoisted like an injected turn', () => {

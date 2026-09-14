@@ -755,6 +755,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'question.resolved':
       // Answered or canceled, here or on another surface.
       questionStore.resolve(frame.id);
+      // A canceled question may be the answer a stop got: the server reads a stop as "cancel the
+      // question" and leaves the run alone, so the mark that stop armed must not wait for a run
+      // end that is not coming -- a mark left through it would swallow the next stop, the one
+      // meant to abort. (The app usually knows about the question before it sends the stop, and
+      // arms nothing then; this is the race, where the ask had not landed yet.)
+      if (frame.reason === 'canceled') chatStore.liftStop(frame.threadId);
       break;
     case 'undo.prompt':
       // The server asks which mode a bare `/undo` should use. The store owns it: the sheet

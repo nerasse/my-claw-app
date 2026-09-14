@@ -93,3 +93,17 @@ export function parseTagCommand(text: string): string | null | undefined {
   if (match) return match[1] ?? '';
   return undefined;
 }
+
+/**
+ * Whether a submitted text is the server's `/stop` command, read the way the server reads it:
+ * the first run of letters after the slash (`/^\/([a-z-]+)/`) must be exactly `stop`. `/stop`,
+ * `/stop ` and `/stop now` are the command; `/stopwatch` is a word of its own, and `/STOP` is
+ * not the command the server would run, so it stays a message like any other.
+ *
+ * Used to hold the request back while a stop is already in flight (`chatStore.claimStop`): the
+ * frame would be answered with nothing, and a bubble drawn for it would have nothing to resolve
+ * it at all.
+ */
+export function isStopCommand(text: string): boolean {
+  return /^\/([a-z-]+)/i.exec(text.trim())?.[1] === 'stop';
+}

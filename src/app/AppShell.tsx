@@ -21,6 +21,7 @@ import {
   useSpawnCards,
   useActiveRun,
   useCompacting,
+  useStopping,
   useHistoryPage,
   useUnreadThreads,
   type TextItem,
@@ -32,7 +33,7 @@ import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
 import { isPinned, migrateLocalPins, setPinned } from '../core/pinned';
-import { parseTagCommand } from '../core/commands';
+import { isStopCommand, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
 import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnostics';
 import {
@@ -629,6 +630,9 @@ export function AppShell(): React.JSX.Element {
   const running = useActiveRun(activeThread);
   const compacting = useCompacting(activeThread);
   const streaming = running || compacting !== undefined;
+  // A stop is in flight on the thread on screen: the session menu entry reads "Stopping…" and
+  // sends nothing until the run ends -- the end of the run is what lifts the mark it reads.
+  const stopping = useStopping(activeThread);
 
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.
@@ -1544,6 +1548,14 @@ export function AppShell(): React.JSX.Element {
   const sendChat = useCallback(
     async (text: string, attachments?: OutgoingAttachment[], location?: LocationInput) => {
       const threadId = activeThreadRef.current ?? uuid();
+      // A `/stop` typed and sent as a message (the arrow, or a word after the command) rather
+      // than picked from the slash-menu above: while a stop is already in flight the request is
+      // consumed -- nothing sent, and no bubble drawn for it. The server answers nothing to a
+      // second request while the abort of the cycle travels, so a bubble left behind would have
+      // nothing at all to resolve it.
+      if (!attachments?.length && !location && isStopCommand(text) && !chatStore.claimStop(threadId)) {
+        return;
+      }
       if (!activeThreadRef.current) selectThread(threadId);
       return sendChatTo(threadId, text, attachments, location);
     },
@@ -2183,9 +2195,13 @@ export function AppShell(): React.JSX.Element {
         },
       },
       stop: {
-        label: 'Stop',
+        // While a stop is in flight the entry says so, and pressing it sends nothing: the server
+        // answers nothing to a second request until the abort of the cycle lands, so the only
+        // thing a second frame could produce is a second bubble for the one stop. It reads Stop
+        // again the moment the run ends -- the end of the run is what lifts the mark.
+        label: threadId !== null && threadId === activeThread && stopping ? 'Stopping…' : 'Stop',
         onPress: () => {
-          if (threadId) connection.send(encodeChatStop(threadId));
+          if (threadId && chatStore.claimStop(threadId)) connection.send(encodeChatStop(threadId));
           close();
         },
       },
@@ -2234,7 +2250,7 @@ export function AppShell(): React.JSX.Element {
         },
       },
     }),
-    [refreshThread, currentModelLabel, currentModelOrigin, openModel, openSessionInstructions, openFilesFor, openStatus, transcriptTitleOf],
+    [refreshThread, currentModelLabel, currentModelOrigin, openModel, openSessionInstructions, openFilesFor, openStatus, transcriptTitleOf, activeThread, stopping],
   );
 
   const refreshAction = useCallback(
@@ -2387,7 +2403,10 @@ export function AppShell(): React.JSX.Element {
           setSettingsPage('tags');
           return true;
         case 'stop':
-          if (threadId) connection.send(encodeChatStop(threadId));
+          // One stop per cycle, typed command included: while an abort is in flight the command
+          // is consumed without sending anything -- no frame, and no bubble, since it never
+          // becomes a message.
+          if (threadId && chatStore.claimStop(threadId)) connection.send(encodeChatStop(threadId));
           return true;
         case 'rename':
           if (threadId) {
@@ -3154,7 +3173,9 @@ export function AppShell(): React.JSX.Element {
             onTagCommand={dispatchTagCommand}
             streaming={streaming}
             onStop={() => {
-              if (activeThread) connection.send(encodeChatStop(activeThread));
+              // The composer's own stop follows the same one-per-cycle rule as the menu entry:
+              // while one is in flight the press sends nothing.
+              if (activeThread && chatStore.claimStop(activeThread)) connection.send(encodeChatStop(activeThread));
             }}
             onNewThread={newThread}
             onLoadOlder={loadOlderHistory}

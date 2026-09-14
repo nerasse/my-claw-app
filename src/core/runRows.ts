@@ -116,10 +116,14 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  *   grouped while the run answers.
  * - Inside a terminal run, hoisted bubbles (see `isHoisted`) stay rows and cut the group into
  *   segments around them.
- * - The last prose of a run is its answer, not its work: it leaves the group and stands as the
- *   row after it. A run that wrote none -- all cards, or phases that only thought -- never
- *   answered, and keeps everything folded. The answer is found by *content*, not by position: an
- *   entry that landed after it does not demote it.
+ * - The last prose of a run that finished (`done`) is its answer, not its work: it leaves the
+ *   group and stands as the row after it. A run that wrote none -- all cards, or phases that only
+ *   thought -- never answered, and keeps everything folded. The answer is found by *content*, not
+ *   by position: an entry that landed after it does not demote it.
+ * - A run that was stopped (`aborted`) or died (`error`) never answered at all: the prose it left
+ *   is work written *before* the calls that followed it, and hoisting it would draw it after them.
+ *   Nothing is elected then -- the group holds everything in the order it was written, and the
+ *   hoisted rows around it (the error included) keep their places.
  * - A segment with nothing left in it produces no group: a run that only ever wrote its answer
  *   renders as plain bubbles, never as an empty header.
  */
@@ -142,14 +146,22 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
       // A run that wrote no prose -- all cards, or phases that only thought -- died before saying
       // anything, and then nothing is hoisted out: everything stays in the group.
       //
+      // And only a run that finished has an answer to elect. On a run that was stopped or died,
+      // the last prose is an interim step written before the tool calls that came after it:
+      // electing it drew it under all of them, and the reading order lied about where the run
+      // actually stopped (2026-09-14). Everything then stays folded, in the order it was written,
+      // and the hoisted rows around it keep cutting the group.
+      //
       // The scan walks back over what is not prose rather than stopping at it, so a thinking phase
       // the model produced after its answer cannot demote that answer, exactly as a stray card
       // cannot.
       let answerAt = -1;
-      for (let i = current.length - 1; i >= 0; i -= 1) {
-        if (isAgentProse(current[i]!)) {
-          answerAt = i;
-          break;
+      if (run.status === 'done') {
+        for (let i = current.length - 1; i >= 0; i -= 1) {
+          if (isAgentProse(current[i]!)) {
+            answerAt = i;
+            break;
+          }
         }
       }
       if (answerAt >= 0) {

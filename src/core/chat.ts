@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import type { AttachmentMeta, HistoryEntry, LocationData, RunMeta, SpawnAction, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
+import { questionStore } from './questionStore';
 import { agentOfCard, indexRoster } from './subagents';
 
 export type RunStatus = 'running' | 'done' | 'aborted' | 'error';
@@ -328,6 +329,11 @@ class ChatStoreImpl {
   private lastStream = new Map<string, string>();
   /** Threads with a run in flight on the server: drives the Stop button across the whole run. */
   private activeRuns = new Set<string>();
+  /**
+   * Threads a stop is in flight for: armed when a stop is sent, lifted when the cycle it targets
+   * ends -- see `claimStop` for the exact doors.
+   */
+  private stopping = new Set<string>();
   /**
    * The run currently being answered, per thread. Live frames attach to it; sync entries carry
    * the server's id, which replaces the synthetic one when it arrives -- docs/run-grouping.md.
@@ -704,6 +710,54 @@ class ChatStoreImpl {
     return this.activeRuns.has(threadId);
   }
 
+  /**
+   * Claims the thread's stop for the caller: one stop per cycle.
+   *
+   * True means the caller may send its stop -- against a run, or against the compaction a stop
+   * can also abort. False means one is already in flight: the server answers nothing to a second
+   * request while the abort of the cycle travels ("stopping"), so the only thing a second frame
+   * could produce is a second bubble for the one stop. Nothing is sent then, and the session
+   * menu entry says "Stopping…" instead of "Stop" by reading `isStopping`.
+   *
+   * The mark is armed only while a cycle is actually in flight. A stop sent when nothing runs is
+   * answered "Nothing running." at once, and there is no run end or compaction end to lift a mark
+   * it set -- it would silence the next stop, the one that matters. The doors that lift it are
+   * every witness that the cycle is over: `endRun` (a stopped run ends `aborted`), the end of the
+   * compaction, a session list or a page that no longer holds the run, and the thread going away.
+   *
+   * A question waiting on the thread is the other case with nothing to wait for: the server reads
+   * a stop as "cancel the question" and leaves the run alone, so the request may go and no mark is
+   * armed -- the next press is the real stop, and a mark set here would swallow it until the run
+   * ended on its own.
+   */
+  claimStop(threadId: string): boolean {
+    if (questionStore.forThread(threadId).length > 0) return true;
+    if (this.stopping.has(threadId)) return false;
+    if (this.activeRuns.has(threadId) || this.openRuns.has(threadId) || this.compacting.has(threadId)) {
+      this.stopping.add(threadId);
+      this.emit();
+    }
+    return true;
+  }
+
+  /** A stop is in flight for this thread: the menu entry reads "Stopping…" and sends nothing. */
+  isStopping(threadId: string): boolean {
+    return this.stopping.has(threadId);
+  }
+
+  /**
+   * Lifts the mark without a run end.
+   *
+   * The one stop that aborts nothing is the one answered by canceling a pending question: the run
+   * carries on, no `chat.run.end` is coming for that stop, and a mark left through it would
+   * swallow the next stop -- the one meant to abort. The router calls this on the server's
+   * `question.resolved` (reason `canceled`), which is also how the race closes: a stop sent before
+   * the ask reached this device armed a mark the question's own cancellation lifts.
+   */
+  liftStop(threadId: string): void {
+    if (this.stopping.delete(threadId)) this.emit();
+  }
+
   /** The run live frames of a thread belong to, if any. */
   private liveRun(threadId: string): RunInfo | undefined {
     return this.openRuns.get(threadId)?.info;
@@ -751,6 +805,16 @@ class ChatStoreImpl {
     // A compaction runs inside its run (a gate at the start, an overflow retry in the middle) and
     // does not outlive it: a Stop that aborted the summarizer ends both.
     this.compacting.delete(threadId);
+    // The stop in flight is over, whatever the motive of the end -- a stopped run ends `aborted`.
+    this.stopping.delete(threadId);
+    // And a command placeholder still waiting across the end of the run is resolved here. The one
+    // command the server deliberately leaves unanswered is a stop whose abort is already
+    // travelling: the web stopped the same thread a moment before, this device sent its own
+    // request and no frame is coming for it. Left alone, the "Running /stop…" the server drew
+    // would spin for good -- nothing else in the app ever answers it. No text is invented for the
+    // resolution: the placeholder is dropped, the way an answer that moved on drops it, and a
+    // result that still lands afterwards re-materialises under the same id.
+    this.clearCommandPending(threadId);
     if (!this.activeRuns.delete(threadId) && !this.openRuns.has(threadId)) return false;
     const open = this.openRuns.get(threadId);
     this.openRuns.delete(threadId);
@@ -853,6 +917,9 @@ class ChatStoreImpl {
       }
     } else if (activeRun === false) {
       this.openRuns.delete(threadId);
+      // The server says no run is answering on the thread: a stop in flight is over too, whether
+      // or not its end frame ever arrives.
+      this.stopping.delete(threadId);
       // No run is in flight, so whatever the live frames painted under a synthetic id is the work
       // of the run this page closes: it takes that run's id, status and end. Renaming only while
       // the run was still running left a page that arrived after its end with two ids for one
@@ -900,11 +967,12 @@ class ChatStoreImpl {
       if ([...next].every(id => this.activeRuns.has(id))) return;
     }
     // A run the server no longer lists is over even if its end frame was lost: settle the open
-    // run of those threads the way endRun would.
+    // run of those threads the way endRun would -- the stop in flight goes with it.
     for (const threadId of removed) {
       const open = this.openRuns.get(threadId);
       if (open) this.sealRun(threadId, open.info.id, 'done', Date.now());
       this.openRuns.delete(threadId);
+      this.stopping.delete(threadId);
     }
     this.activeRuns = next;
     this.emit();
@@ -1413,7 +1481,11 @@ class ChatStoreImpl {
    */
   setCompacting(threadId: string, since: number | undefined, text = '', reasoning = ''): void {
     if (since === undefined) {
-      if (this.compacting.delete(threadId)) this.emit();
+      const ended = this.compacting.delete(threadId);
+      // A compaction was the cycle a stop was aimed at (the one case with no run behind it): its
+      // end lifts the mark the same way a run end does, or the next stop would be silenced.
+      const lifted = this.stopping.delete(threadId);
+      if (ended || lifted) this.emit();
       return;
     }
     this.compacting.set(threadId, { since, text, reasoning });
@@ -1824,6 +1896,7 @@ class ChatStoreImpl {
     this.syncState.delete(threadId);
     this.activeRuns.delete(threadId);
     this.openRuns.delete(threadId);
+    this.stopping.delete(threadId);
     this.lastStream.delete(threadId);
     this.pendingCommands.delete(threadId);
     if (this.unread.delete(threadId)) this.refreshUnread();
@@ -1848,6 +1921,7 @@ class ChatStoreImpl {
     this.lastStream.clear();
     this.activeRuns.clear();
     this.openRuns.clear();
+    this.stopping.clear();
     this.pendingCommands.clear();
     this.unread.clear();
     this.unreadSnapshot = EMPTY_THREADS;
@@ -2008,6 +2082,12 @@ export function useHistoryPage(threadId: string | null): HistoryPage {
 
 export function useActiveRun(threadId: string | null): boolean {
   const snapshot = useCallback(() => (threadId ? chatStore.hasActiveRun(threadId) : false), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+/** A stop is in flight on the thread: the session menu entry reads "Stopping…" instead of "Stop". */
+export function useStopping(threadId: string | null): boolean {
+  const snapshot = useCallback(() => (threadId ? chatStore.isStopping(threadId) : false), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 
