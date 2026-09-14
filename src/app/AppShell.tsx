@@ -179,6 +179,7 @@ import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
 import { PairingScreen, usePairing } from './PairingScreen';
+import { cancelPairing } from '../core/pairingClient';
 import { OtherSettingsScreen } from './OtherSettingsScreen';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
 import { TagsScreen } from './TagsScreen';
@@ -3228,6 +3229,9 @@ export function AppShell(): React.JSX.Element {
                   setPending(0);
                 }}
                 onOpenPairing={() => {
+                  // A completed attempt is kept at module scope; clear it before starting a new
+                  // attempt so the granted-state auto-close effect cannot dismiss this screen.
+                  if (pairing.phase === 'granted') cancelPairing();
                   setSettingsOpen(false);
                   setPairingOpen(true);
                 }}
