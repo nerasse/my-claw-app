@@ -416,3 +416,27 @@ test('the page closes back to where it was opened from, and asks again on the ne
     await unmount(tree);
   }
 });
+
+test('a server that ignores the filter says so, instead of waiting for an answer never coming', async () => {
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    // A payload with no `filter` field at all: what a server that predates the filter sends.
+    const older = { ...report('30d') } as Record<string, unknown>;
+    delete older.filter;
+    await emit({ type: 'stats.result', stats: older });
+    await waitFor(() => screen(tree).includes('total · last 30 days'));
+
+    await pressLabel(tree, 'Model filter, off');
+    await waitFor(() => labelsOf(tree).includes('vendor/model-big'));
+    await pressLabel(tree, 'vendor/model-big');
+    expect(screen(tree)).toContain('asking the server…');
+
+    // The answer comes, but it is the whole window: refused, and said out loud.
+    await emit({ type: 'stats.result', stats: older });
+    await waitFor(() => screen(tree).includes('this server does not apply a filter'));
+    expect(screen(tree)).not.toContain('asking the server…');
+  } finally {
+    await unmount(tree);
+  }
+});

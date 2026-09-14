@@ -75,10 +75,18 @@ class StatsStoreImpl {
   receive(frame: StatsResultFrame): boolean {
     if (this.state.fetch === 'closed') return false;
     if (this.state.period !== frame.stats.period) return false;
-    if (!sameFilter(this.state.filter, frame.stats.filter)) return false;
+    // A server that predates the filter answers without echoing one. That is not an answer to a
+    // filtered request, and drawing it under the chips would be the lie this store exists to stop
+    // -- so it is refused, and refused *visibly*: an answer that will never come is a page stuck
+    // on "asking the server…" forever, which reads as a bug in the app rather than a version skew.
+    const echoed = frame.stats.filter ?? {};
+    if (!sameFilter(this.state.filter, echoed)) {
+      if (frame.stats.filter === undefined) this.fail('this server does not apply a filter');
+      return false;
+    }
     this.state = {
       period: frame.stats.period,
-      filter: frame.stats.filter,
+      filter: echoed,
       fetch: 'ready',
       payload: frame.stats,
       receivedAt: Date.now(),
