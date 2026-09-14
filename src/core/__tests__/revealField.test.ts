@@ -2,6 +2,7 @@ import {
   REVEAL_MARGIN,
   liftFor,
   measureOnScreen,
+  padFor,
   probeText,
   revealFieldAboveKeyboard,
 } from '../revealField';
@@ -39,6 +40,38 @@ describe('the lift a covered field needs', () => {
     // keyboard rather than twice against the same numbers.
     expect(liftFor(1000, 900, 184)).toBe(68);
     expect(liftFor(884, 900, 184)).toBe(184);
+  });
+});
+
+describe('the space the scroll cannot give', () => {
+  it('asks for nothing when the field already clears the keyboard', () => {
+    expect(padFor(800, 900, 0)).toBe(0);
+  });
+
+  it('gives the whole covered height when the list is already at the newest message', () => {
+    // The owner's own measurement: field bottom 605, keyboard top 426, offset 0. `liftFor` can
+    // only answer "0 again" there, and the field stayed behind the keyboard for three releases.
+    expect(padFor(605, 426, 0)).toBe(605 + REVEAL_MARGIN - 426);
+  });
+
+  it('gives only what the scroll could not deliver', () => {
+    // Offset 100, covered 180: the scroll reaches 0 and delivers 100 of it, the content gives 80.
+    expect(padFor(1080, 900, 100)).toBe(1080 + REVEAL_MARGIN - 900 - 100);
+  });
+
+  it('steps aside when the scroll has enough room for the whole lift', () => {
+    // Offset 400, covered 180: the scroll does all of it, and space in the content would be a
+    // second writer on the same problem -- the thread would jump twice as far as it needs to.
+    expect(padFor(1080, 900, 400)).toBe(0);
+  });
+
+  it('is the exact remainder, so the field lands the margin above the keyboard', () => {
+    const covered = 1080 + REVEAL_MARGIN - 900;
+    const delivered = 60;
+    const pad = padFor(1080, 900, 60);
+    expect(pad).toBe(covered - delivered);
+    // Where the field ends up: the scroll moved it `delivered`, the pad does the rest.
+    expect(1080 - (delivered + pad)).toBe(900 - REVEAL_MARGIN);
   });
 });
 
@@ -106,6 +139,51 @@ describe('revealing a field above the keyboard', () => {
     expect(probe.offsetAfter).toBe(120);
   });
 
+  it('pads what the scroll cannot lift, and measures where the field ended up', async () => {
+    // The bug, as a test: offset 0, field under the keyboard. The scroll has nothing to give, so
+    // the content does -- and the second measurement is what proves it, two frames later.
+    const asked: number[] = [];
+    const pads: number[] = [];
+    let moved = false;
+    const field = {
+      measureInWindow: (callback: (x: number, y: number, w: number, h: number) => void) => {
+        const top = moved ? 300 : 1000;
+        callback(0, top, 300, 60);
+      },
+    };
+    const probe = await revealFieldAboveKeyboard({
+      field,
+      metrics: { height: 700, screenY: 900 },
+      offset: 0,
+      scrollTo: offset => asked.push(offset),
+      setPad: pad => {
+        pads.push(pad);
+        // What the screen does with it: the space moves the field, which is what the second
+        // measurement reads. Answered synchronously here so the test owns the geometry.
+        moved = true;
+      },
+    });
+    expect(pads).toEqual([1060 + REVEAL_MARGIN - 900]);
+    expect(asked).toEqual([]);
+    expect(probe.pad).toBe(1060 + REVEAL_MARGIN - 900);
+    expect(probe.settled).toEqual({ top: 300, bottom: 360 });
+    expect(probeText(probe)).toContain('pad=176');
+    expect(probeText(probe)).toContain('settled=300..360');
+  });
+
+  it('asks for no pad when it was not handed a way to apply one', async () => {
+    const probe = await revealFieldAboveKeyboard({
+      field: hostAt(1000, 60),
+      metrics: { height: 700, screenY: 900 },
+      offset: 0,
+      scrollTo: () => {},
+    });
+    // The number is still reported: the caller that only wants to read the geometry gets it.
+    expect(probe.pad).toBe(1060 + REVEAL_MARGIN - 900);
+    expect(probe.settled).toBeNull();
+    expect(probeText(probe)).toContain('pad=176');
+  });
+
   it('reports an unmeasurable field rather than lifting it on a guess', async () => {
     const asked: number[] = [];
     const probe = await revealFieldAboveKeyboard({
@@ -128,6 +206,8 @@ describe('the line the report carries', () => {
       keyboardHeight: 700,
       offsetBefore: 300,
       offsetAfter: 184,
+      pad: 0,
+      settled: null,
     });
     expect(line).toBe(
       'question field reveal: field=1000..1060 keyboardTop=900 keyboardHeight=700 offset=300->184',
@@ -135,7 +215,7 @@ describe('the line the report carries', () => {
   });
 
   it('says the keyboard is down rather than printing a zero', () => {
-    const line = probeText({ field: null, keyboardTop: null, keyboardHeight: null, offsetBefore: 0, offsetAfter: 0 });
+    const line = probeText({ field: null, keyboardTop: null, keyboardHeight: null, offsetBefore: 0, offsetAfter: 0, pad: 0, settled: null });
     expect(line).toContain('keyboardTop=down');
     expect(line).toContain('keyboardHeight=-');
   });

@@ -56,6 +56,33 @@ export function liftFor(
 }
 
 /**
+ * The pad that stands in for the part of a lift the thread cannot make.
+ *
+ * The scroll can only ever step back towards offset 0, and the field of a question sits at the
+ * newest content: measured on the owner's phone, `field=565..605` under a keyboard whose top was
+ * `426`, with the offset already `0`. `liftFor` answered "0 again" and the field stayed covered --
+ * not because the arithmetic was wrong but because there was nothing left to scroll. The viewport
+ * is what never shrank (the app is edge to edge, so `adjustResize` is inert), and the only lever
+ * that does not go through the offset is space *inside* the content.
+ *
+ * Space added at the start of an inverted list's content is space at the bottom of the screen:
+ * the container is not flipped, the scroll view is, and that is the same reason the list header is
+ * the bottom of the thread. So the pad pushes the whole content up by exactly what the scroll
+ * could not deliver, and the field's bottom lands `margin` above the keyboard.
+ */
+export function padFor(
+  fieldBottom: number,
+  keyboardTop: number,
+  offset: number,
+  margin: number = REVEAL_MARGIN,
+): number {
+  const covered = fieldBottom + margin - keyboardTop;
+  if (covered <= 0) return 0;
+  const delivered = offset - liftFor(fieldBottom, keyboardTop, offset, margin);
+  return Math.max(0, Math.ceil(covered - delivered));
+}
+
+/**
  * Where a host is on screen, or null when it cannot say.
  *
  * The timeout is not a retry loop: `measureInWindow` simply never calls back for a node that has
@@ -89,6 +116,10 @@ export interface RevealProbe {
   keyboardHeight: number | null;
   offsetBefore: number;
   offsetAfter: number;
+  /** Space the thread had to give the content when the scroll could not deliver the whole lift. */
+  pad: number;
+  /** Where the field ended up, measured after that pad was given a layout pass. */
+  settled: FieldRect | null;
 }
 
 /**
@@ -105,9 +136,17 @@ export function probeText(probe: RevealProbe): string {
       : `${Math.round(probe.field.top)}..${Math.round(probe.field.bottom)}`;
   const top = probe.keyboardTop === null ? 'down' : String(Math.round(probe.keyboardTop));
   const height = probe.keyboardHeight === null ? '-' : String(Math.round(probe.keyboardHeight));
+  // `settled` is the proof and the pad is what it proves: a second measurement of a field that
+  // moved, taken after the space was given a layout pass. Without it the line says what was
+  // attempted, which is exactly the reading that kept this bug alive for three releases.
+  const settled =
+    probe.settled === null
+      ? ''
+      : ` settled=${Math.round(probe.settled.top)}..${Math.round(probe.settled.bottom)}`;
+  const pad = probe.pad > 0 ? ` pad=${Math.round(probe.pad)}` : '';
   return (
     `question field reveal: field=${field} keyboardTop=${top} keyboardHeight=${height}` +
-    ` offset=${Math.round(probe.offsetBefore)}->${Math.round(probe.offsetAfter)}`
+    ` offset=${Math.round(probe.offsetBefore)}->${Math.round(probe.offsetAfter)}${pad}${settled}`
   );
 }
 
@@ -117,9 +156,27 @@ export interface RevealOptions {
   metrics: KeyboardGeometry | undefined;
   offset: number;
   scrollTo: (offset: number) => void;
+  /**
+   * Space to give the content under the field when the scroll cannot deliver the whole lift.
+   * Absent means the caller only wants the numbers, which is what the tests do.
+   */
+  setPad?: (pad: number) => void;
 }
 
-/** Measure, lift if covered, and hand back the numbers either way. */
+/**
+ * Two frames, so the pad is laid out before the field is measured again.
+ *
+ * A single frame would measure the old layout: the state that carries the pad has to be flushed,
+ * the list has to re-measure the content, and `measureInWindow` of a node that has not moved yet
+ * answers the same rect -- which would read as "the pad did nothing".
+ */
+function afterLayout(): Promise<void> {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
+/** Measure, lift what the scroll can, pad the rest, and hand back the numbers either way. */
 export async function revealFieldAboveKeyboard(options: RevealOptions): Promise<RevealProbe> {
   const field = await measureOnScreen(options.field);
   const up = options.metrics !== undefined && options.metrics.height > 0;
@@ -128,12 +185,22 @@ export async function revealFieldAboveKeyboard(options: RevealOptions): Promise<
     field !== null && keyboardTop !== null
       ? liftFor(field.bottom, keyboardTop, options.offset)
       : options.offset;
+  const pad = field !== null && keyboardTop !== null ? padFor(field.bottom, keyboardTop, options.offset) : 0;
+  if (pad > 0) options.setPad?.(pad);
   if (offsetAfter !== options.offset) options.scrollTo(offsetAfter);
+  // Measured again only when something was asked to move: a clear field that needs neither a lift
+  // nor a pad is already where it is, and a second read of it proves nothing.
+  const settled =
+    pad > 0 && options.setPad !== undefined
+      ? await afterLayout().then(() => measureOnScreen(options.field))
+      : null;
   return {
     field,
     keyboardTop,
     keyboardHeight: up ? (options.metrics as KeyboardGeometry).height : null,
     offsetBefore: options.offset,
     offsetAfter,
+    pad,
+    settled,
   };
 }

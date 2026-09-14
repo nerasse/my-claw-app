@@ -705,6 +705,18 @@ export function ChatScreen({
   const probedRef = useRef(false);
 
   /**
+   * Space given to the content when a scroll could not lift the field out from under the keyboard.
+   *
+   * The last resort, and the one that works where the rest cannot: the field of a question sits at
+   * the newest content, offset 0, where `liftFor` can only step back towards an offset it is
+   * already at. Measured on the phone (2026-09-14, 16:20Z): `field=565..605 keyboardTop=426
+   * offset=0->0` -- the viewport had not shrunk, so nothing about the offset could have helped.
+   * Living in the screen rather than in the card, because the card unmounts with the window while
+   * the keyboard's report lands after that.
+   */
+  const [keyboardPad, setKeyboardPad] = useState(0);
+
+  /**
    * Bring the bottom of the thread back under the keyboard when a free-text answer opens.
    *
    * The pending question is at the bottom -- the pill that jumps to it scrolls to the same
@@ -715,7 +727,12 @@ export function ChatScreen({
    */
   const revealQuestionField = useCallback((field: TextInput | null) => {
     focusedFieldRef.current = field;
-    if (field === null) return;
+    if (field === null) {
+      // Blur, an answer sent, the card gone: the space exists for a field that is on screen, and
+      // a pad left behind would push the end of the thread up with nothing to read there.
+      setKeyboardPad(0);
+      return;
+    }
     probedRef.current = false;
     setAtBottom(true);
     setFollowing(true);
@@ -741,13 +758,21 @@ export function ChatScreen({
         metrics: Keyboard.metrics(),
         offset: offsetRef.current,
         scrollTo: offset => listRef.current?.scrollToOffset({ offset, animated: true }),
+        // What the scroll cannot deliver, the content gives: see `padFor`. Applied here rather
+        // than in the card so that it survives the row unmounting.
+        setPad: setKeyboardPad,
       })
         .then(probe => {
           if (probing) recordDiag({ kind: 'js', at: Date.now(), message: probeText(probe) });
         })
         .catch(() => {});
     });
-    return () => subscription.remove();
+    // The keyboard is the pad's whole reason: it goes down, the space goes with it.
+    const hidden = Keyboard.addListener('keyboardDidHide', () => setKeyboardPad(0));
+    return () => {
+      subscription.remove();
+      hidden.remove();
+    };
   }, []);
 
   /**
@@ -896,6 +921,23 @@ export function ChatScreen({
    * is removed.
    */
   const renderListItem = useCallback(({ item }: { item: ChatRow }) => renderRow(item), [renderRow]);
+
+  /**
+   * The content's padding, plus the space a covered field needed.
+   *
+   * `paddingTop` of an inverted list's *content container* is the bottom of the screen: the
+   * container is not flipped, the scroll view is -- the same reason the list header is the bottom
+   * of the thread. So this space lands where the field is and pushes the thread up by exactly what
+   * the scroll could not deliver. Memoised for the reason below: the list compares its props by
+   * identity, and a fresh array on every keystroke is a re-render of every visible row.
+   */
+  const contentStyle = useMemo(
+    () =>
+      keyboardPad > 0
+        ? [styles.listContent, { paddingTop: styles.listContent.paddingTop + keyboardPad }]
+        : styles.listContent,
+    [keyboardPad, styles.listContent],
+  );
 
   // The list is inverted, so its header is the bottom of the screen: the loose questions sit under
   // the newest message, where the thread actually stops, and so does the compaction rule as long as
@@ -1137,7 +1179,7 @@ export function ChatScreen({
               onScrollToIndexFailed={onScrollToIndexFailed}
               data={reversedRows}
               keyExtractor={keyOfRow}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={contentStyle}
               keyboardShouldPersistTaps="handled"
               renderItem={renderListItem}
               ListHeaderComponent={listHeader}

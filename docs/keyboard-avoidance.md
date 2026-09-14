@@ -144,3 +144,35 @@ asks for an offset before the newest message, that a field already clear is left
 which cannot answer is reported as unmeasured rather than lifted on a guess. The reveal is the one
 part of this that no test can settle on its own -- it is arithmetic about a geometry only the device
 has -- which is exactly why the arithmetic is a pure function and the geometry is passed in.
+
+## The third half: the space the scroll cannot give (2026-09-14)
+
+The device settled it, and not the way the two halves assumed. Four measurements, from the owner's
+phone, all the same shape:
+
+```
+question field reveal: field=565..605 keyboardTop=426 keyboardHeight=339 offset=0->0
+```
+
+The field was under the keyboard and `liftFor` had answered "0 again" -- correctly, because offset 0
+is the newest content of an inverted list and a lift is a step back towards 0. There was nothing left
+to scroll into, and the two halves of the reveal were both working exactly as written. What that
+proves is the *other* hypothesis on this page: the viewport never shrank. The app is edge to edge,
+`adjustResize` is inert, so the keyboard does not resize anything -- it covers. No arithmetic about
+an offset can move a field out from under a rectangle that overlays it.
+
+So the reveal has a third half, and it does not go through the offset at all: space *inside the
+content* (`padFor`, `src/core/revealField.ts`). Space added at the start of an inverted list's
+content container is space at the bottom of the screen -- the container is not flipped, the scroll
+view is, which is the same reason the list header is the bottom of the thread. The pad is the exact
+remainder: what the scroll could not deliver, and nothing when the scroll could deliver all of it,
+so the two halves never move the thread twice for one keyboard.
+
+The pad is applied by `ChatScreen`, not by the card, because a card is a row of the thread and
+unmounts when the keyboard's report arrives. It is dropped on blur and on `keyboardDidHide`: it
+exists for a field that is on screen.
+
+And the line now carries the proof rather than the attempt: `pad=176 settled=300..360`, a second
+measurement of the field taken after the space was given two frames to lay out. A pad that does not
+move the field is a finding too, and this is the only reading that can tell it from a pad that was
+never applied.
