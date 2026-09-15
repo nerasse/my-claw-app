@@ -572,7 +572,7 @@ export function Drawer({
                 <Text style={styles.sectionFold}>{''}</Text>
               )}
               <View style={styles.sectionGlyph}>
-                {folder ? <FolderIcon size={13} color={palette.textFaint} /> : null}
+                {folder ? <FolderIcon size={15} color={palette.textFaint} /> : null}
               </View>
               <Text style={styles.sectionLabel} numberOfLines={1}>
                 {item.label}
@@ -926,7 +926,7 @@ const createStyles = (palette: Palette) => ({
   sectionHeader: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },
   sectionFold: { width: 14, fontSize: font.micro, color: palette.textFaint },
   /** The glyph slot, held empty on the section that is not a folder: the names have to line up. */
-  sectionGlyph: { width: 13 + space.xs, alignItems: 'center' as const, justifyContent: 'center' as const },
+  sectionGlyph: { width: 15 + space.xs, alignItems: 'center' as const, justifyContent: 'center' as const },
   sectionLabel: {
     paddingRight: space.md,
     paddingTop: space.xs,
