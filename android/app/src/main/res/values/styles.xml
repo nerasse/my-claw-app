@@ -30,6 +30,23 @@
     <style name="EditTextStyle" parent="Widget.AppCompat.EditText">
         <item name="android:elegantTextHeight">false</item>
         <item name="android:useLocalePreferredLineHeightForMinimum">false</item>
+        <!--
+          The same API-35 change as TextViewStyle above, and the reason it was missed here is the
+          reason it is visible: React Native hands a TextInput to the platform's own EditText and
+          never lays the text out itself, so the fix it shipped for Text does not reach it. The
+          EditText keeps the new default, which sizes and offsets the line from the glyphs' visual
+          bounds instead of their advances.
+
+          What that costs depends on the left padding. Every other field in the app carries its own
+          paddingHorizontal, so the first glyph starts far enough in that the offset has room. The
+          composer is the one field whose padding sits on the wrapper (the frame moved there on
+          2026-08-18, so an EditText past its ceiling would stop scrolling its padding away), which
+          leaves its text at x=0: the first glyph, drawn at a slightly negative x, is simply cut.
+          Reported as "l'input mange la première lettre", on one line as much as on six.
+          Restoring the pre-15 behaviour puts the advances back in charge, as for Text.
+        -->
+        <item name="android:useBoundsForWidth">false</item>
+        <item name="android:shiftDrawingOffsetForStartOverhang">false</item>
     </style>
 
 </resources>
