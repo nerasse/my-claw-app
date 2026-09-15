@@ -9,6 +9,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { sessionStore } from '../src/core/sessions';
+import { questionStore } from '../src/core/questionStore';
 import type { FolderSummary, SessionSummary } from '../src/core/protocol';
 import { labelsOf, renderAppHome, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
@@ -67,6 +68,7 @@ async function renderList(folders: FolderSummary[] = [CUBEFLOW, CARRIERE], filte
 
 beforeEach(() => {
   chatStore.clearAll();
+  questionStore.clear();
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark' });
 });
 
@@ -126,6 +128,64 @@ test('a folder born in the filtered workspace is still drawn, empty', async () =
 
   expect(textsOf(tree)).toContain('CubeFlow · 0');
   expect(labelsOf(tree)).toContain(row('no folder chat'));
+
+  await unmount(tree);
+});
+
+test('a folder counts what its conversations are asking of the owner', async () => {
+  const tree = await renderList();
+
+  await ReactTestRenderer.act(async () => {
+    chatStore.markUnread('cf-1');
+  });
+  expect(labelsOf(tree)).toContain('Folder CubeFlow, 1 with activity');
+
+  await ReactTestRenderer.act(async () => {
+    questionStore.ask({
+      type: 'question.ask',
+      id: 'q1',
+      threadId: 'cf-2',
+      questions: [],
+      ts: '2026-01-01T00:00:00.000Z',
+    });
+  });
+  // Both are true of this folder; the one waiting on a person is the one it wears.
+  expect(labelsOf(tree)).toContain('Folder CubeFlow, 1 question waiting');
+  expect(textsOf(tree)).toContain('?1');
+
+  await unmount(tree);
+});
+
+test('a run in flight reaches the folder that is hiding it', async () => {
+  const tree = await renderList();
+
+  await ReactTestRenderer.act(async () => {
+    chatStore.startRun('cf-1');
+  });
+
+  // Folded or not, the folder is what hides a run: the badge is the only sign left.
+  expect(labelsOf(tree)).toContain('Folder CubeFlow, 1 with activity');
+
+  // The header's label carries the badge, so that is the one to press: a screen reader hears the
+  // count before the fold, which is the order the information matters in.
+  await pressAny(tree, 'Folder CubeFlow, 1 with activity');
+  expect(labelsOf(tree)).not.toContain(row('cf chat'));
+  expect(labelsOf(tree)).toContain('Folder CubeFlow, 1 with activity');
+
+  await unmount(tree);
+});
+
+test('a quiet folder carries nothing, and its other sections keep their own count', async () => {
+  const tree = await renderList();
+
+  await ReactTestRenderer.act(async () => {
+    chatStore.markUnread('plain');
+  });
+
+  expect(labelsOf(tree)).toContain('Folder CubeFlow');
+  // The unfiled section is not a folder: what nobody filed has no header to wear a badge on.
+  expect(labelsOf(tree)).not.toContain('Folder CubeFlow, 1 with activity');
+  expect(textsOf(tree)).toContain('No folder · 1');
 
   await unmount(tree);
 });

@@ -373,6 +373,8 @@ class ChatStoreImpl {
   private compacting = new Map<string, CompactionRun>();
   private unread = new Set<string>();
   private unreadSnapshot: string[] = EMPTY_THREADS;
+  /** The threads a run is answering on, as a snapshot the list can compare by identity. */
+  private runningSnapshot: string[] = EMPTY_THREADS;
   /** Where the next older page starts, per thread, and whether there is one at all. */
   private pages = new Map<string, HistoryPage>();
   /**
@@ -584,6 +586,11 @@ class ChatStoreImpl {
 
   getUnreadThreads(): string[] {
     return this.unreadSnapshot;
+  }
+
+  /** The threads with a run in flight right now, fresh from the run frames, not from a listing. */
+  getRunningThreads(): string[] {
+    return this.runningSnapshot;
   }
 
   getPage(threadId: string): HistoryPage {
@@ -828,12 +835,14 @@ class ChatStoreImpl {
     const info: RunInfo = { id: `live-${this.syntheticSeq}`, status: 'running', startTs: Date.now() };
     this.openRuns.set(threadId, { info, synthetic: true });
     this.activeRuns.add(threadId);
+    this.refreshRunning();
     return info;
   }
 
   startRun(threadId: string, runId?: string): void {
     if (this.activeRuns.has(threadId)) return;
     this.activeRuns.add(threadId);
+    this.refreshRunning();
     // The frame arrives before any entry does (the trigger turn is written inside the run), so
     // live-created items need a run to belong to right away. The name is the one the frame
     // carries when it does: since server 0.6.3 the run's marker stores the same id, so the page
@@ -867,6 +876,7 @@ class ChatStoreImpl {
     // result that still lands afterwards re-materialises under the same id.
     this.clearCommandPending(threadId);
     if (!this.activeRuns.delete(threadId) && !this.openRuns.has(threadId)) return false;
+    this.refreshRunning();
     const open = this.openRuns.get(threadId);
     this.openRuns.delete(threadId);
     if (open) {
@@ -1026,6 +1036,7 @@ class ChatStoreImpl {
       this.liftStops(threadId);
     }
     this.activeRuns = next;
+    this.refreshRunning();
     this.emit();
   }
 
@@ -1071,6 +1082,7 @@ class ChatStoreImpl {
   ): void {
     if (activeRun === true) this.activeRuns.add(threadId);
     else if (activeRun === false) this.activeRuns.delete(threadId);
+    this.refreshRunning();
 
     if (reset) {
       // Reset: replace the thread. Only streaming items survive, because they exist only locally.
@@ -1263,6 +1275,7 @@ class ChatStoreImpl {
     if (entries.length === 0) return;
     if (activeRun === true) this.activeRuns.add(threadId);
     else if (activeRun === false) this.activeRuns.delete(threadId);
+    this.refreshRunning();
     
     // The newest page replaces the thread, same as a sync reset.
     this.resetThread(threadId, entries);
@@ -1949,6 +1962,7 @@ class ChatStoreImpl {
     this.spawnStatus.delete(threadId);
     this.syncState.delete(threadId);
     this.activeRuns.delete(threadId);
+    this.refreshRunning();
     this.openRuns.delete(threadId);
     this.liftStops(threadId);
     this.lastStream.delete(threadId);
@@ -1974,6 +1988,7 @@ class ChatStoreImpl {
     this.reasoningStart.clear();
     this.lastStream.clear();
     this.activeRuns.clear();
+    this.runningSnapshot = EMPTY_THREADS;
     this.openRuns.clear();
     this.stopping.clear();
     this.serverStopping.clear();
@@ -1986,6 +2001,11 @@ class ChatStoreImpl {
   private refreshUnread(): void {
     this.unreadSnapshot = this.unread.size === 0 ? EMPTY_THREADS : [...this.unread];
     this.emit();
+  }
+
+  /** Rebuilt at every write, like the unread snapshot: a list compares these by identity. */
+  private refreshRunning(): void {
+    this.runningSnapshot = this.activeRuns.size === 0 ? EMPTY_THREADS : [...this.activeRuns];
   }
 
   /**
@@ -2154,4 +2174,8 @@ export function useCompacting(threadId: string | null): CompactionRun | undefine
 
 export function useUnreadThreads(): string[] {
   return useSyncExternalStore(subscribeToChat, () => chatStore.getUnreadThreads());
+}
+
+export function useRunningThreads(): string[] {
+  return useSyncExternalStore(subscribeToChat, () => chatStore.getRunningThreads());
 }

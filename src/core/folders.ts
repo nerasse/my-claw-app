@@ -20,6 +20,39 @@ export interface SessionSection {
   rows: SessionSummary[];
 }
 
+/** What a folder header says about the conversations inside it. */
+export interface SectionBadge {
+  kind: 'question' | 'activity';
+  count: number;
+}
+
+/**
+ * The badge a folder carries, counted from the rows under it.
+ *
+ * Two kinds, one at a time, in that order: a conversation blocked on a question outranks one that
+ * merely moved, and showing both would put the one that is waiting on a person second. The rows
+ * are the visible ones, so a folder wears what its own contents say on screen and nothing more.
+ *
+ * `activity` is deliberately wider than the dot a row carries: a run in flight counts too. A folder
+ * is exactly what hides a run -- fold it and the only sign left is this badge -- and a run
+ * answering is already something the owner has not seen.
+ */
+export function sectionBadge(
+  rows: SessionSummary[],
+  waiting: (threadId: string) => boolean,
+  active: (threadId: string) => boolean,
+): SectionBadge | null {
+  let questions = 0;
+  let activity = 0;
+  for (const row of rows) {
+    if (waiting(row.threadId)) questions += 1;
+    else if (active(row.threadId)) activity += 1;
+  }
+  if (questions > 0) return { kind: 'question', count: questions };
+  if (activity > 0) return { kind: 'activity', count: activity };
+  return null;
+}
+
 /**
  * The conversation list as sections: one per folder in rank order, the unfiled ones last.
  *

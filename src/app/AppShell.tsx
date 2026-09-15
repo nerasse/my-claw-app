@@ -18,6 +18,7 @@ import {
   useStopping,
   useHistoryPage,
   useUnreadThreads,
+  useRunningThreads,
   type TextItem,
 } from '../core/chat';
 import { formatTranscript } from '../core/transcript';
@@ -677,6 +678,8 @@ export function AppShell(): React.JSX.Element {
   );
   const archivedSessions = useArchivedSessions();
   const unread = useUnreadThreads();
+  /** Threads a run is answering on right now, for the folder badges. `running` is the one on screen. */
+  const runningThreads = useRunningThreads();
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
   const catalog = useModelCatalog();
   const threadModel = useThreadModel(activeThread);
@@ -3301,6 +3304,7 @@ export function AppShell(): React.JSX.Element {
             sessions={sessions}
             folders={folders}
             unread={unread}
+            running={runningThreads}
             questionThreads={questionThreads}
             workspaceFilter={workspaceFilter}
             collapsedFolders={collapsedFolders}
@@ -3331,6 +3335,7 @@ export function AppShell(): React.JSX.Element {
             sessions={sessions}
             folders={folders}
             unread={unread}
+            running={runningThreads}
             questionThreads={questionThreads}
             workspaceFilter={workspaceFilter}
             collapsedFolders={collapsedFolders}
@@ -4010,6 +4015,7 @@ export function AppShell(): React.JSX.Element {
         sessions={sessions}
         folders={folders}
         unread={unread}
+        running={runningThreads}
         questionThreads={questionThreads}
         workspaceFilter={workspaceFilter}
         collapsedFolders={collapsedFolders}

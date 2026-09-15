@@ -6,7 +6,7 @@ import { ThreadRow } from '../components/ThreadRow';
 import { FilterIcon, GearIcon, NewFolderIcon, PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
-import { drawerSections } from '../core/folders';
+import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
 import { matchesWorkspace } from '../core/workspaceFilter';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
@@ -32,9 +32,25 @@ function Separator(): React.JSX.Element {
  * array, and a folded section is then just a header with no rows after it.
  */
 type DrawerEntry =
-  | { kind: 'header'; key: string; label: string; folder: FolderSummary | null; folded: boolean }
+  | {
+      kind: 'header';
+      key: string;
+      label: string;
+      folder: FolderSummary | null;
+      folded: boolean;
+      badge: SectionBadge | null;
+    }
   | { kind: 'row'; key: string; session: SessionSummary }
   | { kind: 'empty'; key: string; text: string };
+
+/** What a screen reader hears of a folder's badge, after its name. */
+const badgeWords = (badge: SectionBadge | null): string => {
+  if (badge === null) return '';
+  if (badge.kind === 'question') {
+    return `, ${badge.count} question${badge.count === 1 ? '' : 's'} waiting`;
+  }
+  return `, ${badge.count} with activity`;
+};
 
 /**
  * The count a section header carries. While a search is narrowing the list it also says what it is
@@ -60,6 +76,7 @@ export function Drawer({
   sessions,
   folders,
   unread,
+  running,
   questionThreads,
   workspaceFilter,
   collapsedFolders,
@@ -89,6 +106,8 @@ export function Drawer({
   /** The owner's folders, in rank order: the sections the list is cut into. */
   folders: FolderSummary[];
   unread: string[];
+  /** Conversations a run is answering on right now: part of what a folder counts as activity. */
+  running: string[];
   /** Conversations whose run is blocked on a question, badged in the list. */
   questionThreads: string[];
   /**
@@ -135,6 +154,7 @@ export function Drawer({
   // Membership as a Set, not `unread.includes` per row: that scan ran once per visible row on
   // every render of a panel that never unmounts, i.e. on every streaming token.
   const unreadIds = useMemo(() => new Set(unread), [unread]);
+  const runningIds = useMemo(() => new Set(running), [running]);
   const questionIds = useMemo(() => new Set(questionThreads), [questionThreads]);
 
   /**
@@ -165,6 +185,15 @@ export function Drawer({
         label: `${section.label} · ${sectionCount(section.rows.length, totals.get(id) ?? section.rows.length, searching)}`,
         folder: section.folder,
         folded,
+        // Counted here, with the sections: the drawer re-renders on every token of a streaming
+        // run, and walking the rows again per render is the one cost this list cannot pay.
+        badge: section.folder === null
+          ? null
+          : sectionBadge(
+              section.rows,
+              threadId => questionIds.has(threadId),
+              threadId => unreadIds.has(threadId) || runningIds.has(threadId),
+            ),
       });
       if (folded) continue;
       for (const row of section.rows) out.push({ kind: 'row', key: row.threadId, session: row });
@@ -175,7 +204,7 @@ export function Drawer({
       out.push({ kind: 'empty', key: 'empty', text: searching ? 'no match' : 'no conversations' });
     }
     return out;
-  }, [sessions, folders, query, workspaceFilter, collapsedFolders]);
+  }, [sessions, folders, query, workspaceFilter, collapsedFolders, questionIds, runningIds, unreadIds]);
 
   const renderEntry = useCallback(
     ({ item }: { item: DrawerEntry }) => {
@@ -190,7 +219,7 @@ export function Drawer({
               style={styles.sectionHeader}
               accessibilityRole={folder ? 'button' : undefined}
               accessibilityState={folder ? { expanded: !item.folded } : undefined}
-              accessibilityLabel={folder ? `Folder ${folder.name}` : undefined}>
+              accessibilityLabel={folder ? `Folder ${folder.name}${badgeWords(item.badge)}` : undefined}>
               {folder ? (
                 <Text style={styles.sectionFold}>{item.folded ? '▸' : '▾'}</Text>
               ) : (
@@ -200,6 +229,14 @@ export function Drawer({
                 {item.label}
               </Text>
             </Pressable>
+            {item.badge === null ? null : item.badge.kind === 'question' ? (
+              <Text style={styles.sectionQuestion}>{`?${item.badge.count}`}</Text>
+            ) : (
+              <View style={styles.sectionActivity}>
+                <View style={styles.sectionDot} />
+                <Text style={styles.sectionActivityCount}>{item.badge.count}</Text>
+              </View>
+            )}
             {folder ? (
               <Pressable
                 onPress={() => onFolderMenu(folder)}
@@ -486,6 +523,23 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   sectionMenuGlyph: { fontSize: 17, lineHeight: 20, color: palette.textFaint },
+  /** The same pill a blocked row wears, with the count in it: one vocabulary, two scales. */
+  sectionQuestion: {
+    fontSize: font.micro,
+    fontWeight: '700' as const,
+    color: palette.surface,
+    backgroundColor: palette.accent,
+    borderRadius: radius.pill,
+    minWidth: 16,
+    textAlign: 'center' as const,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    overflow: 'hidden' as const,
+    marginRight: space.xs,
+  },
+  sectionActivity: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginRight: space.xs },
+  sectionDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent },
+  sectionActivityCount: { fontSize: font.micro, color: palette.textFaint },
   /** Indented onto the rows it heads, and the fold glyph takes the same room whether the section
    *  can be folded or not: the unfiled heading has to sit where the folder names do. */
   sectionHeader: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },

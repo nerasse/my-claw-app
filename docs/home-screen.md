@@ -42,6 +42,17 @@ One list, not a `SectionList`: the drawer's tuning, its separators and its scrol
 flat data array, so the sections are flattened into it and a folded folder is a header with no rows
 behind it.
 
+Every folder header carries what its conversations are asking of the owner, counted from the rows
+under it: `?2` when two are blocked on a question, the accent dot and a count when two have moved.
+A question wins when both are true -- one of the two is waiting on a person -- and only one of them
+is ever shown. A run in flight counts as activity as well: a folder is exactly what hides a run,
+and the badge is the only sign left once it is folded, which it survives (the rows go, the count
+stays). The unfiled section carries none: it is a remainder, not a place something was filed into.
+
+The counts come from the rows the section is drawn with, so a folder reflects what its contents say
+on screen and nothing else, and they are computed once per list rather than per row: this list
+re-renders on every token of a streaming run, which is the one cost it cannot pay.
+
 ## Making a folder, and filing into one
 
 The drawer header carries two ways in, side by side: **New conversation** (the accent) and **New

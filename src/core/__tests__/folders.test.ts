@@ -1,4 +1,4 @@
-import { drawerSections } from '../folders';
+import { drawerSections, sectionBadge } from '../folders';
 import type { FolderSummary, SessionSummary } from '../protocol';
 
 function session(threadId: string, over: Partial<SessionSummary> = {}): SessionSummary {
@@ -85,5 +85,32 @@ describe('drawerSections', () => {
     const sections = drawerSections([session('b', { folderId: 'f1' })], [folder('f1', 'CubeFlow', 0)], null);
 
     expect(sections[0]?.rows).toHaveLength(1);
+  });
+});
+
+describe('sectionBadge', () => {
+  const waiting = (id: string): boolean => id === 'q';
+  const active = (id: string): boolean => id === 'a' || id === 'q';
+
+  test('a conversation blocked on a question outranks one that merely moved', () => {
+    const badge = sectionBadge([session('a'), session('q')], waiting, active);
+
+    // Both are true; showing the activity would put the one waiting on a person second.
+    expect(badge).toEqual({ kind: 'question', count: 1 });
+  });
+
+  test('activity is counted on its own when nothing is waiting', () => {
+    expect(sectionBadge([session('a'), session('b')], waiting, active)).toEqual({ kind: 'activity', count: 1 });
+  });
+
+  test('a quiet folder carries nothing', () => {
+    expect(sectionBadge([session('b')], waiting, active)).toBeNull();
+    expect(sectionBadge([], waiting, active)).toBeNull();
+  });
+
+  test('only the rows it is given are counted', () => {
+    // Under a filter the folder wears what its own contents say on screen, not what is filed
+    // away out of sight.
+    expect(sectionBadge([session('b')], waiting, active)).toBeNull();
   });
 });
