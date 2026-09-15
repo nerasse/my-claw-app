@@ -26,6 +26,7 @@ import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
+import { workspaceOptions } from '../core/workspaceFilter';
 import { isStopCommand, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
 import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnostics';
@@ -261,6 +262,12 @@ const RECEIPT_TIMEOUT_MS = 15_000;
 const EMPTY_MODELS: ModelOption[] = [];
 Object.freeze(EMPTY_MODELS);
 const EMPTY_UNAVAILABLE: UnavailableModel[] = [];
+
+/**
+ * Past this many workspaces the filter picker gets a search row. Below it, the list is short enough
+ * to read, and a search field over three rows is a control that costs a tap and saves none.
+ */
+const WORKSPACE_SEARCH_FROM = 9;
 Object.freeze(EMPTY_UNAVAILABLE);
 
 /** The session-level actions both menus draw from; see `sessionEntries`. */
@@ -361,6 +368,14 @@ export function AppShell(): React.JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Bumped by Ctrl+K; the drawer's search field reads it and takes the caret. */
   const [searchFocus, setSearchFocus] = useState(0);
+  /**
+   * The workspace the conversation list is narrowed to, and the sheet that picks it. Held here
+   * rather than in the drawer: the panel, the pinned column and the home list are three mounts of
+   * the same listing, and a filter each of them kept to itself would be three listings.
+   */
+  const [workspaceFilter, setWorkspaceFilter] = useState<string | null>(null);
+  const [workspaceFilterOpen, setWorkspaceFilterOpen] = useState(false);
+  const [workspaceQuery, setWorkspaceQuery] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
@@ -2334,6 +2349,43 @@ export function AppShell(): React.JSX.Element {
     ? [refreshAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, () => setThreadMenu(null))]
     : [];
 
+  /** Every workspace the listing has conversations in: what the filter picker offers. */
+  const workspaceChoices = useMemo(() => workspaceOptions(sessions), [sessions]);
+
+  /**
+   * The filter sheet: what is in use now, and the way back to all of it.
+   *
+   * Built from the listing, so a workspace the owner declared and never used is not offered --
+   * there is nothing to filter, and a picker that lists those is a picker of settings. The count
+   * is what tells him which one is worth narrowing to before he narrows to it.
+   */
+  const workspaceFilterOptions: SheetEntry[] = useMemo(() => {
+    const needle = workspaceQuery.trim().toLowerCase();
+    return [
+      {
+        key: 'all',
+        label: 'All workspaces',
+        selected: workspaceFilter === null,
+        onPress: () => {
+          setWorkspaceFilter(null);
+          setWorkspaceFilterOpen(false);
+        },
+      },
+      ...workspaceChoices
+        .filter(option => !needle || option.key.toLowerCase().includes(needle))
+        .map((option): SheetEntry => ({
+          key: option.key,
+          label: option.key,
+          hint: `${option.count} conversation${option.count === 1 ? '' : 's'}`,
+          selected: workspaceFilter === option.key,
+          onPress: () => {
+            setWorkspaceFilter(option.key);
+            setWorkspaceFilterOpen(false);
+          },
+        })),
+    ];
+  }, [workspaceChoices, workspaceFilter, workspaceQuery]);
+
   /**
    * One sheet for both flows: a new conversation (default preselected) and a switch of an
    * existing one (its current workspace preselected). The same words as the menus: the
@@ -3198,6 +3250,7 @@ export function AppShell(): React.JSX.Element {
             sessions={sessions}
             unread={unread}
             questionThreads={questionThreads}
+            workspaceFilter={workspaceFilter}
             activeThread={activeThread}
             connectionState={status.state}
             pending={pending}
@@ -3205,6 +3258,8 @@ export function AppShell(): React.JSX.Element {
             onOpenThread={openThreadFromDrawer}
             onNewThread={newThread}
             onThreadMenu={setThreadMenu}
+            onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
+            onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -3220,6 +3275,7 @@ export function AppShell(): React.JSX.Element {
             sessions={sessions}
             unread={unread}
             questionThreads={questionThreads}
+            workspaceFilter={workspaceFilter}
             activeThread={activeThread}
             connectionState={status.state}
             pending={pending}
@@ -3227,6 +3283,8 @@ export function AppShell(): React.JSX.Element {
             onOpenThread={openThreadFromDrawer}
             onNewThread={newThread}
             onThreadMenu={setThreadMenu}
+            onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
+            onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -3891,6 +3949,7 @@ export function AppShell(): React.JSX.Element {
         sessions={sessions}
         unread={unread}
         questionThreads={questionThreads}
+        workspaceFilter={workspaceFilter}
         activeThread={activeThread}
         connectionState={status.state}
         pending={pending}
@@ -3898,6 +3957,8 @@ export function AppShell(): React.JSX.Element {
         onOpenThread={openThreadFromDrawer}
         onNewThread={newThread}
         onThreadMenu={setThreadMenu}
+        onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
+        onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
         onOpenMore={() => setMoreOpen(true)}
         onOpenSettings={openSettingsFromDrawer}
         onHome={handleHome}
@@ -4203,6 +4264,22 @@ export function AppShell(): React.JSX.Element {
           preview={threadMenu.title}
           options={threadActions}
           onClose={() => setThreadMenu(null)}
+        />
+      ) : null}
+
+      {workspaceFilterOpen ? (
+        <ActionSheet
+          preview="Filter by workspace"
+          options={workspaceFilterOptions}
+          search={
+            workspaceChoices.length >= WORKSPACE_SEARCH_FROM
+              ? { value: workspaceQuery, onChange: setWorkspaceQuery, placeholder: 'Search workspaces' }
+              : null
+          }
+          onClose={() => {
+            setWorkspaceFilterOpen(false);
+            setWorkspaceQuery('');
+          }}
         />
       ) : null}
 

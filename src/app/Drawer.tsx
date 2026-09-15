@@ -3,9 +3,10 @@ import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { GearIcon, PlusIcon } from '../components/icons';
+import { FilterIcon, GearIcon, PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
+import { matchesWorkspace } from '../core/workspaceFilter';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -42,6 +43,7 @@ export function Drawer({
   sessions,
   unread,
   questionThreads,
+  workspaceFilter,
   activeThread,
   connectionState,
   pending,
@@ -49,6 +51,8 @@ export function Drawer({
   onOpenThread,
   onNewThread,
   onThreadMenu,
+  onOpenWorkspaceFilter,
+  onClearWorkspaceFilter,
   onOpenMore,
   onOpenSettings,
   home,
@@ -63,6 +67,12 @@ export function Drawer({
   unread: string[];
   /** Conversations whose run is blocked on a question, badged in the list. */
   questionThreads: string[];
+  /**
+   * The workspace the list is narrowed to, or null for all of them. Held by the shell and not by
+   * this panel: the drawer and the home screen are two mounts of one list, and a filter that
+   * survived one of them and not the other would be two lists.
+   */
+  workspaceFilter: string | null;
   activeThread: string | null;
   connectionState: WsState;
   pending: number;
@@ -70,6 +80,8 @@ export function Drawer({
   onOpenThread: (threadId: string) => void;
   onNewThread: () => void;
   onThreadMenu: (thread: SessionSummary) => void;
+  onOpenWorkspaceFilter: () => void;
+  onClearWorkspaceFilter: () => void;
   /** The one footer entry: opens the sheet with Archived, Agents, Jobs and Settings. */
   onOpenMore: () => void;
   /** Jump straight to Settings from the home footer. */
@@ -97,13 +109,14 @@ export function Drawer({
   const questionIds = useMemo(() => new Set(questionThreads), [questionThreads]);
 
   // One list. The order is the server's, carried on the summaries themselves: nothing to merge
-  // and nothing to prune.
+  // and nothing to prune. The workspace narrows what the search then searches.
   const { rows, all } = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const match = (session: SessionSummary) =>
-      !needle || session.title.toLowerCase().includes(needle);
+      matchesWorkspace(session, workspaceFilter) &&
+      (!needle || session.title.toLowerCase().includes(needle));
     return { rows: sessions.filter(match), all: sessions.length };
-  }, [sessions, query]);
+  }, [sessions, query, workspaceFilter]);
 
   const sectionCount = (count: number, total: number): string =>
     query.trim() ? `${count} / ${total}` : String(total);
@@ -175,17 +188,45 @@ export function Drawer({
           </Pressable>
         </View>
 
-        <TextInput
-          ref={searchRef}
-          style={styles.search}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="search"
-          placeholderTextColor={palette.textFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Search conversations"
-        />
+        <View style={styles.searchRow}>
+          <TextInput
+            ref={searchRef}
+            style={styles.search}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="search"
+            placeholderTextColor={palette.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Search conversations"
+          />
+          <Pressable
+            onPress={onOpenWorkspaceFilter}
+            hitSlop={8}
+            style={styles.filterButton}
+            accessibilityRole="button"
+            accessibilityLabel={
+              workspaceFilter ? `Filter by workspace, ${workspaceFilter} selected` : 'Filter by workspace'
+            }>
+            <FilterIcon size={18} color={workspaceFilter ? palette.accent : palette.textMuted} />
+          </Pressable>
+        </View>
+
+        {/* What is masked, and the tap that stops masking it. A filter with no trace on screen is
+            a list that has lost conversations for no reason the owner can see. */}
+        {workspaceFilter !== null ? (
+          <Pressable
+            onPress={onClearWorkspaceFilter}
+            hitSlop={6}
+            style={styles.filterChip}
+            accessibilityRole="button"
+            accessibilityLabel={`Clear the ${workspaceFilter} filter`}>
+            <Text style={styles.filterChipText} numberOfLines={1}>
+              {workspaceFilter}
+            </Text>
+            <Text style={styles.filterChipGlyph}>✕</Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.listArea}>
           <FlatList
@@ -349,9 +390,15 @@ const createStyles = (palette: Palette) => ({
   },
   listArea: { flex: 1 },
   list: { paddingHorizontal: space.md },
-  search: {
+  searchRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
     marginHorizontal: space.md,
     marginBottom: space.sm,
+  },
+  search: {
+    flex: 1,
     paddingHorizontal: space.md,
     paddingVertical: 7,
     borderWidth: 1,
@@ -359,8 +406,29 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.pill,
     fontSize: font.body,
     color: palette.text,
+  },
+  filterButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     backgroundColor: palette.surfaceAlt,
   },
+  filterChip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    alignSelf: 'flex-start' as const,
+    gap: space.xs,
+    marginHorizontal: space.md,
+    marginBottom: space.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: palette.accentSoft,
+  },
+  filterChipText: { fontSize: font.small, color: palette.text },
+  filterChipGlyph: { fontSize: font.small, color: palette.textMuted },
   separator: { height: 1, backgroundColor: palette.border, marginHorizontal: 0 },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
   /** The rule above the footer rides the same inset as the list separators and the footer's own

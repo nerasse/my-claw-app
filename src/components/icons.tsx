@@ -62,6 +62,11 @@ export function DownloadIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />;
 }
 
+/** The funnel: three rules narrowing to a point, the shape everyone reads as "narrow this list". */
+export function FilterIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M10 18h4v-2h-4zM3 6v2h18V6zm3 7h12v-2H6z" />;
+}
+
 export function GearIcon(props: IconProps): React.JSX.Element {
   return (
     <Icon
