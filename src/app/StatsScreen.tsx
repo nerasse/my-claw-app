@@ -372,9 +372,19 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
 
       {/* One row of dimensions, above the tabs because it narrows all of them. A chip carries its
           value once set -- `Model · glm-5.2` -- so the row is also the state of the report. */}
+      {/*
+        `strip` on both rows, and it is the whole bug fix: a horizontal ScrollView carries
+        `flexGrow: 1, flexShrink: 1` from React Native's own base style, so the tall vertical list
+        below it claimed the free space and then squeezed these two below their own content. The
+        rows came out a few pixels short and the bottom of every label was cut, which read as a
+        styling accident rather than the flexbox arithmetic it was. `flexGrow: 0` stops them
+        floating in space when the tab is short, `flexShrink: 0` stops them collapsing when it is
+        long. Reported by the owner on 2026-09-15, next to the same cut on the composer.
+      */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.strip}
         contentContainerStyle={styles.chips}
         keyboardShouldPersistTaps="handled">
         {narrowing ? (
@@ -416,6 +426,7 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.strip}
         contentContainerStyle={styles.tabs}
         keyboardShouldPersistTaps="handled">
         {TABS.map(entry => (
@@ -852,6 +863,9 @@ const createStyles = (palette: Palette) => ({
   // The filter row sits above the tabs because it narrows all of them: one row of dimensions, six
   // tabs answering through it.
   chips: { flexDirection: 'row' as const, gap: space.xs, paddingTop: space.sm, alignItems: 'center' as const },
+  /** A row of chips or tabs takes exactly the height of its content: see the comment at the
+   *  ScrollView. Without it the row is a flex item that grows and shrinks with the page. */
+  strip: { flexGrow: 0, flexShrink: 0 },
   chip: {
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
