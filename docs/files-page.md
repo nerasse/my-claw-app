@@ -11,8 +11,11 @@ delete, download, upload, follow. The protocol and the semantics are the server'
   `node_modules`, `.git`, `/proc` and `/sys` list like anything else, because a filter the owner
   cannot see the edge of is worse than a long list. `truncated` says when the server cut at
   `FS_LIST_LIMIT`.
-- **Read**: CodeMirror, read-only, with the cursor's line in the header.
-- **Edit**: the same editor, mutable, with a save button and a conflict banner.
+- **Read**: CodeMirror, read-only, with the cursor's line in the header — except for a markdown
+  file, which is read as a document (`DocumentMarkdown`, the reader the text viewer and the skill
+  reader already use).
+- **Edit**: the same editor, mutable, with a save button and a conflict banner. Markdown included:
+  editing is where the raw text is the point.
 
 An entry opened from a session starts at that session's workspace (`fs.session.root`, resolved
 server-side); opened from More it starts wherever the owner last was. The two entries are
@@ -31,9 +34,24 @@ is MIT, and bundles CodeMirror 6 for React Native — but it cannot express `rea
 the undo history (its `historyClear` is a no-op since `@codemirror/commands` 6.7 dropped the
 effect), and an undo after opening a second file would replay the first file's edits. Its README
 also documents two Android IME bugs it had to fix, which is the part that makes the WebView host
-worth owning. `docs/keyboard-avoidance.md` is unchanged: the host lifts itself by the height
-measured at `keyboardDidShow` and CodeMirror keeps the caret in view; `adjustResize` stays out of
-the manifest, where it is inert.
+worth owning.
+
+**The editor owns no keyboard.** It sits inside the shell's one `KeyboardAvoidingView`
+(`docs/keyboard-avoidance.md`), which already gives up exactly the overlap for every page it
+holds, so the keyboard reaches the editor as a plain resize of the WebView and the page's `resize`
+handler scrolls the caret back into view (`page.ts`). It used to pad itself as well, by the height
+measured at `keyboardDidShow` through `revealField.ts`: a second owner of the same inset,
+measured against a frame the first owner had not moved yet, so the WebView was resized by the sum
+of the two. After that resize it drew nothing until something else forced a repaint, which is the
+owner's "full dark when the keyboard opens to place the cursor" and what closed that door.
+`adjustResize` is declared in the manifest for Android 14 and below, where the window really does
+shrink; above that the app is edge to edge and it is inert.
+
+Reading a markdown file is a reader, not an editor: the same `DocumentMarkdown` renders it, the
+header stops claiming a cursor line (there is no caret to number), and `Edit` hands the raw text
+back to CodeMirror, highlight and all. Which file that is stays a single decision: the editor's
+own `languageForFile` table decides what is markdown, so the reader and the highlighter can never
+disagree about `.md`.
 
 ## What the store refuses to do
 

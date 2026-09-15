@@ -13,12 +13,12 @@
  * replacement -- another file opened -- and is applied with `keepHistory: false` so an undo in
  * the new file cannot replay the old file's edits over it.
  *
- * The keyboard: Android is edge to edge here, so `adjustResize` never fires (AGENTS.md, "Known
- * traps") and a focused field inside a WebView would simply sit under the keyboard. This
- * container measures itself at `keyboardDidShow` and pads its bottom by exactly what the keyboard
- * covers, the same measurement step the question form uses (`src/core/revealField.ts`). Because
- * padding does not move a view's own frame, re-measuring after an IME height change lands on the
- * new delta without stacking, and the shrink shows up inside the page as a resize, where
+ * The keyboard: the editor does not handle it, and that is deliberate. This page lives inside the
+ * shell's `KeyboardAvoidingView`, which already shrinks every page it holds by what the keyboard
+ * covers (AGENTS.md: only the sheets, which sit outside it, pad themselves). Padding here as well
+ * made the editor a second owner of the same inset, measured against a frame that view had not
+ * moved yet, and the WebView was resized by the sum -- after which it drew nothing until something
+ * else forced a repaint. The shrink now reaches the page as a plain resize, which is where
  * `page.ts` keeps the caret in view.
  */
 import React, {
@@ -28,9 +28,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Keyboard, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { measureOnScreen } from '../core/revealField';
 import { useTheme } from '../theme';
 import { shouldReplaceDocument } from './codeeditor/document';
 import { DEFAULT_EDITOR_FONT_SIZE } from './codeeditor/protocol';
@@ -82,9 +81,7 @@ export function CodeEditor({
   const size = fontSize ?? DEFAULT_EDITOR_FONT_SIZE;
 
   const webView = useRef<EditorWebViewInstance | null>(null);
-  const container = useRef<View | null>(null);
   const [initialized, setInitialized] = useState(false);
-  const [lift, setLift] = useState(0);
 
   /**
    * What the document holds, as far as this host knows: the last value it raised through
@@ -308,27 +305,6 @@ export function CodeEditor({
     pushConfig({ fontSize: size }).catch(fail);
   }, [initialized, size, pushConfig, fail]);
 
-  const liftForKeyboard = useCallback(() => {
-    const metrics = Keyboard.metrics();
-    if (!metrics || metrics.height <= 0) {
-      setLift(0);
-      return;
-    }
-    measureOnScreen(container.current).then(rect => {
-      if (rect === null) return;
-      setLift(Math.max(0, Math.round(rect.bottom - metrics.screenY)));
-    });
-  }, []);
-
-  useEffect(() => {
-    const shown = Keyboard.addListener('keyboardDidShow', liftForKeyboard);
-    const hidden = Keyboard.addListener('keyboardDidHide', () => setLift(0));
-    return () => {
-      shown.remove();
-      hidden.remove();
-    };
-  }, [liftForKeyboard]);
-
   // A request in flight when the page is closed has nobody left to answer it: settle it and drop
   // its timer, or an 8 s handle outlives the component it belonged to.
   useEffect(() => {
@@ -342,24 +318,8 @@ export function CodeEditor({
     };
   }, []);
 
-  useEffect(() => {
-    if (!initialized || lift === 0) return;
-    // The container just shrank. The page sees a resize too, but this is the certain one.
-    request<void>({ method: 'scrollToCursor' }).catch(fail);
-  }, [initialized, lift, request, fail]);
-
   return (
-    <View
-      ref={container}
-      collapsable={false}
-      style={[
-        styles.container,
-        {
-          paddingBottom: lift,
-          backgroundColor: isDark ? DARK_BACKGROUND : LIGHT_BACKGROUND,
-        },
-      ]}
-    >
+    <View style={[styles.container, { backgroundColor: isDark ? DARK_BACKGROUND : LIGHT_BACKGROUND }]}>
       <WebView<object>
         ref={webView}
         source={{ uri: EDITOR_URI }}
@@ -386,7 +346,10 @@ export function CodeEditor({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, overflow: 'hidden' },
+  // No `overflow: hidden`: the only child is the WebView and it fills the box, so there was never
+  // anything to clip -- and clipping an embedded AndroidView is one of the documented ways to end
+  // up with a surface that stops being drawn.
+  container: { flex: 1 },
   webView: { flex: 1, backgroundColor: 'transparent' },
 });
 

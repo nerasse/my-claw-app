@@ -11,7 +11,7 @@
  */
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter, StyleSheet } from 'react-native';
+import { DeviceEventEmitter, Keyboard } from 'react-native';
 import { CodeEditor } from '../CodeEditor';
 import type { CodeEditorHandle, CodeEditorProps } from '../CodeEditor';
 import {
@@ -22,7 +22,6 @@ import {
 } from '../codeeditor/document';
 import { LANGUAGE_IDS, languageExtension } from '../codeeditor/languages';
 import { parseEditorEvent } from '../codeeditor/protocol';
-import { measureOnScreen } from '../../core/revealField';
 
 jest.mock('react-native-webview', () => {
   const ReactMock = require('react');
@@ -137,16 +136,6 @@ function answerLastRequest(result: unknown = null): void {
   pageEvent({ type: 'response', id: body.id, result });
 }
 
-function liftOf(tree: Tree): number {
-  const container = tree.root.findAll(
-    node => node.props.collapsable === false,
-  )[0];
-  const style = StyleSheet.flatten(container?.props.style as never) as {
-    paddingBottom?: number;
-  };
-  return style.paddingBottom ?? 0;
-}
-
 function keyboardShows(screenY: number, height: number): Promise<void> {
   return ReactTestRenderer.act(async () => {
     DeviceEventEmitter.emit('keyboardDidShow', {
@@ -161,7 +150,6 @@ function keyboardShows(screenY: number, height: number): Promise<void> {
 
 beforeEach(() => {
   webview().injected.length = 0;
-  (measureOnScreen as jest.Mock).mockReset();
 });
 
 afterEach(() => {
@@ -364,30 +352,28 @@ describe('the Android host and its page', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the container lifts by exactly what the keyboard covers', async () => {
-    (measureOnScreen as jest.Mock).mockResolvedValue({ top: 0, bottom: 800 });
-    const tree = mount({ value: 'file A' });
-    boot();
-    expect(liftOf(tree)).toBe(0);
+  /**
+   * The editor is inside the shell's `KeyboardAvoidingView`, which already shrinks every page by
+   * what the keyboard covers (`docs/keyboard-avoidance.md`: only what sits *outside* that view
+   * pads itself). Padding here as well made the editor a second owner of the same inset: it
+   * measured a frame the first owner had not moved yet, and the WebView was resized by the sum.
+   * The editor therefore owns no keyboard at all -- what keeps the caret visible is the page,
+   * which CodeMirror scrolls into view when the WebView's own resize reaches it.
+   */
+  test('the editor does not lift itself: the keyboard belongs to the shell', async () => {
+    const listened = jest.spyOn(Keyboard, 'addListener');
+    try {
+      mount({ value: 'file A' });
+      boot();
+      const before = webview().injected.length;
 
-    // The container's own frame does not move when it is padded, so this is the same geometry
-    // a repeat of the event would measure.
-    await keyboardShows(500, 300);
-    expect(liftOf(tree)).toBe(300);
-    // And the page is told to put the caret back in view, which is the half a measurement can
-    // not do from here.
-    expect(lastCall('request')).toMatchObject({ method: 'scrollToCursor' });
-    answerLastRequest();
-
-    // Android re-announces the keyboard when the IME changes height.
-    await keyboardShows(400, 400);
-    expect(liftOf(tree)).toBe(400);
-    answerLastRequest();
-
-    await ReactTestRenderer.act(async () => {
-      DeviceEventEmitter.emit('keyboardDidHide', {});
-    });
-    expect(liftOf(tree)).toBe(0);
+      await keyboardShows(500, 300);
+      // Nothing crossed the bridge: the editor answers the keyboard by doing nothing at all.
+      expect(webview().injected.length).toBe(before);
+      expect(listened).not.toHaveBeenCalled();
+    } finally {
+      listened.mockRestore();
+    }
   });
 });
 

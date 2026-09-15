@@ -55,6 +55,16 @@ The bottom sheets are absolute layers rendered outside this view, so nothing lif
 themselves through `useSheetBottomInset`, and `combineBottomInset` carries the platform asymmetry
 (`src/core/keyboard.ts`). That is a separate mechanism on purpose, and it is stateless too.
 
+The same rule cuts the other way, and ignoring it cost a screen: **nothing inside this view may
+pad itself for the keyboard as well.** The file editor did -- `CodeEditor.native.tsx` padded its
+WebView by what it measured at `keyboardDidShow` -- which made it a second owner of one inset,
+measured against a frame the shell had not moved yet. The WebView was resized by the sum of the
+two, and after that resize it drew nothing until something else forced a repaint: the owner's
+"full dark when the keyboard opens to place the cursor" (2026-09-15). The fix was to delete the
+second owner rather than to reconcile the two, and the editor now learns about the keyboard the
+only way it should -- as a resize of the WebView, which is what `page.ts` answers by scrolling the
+caret back into view.
+
 And it does not scroll. `KeyboardAvoidingView` adjusts padding, height or position and nothing else
 -- `padding` here cannot bring a field the keyboard covers into view, it only stops the shell from
 being covered. Whatever reveals a field is ours, and on the question form it is the pair of steps
