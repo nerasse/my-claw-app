@@ -349,8 +349,6 @@ const createStyles = (palette: Palette) => ({
   },
   listArea: { flex: 1 },
   list: { paddingHorizontal: space.md },
-  /** Just enough under the cards that the next heading is not glued to the last one. */
-  pinnedSection: { paddingBottom: space.xs },
   search: {
     marginHorizontal: space.md,
     marginBottom: space.sm,

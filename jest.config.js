@@ -16,7 +16,7 @@ module.exports = {
   transformIgnorePatterns: [
     // `react-native-webview` ships ESM: untransformed, every suite that renders the shell dies at
     // import time. It arrived with the system files page, whose editor host lives in a WebView.
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-gesture-handler|react-native-reanimated|react-native-worklets|react-native-sortables|react-native-webview|@likashefqet/react-native-image-zoom|marked)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-gesture-handler|react-native-reanimated|react-native-worklets|react-native-webview|@likashefqet/react-native-image-zoom|marked)/)',
   ],
   // Rendering the whole app through react-test-renderer costs seconds on a cold transform
   // cache; the 5s default turned a slow CI runner into a red build. 30s still burned when the

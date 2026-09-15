@@ -5,13 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {
-  AppState,
-  KeyboardAvoidingView,
-  Linking,
-  StatusBar,
-  View,
-} from 'react-native';
+import { AppState, Linking, StatusBar, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { connection } from '../core/connection';
@@ -225,6 +219,7 @@ import { ApprovalSheet } from '../components/ApprovalSheet';
 import { UndoSheet } from '../components/UndoSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
+import { KeyboardShell } from '../components/KeyboardShell';
 import { AppUpdateModal } from './AppUpdateModal';
 import { ModelSheet, pickerStart, type PickerState } from '../components/ModelSheet';
 import { ModelTuneSheet } from '../components/ModelTuneSheet';
@@ -3187,16 +3182,11 @@ export function AppShell(): React.JSX.Element {
         barStyle={dark ? 'light-content' : 'dark-content'}
         backgroundColor={palette.bg}
       />
-      {/* Never 'height', on any platform: that branch renders `height: _initialFrameHeight -
-          bottom` with `flex: 0`, and _initialFrameHeight is measured once, at the first layout,
-          then never again -- while `bottom` is recomputed as `state.bottom + frame.height -
-          keyboardY`, which adds the shrink it already applied. The two stay consistent only as
-          long as every keyboard event is separated by a layout pass. Two events in a row (the IME
-          restored on resume, then the field focused) counted the keyboard twice and left the shell
-          a strip at the top of the screen: header, composer, then a band of background where the
-          conversation should be. 'padding' derives the inset from the live frame alone, so a stale
-          frame costs one frame of overshoot instead of compounding. See docs/keyboard-avoidance.md. */}
-      <KeyboardAvoidingView style={styles.safe} behavior="padding">
+      {/* The shell's keyboard inset, from an answer rather than a memory: KeyboardShell re-asks the
+          platform on every return to the foreground, which is what the platform component could not
+          do -- it kept the last keyboard event and padded by a keyboard that had gone while the app
+          was in the background. See docs/keyboard-avoidance.md. */}
+      <KeyboardShell style={styles.safe}>
         {/* A row with one child on a phone, two on a desktop: the conversation list stops being
             an overlay and becomes a column, and the pages beside it lose nothing. */}
         <View style={styles.shell}>
@@ -3892,7 +3882,7 @@ export function AppShell(): React.JSX.Element {
         </View>
         )}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardShell>
 
       {layout.pinnedDrawer ? null : (
       <Drawer
@@ -4148,7 +4138,7 @@ export function AppShell(): React.JSX.Element {
           preview={subagentView.id.replace(/^subagent\//, '')}
           options={[
             // The session actions first, in the order the conversation menu uses them, then what
-            // belongs to an agent alone. Pin, Archive, Rename and Change workspace are absent on
+            // belongs to an agent alone. Archive, Rename and Change workspace are absent on
             // purpose: a sub-agent is not in the drawer, so they would act on nothing visible.
             ...(() => {
               const shared = sessionEntries(subagentView.threadId, () => setSubagentMenuOpen(false));
