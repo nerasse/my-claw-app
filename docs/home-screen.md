@@ -48,9 +48,10 @@ behind it.
 Every folder header carries what its conversations are asking of the owner, counted from the rows
 under it: `?2` when two are blocked on a question, the accent dot and a count when two have moved.
 A question wins when both are true -- one of the two is waiting on a person -- and only one of them
-is ever shown. A run in flight counts as activity as well: a folder is exactly what hides a run,
-and the badge is the only sign left once it is folded, which it survives (the rows go, the count
-stays). The unfiled section carries none: it is a remainder, not a place something was filed into.
+is ever shown. A run in flight counts as activity as well, and it is marked on the row it belongs to
+too, in the slot the unread dot occupies. One vocabulary, so a folder's badge is never a count the
+list below cannot account for; folding it takes the rows and leaves the count, which is what
+survives a fold. The unfiled section carries none: it is a remainder, not a place filed into.
 
 The counts come from the rows the section is drawn with, so a folder reflects what its contents say
 on screen and nothing else, and they are computed once per list rather than per row: this list

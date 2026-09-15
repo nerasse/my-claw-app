@@ -33,9 +33,9 @@ export interface SectionBadge {
  * merely moved, and showing both would put the one that is waiting on a person second. The rows
  * are the visible ones, so a folder wears what its own contents say on screen and nothing more.
  *
- * `activity` is deliberately wider than the dot a row carries: a run in flight counts too. A folder
- * is exactly what hides a run -- fold it and the only sign left is this badge -- and a run
- * answering is already something the owner has not seen.
+ * Activity is what a row marks too -- an unread conversation, and one a run is answering -- or the
+ * badge would be a claim the list below cannot account for. A run is worth marking on the folder as
+ * much as on the row: fold it and this count is the only sign left of it.
  */
 export function sectionBadge(
   rows: SessionSummary[],

@@ -6,6 +6,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
+import { ActivityIndicator } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { sessionStore } from '../src/core/sessions';
@@ -172,6 +173,34 @@ test('a run in flight reaches the folder that is hiding it', async () => {
   await pressAny(tree, 'Folder CubeFlow, 1 with activity');
   expect(labelsOf(tree)).not.toContain(row('cf chat'));
   expect(labelsOf(tree)).toContain('Folder CubeFlow, 1 with activity');
+
+  await unmount(tree);
+});
+
+test('a run in flight is written on the row, not only on the folder', async () => {
+  const tree = await renderList();
+
+  // Nothing is answering yet, so no row draws a spinner.
+  expect(tree.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+
+  await ReactTestRenderer.act(async () => {
+    chatStore.startRun('cf-1');
+  });
+
+  // The folder wears the count, and the row it counts says what it is: the same vocabulary on both,
+  // so the badge of a folder is never a claim the list under it cannot account for.
+  expect(labelsOf(tree)).toContain('Folder CubeFlow, 1 with activity');
+  expect(labelsOf(tree)).toContain(`${row('cf chat')}, answering`);
+  expect(tree.root.findAllByType(ActivityIndicator).length).toBeGreaterThan(0);
+
+  await ReactTestRenderer.act(async () => {
+    chatStore.endRun('cf-1');
+  });
+
+  // And when the run ends, both say nothing again.
+  expect(labelsOf(tree)).not.toContain('Folder CubeFlow, 1 with activity');
+  expect(labelsOf(tree)).not.toContain(`${row('cf chat')}, answering`);
+  expect(tree.root.findAllByType(ActivityIndicator)).toHaveLength(0);
 
   await unmount(tree);
 });

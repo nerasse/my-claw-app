@@ -1,10 +1,10 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
 import { useLayout } from '../core/layout';
 import { contextMenuProps } from '../core/webProps';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 /**
  * Memoized: with hundreds of sessions, a scroll or an unread change must not re-render every
@@ -16,6 +16,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   item,
   active,
   unread,
+  running,
   question,
   onOpen,
   onMenu,
@@ -23,12 +24,15 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   item: SessionSummary;
   active: boolean;
   unread: boolean;
+  /** A run is answering in this conversation right now. */
+  running?: boolean;
   /** A run in this conversation is blocked on a question: it is answerable from here. */
   question?: boolean;
   onOpen: (threadId: string) => void;
   onMenu: (thread: SessionSummary) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   // A 44pt tap target is wasted on a mouse, and it costs a third of the rows on screen.
   const { dense } = useLayout();
   const menuButton = (
@@ -51,9 +55,17 @@ export const ThreadRow = React.memo(function ThreadRowRow({
         onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${question ? ', a question is waiting' : ''}${item.hasDraft ? ', unsent draft' : ''}`}>
+        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${running ? ', answering' : ''}${question ? ', a question is waiting' : ''}${item.hasDraft ? ', unsent draft' : ''}`}>
         <View style={styles.titleRow}>
-          {unread ? <View style={styles.dot} /> : null}
+          {/* A run in flight takes the slot of the unread dot, and one mark is enough: a
+              conversation being answered is not one to catch up on, and the bold title still says
+              it was unread. This is the row half of what a folder's badge counts, so the badge is
+              never a claim the list below cannot account for. */}
+          {running ? (
+            <ActivityIndicator size={DOT_SPINNER} color={palette.accent} />
+          ) : unread ? (
+            <View style={styles.dot} />
+          ) : null}
           <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
             {item.title}
           </Text>
@@ -73,6 +85,9 @@ export const ThreadRow = React.memo(function ThreadRowRow({
     </View>
   );
 });
+
+/** A pixel taller than the unread dot, which is 6: a spinner smaller than that reads as dust. */
+const DOT_SPINNER = 11;
 
 const createStyles = (palette: Palette) => ({
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: radius.sm },

@@ -604,6 +604,7 @@ export function Drawer({
           item={item.session}
           active={item.session.threadId === activeThread}
           unread={unreadIds.has(item.session.threadId)}
+          running={runningIds.has(item.session.threadId)}
           question={questionIds.has(item.session.threadId)}
           onOpen={openThread}
           onMenu={onThreadMenu}
@@ -618,6 +619,7 @@ export function Drawer({
       onThreadMenu,
       openFolderMenu,
       openThread,
+      runningIds,
       toggleFolder,
       palette.textFaint,
       questionIds,
