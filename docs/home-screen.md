@@ -3,7 +3,6 @@
 The app opens on the home screen when no conversation is selected. The home screen is the same
 conversation list used by the side drawer:
 
-- pinned conversations, including drag and drop reordering;
 - active conversations and unread/draft state;
 - conversation search;
 - Archive, Agents, Jobs, and Settings live behind the single **More** entry in the footer.

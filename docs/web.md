@@ -100,10 +100,6 @@ Supported as-is, to be verified on the spike: `react-native-svg`, `react-native-
 `expo-video`, `react-native-gesture-handler`, `react-native-reanimated` v4 with
 `react-native-worklets`. `react-native-marked` renders RN primitives, so it should pass through
 RNW untouched, and it is the visual core: test it in the first hour.
-`react-native-sortables` was the least certain of the set, and it holds: measured in a real
-Chromium against the drawer, a long press of 700 ms on a pinned row then a mouse move lifts it,
-reorders the block live, and the drop emits `session.pin.order` with the new order. Nothing to
-fall back to.
 
 ## Build
 
@@ -355,7 +351,7 @@ crash was shipped over the socket. `errorHooks.web.ts` listens to `error` and
 
 | Risk | Mitigation |
 | --- | --- |
-| reanimated 4 or sortables misbehave under RNW | measured under RNW: the pinned rows drag and drop with a mouse |
+| reanimated 4 misbehaves under RNW | measured under RNW: every gesture-driven surface still animates with a mouse |
 | `react-native-marked` renders wrong | first hour of the spike, it is the visual core |
 | Metro web export fights the bare-app autolinking exclusions | fix `app.json`, or vendor an `expo-*` shim; known to be fiddly |
 | The debugging tooling in AGENTS.md is Hermes only | the web needs its own: source maps in the bundle, `diag.report` reused from the browser's global error handler |
@@ -371,7 +367,7 @@ crash was shipped over the socket. `errorHooks.web.ts` listens to `error` and
 | 3. Distribution | CI builds `dist-web.tar.gz`, `myclaw web install` puts it in place | done |
 | 4. Bridge | voice, transfers with progress, downloads, playback | done |
 | 5. PWA | manifest, service worker, Web Push against the existing VAPID keys | done, needs TLS to activate |
-| 6. Desktop | breakpoint ladder, pinned list, side pane, shortcuts, routing, drag and drop | done |
+| 6. Desktop | breakpoint ladder, pinned list, side pane, shortcuts, routing | done |
 
 `nativeBridge.web.ts` no longer rejects anything: every method of the native interface has a
 browser implementation. Phase 5 ships but stays dormant until a certificate is in front, because

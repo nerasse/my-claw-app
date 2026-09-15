@@ -32,7 +32,6 @@ import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
-import { isPinned, migrateLocalPins, setPinned } from '../core/pinned';
 import { isStopCommand, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
 import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnostics';
@@ -1184,9 +1183,6 @@ export function AppShell(): React.JSX.Element {
         connection.send(encodeSessionList());
       });
     });
-    // The pins this device kept to itself before the server owned them, handed over once.
-    migrateLocalPins().catch(() => {});
-
     // Reports of what killed the previous process, read before the first frame goes out. They
     // are queued natively if the socket is not up yet, so this does not need to wait for it.
     loadDiagnostics()
@@ -2278,32 +2274,6 @@ export function AppShell(): React.JSX.Element {
     [sessionEntries],
   );
 
-  // Pinning leads both menus, on its own: it is the one action that changes nothing about the
-  // conversation and everything about finding it again, so it is the row a thumb reaches for
-  // without reading. Handed out apart from the list below because the header menu keeps Model
-  // and Stop between it and the rest.
-  const pinAction = useCallback(
-    (target: SessionSummary, close: () => void): SheetEntry =>
-      isPinned(target)
-        ? {
-            label: 'Unpin',
-            hint: 'back to the conversation list',
-            onPress: () => {
-              setPinned(target.threadId, false);
-              close();
-            },
-          }
-        : {
-            label: 'Pin to top',
-            hint: 'on every device, above the list',
-            onPress: () => {
-              setPinned(target.threadId, true);
-              close();
-            },
-          },
-    [],
-  );
-
   const conversationActions = useCallback(
     (target: SessionSummary, close: () => void): SheetEntry[] => {
       const shared = sessionEntries(target.threadId, close);
@@ -2366,7 +2336,7 @@ export function AppShell(): React.JSX.Element {
   );
 
   const threadActions: SheetEntry[] = threadMenu
-    ? [refreshAction(threadMenu, () => setThreadMenu(null)), pinAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, () => setThreadMenu(null))]
+    ? [refreshAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, () => setThreadMenu(null))]
     : [];
 
   /**
@@ -2471,7 +2441,7 @@ export function AppShell(): React.JSX.Element {
 
   const commandMenuOptions: SheetEntry[] = [
     // Same head as the drawer's sheet: one action, in the same place, whichever menu was opened.
-    ...(activeSummary ? [refreshAction(activeSummary, () => setCommandMenuOpen(false)), pinAction(activeSummary, () => setCommandMenuOpen(false))] : []),
+    ...(activeSummary ? [refreshAction(activeSummary, () => setCommandMenuOpen(false))] : []),
     ...(() => {
       const shared = sessionEntries(activeThread, () => setCommandMenuOpen(false));
       return [shared.model, shared.tune, ...(streaming ? [shared.stop] : [])];

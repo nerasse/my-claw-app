@@ -536,12 +536,6 @@ export interface SessionSummary {
   lastActiveAt: string;
   /** Filed away by the owner: shown in the archived list instead of the drawer, never deleted. */
   archived?: boolean;
-  /**
-   * Where the conversation sits in the owner's pinned list, absent when it is not pinned. The
-   * server owns it, so the phone and the browser show the same pins in the same order. Dense,
-   * from 0.
-   */
-  pinRank?: number;
   /** A run is answering on this thread right now: the app keeps the Stop button visible. */
   activeRun?: boolean;
   /** Workspace key the conversation runs in: 'default' or a config.workspaces key. */
@@ -2734,16 +2728,6 @@ export function encodeSessionUnarchive(threadId: string): string {
 
 export function encodeSessionDelete(threadId: string): string {
   return JSON.stringify({ type: 'session.delete', threadId });
-}
-
-/** Pins the conversation at the end of the pinned list, or unpins it. */
-export function encodeSessionPin(threadId: string, pinned: boolean): string {
-  return JSON.stringify({ type: 'session.pin', threadId, pinned });
-}
-
-/** The pinned list as the owner just dropped it. Ids absent from it keep their pin. */
-export function encodeSessionPinOrder(threadIds: string[]): string {
-  return JSON.stringify({ type: 'session.pin.order', threadIds });
 }
 
 /** What is typed and not sent, for the owner's other devices. Empty text clears it. */

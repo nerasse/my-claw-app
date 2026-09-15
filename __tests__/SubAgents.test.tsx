@@ -281,7 +281,7 @@ describe('inside a sub-agent', () => {
     await pressLabel(tree, 'Sub-agent actions');
 
     const shown = textsOf(tree);
-    for (const absent of ['Pin to top', 'Unpin', 'Archive', 'Rename…', 'Change workspace']) {
+    for (const absent of ['Archive', 'Rename…', 'Change workspace']) {
       expect(shown).not.toContain(absent);
     }
     await settleAndUnmount(tree);

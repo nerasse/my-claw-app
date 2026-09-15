@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
 import { useLayout } from '../core/layout';
@@ -11,18 +11,12 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
  * row. The handlers take what they need from the row rather than a per-row closure, so their
  * identity is stable — `onMenu` gets the whole session, which spares its owner a lookup table
  * whose identity would have moved with the list.
- * When `pinned`, the row carries no handle of its own: its sortable parent makes the whole cell
- * the grab area, so a hold anywhere starts a drag and a tap still opens the thread. It also
- * wears a card, which is what tells the eye where the pinned block ends and the plain list
- * begins — and it says so out loud, because a gesture nobody announces is a gesture nobody
- * finds.
  */
 export const ThreadRow = React.memo(function ThreadRowRow({
   item,
   active,
   unread,
   question,
-  pinned,
   onOpen,
   onMenu,
 }: {
@@ -31,8 +25,6 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   unread: boolean;
   /** A run in this conversation is blocked on a question: it is answerable from here. */
   question?: boolean;
-  /** Pinned rows read as cards and reorder; the whole row is the grab area. */
-  pinned: boolean;
   onOpen: (threadId: string) => void;
   onMenu: (thread: SessionSummary) => void;
 }): React.JSX.Element {
@@ -52,14 +44,14 @@ export const ThreadRow = React.memo(function ThreadRowRow({
   return (
     // Right-click is the desktop form of the long press the ⋯ button stands in for.
     <View
-      style={[styles.row, pinned && styles.rowPinned, active && styles.rowActive]}
+      style={[styles.row, active && styles.rowActive]}
       {...contextMenuProps(() => onMenu(item))}>
       <Pressable
         style={[styles.main, dense && styles.mainDense]}
         onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${question ? ', a question is waiting' : ''}${item.hasDraft ? ', unsent draft' : ''}${pinned ? ', hold to reorder' : ''}`}>
+        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${question ? ', a question is waiting' : ''}${item.hasDraft ? ', unsent draft' : ''}`}>
         <View style={styles.titleRow}>
           {unread ? <View style={styles.dot} /> : null}
           <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
@@ -84,14 +76,6 @@ export const ThreadRow = React.memo(function ThreadRowRow({
 
 const createStyles = (palette: Palette) => ({
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: radius.sm },
-  /** A pinned row is a card: the plain list below is flat, so the block reads as its own. The
-   *  edge is a hairline, like the drawer's own footer rules — enough to define the card without
-   *  spending two pixels of row height on it. */
-  rowPinned: {
-    backgroundColor: palette.surfaceAlt,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: palette.border,
-  },
   rowActive: { backgroundColor: palette.accentSoft },
   main: { flex: 1, paddingVertical: space.sm, paddingHorizontal: space.sm, gap: 1 },
   mainDense: { paddingVertical: space.xs },

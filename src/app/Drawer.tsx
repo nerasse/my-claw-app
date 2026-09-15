@@ -1,14 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import Sortable, { type SortableGridDragEndParams } from 'react-native-sortables';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
 import { GearIcon, PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
-import { isPinned, pinnedOf, setOrder } from '../core/pinned';
-import { pointerFine } from '../core/platform';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -99,26 +96,14 @@ export function Drawer({
   const unreadIds = useMemo(() => new Set(unread), [unread]);
   const questionIds = useMemo(() => new Set(questionThreads), [questionThreads]);
 
-  // Pins and their order come from the server, on the summaries themselves: nothing to merge and
-  // nothing to prune, since a thread that is gone from the listing takes its rank with it.
-  const { pinnedRows, restRows, pinnedTotal, restTotal } = useMemo(() => {
+  // One list. The order is the server's, carried on the summaries themselves: nothing to merge
+  // and nothing to prune.
+  const { rows, all } = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const match = (session: SessionSummary) =>
       !needle || session.title.toLowerCase().includes(needle);
-    const onTop = pinnedOf(sessions);
-    return {
-      pinnedRows: onTop.filter(match),
-      restRows: sessions.filter(session => match(session) && !isPinned(session)),
-      pinnedTotal: onTop.length,
-      restTotal: sessions.length - onTop.length,
-    };
+    return { rows: sessions.filter(match), all: sessions.length };
   }, [sessions, query]);
-
-  const handleDragEnd = useCallback((params: SortableGridDragEndParams<SessionSummary>) => {
-    // The grid hands back the rows already reshuffled, so the drop reads straight off them
-    // rather than replaying an index permutation over a captured list.
-    setOrder(params.data.map(session => session.threadId));
-  }, []);
 
   const sectionCount = (count: number, total: number): string =>
     query.trim() ? `${count} / ${total}` : String(total);
@@ -130,22 +115,6 @@ export function Drawer({
         active={item.threadId === activeThread}
         unread={unreadIds.has(item.threadId)}
         question={questionIds.has(item.threadId)}
-        pinned={false}
-        onOpen={onOpenThread}
-        onMenu={onThreadMenu}
-      />
-    ),
-    [activeThread, onOpenThread, onThreadMenu, questionIds, unreadIds],
-  );
-
-  const renderPinned = useCallback(
-    ({ item }: { item: SessionSummary }) => (
-      <ThreadRow
-        item={item}
-        active={item.threadId === activeThread}
-        unread={unreadIds.has(item.threadId)}
-        question={questionIds.has(item.threadId)}
-        pinned
         onOpen={onOpenThread}
         onMenu={onThreadMenu}
       />
@@ -222,7 +191,7 @@ export function Drawer({
           <FlatList
             {...scrollProps}
             style={styles.list}
-            data={restRows}
+            data={rows}
             keyExtractor={keyOfThread}
             ItemSeparatorComponent={Separator}
             keyboardShouldPersistTaps="handled"
@@ -236,51 +205,13 @@ export function Drawer({
             // labelled break reads as a break, where the hairline that used to stand here was
             // the very rule the plain rows use between themselves and so said nothing.
             ListHeaderComponent={
-              <View>
-                {pinnedRows.length > 0 ? (
-                  <View style={styles.pinnedSection}>
-                    <Text style={styles.sectionLabel}>
-                      {`pinned · ${sectionCount(pinnedRows.length, pinnedTotal)}`}
-                    </Text>
-                    {/* A single column, not a Flex: Flex defaults to a wrapping row and leaves
-                        item width uncontrolled, so each row sized itself to its own title and
-                        pushed its actions button past the panel. A vertical grid owns the width,
-                        which is what makes `numberOfLines` bite. The whole row is the handle —
-                        holding a row is how a human expects to reorder one, and the gap is what
-                        makes the cards legible as separate things to pick up. */}
-                    <Sortable.Grid
-                      columns={1}
-                      data={pinnedRows}
-                      keyExtractor={keyOfThread}
-                      rowGap={space.xs}
-                      // A mouse drags on the spot; only a finger needs to say "this is a drag and
-                      // not a scroll" by holding still first. Under a cursor the 400ms wait was
-                      // the whole feature failing: the pointer moves at once, more than the 5px
-                      // activation fail offset, so the press was cancelled before it ever became
-                      // a drag and the rows simply refused to move.
-                      dragActivationDelay={pointerFine ? 0 : 400}
-                      // And the offset that cancels an activation has to grow with it: a cursor
-                      // yanked across the panel travels 20pt between two frames, which the 5pt
-                      // default reads as "not a drag" even with no delay left to wait for.
-                      dragActivationFailOffset={pointerFine ? 60 : 5}
-                      hapticsEnabled
-                      renderItem={renderPinned}
-                      onDragEnd={handleDragEnd}
-                    />
-                  </View>
-                ) : null}
-                <Text style={styles.sectionLabel}>
-                  {`conversations · ${sectionCount(restRows.length, restTotal)}`}
-                </Text>
-              </View>
+              <Text style={styles.sectionLabel}>
+                {`conversations · ${sectionCount(rows.length, all)}`}
+              </Text>
             }
             ListEmptyComponent={
               <Text style={styles.empty}>
-                {query.trim()
-                  ? 'no match'
-                  : pinnedRows.length > 0
-                    ? 'no more conversations'
-                    : 'no conversations'}
+                {query.trim() ? 'no match' : 'no conversations'}
               </Text>
             }
             renderItem={renderThread}
