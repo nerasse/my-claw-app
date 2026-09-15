@@ -2758,6 +2758,11 @@ export function encodeFolderRename(folderId: string, name: string): string {
   return JSON.stringify({ type: 'folder.rename', folderId, name });
 }
 
+/** The order the folders are shown in, top to bottom. Ids the server does not know are ignored. */
+export function encodeFolderOrder(folderIds: string[]): string {
+  return JSON.stringify({ type: 'folder.order', folderIds });
+}
+
 /** Drops the folder. Its conversations are unfiled, none of them is deleted. */
 export function encodeFolderRemove(folderId: string): string {
   return JSON.stringify({ type: 'folder.remove', folderId });

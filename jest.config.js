@@ -1,6 +1,9 @@
 module.exports = {
   preset: '@react-native/jest-preset',
-  setupFiles: ['<rootDir>/jest.setup.js'],
+  // The gesture engine ships the mock its own detectors need: without it a rendered
+  // GestureDetector is a native module that does not exist, and `fireGestureHandler` has nothing
+  // to fire into. Official setup file, and it has to come after jest.setup.js.
+  setupFiles: ['<rootDir>/jest.setup.js', '<rootDir>/node_modules/react-native-gesture-handler/jestSetup.js'],
   // Runs once the test framework exists, which is what a global beforeEach needs.
   setupFilesAfterEnv: ['<rootDir>/jest.after.js'],
   // The worklets babel plugin compiles in a native unpacker at build time; under Jest its

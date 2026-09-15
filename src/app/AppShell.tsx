@@ -75,6 +75,7 @@ import {
   encodeFolderCreate,
   encodeFolderRemove,
   encodeFolderRename,
+  encodeFolderOrder,
   FOLDER_NAME_LIMIT,
   encodeSessionHistory,
   encodeSessionSync,
@@ -418,6 +419,12 @@ export function AppShell(): React.JSX.Element {
   const fileThread = useCallback((threadId: string, folderId: string | null) => {
     sessionStore.setFolder(threadId, folderId);
     connection.send(encodeSessionFolder(threadId, folderId)).catch(() => {});
+  }, []);
+
+  /** Same for the folders themselves: the order is echoed, then confirmed by the listing. */
+  const reorderFolders = useCallback((order: string[]) => {
+    sessionStore.setFolderOrder(order);
+    connection.send(encodeFolderOrder(order)).catch(() => {});
   }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing: the index lists the categories, every other value is a
@@ -3329,6 +3336,8 @@ export function AppShell(): React.JSX.Element {
             onToggleFolder={toggleFolder}
             onNewFolder={() => setFolderToCreate({ workspace: workspaceFilter ?? undefined })}
             onFolderMenu={setFolderMenu}
+            onMoveToFolder={fileThread}
+            onReorderFolders={reorderFolders}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -3360,6 +3369,8 @@ export function AppShell(): React.JSX.Element {
             onToggleFolder={toggleFolder}
             onNewFolder={() => setFolderToCreate({ workspace: workspaceFilter ?? undefined })}
             onFolderMenu={setFolderMenu}
+            onMoveToFolder={fileThread}
+            onReorderFolders={reorderFolders}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -4040,6 +4051,8 @@ export function AppShell(): React.JSX.Element {
         onToggleFolder={toggleFolder}
         onNewFolder={() => setFolderToCreate({ workspace: workspaceFilter ?? undefined })}
         onFolderMenu={setFolderMenu}
+        onMoveToFolder={fileThread}
+        onReorderFolders={reorderFolders}
         onOpenMore={() => setMoreOpen(true)}
         onOpenSettings={openSettingsFromDrawer}
         onHome={handleHome}

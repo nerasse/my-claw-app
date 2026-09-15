@@ -88,6 +88,20 @@ class SessionStoreImpl {
     return this.list.find(summary => summary.threadId === threadId)?.workspace;
   }
 
+  /**
+   * Local echo of folder.order until the listing lands with the server's own ranks: the folders
+   * move under the finger, and a folder that waits for a round trip reads as dropped on the floor.
+   * Renumbered densely, which is what the server stores.
+   */
+  setFolderOrder(order: string[]): void {
+    const rank = new Map(order.map((id, index) => [id, index]));
+    const sorted = [...this.folders].sort(
+      (left, right) => (rank.get(left.id) ?? left.rank) - (rank.get(right.id) ?? right.rank),
+    );
+    this.folders = sorted.map((folder, index) => ({ ...folder, rank: index }));
+    this.emit();
+  }
+
   /** Local echo of session.folder until the server's listing lands and brings the real one. */
   setFolder(threadId: string, folderId: string | null): void {
     const existing = this.list.find(summary => summary.threadId === threadId);

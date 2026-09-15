@@ -56,6 +56,39 @@ The counts come from the rows the section is drawn with, so a folder reflects wh
 on screen and nothing else, and they are computed once per list rather than per row: this list
 re-renders on every token of a streaming run, which is the one cost it cannot pay.
 
+## Picking something up
+
+Hold a conversation still for a moment, then move: it lifts, a chip carrying its title follows the
+finger, and the section it would land in lights up. Let go over another section and it is filed
+there; let go anywhere else -- under the last section, over the one it came from -- and nothing
+happens. The highlight is exactly the release that would do something, so it never promises a drop
+that would be a no-op.
+
+A **folder heading** is picked up the same way and dropped on another folder, which reorders them:
+the dragged folder takes the place of the one it was dropped on and the rest closes up around it,
+which is what a list of names does when a name is moved onto another. Dropping it back where it
+already is sends nothing, and the conversations in no folder are not a place in that order.
+
+The list scrolls itself when the finger is held near an edge: a drag has to be able to reach a
+folder that is not on screen, or it could only ever move things between the two folders it started
+between.
+
+**Why a long press, and why this is hand-rolled.** Dragging a list and dragging a row out of it are
+the same motion, and only a pause tells them apart: the pan only activates after the hold, and a
+finger that moves during it fails the gesture and the list scrolls instead. The gesture also lives
+on the whole list rather than on each row -- a row is unmounted the moment it leaves the window, and
+a gesture that lives on an unmounted row dies mid-drag -- and the drop test reads a map of the boxes
+the lines report, so nothing has to measure the window.
+
+That is also why `react-native-sortables` is not used here, though its gesture is what the pinned
+section used: it renders its own items, so adopting it would mean giving up the virtualized list
+this drawer is built on. `react-native-gesture-handler`, already mounted at the app root, does the
+one thing needed -- `activateAfterLongPress` -- without owning the layout.
+
+Both gestures echo locally before the server confirms: a conversation moves in the list as the tap
+lands, and a reordered folder moves under the finger. Waiting for the round trip reads as a gesture
+that was dropped on the floor.
+
 ## Making a folder, and filing into one
 
 The drawer header carries two ways in, side by side: **New conversation** (the accent) and **New
@@ -65,20 +98,22 @@ keeps an empty folder visible under that filter. Nothing else is asked: a folder
 that is all.
 
 A conversation is filed from its own menu, **Move to folder…**, which says where it sits today and
-offers every folder plus **No folder** -- the one row that takes it out of all of them. The row
-moves in the list as soon as the tap lands, before the server's listing comes back: waiting for the
-round trip reads as a tap that did nothing. The listing then confirms, as it does for every other
-session edit.
+offers every folder plus **No folder** -- the one row that takes it out of all of them. It stays
+alongside the drag for a keyboard, a mouse and a screen reader, none of which hold a list still on
+purpose. The row moves in the list as soon as the tap lands, before the server's listing comes back:
+waiting for the round trip reads as a tap that did nothing. The listing then confirms, as it does for
+every other session edit.
 
 Rename and **Delete folder** sit behind the `⋯` on the folder's own header, the same control a
 conversation row carries. Deleting asks first, and the question says what it leaves behind: a
 folder holds nothing, so its conversations are unfiled and none of them is deleted. The server
 unfiles them, and the drawer follows the listing like it does for everything else.
 
-Three things are deliberately absent. Nothing drags, because the server's rank order is already the
-order folders are shown in and a drag would need a rank field written on every drop. Nothing nests,
-because a folder in a folder is a tree to walk and to keep consistent. And a folder does not carry a
-status of its own -- its badge is derived from its conversations, which is step six.
+Three things are deliberately absent. Nothing nests, because a folder in a folder is a tree to walk
+and to keep consistent. Nothing drags *within* a folder, because the two gestures above move things
+between places and neither of them answers "where in this place": the order inside a section stays
+the server's, which is what keeps one source of truth for it. And a folder does not carry a status
+of its own -- its badge is derived from its conversations.
 
 ## Filtering by workspace
 

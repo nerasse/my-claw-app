@@ -1,5 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Animated,
+  FlatList,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
@@ -7,6 +21,7 @@ import { FilterIcon, FolderIcon, GearIcon, NewFolderIcon, PlusIcon } from '../co
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
+import { fileDrop, lineAt, orderDrop, sameDrop, targetOf, type DropMove, type LineBox, type ListLine } from '../core/dragMove';
 import { matchesWorkspace } from '../core/workspaceFilter';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
@@ -40,8 +55,35 @@ type DrawerEntry =
       folded: boolean;
       badge: SectionBadge | null;
     }
-  | { kind: 'row'; key: string; session: SessionSummary }
-  | { kind: 'empty'; key: string; text: string };
+  | { kind: 'row'; key: string; session: SessionSummary; folderId: string | null }
+  | { kind: 'empty'; key: string; text: string; folderId: string | null };
+
+/** The section an entry belongs to. null = the conversations nobody filed. */
+const sectionOf = (item: DrawerEntry): string | null =>
+  item.kind === 'header' ? (item.folder?.id ?? null) : item.folderId;
+
+/** Where an entry sits for the drop hit test: a key, its section, and what it carries. */
+const lineOf = (item: DrawerEntry): ListLine => ({
+  key: item.key,
+  folderId: sectionOf(item),
+  role: item.kind,
+  ...(item.kind === 'row' ? { threadId: item.session.threadId } : {}),
+});
+
+/** What a finger is carrying: a conversation to file, or a folder to place among its own. */
+type DragSubject =
+  | { kind: 'thread'; session: SessionSummary }
+  | { kind: 'folder'; folder: FolderSummary };
+
+/** How long a finger has to hold still before moving becomes a drag rather than a scroll. */
+const DRAG_HOLD_MS = 350;
+/** How close to an edge the finger has to be for the list to follow it, in points. */
+const AUTO_SCROLL_EDGE = 64;
+const AUTO_SCROLL_STEP = 12;
+const AUTO_SCROLL_MS = 32;
+/** The floating title sits above and to the right of the finger, clear of where it is pointing. */
+const CHIP_OFFSET_X = 14;
+const CHIP_OFFSET_Y = 44;
 
 /** What a screen reader hears of a folder's badge, after its name. */
 const badgeWords = (badge: SectionBadge | null): string => {
@@ -92,6 +134,8 @@ export function Drawer({
   onToggleFolder,
   onNewFolder,
   onFolderMenu,
+  onMoveToFolder,
+  onReorderFolders,
   onOpenMore,
   onOpenSettings,
   home,
@@ -130,6 +174,10 @@ export function Drawer({
   onToggleFolder: (folderId: string) => void;
   onNewFolder: () => void;
   onFolderMenu: (folder: FolderSummary) => void;
+  /** A conversation dragged onto another section: the server files it, the listing confirms. */
+  onMoveToFolder: (threadId: string, folderId: string | null) => void;
+  /** A folder dragged onto another one: the order the server should keep. */
+  onReorderFolders: (order: string[]) => void;
   /** The one footer entry: opens the sheet with Archived, Agents, Jobs and Settings. */
   onOpenMore: () => void;
   /** Jump straight to Settings from the home footer. */
@@ -145,7 +193,28 @@ export function Drawer({
   const progress = useRef(new Animated.Value(0)).current;
   const searchRef = useRef<TextInput>(null);
   const [query, setQuery] = useState('');
-  const { scrollProps, indicator } = useScrollIndicator();
+  /** Where every drawn line sits in the list's content, keyed by entry. Written by `onLayout`. */
+  const lineBoxesRef = useRef(new Map<string, LineBox>());
+  /** What the finger is carrying: a ref, because the gesture reads it on every move. */
+  const draggedRef = useRef<DragSubject | null>(null);
+  /** What a release would do right now, already narrowed by the hit test. */
+  const dropRef = useRef<DropMove | null>(null);
+  const scrollOffsetRef = useRef(0);
+  const viewportRef = useRef(0);
+  const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const listRef = useRef<FlatList<DrawerEntry>>(null);
+  const chipPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const [dragging, setDragging] = useState<DragSubject | null>(null);
+  /** The move a release would make. The section it acts on is what lights up: the preview. */
+  const [dropMove, setDropMove] = useState<DropMove | null>(null);
+
+  const trackScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+  const trackViewport = useCallback((event: LayoutChangeEvent): void => {
+    viewportRef.current = event.nativeEvent.layout.height;
+  }, []);
+  const { scrollProps, indicator } = useScrollIndicator({ onScroll: trackScroll, onLayout: trackViewport });
   // The panel stays mounted, so opening it is a prop change, not a mount. Its search field is
   // never focused on the way in: whatever keyboard is up belongs to the composer behind it.
   // A pinned panel never "opens", so it never takes the keyboard away from the composer.
@@ -196,22 +265,216 @@ export function Drawer({
             ),
       });
       if (folded) continue;
-      for (const row of section.rows) out.push({ kind: 'row', key: row.threadId, session: row });
+      for (const row of section.rows) {
+        out.push({ kind: 'row', key: row.threadId, session: row, folderId: section.folder?.id ?? null });
+      }
     }
     // A list with no conversations still says so: with sections it always has a header, so the
     // sentence the FlatList used to draw for an empty data array has to be an entry of its own.
     if (searched.length === 0) {
-      out.push({ kind: 'empty', key: 'empty', text: searching ? 'no match' : 'no conversations' });
+      out.push({ kind: 'empty', key: 'empty', text: searching ? 'no match' : 'no conversations', folderId: null });
     }
     return out;
   }, [sessions, folders, query, workspaceFilter, collapsedFolders, questionIds, runningIds, unreadIds]);
 
+  /**
+   * The gesture reads the list and the owner's callback through refs, and the callbacks below never
+   * change identity: a gesture is long-lived, and RNGH re-attaches it whenever the object it was
+   * given changes -- a listing arriving mid-drag would otherwise drop the drag on the floor.
+   */
+  const moveRef = useRef(onMoveToFolder);
+  useEffect(() => {
+    moveRef.current = onMoveToFolder;
+  }, [onMoveToFolder]);
+  const orderRef = useRef(onReorderFolders);
+  useEffect(() => {
+    orderRef.current = onReorderFolders;
+  }, [onReorderFolders]);
+  const sessionsRef = useRef(sessions);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+  const foldersRef = useRef(folders);
+  useEffect(() => {
+    foldersRef.current = folders;
+  }, [folders]);
+  /** The order the folders are in, which is what a reorder rewrites. */
+  const folderIds = useMemo(() => folders.map(folder => folder.id), [folders]);
+  const folderIdsRef = useRef(folderIds);
+  useEffect(() => {
+    folderIdsRef.current = folderIds;
+  }, [folderIds]);
+
+  /** Records where a drawn line sits, in the list's own content coordinates. */
+  const measureLine = useCallback((line: ListLine, event: LayoutChangeEvent): void => {
+    const { y, height } = event.nativeEvent.layout;
+    lineBoxesRef.current.set(line.key, { ...line, y, height });
+  }, []);
+
+  /** The line under a finger: the viewport's own y, plus what has scrolled past above it. */
+  const lineUnder = useCallback(
+    (y: number): LineBox | undefined => lineAt(lineBoxesRef.current.values(), scrollOffsetRef.current + y),
+    [],
+  );
+
+  /**
+   * The move under the finger, and the only thing a release acts on. Set when the release would do
+   * something, cleared the moment it would do nothing -- so the highlight is the preview of the
+   * drop, and it never lies about what letting go is about to do.
+   */
+  const reflectDrop = useCallback(
+    (target: LineBox | undefined): void => {
+      const subject = draggedRef.current;
+      const move =
+        subject === null
+          ? null
+          : subject.kind === 'thread'
+            ? fileDrop(subject.session, target)
+            : orderDrop(subject.folder.id, folderIdsRef.current, target);
+      if (sameDrop(dropRef.current, move)) return;
+      dropRef.current = move;
+      setDropMove(move);
+    },
+    [],
+  );
+
+  /** What a line hands to the finger: a conversation from a row, a folder from its heading. */
+  const subjectAt = useCallback((line: LineBox | undefined): DragSubject | null => {
+    if (!line) return null;
+    // A row carries a conversation, a heading carries the folder it names, and `threadId` is what
+    // tells the two apart: it is set on a row and nowhere else.
+    if (line.threadId !== undefined) {
+      const session = sessionsRef.current.find(row => row.threadId === line.threadId);
+      return session ? { kind: 'thread', session } : null;
+    }
+    if (line.role === 'header' && line.folderId !== null) {
+      const folder = foldersRef.current.find(held => held.id === line.folderId);
+      return folder ? { kind: 'folder', folder } : null;
+    }
+    return null;
+  }, []);
+
+  const stopAutoScroll = useCallback((): void => {
+    if (autoScrollRef.current === null) return;
+    clearInterval(autoScrollRef.current);
+    autoScrollRef.current = null;
+  }, []);
+
+  /**
+   * The list follows a finger held at its edge. Without it a drag reaches only the folders already
+   * on screen, and a folder one screen away is exactly what this list is for.
+   */
+  const driveAutoScroll = useCallback(
+    (y: number): void => {
+      const viewport = viewportRef.current;
+      const direction = y < AUTO_SCROLL_EDGE ? -1 : y > viewport - AUTO_SCROLL_EDGE ? 1 : 0;
+      if (direction === 0) {
+        stopAutoScroll();
+        return;
+      }
+      if (autoScrollRef.current !== null) return;
+      autoScrollRef.current = setInterval(() => {
+        // The end of the list clamps itself: scrolling past it is a no-op, so only the top needs
+        // holding, and a negative offset would fight the list's own bounce.
+        const next = Math.max(0, scrollOffsetRef.current + direction * AUTO_SCROLL_STEP);
+        listRef.current?.scrollToOffset({ offset: next, animated: false });
+      }, AUTO_SCROLL_MS);
+    },
+    [stopAutoScroll],
+  );
+
+  const beginDrag = useCallback(
+    (y: number, x: number): void => {
+      if (draggedRef.current) return;
+      const line = lineUnder(y);
+      const subject = subjectAt(line);
+      // The unfiled heading, a sentence, the gap under the last section: nothing to pick up.
+      if (!subject) return;
+      draggedRef.current = subject;
+      chipPos.setValue({ x: x + CHIP_OFFSET_X, y: y - CHIP_OFFSET_Y });
+      setDragging(subject);
+      reflectDrop(line);
+    },
+    [chipPos, lineUnder, reflectDrop, subjectAt],
+  );
+
+  const updateDrag = useCallback(
+    (y: number, x: number): void => {
+      chipPos.setValue({ x: x + CHIP_OFFSET_X, y: y - CHIP_OFFSET_Y });
+      driveAutoScroll(y);
+      reflectDrop(lineUnder(y));
+    },
+    [chipPos, driveAutoScroll, lineUnder, reflectDrop],
+  );
+
+  const endDrag = useCallback(
+    (canceled: boolean): void => {
+      stopAutoScroll();
+      const move = dropRef.current;
+      draggedRef.current = null;
+      dropRef.current = null;
+      setDragging(null);
+      setDropMove(null);
+      // Nothing to do: the finger let go outside every section, or over the one it came from.
+      if (canceled || !move) return;
+      if (move.kind === 'file') moveRef.current(move.threadId, move.folderId);
+      else orderRef.current(move.order);
+    },
+    [stopAutoScroll],
+  );
+
+  /**
+   * Picking a conversation up: hold still, then move.
+   *
+   * `activateAfterLongPress` is what makes a drag and a scroll the same motion told apart by a
+   * pause -- moving during the hold fails the gesture and the list scrolls, which is the only way
+   * to reach a folder that is not on screen.
+   *
+   * The callbacks stay on the JS thread: the hit test is a lookup in a Map, not a worklet, and
+   * that is also what makes the whole thing testable without a device.
+   */
+  const dragGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activateAfterLongPress(DRAG_HOLD_MS)
+        .runOnJS(true)
+        .activeCursor('grabbing')
+        .withTestId('drawerDrag')
+        // `onStart` is the activation, so it fires only once the hold has been kept: the drag
+        // never begins on a gesture the list is going to scroll instead.
+        .onStart(event => beginDrag(event.y, event.x))
+        .onUpdate(event => updateDrag(event.y, event.x))
+        .onEnd((_event, success) => endDrag(!success))
+        .onFinalize(() => stopAutoScroll()),
+    [beginDrag, endDrag, stopAutoScroll, updateDrag],
+  );
+
   const renderEntry = useCallback(
     ({ item }: { item: DrawerEntry }) => {
-      if (item.kind === 'empty') return <Text style={styles.empty}>{item.text}</Text>;
+      const line = lineOf(item);
+      const droppedId = dropMove === null ? undefined : targetOf(dropMove);
+      const dropped = droppedId !== undefined && line.folderId === droppedId;
+      // The line in hand is faded, whichever line it is: a conversation or a whole folder.
+      const lifted =
+        dragging === null
+          ? false
+          : dragging.kind === 'thread'
+            ? item.kind === 'row' && item.session.threadId === dragging.session.threadId
+            : item.kind === 'header' && item.folder?.id === dragging.folder.id;
+      // Every line is measured where it is drawn: the hit test below reads these boxes, and a line
+      // that was never laid out is a line a finger cannot be over.
+      const wrap = (body: React.JSX.Element): React.JSX.Element => (
+        <View
+          testID={`line:${item.key}`}
+          onLayout={event => measureLine(line, event)}
+          style={[dropped && styles.dropTarget, lifted && styles.lifted]}>
+          {body}
+        </View>
+      );
+      if (item.kind === 'empty') return wrap(<Text style={styles.empty}>{item.text}</Text>);
       if (item.kind === 'header') {
         const folder = item.folder;
-        return (
+        return wrap(
           <View style={styles.sectionRow}>
             <Pressable
               onPress={folder ? () => onToggleFolder(folder.id) : undefined}
@@ -253,10 +516,10 @@ export function Drawer({
                 <Text style={styles.sectionMenuGlyph}>⋯</Text>
               </Pressable>
             ) : null}
-          </View>
+          </View>,
         );
       }
-      return (
+      return wrap(
         <ThreadRow
           item={item.session}
           active={item.session.threadId === activeThread}
@@ -264,10 +527,23 @@ export function Drawer({
           question={questionIds.has(item.session.threadId)}
           onOpen={onOpenThread}
           onMenu={onThreadMenu}
-        />
+        />,
       );
     },
-    [activeThread, onFolderMenu, onOpenThread, onThreadMenu, onToggleFolder, palette.textFaint, questionIds, unreadIds, styles],
+    [
+      activeThread,
+      dragging,
+      dropMove,
+      measureLine,
+      onFolderMenu,
+      onOpenThread,
+      onThreadMenu,
+      onToggleFolder,
+      palette.textFaint,
+      questionIds,
+      unreadIds,
+      styles,
+    ],
   );
 
   useEffect(() => {
@@ -374,26 +650,45 @@ export function Drawer({
         ) : null}
 
         <View style={styles.listArea}>
-          <FlatList
-            {...scrollProps}
-            style={styles.list}
-            data={entries}
-            keyExtractor={item => item.key}
-            ItemSeparatorComponent={Separator}
-            keyboardShouldPersistTaps="handled"
-            // Virtualized by default; tuned so a long list scrolls without re-rendering
-            // everything, and the memoized rows only update when their own props move.
-            initialNumToRender={14}
-            maxToRenderPerBatch={14}
-            windowSize={9}
-            removeClippedSubviews={Platform.OS === 'android'}
-            // Each heading sits on the list it counts, which is the whole separation: a
-            // labelled break reads as a break, where the hairline that used to stand here was
-            // the very rule the plain rows use between themselves and so said nothing. Every
-            // section carries its own, so the list needs no header of its own.
-            renderItem={renderEntry}
-            updateCellsBatchingPeriod={50}
-          />
+          {/* One detector for the whole list, not one per row: a row is unmounted the moment it
+              leaves the window, and a gesture that lives on an unmounted row is a gesture that
+              dies mid-drag. The list's own coordinates are what the hit test reads, so nothing
+              has to measure the window either. */}
+          <GestureDetector gesture={dragGesture}>
+            <View style={styles.listBox}>
+              <FlatList
+                {...scrollProps}
+                ref={listRef}
+                style={styles.list}
+                data={entries}
+                keyExtractor={item => item.key}
+                ItemSeparatorComponent={Separator}
+                keyboardShouldPersistTaps="handled"
+                // Virtualized by default; tuned so a long list scrolls without re-rendering
+                // everything, and the memoized rows only update when their own props move.
+                initialNumToRender={14}
+                maxToRenderPerBatch={14}
+                windowSize={9}
+                removeClippedSubviews={Platform.OS === 'android'}
+                // Each heading sits on the list it counts, which is the whole separation: a
+                // labelled break reads as a break, where the hairline that used to stand here was
+                // the very rule the plain rows use between themselves and so said nothing. Every
+                // section carries its own, so the list needs no header of its own.
+                renderItem={renderEntry}
+                updateCellsBatchingPeriod={50}
+              />
+            </View>
+          </GestureDetector>
+          {/* The conversation in hand, lifted clear of the finger that is carrying it. */}
+          {dragging ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.dragChip, { transform: chipPos.getTranslateTransform() }]}>
+              <Text style={styles.dragChipText} numberOfLines={1}>
+                {dragging.kind === 'thread' ? dragging.session.title : dragging.folder.name}
+              </Text>
+            </Animated.View>
+          ) : null}
           {indicator}
         </View>
 
@@ -562,7 +857,24 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
   },
   listArea: { flex: 1 },
+  /** The box the drag reads its coordinates in: same bounds as the list it wraps. */
+  listBox: { flex: 1 },
   list: { paddingHorizontal: space.md },
+  /** The section a release would file into. No border, no shift: only the fill changes. */
+  dropTarget: { backgroundColor: palette.accentSoft },
+  lifted: { opacity: 0.4 },
+  dragChip: {
+    position: 'absolute' as const,
+    maxWidth: DRAWER_WIDTH - space.xl * 2,
+    backgroundColor: palette.surfaceAlt,
+    borderColor: palette.accent,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    elevation: 6,
+  },
+  dragChipText: { fontSize: font.small, color: palette.text },
   searchRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
