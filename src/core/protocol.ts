@@ -2747,6 +2747,27 @@ export function encodeSessionDelete(threadId: string): string {
   return JSON.stringify({ type: 'session.delete', threadId });
 }
 
+/** Longest folder name the server accepts. The device stops before it, like the title length. */
+export const FOLDER_NAME_LIMIT = 60;
+
+export function encodeFolderCreate(name: string, workspace?: string): string {
+  return JSON.stringify({ type: 'folder.create', name, ...(workspace ? { workspace } : {}) });
+}
+
+export function encodeFolderRename(folderId: string, name: string): string {
+  return JSON.stringify({ type: 'folder.rename', folderId, name });
+}
+
+/** Drops the folder. Its conversations are unfiled, none of them is deleted. */
+export function encodeFolderRemove(folderId: string): string {
+  return JSON.stringify({ type: 'folder.remove', folderId });
+}
+
+/** Files a conversation, or takes it out of every folder when `folderId` is null. */
+export function encodeSessionFolder(threadId: string, folderId: string | null): string {
+  return JSON.stringify({ type: 'session.folder', threadId, folderId });
+}
+
 /** What is typed and not sent, for the owner's other devices. Empty text clears it. */
 export function encodeDraftSet(threadId: string, text: string): string {
   return JSON.stringify({ type: 'draft.set', threadId, text });

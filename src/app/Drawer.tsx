@@ -3,7 +3,7 @@ import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { FilterIcon, GearIcon, PlusIcon } from '../components/icons';
+import { FilterIcon, GearIcon, NewFolderIcon, PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections } from '../core/folders';
@@ -73,6 +73,8 @@ export function Drawer({
   onOpenWorkspaceFilter,
   onClearWorkspaceFilter,
   onToggleFolder,
+  onNewFolder,
+  onFolderMenu,
   onOpenMore,
   onOpenSettings,
   home,
@@ -107,6 +109,8 @@ export function Drawer({
   onOpenWorkspaceFilter: () => void;
   onClearWorkspaceFilter: () => void;
   onToggleFolder: (folderId: string) => void;
+  onNewFolder: () => void;
+  onFolderMenu: (folder: FolderSummary) => void;
   /** The one footer entry: opens the sheet with Archived, Agents, Jobs and Settings. */
   onOpenMore: () => void;
   /** Jump straight to Settings from the home footer. */
@@ -179,16 +183,34 @@ export function Drawer({
       if (item.kind === 'header') {
         const folder = item.folder;
         return (
-          <Pressable
-            onPress={folder ? () => onToggleFolder(folder.id) : undefined}
-            disabled={folder === null}
-            style={styles.sectionHeader}
-            accessibilityRole={folder ? 'button' : undefined}
-            accessibilityState={folder ? { expanded: !item.folded } : undefined}
-            accessibilityLabel={folder ? `Folder ${folder.name}` : undefined}>
-            {folder ? <Text style={styles.sectionFold}>{item.folded ? '▸' : '▾'}</Text> : <Text style={styles.sectionFold}>{''}</Text>}
-            <Text style={styles.sectionLabel}>{item.label}</Text>
-          </Pressable>
+          <View style={styles.sectionRow}>
+            <Pressable
+              onPress={folder ? () => onToggleFolder(folder.id) : undefined}
+              disabled={folder === null}
+              style={styles.sectionHeader}
+              accessibilityRole={folder ? 'button' : undefined}
+              accessibilityState={folder ? { expanded: !item.folded } : undefined}
+              accessibilityLabel={folder ? `Folder ${folder.name}` : undefined}>
+              {folder ? (
+                <Text style={styles.sectionFold}>{item.folded ? '▸' : '▾'}</Text>
+              ) : (
+                <Text style={styles.sectionFold}>{''}</Text>
+              )}
+              <Text style={styles.sectionLabel} numberOfLines={1}>
+                {item.label}
+              </Text>
+            </Pressable>
+            {folder ? (
+              <Pressable
+                onPress={() => onFolderMenu(folder)}
+                hitSlop={6}
+                style={styles.sectionMenu}
+                accessibilityRole="button"
+                accessibilityLabel={`Actions for folder ${folder.name}`}>
+                <Text style={styles.sectionMenuGlyph}>⋯</Text>
+              </Pressable>
+            ) : null}
+          </View>
         );
       }
       return (
@@ -202,7 +224,7 @@ export function Drawer({
         />
       );
     },
-    [activeThread, onOpenThread, onThreadMenu, onToggleFolder, questionIds, unreadIds, styles],
+    [activeThread, onFolderMenu, onOpenThread, onThreadMenu, onToggleFolder, questionIds, unreadIds, styles],
   );
 
   useEffect(() => {
@@ -248,14 +270,24 @@ export function Drawer({
             accessibilityLabel="Home">
             <Text style={styles.brand}>MyClaw</Text>
           </Pressable>
-          <Pressable
-            onPress={onNewThread}
-            hitSlop={8}
-            style={styles.newButton}
-            accessibilityRole="button"
-            accessibilityLabel="New conversation">
-            <PlusIcon size={20} color={palette.accent} />
-          </Pressable>
+          <View style={styles.headActions}>
+            <Pressable
+              onPress={onNewFolder}
+              hitSlop={8}
+              style={styles.folderButton}
+              accessibilityRole="button"
+              accessibilityLabel="New folder">
+              <NewFolderIcon size={20} color={palette.textFaint} />
+            </Pressable>
+            <Pressable
+              onPress={onNewThread}
+              hitSlop={8}
+              style={styles.newButton}
+              accessibilityRole="button"
+              accessibilityLabel="New conversation">
+              <PlusIcon size={20} color={palette.accent} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.searchRow}>
@@ -430,6 +462,8 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: 'transparent' as const,
     alignSelf: 'flex-start' as const,
   },
+  /** The two ways in: a conversation, or a place to put one. The accent stays on the first. */
+  headActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
   newButton: {
     width: 40,
     height: 40,
@@ -438,9 +472,23 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
+  folderButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  sectionRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  sectionMenu: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  sectionMenuGlyph: { fontSize: 17, lineHeight: 20, color: palette.textFaint },
   /** Indented onto the rows it heads, and the fold glyph takes the same room whether the section
    *  can be folded or not: the unfiled heading has to sit where the folder names do. */
-  sectionHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },
+  sectionHeader: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },
   sectionFold: { width: 14, fontSize: font.micro, color: palette.textFaint },
   sectionLabel: {
     paddingRight: space.md,

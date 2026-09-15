@@ -42,6 +42,30 @@ One list, not a `SectionList`: the drawer's tuning, its separators and its scrol
 flat data array, so the sections are flattened into it and a folded folder is a header with no rows
 behind it.
 
+## Making a folder, and filing into one
+
+The drawer header carries two ways in, side by side: **New conversation** (the accent) and **New
+folder**. A folder is named in a sheet and created by the server; when the list is filtered to a
+workspace, the folder is born in that workspace, which is both where the owner is looking and what
+keeps an empty folder visible under that filter. Nothing else is asked: a folder has a name and
+that is all.
+
+A conversation is filed from its own menu, **Move to folder…**, which says where it sits today and
+offers every folder plus **No folder** -- the one row that takes it out of all of them. The row
+moves in the list as soon as the tap lands, before the server's listing comes back: waiting for the
+round trip reads as a tap that did nothing. The listing then confirms, as it does for every other
+session edit.
+
+Rename and **Delete folder** sit behind the `⋯` on the folder's own header, the same control a
+conversation row carries. Deleting asks first, and the question says what it leaves behind: a
+folder holds nothing, so its conversations are unfiled and none of them is deleted. The server
+unfiles them, and the drawer follows the listing like it does for everything else.
+
+Three things are deliberately absent. Nothing drags, because the server's rank order is already the
+order folders are shown in and a drag would need a rank field written on every drop. Nothing nests,
+because a folder in a folder is a tree to walk and to keep consistent. And a folder does not carry a
+status of its own -- its badge is derived from its conversations, which is step six.
+
 ## Filtering by workspace
 
 The funnel beside the search field narrows the list to one workspace, and **masks every other one**

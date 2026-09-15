@@ -88,6 +88,19 @@ class SessionStoreImpl {
     return this.list.find(summary => summary.threadId === threadId)?.workspace;
   }
 
+  /** Local echo of session.folder until the server's listing lands and brings the real one. */
+  setFolder(threadId: string, folderId: string | null): void {
+    const existing = this.list.find(summary => summary.threadId === threadId);
+    if (!existing || (existing.folderId ?? null) === folderId) return;
+    this.list = this.list.map(summary => {
+      if (summary.threadId !== threadId) return summary;
+      // Cleared, not set to a value: an unfiled conversation carries no folder at all, which is
+      // what the listing sends, and a key holding `undefined` reads the same to the sections.
+      return { ...summary, folderId: folderId ?? undefined };
+    });
+    this.emit();
+  }
+
   /** Local echo of session.workspace.set until the server's result lands and refreshes. */
   setWorkspace(threadId: string, workspace: string): void {
     const existing = this.list.find(summary => summary.threadId === threadId);

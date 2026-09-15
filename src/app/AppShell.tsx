@@ -70,6 +70,11 @@ import {
   encodeModelList,
   encodeSessionArchive,
   encodeSessionDelete,
+  encodeSessionFolder,
+  encodeFolderCreate,
+  encodeFolderRemove,
+  encodeFolderRename,
+  FOLDER_NAME_LIMIT,
   encodeSessionHistory,
   encodeSessionSync,
   encodeSessionList,
@@ -99,6 +104,7 @@ import {
   type ApprovalRequestFrame,
   type ApprovalHistoryResultFrame,
   type FileScopeMode,
+  type FolderSummary,
   type JobEntry,
   type SubAgentEntry,
   type JobRunEntry,
@@ -386,6 +392,23 @@ export function AppShell(): React.JSX.Element {
       current.includes(folderId) ? current.filter(id => id !== folderId) : [...current, folderId],
     );
   }, []);
+
+  /** The folder being made. `workspace` is the filter on screen: that is where the owner is. */
+  const [folderToCreate, setFolderToCreate] = useState<{ workspace?: string } | null>(null);
+  const [folderMenu, setFolderMenu] = useState<FolderSummary | null>(null);
+  const [folderToRename, setFolderToRename] = useState<FolderSummary | null>(null);
+  const [folderToDelete, setFolderToDelete] = useState<FolderSummary | null>(null);
+  /** The conversation being filed. It decides what the picker offers as "where it is now". */
+  const [threadToFile, setThreadToFile] = useState<SessionSummary | null>(null);
+
+  /**
+   * Files a conversation. The echo is local and immediate -- the server's listing follows and
+   * confirms -- so the tap does not read as lost on a slow link.
+   */
+  const fileThread = useCallback((threadId: string, folderId: string | null) => {
+    sessionStore.setFolder(threadId, folderId);
+    connection.send(encodeSessionFolder(threadId, folderId)).catch(() => {});
+  }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
@@ -643,6 +666,15 @@ export function AppShell(): React.JSX.Element {
   const historyPage = useHistoryPage(activeThread);
   const sessions = useSessions();
   const folders = useFolders();
+
+  /**
+   * The folder a conversation is in, by name: the menu says where it is before offering to move it.
+   */
+  const folderOf = useCallback(
+    (thread: SessionSummary): string | undefined =>
+      folders.find(folder => folder.id === thread.folderId)?.name,
+    [folders],
+  );
   const archivedSessions = useArchivedSessions();
   const unread = useUnreadThreads();
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
@@ -2315,6 +2347,14 @@ export function AppShell(): React.JSX.Element {
       },
       { type: 'separator' },
       {
+        label: 'Move to folder…',
+        hint: folderOf(target) ?? 'not in a folder',
+        onPress: () => {
+          setThreadToFile(target);
+          close();
+        },
+      },
+      {
         label: 'Rename…',
         onPress: () => {
           // The rename sheet needs the current name to start from, so it is handed the thread
@@ -2353,7 +2393,7 @@ export function AppShell(): React.JSX.Element {
       },
       ];
     },
-    [sessionEntries, setThreadArchived, workspaceOf],
+    [folderOf, sessionEntries, setThreadArchived, workspaceOf],
   );
 
   const threadActions: SheetEntry[] = threadMenu
@@ -3274,6 +3314,8 @@ export function AppShell(): React.JSX.Element {
             onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
             onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
             onToggleFolder={toggleFolder}
+            onNewFolder={() => setFolderToCreate({ workspace: workspaceFilter ?? undefined })}
+            onFolderMenu={setFolderMenu}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -3302,6 +3344,8 @@ export function AppShell(): React.JSX.Element {
             onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
             onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
             onToggleFolder={toggleFolder}
+            onNewFolder={() => setFolderToCreate({ workspace: workspaceFilter ?? undefined })}
+            onFolderMenu={setFolderMenu}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -3979,6 +4023,8 @@ export function AppShell(): React.JSX.Element {
         onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
         onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
         onToggleFolder={toggleFolder}
+        onNewFolder={() => setFolderToCreate({ workspace: workspaceFilter ?? undefined })}
+        onFolderMenu={setFolderMenu}
         onOpenMore={() => setMoreOpen(true)}
         onOpenSettings={openSettingsFromDrawer}
         onHome={handleHome}
@@ -4530,6 +4576,105 @@ export function AppShell(): React.JSX.Element {
             connection.send(encodeUndoCancel(last.id)).catch(() => {});
             undoStore.resolve(last.id);
           }}
+        />
+      ) : null}
+
+      {folderToCreate ? (
+        <PromptSheet
+          title="Name this folder"
+          hint="It holds conversations. The ones inside keep running, and deleting it deletes none of them."
+          placeholder="CubeFlow"
+          confirmLabel="Create"
+          maxLength={FOLDER_NAME_LIMIT}
+          onSubmit={value => {
+            const name = value.trim();
+            if (name) connection.send(encodeFolderCreate(name, folderToCreate.workspace)).catch(() => {});
+          }}
+          onClose={() => setFolderToCreate(null)}
+        />
+      ) : null}
+
+      {folderToRename ? (
+        <PromptSheet
+          title="Rename this folder"
+          initialValue={folderToRename.name}
+          confirmLabel="Rename"
+          maxLength={FOLDER_NAME_LIMIT}
+          onSubmit={value => {
+            const name = value.trim();
+            if (name) connection.send(encodeFolderRename(folderToRename.id, name)).catch(() => {});
+          }}
+          onClose={() => setFolderToRename(null)}
+        />
+      ) : null}
+
+      {folderMenu ? (
+        <ActionSheet
+          preview={folderMenu.name}
+          options={[
+            {
+              label: 'Rename',
+              onPress: () => {
+                setFolderToRename(folderMenu);
+                setFolderMenu(null);
+              },
+            },
+            {
+              label: 'Delete folder',
+              onPress: () => {
+                setFolderToDelete(folderMenu);
+                setFolderMenu(null);
+              },
+            },
+            { label: 'Cancel', onPress: () => setFolderMenu(null) },
+          ]}
+          onClose={() => setFolderMenu(null)}
+        />
+      ) : null}
+
+      {folderToDelete ? (
+        <ActionSheet
+          // A folder holds nothing: the conversations in it are the ones already listed, and they
+          // outlive it. The question says so before the answer is given.
+          preview={`Delete the folder ${folderToDelete.name}? Its conversations stay in the list.`}
+          options={[
+            {
+              label: 'Delete',
+              danger: true,
+              onPress: () => {
+                connection.send(encodeFolderRemove(folderToDelete.id)).catch(() => {});
+                setFolderToDelete(null);
+              },
+            },
+            { label: 'Cancel', onPress: () => setFolderToDelete(null) },
+          ]}
+          onClose={() => setFolderToDelete(null)}
+        />
+      ) : null}
+
+      {threadToFile ? (
+        <ActionSheet
+          preview={`Move "${threadToFile.title}" to`}
+          options={[
+            ...folders.map(folder => ({
+              label: folder.name,
+              hint: folder.id === threadToFile.folderId ? 'current' : undefined,
+              onPress: () => {
+                fileThread(threadToFile.threadId, folder.id);
+                setThreadToFile(null);
+              },
+            })),
+            {
+              label: 'No folder',
+              hint: threadToFile.folderId ? undefined : 'current',
+              onPress: () => {
+                fileThread(threadToFile.threadId, null);
+                setThreadToFile(null);
+              },
+            },
+            { label: 'Cancel', onPress: () => setThreadToFile(null) },
+          ]}
+          onClose={() => setThreadToFile(null)}
         />
       ) : null}
 
