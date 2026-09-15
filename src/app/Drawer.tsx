@@ -21,7 +21,7 @@ import { FilterIcon, FolderIcon, GearIcon, NewFolderIcon, PlusIcon } from '../co
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
-import { fileDrop, lineAt, orderDrop, sameDrop, stackLines, targetOf, type DropMove, type LineBox, type ListLine } from '../core/dragMove';
+import { chipAt, fileDrop, lineAt, orderDrop, sameDrop, stackLines, targetOf, type DropMove, type LineBox, type ListLine } from '../core/dragMove';
 import { matchesWorkspace } from '../core/workspaceFilter';
 import { pointerFine } from '../core/platform';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -89,9 +89,8 @@ const DRAG_HOLD_MS = 350;
 const AUTO_SCROLL_EDGE = 64;
 const AUTO_SCROLL_STEP = 12;
 const AUTO_SCROLL_MS = 32;
-/** The floating title sits above and to the right of the finger, clear of where it is pointing. */
-const CHIP_OFFSET_X = 14;
-const CHIP_OFFSET_Y = 44;
+/** How far above the finger the floating title rides, measured from its own bottom edge. */
+const CHIP_GAP = 18;
 
 /** What a screen reader hears of a folder's badge, after its name. */
 const badgeWords = (badge: SectionBadge | null): string => {
@@ -216,9 +215,19 @@ export function Drawer({
   const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const listRef = useRef<FlatList<DrawerEntry>>(null);
   const chipPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  /** The chip's own size, since centring it on the finger needs it and only the layout knows it. */
+  const chipSizeRef = useRef({ width: 0, height: 0 });
   const [dragging, setDragging] = useState<DragSubject | null>(null);
   /** The move a release would make. The section it acts on is what lights up: the preview. */
   const [dropMove, setDropMove] = useState<DropMove | null>(null);
+
+  /** The chip follows the finger, centred on it: one place, so a move and a pickup cannot differ. */
+  const placeChip = useCallback(
+    (x: number, y: number): void => {
+      chipPos.setValue(chipAt({ x, y }, chipSizeRef.current, CHIP_GAP));
+    },
+    [chipPos],
+  );
 
   const trackScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>): void => {
     scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
@@ -415,20 +424,20 @@ export function Drawer({
       // The unfiled heading, a sentence, the gap under the last section: nothing to pick up.
       if (!subject) return;
       draggedRef.current = subject;
-      chipPos.setValue({ x: x + CHIP_OFFSET_X, y: y - CHIP_OFFSET_Y });
+      placeChip(x, y);
       setDragging(subject);
       reflectDrop(line);
     },
-    [chipPos, lineUnder, reflectDrop, subjectAt],
+    [lineUnder, placeChip, reflectDrop, subjectAt],
   );
 
   const updateDrag = useCallback(
     (y: number, x: number): void => {
-      chipPos.setValue({ x: x + CHIP_OFFSET_X, y: y - CHIP_OFFSET_Y });
+      placeChip(x, y);
       driveAutoScroll(y);
       reflectDrop(lineUnder(y));
     },
-    [chipPos, driveAutoScroll, lineUnder, reflectDrop],
+    [driveAutoScroll, lineUnder, placeChip, reflectDrop],
   );
 
   /**
@@ -765,6 +774,12 @@ export function Drawer({
           {dragging ? (
             <Animated.View
               pointerEvents="none"
+              onLayout={event => {
+                chipSizeRef.current = {
+                  width: event.nativeEvent.layout.width,
+                  height: event.nativeEvent.layout.height,
+                };
+              }}
               style={[styles.dragChip, { transform: chipPos.getTranslateTransform() }]}>
               <Text style={styles.dragChipText} numberOfLines={1}>
                 {dragging.kind === 'thread' ? dragging.session.title : dragging.folder.name}

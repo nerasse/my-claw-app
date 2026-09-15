@@ -1,4 +1,4 @@
-import { fileDrop, lineAt, orderDrop, sameDrop, stackLines, targetOf, type LineBox, type ListLine } from '../dragMove';
+import { chipAt, fileDrop, lineAt, orderDrop, sameDrop, stackLines, targetOf, type LineBox, type ListLine } from '../dragMove';
 
 function box(key: string, y: number, height: number, over: Partial<LineBox> = {}): LineBox {
   return { key, folderId: null, role: 'row', y, height, ...over };
@@ -126,6 +126,18 @@ describe('sameDrop', () => {
 
   test('two sections are two moves', () => {
     expect(sameDrop(fileDrop({ threadId: 't' }, { folderId: 'f1' }), fileDrop({ threadId: 't' }, { folderId: 'f2' }))).toBe(false);
+  });
+});
+
+describe('chipAt', () => {
+  test('the chip is centred on the finger, and clear above it', () => {
+    expect(chipAt({ x: 100, y: 200 }, { width: 60, height: 22 }, 18)).toEqual({ x: 70, y: 160 });
+  });
+
+  test('a chip nobody has measured yet lands on the point, lifted', () => {
+    // The size arrives with the first layout, one frame after the pickup: the first position is
+    // the same rule with nothing to give back, not a second one.
+    expect(chipAt({ x: 100, y: 200 }, { width: 0, height: 0 }, 18)).toEqual({ x: 100, y: 182 });
   });
 });
 

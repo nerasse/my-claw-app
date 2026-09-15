@@ -51,6 +51,22 @@ export function stackLines(
   return boxes;
 }
 
+/**
+ * Where the chip sits while a line is carried: centred on the finger, and held clear above it.
+ *
+ * Centred sideways, because the chip names what is in hand and the hand goes under it. Not centred
+ * the other way: on a finger the chip would sit under the fingertip and hide itself. It rides `gap`
+ * pixels above the point instead, its own height included -- and a size nobody has measured yet
+ * (0, 0) is the same rule with nothing to add, rather than a case of its own.
+ */
+export function chipAt(
+  finger: { x: number; y: number },
+  chip: { width: number; height: number },
+  gap: number,
+): { x: number; y: number } {
+  return { x: finger.x - chip.width / 2, y: finger.y - chip.height - gap };
+}
+
 /** The line under a finger, if it is over one. */
 export function lineAt(boxes: Iterable<LineBox>, contentY: number): LineBox | undefined {
   for (const box of boxes) {
