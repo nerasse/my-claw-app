@@ -33,6 +33,18 @@ export interface CurrentLocationNative {
   speedMetersPerSecond?: number;
 }
 
+/**
+ * The IME as the platform sees it right now, read from the live window insets.
+ *
+ * `height` is what a view sitting above the gesture bar has to pad by, in dp: the same number RN
+ * hands over as `endCoordinates.height` (the IME inset minus the bar inset), asked rather than
+ * remembered.
+ */
+export interface KeyboardStateNative {
+  visible: boolean;
+  height: number;
+}
+
 /** Pushed while recording, ~16 times a second: `level` is already normalised to 0..1. */
 export interface VoiceLevelEvent {
   level: number;
@@ -127,6 +139,14 @@ export interface DeviceBridgeNative {
   stagedApkInfo(): Promise<{ staged: boolean; size: number; version: string }>;
   /** Drops the staged APK, so a failed or superseded download is not offered for install. */
   clearStagedApk(): Promise<void>;
+  /**
+   * Whether the IME is on screen right now, and what a view above the gesture bar pads by.
+   *
+   * The one keyboard answer in the app that is not a memory of an event: `Keyboard.isVisible()`
+   * and everything built on it keep believing a keyboard that left while the app was in the
+   * background. Ask it on the way back in.
+   */
+  keyboardVisible(): Promise<KeyboardStateNative>;
   /** The staged file's transitions, newest last. Never rejects: an unreadable journal reads empty. */
   stagedApkJournal(): Promise<string>;
   /** Delivers an install result that arrived before JS subscribed (cold start after install). */
@@ -251,6 +271,7 @@ export const deviceBridge: DeviceBridgeNative = {
   stagedApkInfo: () =>
     native?.stagedApkInfo() ?? Promise.resolve({ staged: false, size: 0, version: '' }),
   clearStagedApk: () => native?.clearStagedApk() ?? Promise.resolve(),
+  keyboardVisible: () => native?.keyboardVisible() ?? Promise.resolve({ visible: false, height: 0 }),
   stagedApkJournal: () => native?.stagedApkJournal() ?? Promise.resolve(''),
   drainInstallResult: () => native?.drainInstallResult(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),

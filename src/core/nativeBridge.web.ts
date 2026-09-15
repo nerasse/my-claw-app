@@ -45,6 +45,15 @@ export interface CurrentLocationNative {
   speedMetersPerSecond?: number;
 }
 
+/**
+ * The IME as the platform sees it. A browser has none of its own: the stub answers "down, no
+ * height", which is the same thing the native module answers with the keyboard dismissed.
+ */
+export interface KeyboardStateNative {
+  visible: boolean;
+  height: number;
+}
+
 export interface VoiceLevelEvent {
   level: number;
   elapsedMs: number;
@@ -135,6 +144,7 @@ export interface DeviceBridgeNative {
   installStagedApk(): Promise<void>;
   stagedApkInfo(): Promise<{ staged: boolean; size: number; version: string }>;
   clearStagedApk(): Promise<void>;
+  keyboardVisible(): Promise<KeyboardStateNative>;
   stagedApkJournal(): Promise<string>;
   drainInstallResult(): void;
   cancelNotification(id: number): Promise<void>;
@@ -708,6 +718,8 @@ export const deviceBridge: DeviceBridgeNative = {
   installStagedApk: () => Promise.resolve(),
   stagedApkInfo: () => Promise.resolve({ staged: false, size: 0, version: '' }),
   clearStagedApk: () => Promise.resolve(),
+  // A browser has no IME of its own to leave behind, and no shell padding built on it.
+  keyboardVisible: () => Promise.resolve({ visible: false, height: 0 }),
   stagedApkJournal: () => Promise.resolve(''),
   drainInstallResult: () => {},
   cancelNotification: () => Promise.resolve(),

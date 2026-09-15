@@ -990,6 +990,51 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     promise.resolve(null)
   }
 
+  /**
+   * Whether the IME is on screen, read from the live window insets rather than remembered.
+   *
+   * Every keyboard state in this app used to be a memory of an event: RN keeps `_currentlyShowing`
+   * for `Keyboard.isVisible()`, its `KeyboardAvoidingView` keeps `_keyboardEvent`, and
+   * `ReactRootView` keeps `mKeyboardIsVisible` -- and the native one only re-decides on a layout
+   * pass, because `checkForKeyboardEvents()` runs from `onGlobalLayout`. Background the app with
+   * the keyboard up and Android hides the IME as part of the window losing focus; if no layout
+   * pass happens while the app can still see it, all three keep believing the keyboard is there,
+   * and the app comes back with the shell still padded by it (owner: "quand on reviens sur l'app
+   * ca garde comme si le clavier est ouvert", 2026-09-15).
+   *
+   * This is the same source `checkForKeyboardEvents` reads (`imeInsets`), asked on demand: an
+   * answer that cannot be out of date, because there is no date to it. It carries the geometry
+   * too, in the same arithmetic RN uses for `endCoordinates.height` (the IME inset minus the bar
+   * inset it shares with the navigation bar), so a caller that learns the keyboard is up does not
+   * have to wait for an event to learn how tall it is.
+   */
+  @ReactMethod
+  fun keyboardVisible(promise: Promise) {
+    val out = Arguments.createMap()
+    out.putBoolean("visible", false)
+    out.putDouble("height", 0.0)
+    try {
+      val activity = reactContext.currentActivity
+      val decor = activity?.window?.decorView
+      val insets = if (decor != null) androidx.core.view.ViewCompat.getRootWindowInsets(decor) else null
+      if (insets != null) {
+        val ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
+        val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        val density = reactContext.resources.displayMetrics.density.toDouble().coerceAtLeast(0.1)
+        out.putBoolean("visible", insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()))
+        out.putDouble("height", (ime.bottom - bars.bottom).coerceAtLeast(0) / density)
+      } else {
+        // Nothing resumed to read insets from (no window, no decor): the IME service is the only
+        // thing left to ask, and it answers for the whole system rather than for this app.
+        val imm = reactContext.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+        out.putBoolean("visible", imm?.isAcceptingText ?: false)
+      }
+    } catch (_: Exception) {
+      // Answered false above: a keyboard question that cannot be answered is not one to guess at.
+    }
+    promise.resolve(out)
+  }
+
   /** "wifi" | "mobile" | "other". Drives the auto-download policy: 45 MB on mobile data is a choice, not a default. */
   @ReactMethod
   fun getNetworkType(promise: Promise) {

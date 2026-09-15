@@ -1,6 +1,49 @@
 import { useEffect, useState } from 'react';
-import { Keyboard, Platform } from 'react-native';
+import { AppState, Keyboard, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { deviceBridge, type KeyboardStateNative } from './nativeBridge';
+
+/**
+ * Ask the platform whether the IME is on screen, and what it covers. Right now, not as remembered.
+ *
+ * Every other keyboard answer in this app is a listener, and a listener can miss the hide: RN keeps
+ * `_currentlyShowing` for `Keyboard.isVisible()`, its `KeyboardAvoidingView` keeps its last event,
+ * and `ReactRootView.checkForKeyboardEvents()` only re-decides on a layout pass. Android hides the
+ * IME as part of the window losing focus -- background the app and there may be no layout pass
+ * while the app can still see it, so all of them keep believing a keyboard that is gone. This one
+ * reads the live insets, which cannot be out of date because there is no date to them.
+ */
+export function keyboardNow(): Promise<KeyboardStateNative> {
+  return deviceBridge.keyboardVisible().catch(() => ({ visible: false, height: 0 }));
+}
+
+/**
+ * What the keyboard height should be after a return to the foreground.
+ *
+ * The layout is a memory of a keyboard, and the trip to the background is what erases the
+ * keyboard without erasing the memory. So the height is re-asked instead of assumed, and the
+ * platform's answer is used whole -- it knows both whether the IME is up and how tall it is.
+ */
+export function heightAfterResume(state: KeyboardStateNative, previous: number): number {
+  if (!state.visible) return 0;
+  // Visible with no usable geometry: keep what we had rather than drop the pad under a keyboard
+  // that is really there.
+  return state.height > 0 ? state.height : previous;
+}
+
+/**
+ * Whether a return to the foreground has something worth writing to the diagnostics.
+ *
+ * Silent by default: the normal resume finds no keyboard and nothing to undo, and a line per
+ * resume would drown everything else. It speaks when a keyboard-derived layout was still applied
+ * (the pad that pushed the end of a thread up with nothing under it), or when RN still believes a
+ * keyboard the platform says is gone -- the two readings that name this bug from the device
+ * instead of from a screenshot.
+ */
+export function keyboardResumeMismatch(pad: number, believed: boolean, imeVisible: boolean): boolean {
+  if (pad > 0) return true;
+  return believed && !imeVisible;
+}
 
 /**
  * How much of the screen the keyboard currently covers, 0 when it is down.
@@ -25,10 +68,20 @@ export function useKeyboardHeight(): number {
     const hide = Keyboard.addListener(hideEvent, () => {
       setHeight(0);
     });
+    // The way back into the foreground re-asks: a keyboard-derived layout outlives the keyboard
+    // itself, and coming back to a shell still padded by one is what this hook is for. See
+    // `keyboardNow` -- the platform is the only source that cannot be stale.
+    const resumed = AppState.addEventListener('change', state => {
+      if (state !== 'active') return;
+      keyboardNow()
+        .then(now => setHeight(current => heightAfterResume(now, current)))
+        .catch(() => {});
+    });
 
     return () => {
       show.remove();
       hide.remove();
+      resumed.remove();
     };
   }, []);
 

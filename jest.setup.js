@@ -236,6 +236,10 @@ jest.mock('./src/core/nativeBridge', () => ({
     installStagedApk: jest.fn(() => Promise.resolve()),
     stagedApkInfo: jest.fn(() => Promise.resolve({ staged: false, size: 0, version: '' })),
     clearStagedApk: jest.fn(() => Promise.resolve()),
+    // The mock mirrors the module: every method the real bridge carries is here, or a suite that
+    // exercises a new one answers `undefined is not a function` instead of the module's contract.
+    keyboardVisible: jest.fn(() => Promise.resolve({ visible: false, height: 0 })),
+    stagedApkJournal: jest.fn(() => Promise.resolve('')),
     drainInstallResult: jest.fn(),
     cancelNotification: jest.fn(() => Promise.resolve()),
     prefsSet: jest.fn(() => Promise.resolve()),

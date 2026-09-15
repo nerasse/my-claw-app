@@ -186,3 +186,54 @@ And the line now carries the proof rather than the attempt: `pad=176 settled=300
 measurement of the field taken after the space was given two frames to lay out. A pad that does not
 move the field is a finding too, and this is the only reading that can tell it from a pad that was
 never applied.
+
+## The way back in: a keyboard that is gone (2026-09-15)
+
+"De temps en temps quand on reviens sur l'app ca garde comme si le clavier est ouvert." The
+screenshot is the shell itself: conversation and composer squeezed into the top half, a band of
+background under them. Nothing was broken in the arithmetic — the padding was simply for a keyboard
+that no longer existed.
+
+Every keyboard state in the app was a **memory of an event**, and each one can miss the hide:
+
+- RN keeps `_currentlyShowing`, which is what `Keyboard.isVisible()` and `Keyboard.metrics()` read;
+- `KeyboardAvoidingView` keeps its last event in instance state and feeds
+  `_relativeKeyboardHeight` from it;
+- `ReactRootView` keeps `mKeyboardIsVisible` on the native side, and only re-decides inside
+  `checkForKeyboardEvents()`, which runs from **`onGlobalLayout`**.
+
+Android hides the IME as part of the window losing focus. If no layout pass happens while the app
+can still see it, none of the three ever learns the keyboard left, and the shell comes back padded
+by it. The tell that this was a known hazard, not an oversight, sits in
+`KeyboardAvoidingView.componentDidMount`: `if (!Keyboard.isVisible()) { this._keyboardEvent = null;
+this._setBottom(0) }`. The truth is askable. It was just never asked again — and the component that
+holds it offers no way in.
+
+So the shell stopped using it, on Android:
+
+- **`keyboardVisible()` on the bridge** (`DeviceBridgeModule.kt`) reads the *live* insets —
+  `imeInsets`, the same source `checkForKeyboardEvents` reads — and answers
+  `{ visible, height }`. `height` uses RN's own arithmetic (IME inset minus the bar inset it shares
+  with the navigation bar), so it is exactly what a view already above the gesture bar pads by.
+  Nothing to go stale: the answer has no date.
+- **`useKeyboardHeight()` re-asks on every return to the foreground** (`AppState` → `active`) and
+  takes the platform's answer over the last event's (`heightAfterResume`). This fixes every consumer
+  at once: the shell, and every bottom sheet padding itself through `useSheetBottomInset`.
+- **`KeyboardShell`** replaces `KeyboardAvoidingView` on Android: a `View` padded by that height.
+  Same formula as the `padding` behaviour, and still never `height` (that branch renders
+  `height: initialFrameHeight - bottom` with `flex: 0`, against a frame measured once, forever). iOS
+  keeps the platform component, where `keyboardWillHide` *is* delivered on resign-active and its
+  LayoutAnimation rides the keyboard's curve.
+- **The thread's pad is reset the same way.** The pad `padFor` gives the content is another memory
+  of a keyboard, so `ChatScreen` clears it when the platform says the IME is down, on the same event.
+
+And the return is instrumented, because the next report of "it still looks open" should not need a
+screenshot to read:
+
+```
+keyboard resume: ime=down height=0 jsVisible=true pad=212
+```
+
+Silent unless there is something to say (`keyboardResumeMismatch`): a layout still applied for a
+keyboard that is gone, or RN still believing a keyboard the platform says is down. `jsVisible=true`
+next to `ime=down` is the stale memory, named; `pad=212` is the thread that was still padded.

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
@@ -19,6 +19,7 @@ import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
 import { recordDiag } from '../core/diagnostics';
 import { probeText, revealFieldAboveKeyboard } from '../core/revealField';
+import { keyboardNow, keyboardResumeMismatch } from '../core/keyboard';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
 import { encodeCommandsList, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
@@ -718,6 +719,18 @@ export function ChatScreen({
    * the keyboard's report lands after that.
    */
   const [keyboardPad, setKeyboardPad] = useState(0);
+  /**
+   * The same value, readable from an event handler without re-subscribing it.
+   *
+   * A pad is applied from a promise (`revealFieldAboveKeyboard`), so the state alone cannot be
+   * read at the moment the app comes back -- and reading it inside a state updater to decide
+   * whether to write a diagnostic would be a side effect in a place React is allowed to call twice.
+   */
+  const padRef = useRef(0);
+  const applyPad = useCallback((pad: number) => {
+    padRef.current = pad;
+    setKeyboardPad(pad);
+  }, []);
 
   /**
    * Bring the bottom of the thread back under the keyboard when a free-text answer opens.
@@ -733,14 +746,14 @@ export function ChatScreen({
     if (field === null) {
       // Blur, an answer sent, the card gone: the space exists for a field that is on screen, and
       // a pad left behind would push the end of the thread up with nothing to read there.
-      setKeyboardPad(0);
+      applyPad(0);
       return;
     }
     probedRef.current = false;
     setAtBottom(true);
     setFollowing(true);
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, []);
+  }, [applyPad]);
 
   useEffect(() => {
     // The measurement half. Android announces the keyboard once it is up, and only then is there
@@ -763,7 +776,7 @@ export function ChatScreen({
         scrollTo: offset => listRef.current?.scrollToOffset({ offset, animated: true }),
         // What the scroll cannot deliver, the content gives: see `padFor`. Applied here rather
         // than in the card so that it survives the row unmounting.
-        setPad: setKeyboardPad,
+        setPad: applyPad,
       })
         .then(probe => {
           if (probing) recordDiag({ kind: 'js', at: Date.now(), message: probeText(probe) });
@@ -771,12 +784,40 @@ export function ChatScreen({
         .catch(() => {});
     });
     // The keyboard is the pad's whole reason: it goes down, the space goes with it.
-    const hidden = Keyboard.addListener('keyboardDidHide', () => setKeyboardPad(0));
+    const hidden = Keyboard.addListener('keyboardDidHide', () => applyPad(0));
+    /**
+     * A pad is a memory of a keyboard, and the trip to the background erases the keyboard without
+     * erasing the memory: Android hides the IME as part of the window losing focus, and
+     * `keyboardDidHide` is not guaranteed for it (see `keyboardNow`). Coming back to a thread still
+     * padded by a keyboard that is gone is the owner's report, so the return asks the platform and
+     * the answer overrides the pad -- and RN's own memory of it.
+     */
+    const resumed = AppState.addEventListener('change', state => {
+      if (state !== 'active') return;
+      keyboardNow()
+        .then(now => {
+          const believed = Keyboard.isVisible();
+          if (keyboardResumeMismatch(padRef.current, believed, now.visible)) {
+            recordDiag({
+              kind: 'js',
+              at: Date.now(),
+              message:
+                `keyboard resume: ime=${now.visible ? 'up' : 'down'} height=${Math.round(now.height)}` +
+                ` jsVisible=${believed} pad=${Math.round(padRef.current)}`,
+            });
+          }
+          if (now.visible) return;
+          applyPad(0);
+          probedRef.current = false;
+        })
+        .catch(() => {});
+    });
     return () => {
       subscription.remove();
       hidden.remove();
+      resumed.remove();
     };
-  }, []);
+  }, [applyPad]);
 
   /**
    * Draws one bubble or card. `groupedFlag`/`showTimeFlag` are passed in rather than read from
