@@ -111,8 +111,8 @@ jest.mock('react-native-reanimated', () => {
   return {
     ...mock,
     default: { ...mock.default },
-    // The official mock lacks this predicate that react-native-sortables calls on drag
-    // handlers; a plain function is never a worklet, which is what the mock world needs.
+    // The official mock lacks this predicate, which a worklet-aware consumer reads off the
+    // module: a plain function is never a worklet, which is what the mock world needs.
     isWorkletFunction: fn => typeof fn === 'function' && typeof fn.__workletHash === 'number',
   };
 });
@@ -157,46 +157,11 @@ jest.mock('react-native-image-picker', () => ({
   ),
 }));
 
-// react-native-sortables runs its drag engine on measured layout shared values; the reanimated
-// mock has no layout at all, so the provider crashes. The gesture itself therefore stays device
-// territory. What this mock keeps testable is the contract the drawer leans on: the rows render
-// through `renderItem` in the order they are handed over, the layout is a single column, and no
-// custom handle steals the grab area from the row. Those props ride onto the View so a test can
-// read them back, and `onDragEnd` is exposed so a drop can be played without a finger.
-jest.mock('react-native-sortables', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const Grid = ({
-    data = [],
-    renderItem,
-    keyExtractor,
-    columns,
-    customHandle,
-    onDragEnd,
-    dragActivationDelay,
-    dragActivationFailOffset,
-  }) =>
-    React.createElement(
-      View,
-      {
-        testID: 'sortable-grid',
-        collapsable: false,
-        columns,
-        customHandle: Boolean(customHandle),
-        onDragEnd,
-        dragActivationDelay,
-        dragActivationFailOffset,
-      },
-      data.map((item, index) =>
-        React.createElement(
-          View,
-          { key: keyExtractor ? keyExtractor(item) : index },
-          renderItem({ item, index }),
-        ),
-      ),
-    );
-  return { __esModule: true, default: { Grid }, Grid };
-});
+// `react-native-sortables` used to be mocked here, for the pinned list the drawer carried. The
+// dependency is gone, so the mock is too: `jest.mock` resolves its subject even when it is handed a
+// factory, so a mock of an uninstalled package fails the whole setup -- which is invisible on a
+// machine where the package is still in `node_modules`, and fatal on CI, where `npm ci` installs
+// exactly the lock. That is what turned `chore: drop what the pinned list left behind` red.
 
 // The SAF file picker lives in our own Kotlin bridge, like the rest of the native modules.
 jest.mock('./src/core/nativeBridge', () => ({
