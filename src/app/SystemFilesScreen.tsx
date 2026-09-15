@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, Text, View } from 'react-native';
+import { ScrollView, FlatList, Platform, Pressable, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { PromptSheet } from '../components/PromptSheet';
 import { CodeEditor } from '../components/CodeEditor';
+import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { languageForFile } from '../components/codeeditor/document';
 import { FolderIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
@@ -117,11 +118,13 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function metaOf(file: FsOpenFile, cursor: number): string {
+function metaOf(file: FsOpenFile, cursor: number, rendered: boolean): string {
   const parts: string[] = [];
   if (file.size !== null) parts.push(formatBytes(file.size));
   if (file.mtimeMs !== null) parts.push(formatDate(new Date(file.mtimeMs).toISOString()));
-  if (file.text !== null) parts.push(`ln ${cursor}`);
+  // A rendered document has no cursor: claiming a line would be a figure for a caret that is
+  // not on screen. It comes back the moment `Edit` hands the file to CodeMirror.
+  if (file.text !== null && !rendered) parts.push(`ln ${cursor}`);
   if (file.encoding) parts.push(file.encoding);
   if (file.eol) parts.push(file.eol);
   if (file.text !== null) parts.push(file.watching ? 'live' : 'not watched');
@@ -394,6 +397,16 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
   const crumbs = crumbsOf(listing?.path ?? state.dir ?? '/');
   const file = state.file;
   const canEdit = file !== null && file.text !== null && !file.binary && !file.truncated && !file.error;
+  /**
+   * Read mode on a markdown file is a reader, not an editor.
+   *
+   * The language id comes from the editor's own table (`languageForFile`), so the file the
+   * reader renders is exactly the one CodeMirror would highlight as markdown -- one list, and
+   * no second opinion about what `.md` means. A truncated read stays in the editor: prose drawn
+   * from the first window would hide the fact that the file continues.
+   */
+  const markdownRead =
+    state.mode === 'read' && file !== null && file.text !== null && !file.truncated && !file.error && languageForFile(file.path) === 'markdown';
   const inFile = state.mode === 'read' || state.mode === 'edit';
 
   return (
@@ -417,7 +430,7 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
           </View>
           <Text style={styles.headerSub} numberOfLines={1}>
             {inFile && file
-              ? metaOf(file, cursor)
+              ? metaOf(file, cursor, markdownRead)
               : listing
                 ? `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}${listing.truncated ? ' · cut off by the server' : ''}`
                 : 'opening…'}
@@ -604,6 +617,13 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
           </Text>
           <Text style={styles.rowMeta}>{file.path}</Text>
         </View>
+      ) : markdownRead && file ? (
+        <ScrollView
+          style={styles.readArea}
+          contentContainerStyle={styles.readContent}
+          keyboardShouldPersistTaps="handled">
+          <DocumentMarkdown value={file.text ?? ''} />
+        </ScrollView>
       ) : (
         <View style={styles.editorArea}>
           {file?.truncated ? (
@@ -847,6 +867,9 @@ const createStyles = (palette: Palette) => ({
   },
   binaryTitle: { fontSize: font.meta, color: palette.text },
   editorArea: { flex: 1, paddingTop: space.sm },
+  /** The same box as the editor, so switching to `Edit` does not move the text's top edge. */
+  readArea: { flex: 1, paddingTop: space.sm },
+  readContent: { paddingBottom: space.xl },
   truncated: {
     paddingBottom: space.xs,
     fontSize: font.small,

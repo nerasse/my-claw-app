@@ -109,6 +109,12 @@ const HOME: FsListResultFrame = {
   truncated: false,
 };
 
+/** The same folder with one plain-text file in it: what stays in the editor in read mode. */
+const HOME_WITH_SCRIPT: FsListResultFrame = {
+  ...HOME,
+  entries: [...HOME.entries, entry({ name: 'deploy.sh', path: '/home/neras/deploy.sh', size: 64 })],
+};
+
 function readResult(over: Partial<FsReadResultFrame> = {}): FsReadResultFrame {
   return {
     type: 'fs.read.result',
@@ -183,17 +189,45 @@ describe('SystemFilesScreen', () => {
     expect(texts(tree).join('\n')).toContain('4 entries');
   });
 
-  test('a tap opens a text file in the read-only editor, with its cursor line in the header', async () => {
+  test('a file that is not markdown opens in the read-only editor, with its cursor line in the header', async () => {
+    const tree = await render();
+    receive(HOME_WITH_SCRIPT);
+
+    press(tree, 'Open /home/neras/deploy.sh');
+    expect(sent()).toContainEqual({ type: 'fs.read', path: '/home/neras/deploy.sh' });
+
+    receive(readResult({ path: '/home/neras/deploy.sh', text: 'echo hi\n' }));
+    const editor = editorProps(tree);
+    expect(editor.value).toBe('echo hi\n');
+    expect(editor.readOnly).toBe(true);
+    expect(editor.language).toBe('shell');
+    expect(texts(tree).join('\n')).toContain('ln 1');
+  });
+
+  test('markdown is read as a document: the editor is not on screen and no cursor line is claimed', async () => {
     const tree = await render();
     receive(HOME);
-
     press(tree, 'Open /home/neras/notes.md');
-    expect(sent()).toContainEqual({ type: 'fs.read', path: '/home/neras/notes.md' });
+    receive(readResult({ text: '# notes\n\nsome prose\n' }));
 
-    receive(readResult());
+    // Nothing to put a caret in: a rendered document has no cursor.
+    expect(tree.root.findAllByProps({ testID: 'code-editor' })).toHaveLength(0);
+    expect(texts(tree).join('\n')).not.toContain('ln 1');
+    expect(texts(tree).join('\n')).toContain('# notes');
+    // The door to the raw text is still there, and it is what `Edit` does.
+    expect(labels(tree)).toContain('Edit file');
+  });
+
+  test('editing the same markdown hands it back raw, in the markdown the editor knows', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult({ text: '# notes\n\nsome prose\n' }));
+
+    press(tree, 'Edit file');
     const editor = editorProps(tree);
-    expect(editor.value).toBe('# notes\n');
-    expect(editor.readOnly).toBe(true);
+    expect(editor.value).toBe('# notes\n\nsome prose\n');
+    expect(editor.readOnly).toBe(false);
     expect(editor.language).toBe('markdown');
     expect(texts(tree).join('\n')).toContain('ln 1');
   });
