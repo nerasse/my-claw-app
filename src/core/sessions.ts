@@ -1,10 +1,13 @@
 import { useSyncExternalStore } from 'react';
-import type { SessionSummary } from './protocol';
+import type { FolderSummary, SessionSummary } from './protocol';
 
 type Listener = () => void;
 
 const EMPTY: SessionSummary[] = [];
 Object.freeze(EMPTY);
+
+const NO_FOLDERS: FolderSummary[] = [];
+Object.freeze(NO_FOLDERS);
 
 function titleFromText(text: string): string {
   const clean = text.trim().replace(/\s+/g, ' ');
@@ -19,6 +22,7 @@ class SessionStoreImpl {
   private list: SessionSummary[] = EMPTY;
   private active: SessionSummary[] = EMPTY;
   private archived: SessionSummary[] = EMPTY;
+  private folders: FolderSummary[] = NO_FOLDERS;
   private listeners = new Set<Listener>();
 
   subscribe(listener: Listener): () => void {
@@ -40,6 +44,10 @@ class SessionStoreImpl {
     return this.archived;
   }
 
+  getFoldersSnapshot(): FolderSummary[] {
+    return this.folders;
+  }
+
   titleOf(threadId: string): string | undefined {
     return this.list.find(summary => summary.threadId === threadId)?.title;
   }
@@ -48,8 +56,13 @@ class SessionStoreImpl {
     return this.list.some(summary => summary.threadId === threadId);
   }
 
-  replace(sessions: SessionSummary[]): void {
+  /**
+   * The listing, both halves at once: the server sends the folders with the conversations, and two
+   * separate stores would let a drawer render rows into a folder that no longer exists.
+   */
+  replace(sessions: SessionSummary[], folders: FolderSummary[] = NO_FOLDERS): void {
     this.list = sessions.length === 0 ? EMPTY : sessions;
+    this.folders = folders.length === 0 ? NO_FOLDERS : folders;
     this.emit();
   }
 
@@ -106,4 +119,8 @@ export function useSessions(): SessionSummary[] {
 
 export function useArchivedSessions(): SessionSummary[] {
   return useSyncExternalStore(subscribeToSessions, () => sessionStore.getArchivedSnapshot());
+}
+
+export function useFolders(): FolderSummary[] {
+  return useSyncExternalStore(subscribeToSessions, () => sessionStore.getFoldersSnapshot());
 }

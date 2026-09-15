@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { SessionSummary } from '../core/protocol';
+import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
 import { FilterIcon, GearIcon, PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
+import { drawerSections } from '../core/folders';
 import { matchesWorkspace } from '../core/workspaceFilter';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
@@ -24,7 +25,23 @@ function Separator(): React.JSX.Element {
   return <View style={styles.separator} />;
 }
 
-const keyOfThread = (item: SessionSummary): string => item.threadId;
+/**
+ * One line of the list: a section header, a conversation, or the sentence that says the list is
+ * empty. Flattened rather than handed to a SectionList so the drawer keeps the one virtualized list
+ * it has always had -- its tuning, its separators and its scroll are all built around a flat data
+ * array, and a folded section is then just a header with no rows after it.
+ */
+type DrawerEntry =
+  | { kind: 'header'; key: string; label: string; folder: FolderSummary | null; folded: boolean }
+  | { kind: 'row'; key: string; session: SessionSummary }
+  | { kind: 'empty'; key: string; text: string };
+
+/**
+ * The count a section header carries. While a search is narrowing the list it also says what it is
+ * narrowing: "two of nine" is a section with seven answers missing, and "two" is a claim.
+ */
+const sectionCount = (count: number, total: number, searching: boolean): string =>
+  searching ? `${count} / ${total}` : String(total);
 
 /**
  * The conversation list: conversations first, fixed entries (Sub-Agents, Archived, Jobs,
@@ -41,9 +58,11 @@ export function Drawer({
   pinned = false,
   focusSearch = 0,
   sessions,
+  folders,
   unread,
   questionThreads,
   workspaceFilter,
+  collapsedFolders,
   activeThread,
   connectionState,
   pending,
@@ -53,6 +72,7 @@ export function Drawer({
   onThreadMenu,
   onOpenWorkspaceFilter,
   onClearWorkspaceFilter,
+  onToggleFolder,
   onOpenMore,
   onOpenSettings,
   home,
@@ -64,6 +84,8 @@ export function Drawer({
   /** Bumped by the Ctrl+K shortcut: the search field takes the caret. */
   focusSearch?: number;
   sessions: SessionSummary[];
+  /** The owner's folders, in rank order: the sections the list is cut into. */
+  folders: FolderSummary[];
   unread: string[];
   /** Conversations whose run is blocked on a question, badged in the list. */
   questionThreads: string[];
@@ -73,6 +95,8 @@ export function Drawer({
    * survived one of them and not the other would be two lists.
    */
   workspaceFilter: string | null;
+  /** Folder ids the owner folded away. Held by the shell, like the filter, for the same reason. */
+  collapsedFolders: string[];
   activeThread: string | null;
   connectionState: WsState;
   pending: number;
@@ -82,6 +106,7 @@ export function Drawer({
   onThreadMenu: (thread: SessionSummary) => void;
   onOpenWorkspaceFilter: () => void;
   onClearWorkspaceFilter: () => void;
+  onToggleFolder: (folderId: string) => void;
   /** The one footer entry: opens the sheet with Archived, Agents, Jobs and Settings. */
   onOpenMore: () => void;
   /** Jump straight to Settings from the home footer. */
@@ -108,31 +133,76 @@ export function Drawer({
   const unreadIds = useMemo(() => new Set(unread), [unread]);
   const questionIds = useMemo(() => new Set(questionThreads), [questionThreads]);
 
-  // One list. The order is the server's, carried on the summaries themselves: nothing to merge
-  // and nothing to prune. The workspace narrows what the search then searches.
-  const { rows, all } = useMemo(() => {
+  /**
+   * The list, cut into sections.
+   *
+   * Two passes over the same filter: one keeps the search, and one does not. The second is what a
+   * header counts against, so a folded folder says how many of its conversations the search left --
+   * "two of nine" -- instead of claiming the folder holds two.
+   */
+  const entries = useMemo((): DrawerEntry[] => {
     const needle = query.trim().toLowerCase();
-    const match = (session: SessionSummary) =>
-      matchesWorkspace(session, workspaceFilter) &&
-      (!needle || session.title.toLowerCase().includes(needle));
-    return { rows: sessions.filter(match), all: sessions.length };
-  }, [sessions, query, workspaceFilter]);
+    const searching = needle !== '';
+    const byWorkspace = sessions.filter(session => matchesWorkspace(session, workspaceFilter));
+    const searched = needle
+      ? byWorkspace.filter(session => session.title.toLowerCase().includes(needle))
+      : byWorkspace;
+    const sections = drawerSections(searched, folders, workspaceFilter);
+    const totals = new Map(
+      drawerSections(byWorkspace, folders, workspaceFilter).map(section => [section.folder?.id ?? '', section.rows.length]),
+    );
+    const out: DrawerEntry[] = [];
+    for (const section of sections) {
+      const id = section.folder?.id ?? '';
+      const folded = section.folder !== null && collapsedFolders.includes(section.folder.id);
+      out.push({
+        kind: 'header',
+        key: `section:${id}`,
+        label: `${section.label} · ${sectionCount(section.rows.length, totals.get(id) ?? section.rows.length, searching)}`,
+        folder: section.folder,
+        folded,
+      });
+      if (folded) continue;
+      for (const row of section.rows) out.push({ kind: 'row', key: row.threadId, session: row });
+    }
+    // A list with no conversations still says so: with sections it always has a header, so the
+    // sentence the FlatList used to draw for an empty data array has to be an entry of its own.
+    if (searched.length === 0) {
+      out.push({ kind: 'empty', key: 'empty', text: searching ? 'no match' : 'no conversations' });
+    }
+    return out;
+  }, [sessions, folders, query, workspaceFilter, collapsedFolders]);
 
-  const sectionCount = (count: number, total: number): string =>
-    query.trim() ? `${count} / ${total}` : String(total);
-
-  const renderThread = useCallback(
-    ({ item }: { item: SessionSummary }) => (
-      <ThreadRow
-        item={item}
-        active={item.threadId === activeThread}
-        unread={unreadIds.has(item.threadId)}
-        question={questionIds.has(item.threadId)}
-        onOpen={onOpenThread}
-        onMenu={onThreadMenu}
-      />
-    ),
-    [activeThread, onOpenThread, onThreadMenu, questionIds, unreadIds],
+  const renderEntry = useCallback(
+    ({ item }: { item: DrawerEntry }) => {
+      if (item.kind === 'empty') return <Text style={styles.empty}>{item.text}</Text>;
+      if (item.kind === 'header') {
+        const folder = item.folder;
+        return (
+          <Pressable
+            onPress={folder ? () => onToggleFolder(folder.id) : undefined}
+            disabled={folder === null}
+            style={styles.sectionHeader}
+            accessibilityRole={folder ? 'button' : undefined}
+            accessibilityState={folder ? { expanded: !item.folded } : undefined}
+            accessibilityLabel={folder ? `Folder ${folder.name}` : undefined}>
+            {folder ? <Text style={styles.sectionFold}>{item.folded ? '▸' : '▾'}</Text> : <Text style={styles.sectionFold}>{''}</Text>}
+            <Text style={styles.sectionLabel}>{item.label}</Text>
+          </Pressable>
+        );
+      }
+      return (
+        <ThreadRow
+          item={item.session}
+          active={item.session.threadId === activeThread}
+          unread={unreadIds.has(item.session.threadId)}
+          question={questionIds.has(item.session.threadId)}
+          onOpen={onOpenThread}
+          onMenu={onThreadMenu}
+        />
+      );
+    },
+    [activeThread, onOpenThread, onThreadMenu, onToggleFolder, questionIds, unreadIds, styles],
   );
 
   useEffect(() => {
@@ -232,8 +302,8 @@ export function Drawer({
           <FlatList
             {...scrollProps}
             style={styles.list}
-            data={rows}
-            keyExtractor={keyOfThread}
+            data={entries}
+            keyExtractor={item => item.key}
             ItemSeparatorComponent={Separator}
             keyboardShouldPersistTaps="handled"
             // Virtualized by default; tuned so a long list scrolls without re-rendering
@@ -244,18 +314,9 @@ export function Drawer({
             removeClippedSubviews={Platform.OS === 'android'}
             // Each heading sits on the list it counts, which is the whole separation: a
             // labelled break reads as a break, where the hairline that used to stand here was
-            // the very rule the plain rows use between themselves and so said nothing.
-            ListHeaderComponent={
-              <Text style={styles.sectionLabel}>
-                {`conversations · ${sectionCount(rows.length, all)}`}
-              </Text>
-            }
-            ListEmptyComponent={
-              <Text style={styles.empty}>
-                {query.trim() ? 'no match' : 'no conversations'}
-              </Text>
-            }
-            renderItem={renderThread}
+            // the very rule the plain rows use between themselves and so said nothing. Every
+            // section carries its own, so the list needs no header of its own.
+            renderItem={renderEntry}
             updateCellsBatchingPeriod={50}
           />
           {indicator}
@@ -377,10 +438,12 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  /** Indented onto the rows it heads: the list already pads by `md`, the row's own main pads
-   *  by `sm` again, so the heading starts where the titles under it start. */
+  /** Indented onto the rows it heads, and the fold glyph takes the same room whether the section
+   *  can be folded or not: the unfiled heading has to sit where the folder names do. */
+  sectionHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },
+  sectionFold: { width: 14, fontSize: font.micro, color: palette.textFaint },
   sectionLabel: {
-    paddingHorizontal: space.md + space.sm,
+    paddingRight: space.md,
     paddingTop: space.xs,
     paddingBottom: space.xxs,
     fontSize: font.micro,

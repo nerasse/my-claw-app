@@ -412,7 +412,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       });
       break;
     case 'session.list.result':
-      sessionStore.replace(frame.sessions);
+      sessionStore.replace(frame.sessions, frame.folders ?? []);
       // The server now owns these conversations: their optimistic workspace values are
       // superseded by the listing's own (authoritative) field.
       for (const threadId of pendingWorkspace.keys()) {

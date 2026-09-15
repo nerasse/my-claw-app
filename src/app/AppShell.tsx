@@ -25,7 +25,7 @@ import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
-import { sessionStore, useArchivedSessions, useSessions } from '../core/sessions';
+import { sessionStore, useArchivedSessions, useFolders, useSessions } from '../core/sessions';
 import { workspaceOptions } from '../core/workspaceFilter';
 import { isStopCommand, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
@@ -262,13 +262,13 @@ const RECEIPT_TIMEOUT_MS = 15_000;
 const EMPTY_MODELS: ModelOption[] = [];
 Object.freeze(EMPTY_MODELS);
 const EMPTY_UNAVAILABLE: UnavailableModel[] = [];
+Object.freeze(EMPTY_UNAVAILABLE);
 
 /**
  * Past this many workspaces the filter picker gets a search row. Below it, the list is short enough
  * to read, and a search field over three rows is a control that costs a tap and saves none.
  */
 const WORKSPACE_SEARCH_FROM = 9;
-Object.freeze(EMPTY_UNAVAILABLE);
 
 /** The session-level actions both menus draw from; see `sessionEntries`. */
 type SessionEntryKey = 'refresh' | 'model' | 'tune' | 'stop' | 'instructions' | 'files' | 'systemFiles' | 'status' | 'transcript';
@@ -376,6 +376,16 @@ export function AppShell(): React.JSX.Element {
   const [workspaceFilter, setWorkspaceFilter] = useState<string | null>(null);
   const [workspaceFilterOpen, setWorkspaceFilterOpen] = useState(false);
   const [workspaceQuery, setWorkspaceQuery] = useState('');
+  /**
+   * Folders the owner folded away. Here for the same reason the filter is: three mounts, one list.
+   * Not remembered across a restart yet -- a fold is a gesture of the moment, not a setting.
+   */
+  const [collapsedFolders, setCollapsedFolders] = useState<string[]>([]);
+  const toggleFolder = useCallback((folderId: string) => {
+    setCollapsedFolders(current =>
+      current.includes(folderId) ? current.filter(id => id !== folderId) : [...current, folderId],
+    );
+  }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
@@ -632,6 +642,7 @@ export function AppShell(): React.JSX.Element {
   const itemCount = useChatItemCount(activeThread);
   const historyPage = useHistoryPage(activeThread);
   const sessions = useSessions();
+  const folders = useFolders();
   const archivedSessions = useArchivedSessions();
   const unread = useUnreadThreads();
   const mediaBase = useMemo(() => httpOrigin(url), [url]);
@@ -3248,9 +3259,11 @@ export function AppShell(): React.JSX.Element {
             open
             focusSearch={searchFocus}
             sessions={sessions}
+            folders={folders}
             unread={unread}
             questionThreads={questionThreads}
             workspaceFilter={workspaceFilter}
+            collapsedFolders={collapsedFolders}
             activeThread={activeThread}
             connectionState={status.state}
             pending={pending}
@@ -3260,6 +3273,7 @@ export function AppShell(): React.JSX.Element {
             onThreadMenu={setThreadMenu}
             onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
             onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
+            onToggleFolder={toggleFolder}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -3273,9 +3287,11 @@ export function AppShell(): React.JSX.Element {
             home
             open
             sessions={sessions}
+            folders={folders}
             unread={unread}
             questionThreads={questionThreads}
             workspaceFilter={workspaceFilter}
+            collapsedFolders={collapsedFolders}
             activeThread={activeThread}
             connectionState={status.state}
             pending={pending}
@@ -3285,6 +3301,7 @@ export function AppShell(): React.JSX.Element {
             onThreadMenu={setThreadMenu}
             onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
             onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
+            onToggleFolder={toggleFolder}
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
@@ -3947,9 +3964,11 @@ export function AppShell(): React.JSX.Element {
         open={drawerOpen}
         focusSearch={searchFocus}
         sessions={sessions}
+        folders={folders}
         unread={unread}
         questionThreads={questionThreads}
         workspaceFilter={workspaceFilter}
+        collapsedFolders={collapsedFolders}
         activeThread={activeThread}
         connectionState={status.state}
         pending={pending}
@@ -3959,6 +3978,7 @@ export function AppShell(): React.JSX.Element {
         onThreadMenu={setThreadMenu}
         onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
         onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
+        onToggleFolder={toggleFolder}
         onOpenMore={() => setMoreOpen(true)}
         onOpenSettings={openSettingsFromDrawer}
         onHome={handleHome}

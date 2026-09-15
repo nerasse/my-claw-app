@@ -11,6 +11,37 @@ On phone and tablet the **New conversation** action sits at the top of the list 
 the MyClaw title). It opens the workspace picker. Selecting a workspace creates a new thread and
 returns to the empty composer hero, where the first message can be written.
 
+## Folders are sections
+
+The list is cut into one section per folder, in the server's rank order, and the conversations in
+no folder come **last** -- the cabinet reads top to bottom, and the things nobody filed are the
+tail. A header carries the count of what is under it; while a search narrows the list it says what
+it is narrowing, `3 / 9`, because a heading that says "three" while seven conversations are hidden
+is making a claim it cannot back.
+
+Tapping a folder folds it. Folded is not hidden: the header stays with its count, which is the
+whole reason to fold one. The fold lives in the shell, next to the workspace filter and for the same
+reason -- three mounts, one list -- and is remembered nowhere, like the filter.
+
+What is drawn follows from what the filter left:
+
+- a folder holding a visible conversation is drawn, with it;
+- an empty folder is drawn as long as nothing is filtered: a folder the owner just made has to be
+  somewhere he can see and file into;
+- under a workspace filter, an empty folder is drawn only if it was born in that workspace: the one
+  case where he expects to find it, and the only thing left to prove it exists;
+- a conversation naming a folder the listing does not carry lands in the unfiled section, which is
+  the only honest place for it and keeps a stale folder list from swallowing rows.
+
+The unfiled section is always drawn, empty included, and it is the only one that cannot be folded --
+folding everything away would leave a drawer with nothing to tap. It is named `No folder` only once
+there are folders to be told apart from: a list with none is the drawer as it has always read, and
+naming that section would answer a question nobody asked.
+
+One list, not a `SectionList`: the drawer's tuning, its separators and its scroll are built around a
+flat data array, so the sections are flattened into it and a folded folder is a header with no rows
+behind it.
+
 ## Filtering by workspace
 
 The funnel beside the search field narrows the list to one workspace, and **masks every other one**

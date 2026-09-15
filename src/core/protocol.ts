@@ -536,6 +536,8 @@ export interface SessionSummary {
   lastActiveAt: string;
   /** Filed away by the owner: shown in the archived list instead of the drawer, never deleted. */
   archived?: boolean;
+  /** The folder it is filed in, absent when it is not filed. One place, and it is the server's. */
+  folderId?: string;
   /** A run is answering on this thread right now: the app keeps the Stop button visible. */
   activeRun?: boolean;
   /** Workspace key the conversation runs in: 'default' or a config.workspaces key. */
@@ -568,6 +570,21 @@ export interface FilesListResultFrame {
 export interface SessionListResultFrame {
   type: 'session.list.result';
   sessions: SessionSummary[];
+  /**
+   * The owner's folders, in rank order. Absent from a server that predates them, which is the same
+   * thing as having none: the listing then draws one section of conversations.
+   */
+  folders?: FolderSummary[];
+}
+
+/** One folder as the drawer draws it: a name, a rank, and the workspace it was born in. */
+export interface FolderSummary {
+  id: string;
+  name: string;
+  rank: number;
+  /** Not a scope: it defaults what a conversation created inside runs in, and keeps an empty folder
+   *  visible under that workspace filter. */
+  workspace?: string;
 }
 
 /** Answer to session.workspace.set: the key the server stored, not the one the app hoped for. */
