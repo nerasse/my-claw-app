@@ -106,6 +106,37 @@ function versionOf(phase: AppUpdatePhase): string | undefined {
 }
 
 /**
+ * What a phase is asking the owner for, as a key the dialog can remember being dismissed by.
+ *
+ * Keyed on the decision, not on the version. The dismissal used to be the version alone: hiding
+ * the dialog during a download recorded `0.6.72`, the transfer then landed as `ready 0.6.72` --
+ * same version, so the key matched and nothing ever offered the install. Two decisions about one
+ * version are two keys, so what replaces a dismissed dialog is a new decision and it opens; a
+ * check that re-says the same thing stays dismissed. A failure carries its message for the same
+ * reason: the same failure twice is one decision, a different one is news.
+ */
+export function appUpdateDecision(phase: AppUpdatePhase): string | null {
+  switch (phase.kind) {
+    case 'available':
+      return `available:${phase.version}`;
+    case 'downloading':
+      return `downloading:${phase.version}`;
+    case 'ready':
+      return `ready:${phase.version}`;
+    case 'error':
+      return `error:${phase.staged ?? phase.message}`;
+    default:
+      return null;
+  }
+}
+
+/** Whether the dialog is showing: a phase that asks for a decision, and not the one already dismissed. */
+export function appUpdateAsks(phase: AppUpdatePhase, dismissed: string | null): boolean {
+  const decision = appUpdateDecision(phase);
+  return decision !== null && decision !== dismissed;
+}
+
+/**
  * Numeric semver comparison (major.minor.patch), tolerant of a leading `v` and of missing parts
  * ("0.5" == "0.5.0"). Our whole release pipeline stamps versionName = tag, so this is enough.
  */

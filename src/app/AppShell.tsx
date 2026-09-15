@@ -171,7 +171,7 @@ import { deviceBridge } from '../core/nativeBridge';
 import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
 import { reduceUpdate, type UpdatePhase } from '../core/serverUpdate';
-import { reduceAppUpdate, type AppUpdatePhase } from '../core/appUpdate';
+import { appUpdateAsks, appUpdateDecision, reduceAppUpdate, type AppUpdatePhase } from '../core/appUpdate';
 import { appUpdateRuntime, appUpdateSupported } from '../core/appUpdateRuntime';
 import { playAlertSound } from '../core/alertSound';
 import { resetToolOutputAsks } from '../core/toolOutput';
@@ -303,6 +303,29 @@ function scopeModeOfFile(mode: FileScopeMode): ScopeMode {
 function unknownOfList(names: string[], catalog: Array<{ name: string }>): string[] {
   const known = new Set(catalog.map(item => item.name));
   return names.filter(name => !known.has(name));
+}
+
+/**
+ * Ships the staged file's own history with an update failure.
+ *
+ * The message on screen says what a person needs ("the downloaded file is gone, download it
+ * again"); who deleted what, and when, is what the server log is for. An app-update failure
+ * otherwise arrives as a raw Java message with no history -- which is exactly why the ENOENT of
+ * 2026-09-15 could not be attributed to the download, the installer or a clear. Owner's call: the
+ * detail goes to the diagnostics, not into the dialog.
+ */
+function reportUpdateFailure(what: string, message: string): void {
+  appUpdateRuntime
+    .journal()
+    .then(journal => {
+      recordDiag({
+        kind: 'js',
+        at: Date.now(),
+        message: `app update ${what}: ${message}`,
+        ...(journal ? { stack: journal } : {}),
+      });
+    })
+    .catch(() => {});
 }
 
 export function AppShell(): React.JSX.Element {
@@ -457,28 +480,17 @@ export function AppShell(): React.JSX.Element {
     appUpdatePhaseRef.current = appUpdatePhase;
   }, [appUpdatePhase]);
   /**
-   * The version the owner said "later" to. The dialog is modal, so it has to be dismissible;
-   * dismissing one version must not hide the next one, and Settings always shows the card.
+   * The decision the owner said "later" to, not the version. The dialog is modal, so it has to be
+   * dismissible; dismissing one decision must not hide the next one -- and a download completing
+   * into an install IS the next one (owner, 2026-09-15). Settings always shows the card.
    */
   const [appUpdateDismissed, setAppUpdateDismissed] = useState<string | null>(null);
   const dismissAppUpdate = useCallback(() => {
-    const phase = appUpdatePhaseRef.current;
-    const version =
-      phase.kind === 'available' || phase.kind === 'downloading' || phase.kind === 'ready'
-        ? phase.version
-        : phase.kind === 'error'
-          ? phase.staged ?? 'error'
-          : null;
-    setAppUpdateDismissed(version);
+    setAppUpdateDismissed(appUpdateDecision(appUpdatePhaseRef.current));
   }, []);
   /** Shown for a decision only: an update to fetch, one ready to install, or a failure that explains itself.
    *  Never in a browser, which has nothing to install an APK with. */
-  const appUpdateDialogOpen =
-    appUpdateSupported &&
-    ((appUpdatePhase.kind === 'available' && appUpdatePhase.version !== appUpdateDismissed) ||
-    (appUpdatePhase.kind === 'ready' && appUpdatePhase.version !== appUpdateDismissed) ||
-    (appUpdatePhase.kind === 'downloading' && appUpdatePhase.version !== appUpdateDismissed) ||
-      (appUpdatePhase.kind === 'error' && (appUpdatePhase.staged ?? 'error') !== appUpdateDismissed));
+  const appUpdateDialogOpen = appUpdateSupported && appUpdateAsks(appUpdatePhase, appUpdateDismissed);
   /** Only moves while a server update runs, so nothing else in the tree redraws on a clock. */
   const [updateNow, setUpdateNow] = useState(0);
   /** Only the two settings screens read it: a re-render there is enough. */
@@ -1797,6 +1809,7 @@ export function AppShell(): React.JSX.Element {
         // A download that failed left nothing usable behind: drop it, so the next tap downloads
         // instead of offering an install for a file that is not there.
         await appUpdateRuntime.clearStaged().catch(() => {});
+        reportUpdateFailure('download', message);
         setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: false }));
       }
     },
@@ -1830,7 +1843,13 @@ export function AppShell(): React.JSX.Element {
           await appUpdateRuntime.install();
         } catch (err) {
           const message = err instanceof Error ? err.message : 'install failed';
-          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: true }));
+          // The file is the authority, not the flow's hope. This used to pass `staged: true`
+          // ("the APK is still on disk"), while the native refusal path deletes a staged APK it
+          // will not install (not newer, unsigned) and a rejected install leaves nothing: the
+          // dialog then offered Install for a file that was gone (owner, 2026-09-15).
+          const afterFailure = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
+          reportUpdateFailure('install', message);
+          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: afterFailure.staged }));
           if (/security|permission|unknown/i.test(message)) appUpdateRuntime.openInstallSettings();
         }
       })().catch(() => {});
@@ -1920,6 +1939,7 @@ export function AppShell(): React.JSX.Element {
       } catch (err) {
         if (cancelled) return;
         await appUpdateRuntime.clearStaged().catch(() => {});
+        reportUpdateFailure('download', err instanceof Error ? err.message : 'download failed');
         setAppUpdatePhase(prev => reduceAppUpdate(prev, {
           type: 'failed',
           message: err instanceof Error ? err.message : 'download failed',

@@ -38,6 +38,12 @@ export interface AppUpdateRuntime {
   clearStaged(): Promise<void>;
   /** Commits the staged APK; the system confirmation and outcome arrive via onInstallStatus. */
   install(): Promise<void>;
+  /**
+   * The staged file's own history ("deleted by download start, 46 MB, 2026-09-15T09:12Z").
+   * Shipped with any update failure: it is the only record of who touched that file, and the
+   * promise never rejects -- an unreadable journal is an empty one, never a failed update.
+   */
+  journal(): Promise<string>;
   /** True if Install can be offered right now; false means the settings permission screen must come first. */
   canInstall(): Promise<boolean>;
   /** Opens the system "install unknown apps" screen. */
@@ -80,6 +86,10 @@ export const appUpdateRuntime: AppUpdateRuntime = {
 
   async install() {
     await deviceBridge.installStagedApk();
+  },
+
+  async journal() {
+    return deviceBridge.stagedApkJournal();
   },
 
   async canInstall() {

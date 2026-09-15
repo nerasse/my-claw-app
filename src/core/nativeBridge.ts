@@ -127,6 +127,8 @@ export interface DeviceBridgeNative {
   stagedApkInfo(): Promise<{ staged: boolean; size: number; version: string }>;
   /** Drops the staged APK, so a failed or superseded download is not offered for install. */
   clearStagedApk(): Promise<void>;
+  /** The staged file's transitions, newest last. Never rejects: an unreadable journal reads empty. */
+  stagedApkJournal(): Promise<string>;
   /** Delivers an install result that arrived before JS subscribed (cold start after install). */
   drainInstallResult(): void;
   /**
@@ -249,6 +251,7 @@ export const deviceBridge: DeviceBridgeNative = {
   stagedApkInfo: () =>
     native?.stagedApkInfo() ?? Promise.resolve({ staged: false, size: 0, version: '' }),
   clearStagedApk: () => native?.clearStagedApk() ?? Promise.resolve(),
+  stagedApkJournal: () => native?.stagedApkJournal() ?? Promise.resolve(''),
   drainInstallResult: () => native?.drainInstallResult(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   playAlertSound: () => native?.playAlertSound() ?? Promise.resolve(),

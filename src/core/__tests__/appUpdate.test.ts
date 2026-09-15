@@ -1,4 +1,6 @@
 import {
+  appUpdateAsks,
+  appUpdateDecision,
   appUpdateHint,
   appUpdateLabel,
   compareVersions,
@@ -145,5 +147,60 @@ describe('the app update phase', () => {
       progress: 0.3,
     });
     expect(phase).toEqual({ kind: 'downloading', version: '0.5.53', apkSize: 45_000_000, progress: 0.3 });
+  });
+});
+
+/**
+ * What the dialog asks, and what a dismissal hides (owner, 2026-09-15).
+ *
+ * "Si on hide lors du dl ca recouvre une modale pour proposer de l'installer": hiding a download
+ * recorded the version, the transfer then landed as `ready` for that same version, and nothing
+ * offered the install. The key is the decision, so the install that follows a hidden download is
+ * a new decision and it opens.
+ */
+describe('the update decision and its dismissal', () => {
+  const available = (version: string): AppUpdatePhase => ({
+    kind: 'available',
+    version,
+    apkSize: 46_000_000,
+  });
+
+  it('brings the dialog back when a hidden download becomes an install', () => {
+    const dismissed = appUpdateDecision({
+      kind: 'downloading',
+      version: '0.6.78',
+      apkSize: 46_000_000,
+      progress: 0.4,
+    });
+    expect(appUpdateAsks({ kind: 'ready', version: '0.6.78' }, dismissed)).toBe(true);
+  });
+
+  it('stays shut for the decision already dismissed', () => {
+    const phase = available('0.6.78');
+    expect(appUpdateAsks(phase, appUpdateDecision(phase))).toBe(false);
+  });
+
+  it('does not hide the next release behind the dismissed one', () => {
+    expect(appUpdateAsks(available('0.6.79'), appUpdateDecision(available('0.6.78')))).toBe(true);
+  });
+
+  it('opens for a failure that says something new, stays shut for the same one repeated', () => {
+    const cancelled: AppUpdatePhase = { kind: 'error', message: 'install cancelled', staged: '0.6.78' };
+    const dismissed = appUpdateDecision(cancelled);
+    expect(appUpdateAsks({ kind: 'error', message: 'install cancelled', staged: '0.6.78' }, dismissed)).toBe(false);
+    expect(appUpdateAsks({ kind: 'error', message: 'the downloaded file is gone', staged: undefined }, dismissed)).toBe(true);
+  });
+
+  it('asks nothing of the phases that carry no decision to make', () => {
+    const quiet: AppUpdatePhase[] = [
+      { kind: 'idle' },
+      { kind: 'checking' },
+      { kind: 'uptodate', version: '0.6.78' },
+      { kind: 'installing', version: '0.6.78' },
+    ];
+    for (const phase of quiet) {
+      expect(appUpdateAsks(phase, null)).toBe(false);
+      expect(appUpdateDecision(phase)).toBeNull();
+    }
   });
 });

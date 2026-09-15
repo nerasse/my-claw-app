@@ -135,6 +135,7 @@ export interface DeviceBridgeNative {
   installStagedApk(): Promise<void>;
   stagedApkInfo(): Promise<{ staged: boolean; size: number; version: string }>;
   clearStagedApk(): Promise<void>;
+  stagedApkJournal(): Promise<string>;
   drainInstallResult(): void;
   cancelNotification(id: number): Promise<void>;
   pickFile(): Promise<PickedFile[]>;
@@ -707,6 +708,7 @@ export const deviceBridge: DeviceBridgeNative = {
   installStagedApk: () => Promise.resolve(),
   stagedApkInfo: () => Promise.resolve({ staged: false, size: 0, version: '' }),
   clearStagedApk: () => Promise.resolve(),
+  stagedApkJournal: () => Promise.resolve(''),
   drainInstallResult: () => {},
   cancelNotification: () => Promise.resolve(),
   pickFile: () =>

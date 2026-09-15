@@ -72,6 +72,41 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
      */
     private const val TRACE_LIMIT = 16 * 1024
 
+    /** The staged APK's transitions, kept on disk: a process death is half of what they explain. */
+    private const val JOURNAL_NAME = "update-journal.txt"
+    private const val JOURNAL_LIMIT = 4000
+
+    /**
+     * One owner of the staged file at a time. Three actors touch that path -- the download (an
+     * OkHttp thread that deletes then writes), the installer (installWorker, which copies) and
+     * clearStagedApk (the JS bridge, which deletes) -- and nothing serialized them: the ENOENT of
+     * 2026-09-15 landed between the installer's entry check and its copy, with one file and no
+     * lock. A Semaphore rather than a ReentrantLock, because the installer acquires it on the
+     * module thread and releases it inside the worker.
+     */
+    private val stagedGate = java.util.concurrent.Semaphore(1)
+
+    /**
+     * Appends one transition of the staged file to its journal, bounded. Each line answers "who
+     * touched it, when, and what was there": an update failure otherwise arrives as a raw Java
+     * message with no history, which is exactly why that ENOENT could not be attributed. Owner's
+     * call (2026-09-15): the detail goes to the diagnostics, never into the dialog.
+     */
+    fun noteStaged(context: Context, line: String) {
+      try {
+        val file = java.io.File(context.filesDir, JOURNAL_NAME)
+        val at = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+          .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+          .format(java.util.Date())
+        file.appendText("$at $line\n")
+        if (file.length() > JOURNAL_LIMIT) {
+          file.writeText(file.readLines().takeLast(20).joinToString("\n") + "\n")
+        }
+      } catch (_: Exception) {
+        // A journal that cannot be written must never cost the update itself.
+      }
+    }
+
     /**
      * Deletes the staged APK-plus-marker. Called by the JS bridge and by [InstallResultReceiver]
      * on an install success, where the JS half of the flow is already dead: the process being
@@ -80,7 +115,9 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
      */
     fun dropStagedApk(context: Context) {
       try {
-        File(context.filesDir, "update-staged.apk").delete()
+        val apk = File(context.filesDir, "update-staged.apk")
+        if (apk.exists()) noteStaged(context, "staged apk deleted (${apk.length()} bytes)")
+        apk.delete()
         File(context.filesDir, "update-staged.version").delete()
       } catch (_: Exception) {
         // Nothing to do: the next download overwrites in place anyway.
@@ -1012,35 +1049,52 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
           }
           try {
             val target = stagedApk()
-            if (target.exists()) target.delete()
-            // The relay streams the APK, so the response is chunked and carries no
-            // Content-Length: contentLength() is -1 and a percentage cannot be computed from it.
-            // The size the check already reported is the authority when that happens.
-            val declared = body.contentLength()
-            val total = if (declared > 0) declared else expectedSize.toLong()
-            target.outputStream().use { out ->
-              copyWithProgress(body.byteStream(), out, total, transferId)
-            }
-            // A truncated download installs as a corrupt package and fails with a message that
-            // explains nothing. Two cheap checks: the APK magic, and the size we were promised.
-            val magic = ByteArray(2)
-            target.inputStream().use { it.read(magic) }
-            if (magic[0] != 'P'.code.toByte() || magic[1] != 'K'.code.toByte()) {
-              target.delete()
-              promise.reject("APK_CORRUPT", "the downloaded file is not an apk")
+            // The same gate the installer takes: a transfer rewrites this exact path, and letting
+            // it run while an install copies what is there is how a verified APK becomes a
+            // truncated one (2026-09-15).
+            if (!stagedGate.tryAcquire()) {
+              promise.reject("APK_BUSY", "the staged apk is being installed right now, download again in a moment")
               return
             }
-            if (total > 0 && target.length() != total) {
-              target.delete()
-              promise.reject("APK_TRUNCATED", "download stopped at ${target.length()} of $total bytes")
-              return
-            }
-            // The version travels with the file: a staged APK that cannot say what it carries
-            // is a staged APK the UI has to guess about, and guessing is what looped here.
             try {
-              versionMarker().writeText(version)
-            } catch (_: Exception) {
-              // A missing marker only costs the version label, never the install itself.
+              if (target.exists()) {
+                noteStaged(reactContext, "download start deleted ${target.length()} bytes")
+                target.delete()
+              }
+              // The relay streams the APK, so the response is chunked and carries no
+              // Content-Length: contentLength() is -1 and a percentage cannot be computed from it.
+              // The size the check already reported is the authority when that happens.
+              val declared = body.contentLength()
+              val total = if (declared > 0) declared else expectedSize.toLong()
+              target.outputStream().use { out ->
+                copyWithProgress(body.byteStream(), out, total, transferId)
+              }
+              // A truncated download installs as a corrupt package and fails with a message that
+              // explains nothing. Two cheap checks: the APK magic, and the size we were promised.
+              val magic = ByteArray(2)
+              target.inputStream().use { it.read(magic) }
+              if (magic[0] != 'P'.code.toByte() || magic[1] != 'K'.code.toByte()) {
+                noteStaged(reactContext, "download rejected: not an apk (${target.length()} bytes)")
+                target.delete()
+                promise.reject("APK_CORRUPT", "the downloaded file is not an apk")
+                return
+              }
+              if (total > 0 && target.length() != total) {
+                noteStaged(reactContext, "download rejected: stopped at ${target.length()} of $total bytes")
+                target.delete()
+                promise.reject("APK_TRUNCATED", "download stopped at ${target.length()} of $total bytes")
+                return
+              }
+              // The version travels with the file: a staged APK that cannot say what it carries
+              // is a staged APK the UI has to guess about, and guessing is what looped here.
+              try {
+                versionMarker().writeText(version)
+              } catch (_: Exception) {
+                // A missing marker only costs the version label, never the install itself.
+              }
+              noteStaged(reactContext, "staged $version (${target.length()} bytes)")
+            } finally {
+              stagedGate.release()
             }
             val map = Arguments.createMap()
             map.putString("path", target.absolutePath)
@@ -1086,11 +1140,41 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       ""
     }
 
-  /** Drops the staged APK and its marker: a failed or superseded download must not linger. */
+  /**
+   * Drops the staged APK and its marker: a failed or superseded download must not linger. Queued
+   * behind the installer on the same worker and gated like it: a clear that lands mid-transfer
+   * would delete the file the transfer is writing and leave the marker pointing at nothing.
+   */
   @ReactMethod
   fun clearStagedApk(promise: Promise) {
-    dropStagedApk(reactContext)
-    promise.resolve(null)
+    installWorker.execute {
+      if (!stagedGate.tryAcquire()) {
+        promise.reject("APK_BUSY", "the staged apk is being written or installed right now")
+        return@execute
+      }
+      try {
+        dropStagedApk(reactContext)
+        promise.resolve(null)
+      } finally {
+        stagedGate.release()
+      }
+    }
+  }
+
+  /**
+   * The staged file's own history, newest last. Read by the JS side whenever an update fails and
+   * shipped as a diagnostic: it is the only record of who deleted what, and the dialog has no
+   * room for it (owner's call, 2026-09-15). Never rejects: an unreadable journal reads empty.
+   */
+  @ReactMethod
+  fun stagedApkJournal(promise: Promise) {
+    val text = try {
+      val file = File(reactContext.filesDir, JOURNAL_NAME)
+      if (file.exists()) file.readText().takeLast(JOURNAL_LIMIT) else ""
+    } catch (_: Exception) {
+      ""
+    }
+    promise.resolve(text)
   }
 
   private fun certDigests(certs: Array<android.content.pm.Signature>?): Set<String> {
@@ -1162,68 +1246,110 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    */
   @ReactMethod
   fun installStagedApk(promise: Promise) {
-    val file = stagedApk()
-    if (!file.exists() || file.length() == 0L) {
-      promise.reject("APK_NOT_STAGED", "no staged apk, download first")
-      return
-    }
-    val refusal = try {
-      rejectionReason(file)
-    } catch (e: Exception) {
-      e.message ?: "the staged package could not be verified"
-    }
-    if (refusal != null) {
-      // A file that failed this check is never worth keeping: leaving it staged would offer the
-      // same Install button again on the next screen.
-      dropStagedApk(reactContext)
-      promise.reject("APK_UNTRUSTED", refusal)
-      return
-    }
-    // Deliberately no canRequestPackageInstalls() gate here. That value is cached per process,
-    // so after the owner grants the permission and comes back it can still read false, and the
-    // install we refuse is one the system would have accepted. Android documents the real
-    // behaviour: when the permission is missing, the package installer shows its own dialog with
-    // a link to the settings. So commit, and only treat a SecurityException as a refusal.
+    // Everything runs on the worker, entry checks included: the whole point of 2026-09-15 is that
+    // a check on one thread and a copy on another, with a file anyone can delete between them, is
+    // what turned a verified install into an ENOENT.
     installWorker.execute {
+      // One owner of the staged file at a time, and a refusal that says why rather than a race.
+      if (!stagedGate.tryAcquire()) {
+        promise.reject("APK_BUSY", "a download is writing the staged apk, try again in a moment")
+        return@execute
+      }
       try {
-        val pkg = reactContext.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-        // MUTABLE is not a choice: commit() rejects an immutable status receiver outright
-        // ("The commit() status receiver should come from a mutable PendingIntent") because the
-        // system fills EXTRA_STATUS and, for the confirmation screen, EXTRA_INTENT into it. The
-        // flag only exists from S; before that a PendingIntent is mutable by default. Keeping the
-        // intent explicit (component + package) also satisfies Android 14, which refuses a mutable
-        // PendingIntent built on an implicit intent.
-        val mutability =
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
-        val sender = PendingIntent.getBroadcast(
-          reactContext,
-          4242,
-          Intent(reactContext, InstallResultReceiver::class.java)
-            .setAction(InstallResultReceiver.ACTION_INSTALL_RESULT)
-            .setPackage(reactContext.packageName),
-          PendingIntent.FLAG_UPDATE_CURRENT or mutability,
-        )
-        val sessionId = pkg.createSession(params)
-        val session = pkg.openSession(sessionId)
-        try {
-          file.inputStream().use { input ->
-            session.openWrite("base.apk", 0, file.length()).use { out ->
-              input.copyTo(out)
-              // Documented requirement: without fsync the bytes are not guaranteed to have
-              // reached the session, and the commit fails on a package it considers truncated.
-              session.fsync(out)
-            }
-          }
-          session.commit(sender.intentSender)
-          promise.resolve(null)
-        } finally {
-          session.close()
+        val file = stagedApk()
+        if (!file.exists() || file.length() == 0L) {
+          noteStaged(reactContext, "install found nothing staged")
+          promise.reject("APK_NOT_STAGED", "no staged apk, download first")
+          return@execute
         }
-      } catch (e: SecurityException) {
-        promise.reject("UNKNOWN_SOURCES_DISABLED", "allow this app to install updates first")
-      } catch (e: Exception) {
-        promise.reject("APK_INSTALL_FAILED", e.message ?: "apk install failed")
+        // Opened before anything is verified, and kept open across the copy: from here the bytes
+        // are ours whatever happens to the directory entry, because POSIX keeps an unlinked file
+        // readable through its descriptor. `file.inputStream()` here threw the ENOENT that started
+        // this; a stream that cannot be opened now is answered at the door, by name.
+        val input = try {
+          file.inputStream()
+        } catch (e: Exception) {
+          noteStaged(reactContext, "install could not open the staged apk: ${e.message}")
+          promise.reject("APK_NOT_STAGED", "the staged apk is not readable any more, download it again")
+          return@execute
+        }
+        try {
+          val size = try {
+            input.channel.size()
+          } catch (e: Exception) {
+            file.length()
+          }
+          val refusal = try {
+            rejectionReason(file)
+          } catch (e: Exception) {
+            e.message ?: "the staged package could not be verified"
+          }
+          if (refusal != null) {
+            // A file that failed this check is never worth keeping: leaving it staged would offer
+            // the same Install button again on the next screen.
+            noteStaged(reactContext, "refused before install: $refusal")
+            dropStagedApk(reactContext)
+            promise.reject("APK_UNTRUSTED", refusal)
+            return@execute
+          }
+          // Deliberately no canRequestPackageInstalls() gate here. That value is cached per
+          // process, so after the owner grants the permission and comes back it can still read
+          // false, and the install we refuse is one the system would have accepted. Android
+          // documents the real behaviour: when the permission is missing, the package installer
+          // shows its own dialog with a link to the settings. So commit, and only treat a
+          // SecurityException as a refusal.
+          try {
+            val pkg = reactContext.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            // MUTABLE is not a choice: commit() rejects an immutable status receiver outright
+            // ("The commit() status receiver should come from a mutable PendingIntent") because
+            // the system fills EXTRA_STATUS and, for the confirmation screen, EXTRA_INTENT into it.
+            // The flag only exists from S; before that a PendingIntent is mutable by default.
+            // Keeping the intent explicit (component + package) also satisfies Android 14, which
+            // refuses a mutable PendingIntent built on an implicit intent.
+            val mutability =
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+            val sender = PendingIntent.getBroadcast(
+              reactContext,
+              4242,
+              Intent(reactContext, InstallResultReceiver::class.java)
+                .setAction(InstallResultReceiver.ACTION_INSTALL_RESULT)
+                .setPackage(reactContext.packageName),
+              PendingIntent.FLAG_UPDATE_CURRENT or mutability,
+            )
+            val sessionId = pkg.createSession(params)
+            val session = pkg.openSession(sessionId)
+            try {
+              session.openWrite("base.apk", 0, size).use { out ->
+                input.copyTo(out)
+                // Documented requirement: without fsync the bytes are not guaranteed to have
+                // reached the session, and the commit fails on a package it considers truncated.
+                session.fsync(out)
+              }
+              session.commit(sender.intentSender)
+              noteStaged(reactContext, "install committed ($size bytes)")
+              promise.resolve(null)
+            } finally {
+              session.close()
+            }
+          } catch (e: SecurityException) {
+            noteStaged(reactContext, "install refused by the system: ${e.message}")
+            promise.reject("UNKNOWN_SOURCES_DISABLED", "allow this app to install updates first")
+          } catch (e: Exception) {
+            noteStaged(reactContext, "install failed: ${e.message}")
+            promise.reject("APK_INSTALL_FAILED", e.message ?: "apk install failed")
+          }
+        } finally {
+          // A deletion from another actor can no longer break the copy, but the descriptor has to
+          // be let go before the gate is: this is the last reader of that inode.
+          try {
+            input.close()
+          } catch (_: Exception) {
+            // Nothing to do: the session already has the bytes, or the failure is already reported.
+          }
+        }
+      } finally {
+        stagedGate.release()
       }
     }
   }
