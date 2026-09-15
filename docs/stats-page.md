@@ -65,3 +65,19 @@ reconstructed here: a page that drew its own filter could show a chip the server
 
 `docs/back-cascade.md` has the page as the eleventh rung: back closes it and returns to whatever was
 under it.
+
+## The two strips at the top
+
+The period row is a plain `View`; the filter chips and the tabs are horizontal `ScrollView`s,
+because both can outgrow a phone's width.
+
+A `ScrollView` carries `flexGrow: 1, flexShrink: 1` from React Native's own base style. Inside the
+page's column that made the two rows flex items **of the page** rather than strips above it: the
+tall vertical list below claimed the free space and then pushed them under their own content, so
+the bottom of every label was cut -- and while the page was short they floated, centered, in a row
+taller than they needed. Both read as a styling accident; both were flexbox arithmetic.
+
+`strip: { flexGrow: 0, flexShrink: 0 }` on each row fixes the two halves at once. `flexGrow: 0`
+stops a row from floating mid-space, `flexShrink: 0` stops it from collapsing. A layout bug like
+this has no string to assert on, so `src/app/__tests__/statsStrips.test.tsx` pins the two properties
+themselves.

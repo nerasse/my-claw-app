@@ -57,3 +57,22 @@ playwright-core:
 
 `scrollHeight == clientHeight` under the ceiling is the assertion that matters: it is what says the
 field is not scrolling behind its own border.
+
+## Why the composer is the only field whose first letter got cut
+
+The frame carries the padding and the `TextInput` carries none, and that is deliberate: an
+`EditText` past its ceiling scrolls its own padding away with the text, so the vertical padding has
+to live outside it. The horizontal padding is on the wrapper for the same reason.
+
+Android 15 (API 35) changed how a `TextView` sizes and offsets a line -- it uses the glyphs' visual
+bounds rather than their advances -- and left the pre-15 behaviour one attribute away. The app
+restores the pre-15 world in `android/app/src/main/res/values/styles.xml` (see `TextViewStyle`),
+but React Native hands a `TextInput` to the platform's own `EditText` and never lays its text out
+itself, so the fix it shipped for `Text` does not reach a field. `EditTextStyle` therefore needs the
+same two attributes, and did not have them.
+
+With the new default, a field that carries no padding of its own has its first glyph drawn at a
+slightly negative x and clipped. Every other field in the app pads its own `TextInput`, which is
+why the cut was only ever seen here: the composer's text sits at x=0 of the `EditText`, and a dozen
+input fields elsewhere never showed it. Restoring the pre-15 attributes puts the advances back in
+charge.
