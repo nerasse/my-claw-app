@@ -74,7 +74,9 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
  */
 export function CompactionRunning({ since, text, reasoning, stopping }: { since: number; text?: string; reasoning?: string; stopping?: boolean }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const elapsed = useElapsed(since);
+  // The counter is dropped the moment a stop is in flight, so its tick goes with it: the rule then
+  // reads as one steady word instead of redrawing itself every second.
+  const elapsed = useElapsed(since, stopping === true);
   const summary = text?.trim() ?? '';
   const thinking = reasoning?.trim() ?? '';
   return (

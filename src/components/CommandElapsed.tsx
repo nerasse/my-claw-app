@@ -16,12 +16,17 @@ export function formatElapsed(ms: number): string {
  * sits under a command at body size and beside the reasoning label at micro size. Whoever calls
  * it is the only thing the tick redraws, never the thread around it.
  */
-export function useElapsed(since: number): number {
+export function useElapsed(since: number, paused = false): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    // Paused is not cosmetic: the compaction rule drops its counter when a stop is in flight (the
+    // state takes the number's place), and a timer still ticking would re-render the rule -- and
+    // every aside under it, which can be thousands of tokens of open summary -- once a second for a
+    // figure nothing is reading any more.
+    if (paused) return;
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
-  }, []);
+  }, [paused]);
   return now - since;
 }
 

@@ -114,3 +114,30 @@ test('what the compaction had written stays readable while it is stopped', () =>
   expect(textOf(tree)).toContain('Stopping…');
   expect(textOf(tree)).toContain('Writing the summary');
 });
+
+/**
+ * The tick goes with the number it exists for.
+ *
+ * `Stopping…` is a steady word, and the second-by-second redraw it used to keep would re-render
+ * the rule *and* every aside under it -- an open summary is thousands of tokens -- for a figure
+ * nothing is displaying any more.
+ */
+test('a stopped rule no longer ticks', () => {
+  const scheduled = jest.spyOn(globalThis, 'setInterval');
+  try {
+    render({ since: Date.now() - 5_000, stopping: true });
+    expect(scheduled).not.toHaveBeenCalled();
+  } finally {
+    scheduled.mockRestore();
+  }
+});
+
+test('a rule that is counting still ticks', () => {
+  const scheduled = jest.spyOn(globalThis, 'setInterval');
+  try {
+    render({ since: Date.now() - 5_000 });
+    expect(scheduled).toHaveBeenCalled();
+  } finally {
+    scheduled.mockRestore();
+  }
+});
