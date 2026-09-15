@@ -103,7 +103,7 @@ export interface DeviceBridgeNative {
   /** Android's history of previous process deaths, plus the running build's version name. */
   getExitInfo(): Promise<{
     versionName: string;
-    exits: { reason: string; at: number; status: number; description: string }[];
+    exits: { reason: string; at: number; status: number; description: string; trace?: string }[];
   }>;
   /** The running build's version name ("0.2.78"). */
   getAppVersion(): Promise<string>;

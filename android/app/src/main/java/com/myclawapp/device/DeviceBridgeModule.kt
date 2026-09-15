@@ -65,6 +65,12 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     private const val PREFS_NAME = "claw_prefs"
     private const val FILE_PICK_REQUEST_CODE = 4201
     private const val FILE_SAVE_REQUEST_CODE = 4202
+    /**
+     * How much of a death trace travels. A tombstone's backtrace is the first screen; past that
+     * it is memory maps and register dumps, which is more than a diagnostic report can carry and
+     * more than anyone reads. The report clips again on the JS side.
+     */
+    private const val TRACE_LIMIT = 16 * 1024
 
     /**
      * Deletes the staged APK-plus-marker. Called by the JS bridge and by [InstallResultReceiver]
@@ -1287,6 +1293,25 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
           map.putDouble("at", info.timestamp.toDouble())
           map.putInt("status", info.status)
           map.putString("description", info.description ?: "")
+          // The trace Android kept of the death. For an uncaught exception it is a tombstone whose
+          // backtrace names the thrower and the stack it came from -- the one thing a report says
+          // today is missing ("process exit: CRASH (crash)", 2026-09-15). Without it the only way
+          // to attribute a crash is a cable, and the phone is not always on the same network as
+          // the machine that would read it. Best effort, clipped, never fatal: a refused or empty
+          // stream must not keep the report itself from being sent.
+          val trace = info.traceInputStream
+          if (trace != null) {
+            val text = try {
+              trace.use { stream ->
+                val buffer = ByteArray(TRACE_LIMIT)
+                val read = stream.read(buffer)
+                if (read > 0) String(buffer, 0, read, Charsets.UTF_8) else ""
+              }
+            } catch (_: Exception) {
+              ""
+            }
+            if (text.isNotEmpty()) map.putString("trace", text)
+          }
           exits.pushMap(map)
         }
       } catch (_: Exception) {

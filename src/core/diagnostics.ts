@@ -54,6 +54,38 @@ export function recordDiag(report: DiagReport): void {
 }
 
 /**
+ * The reports Android's exit history yields, and the newest death it held.
+ *
+ * Pure on purpose: the one thing this path exists for -- a crash arriving with the trace that
+ * names the thrower -- is then a test rather than a hope, and the shape Android hands over (a
+ * stream, a description that says only "crash") is read in exactly one place.
+ */
+export function exitReports(
+  info: { versionName: string; exits: { reason: string; at: number; status: number; description: string; trace?: string }[] },
+  since: number,
+): { newest: number; reports: DiagReport[] } {
+  let newest = since;
+  const reports: DiagReport[] = [];
+  for (const exit of info.exits) {
+    if (exit.at <= since) continue;
+    newest = Math.max(newest, exit.at);
+    if (!ABNORMAL_EXITS.has(exit.reason)) continue;
+    reports.push({
+      kind: 'exit',
+      at: exit.at,
+      message: exit.description ? `process exit: ${exit.reason} (${exit.description})` : `process exit: ${exit.reason}`,
+      reason: exit.reason,
+      appVersion: info.versionName,
+      // What Android kept of the death, when it kept anything: a tombstone whose backtrace names
+      // the thrower. Until 2026-09-15 a crash arrived as "process exit: CRASH (crash)" and nothing
+      // else, which is not a fact anyone can act on. `recordDiag` clips it on the way in.
+      ...(exit.trace ? { stack: exit.trace } : {}),
+    });
+  }
+  return { newest, reports };
+}
+
+/**
  * Android's own post-mortem of previous process deaths. This is the only way to tell a crash
  * from an ANR, an OOM kill, or the battery optimiser stopping the foreground service — four
  * causes that all look identical from the outside. `since` dedupes across boots: the same exit
@@ -62,19 +94,8 @@ export function recordDiag(report: DiagReport): void {
 async function collectExits(since: number): Promise<void> {
   const info = await deviceBridge.getExitInfo().catch(() => undefined);
   if (!info) return;
-  let newest = since;
-  for (const exit of info.exits) {
-    if (exit.at <= since) continue;
-    newest = Math.max(newest, exit.at);
-    if (!ABNORMAL_EXITS.has(exit.reason)) continue;
-    recordDiag({
-      kind: 'exit',
-      at: exit.at,
-      message: exit.description ? `process exit: ${exit.reason} (${exit.description})` : `process exit: ${exit.reason}`,
-      reason: exit.reason,
-      appVersion: info.versionName,
-    });
-  }
+  const { newest, reports } = exitReports(info, since);
+  for (const report of reports) recordDiag(report);
   if (newest > since) {
     try {
       await deviceBridge.prefsSet(LAST_EXIT_KEY, String(newest));
