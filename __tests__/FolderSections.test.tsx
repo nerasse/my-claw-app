@@ -10,6 +10,7 @@ import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { sessionStore } from '../src/core/sessions';
 import { questionStore } from '../src/core/questionStore';
+import { FolderIcon } from '../src/components/icons';
 import type { FolderSummary, SessionSummary } from '../src/core/protocol';
 import { labelsOf, renderAppHome, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
@@ -215,4 +216,18 @@ test('a fold is remembered on the device, and the list comes back folded', async
   expect(bridge.prefsSet).toHaveBeenCalledWith('collapsedFolders', '');
 
   await unmount(tree);
+});
+
+test('a folder carries its glyph, and the section that is not a folder does not', async () => {
+  const tree = await renderList();
+
+  // The home screen mounts two drawers: one glyph per folder header, twice over.
+  expect(tree.root.findAllByType(FolderIcon)).toHaveLength(4);
+
+  await unmount(tree);
+
+  const withoutFolders = await renderList([]);
+  expect(withoutFolders.root.findAllByType(FolderIcon)).toHaveLength(0);
+
+  await unmount(withoutFolders);
 });

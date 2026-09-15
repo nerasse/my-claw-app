@@ -3,7 +3,7 @@ import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { FilterIcon, GearIcon, NewFolderIcon, PlusIcon } from '../components/icons';
+import { FilterIcon, FolderIcon, GearIcon, NewFolderIcon, PlusIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
@@ -220,11 +220,17 @@ export function Drawer({
               accessibilityRole={folder ? 'button' : undefined}
               accessibilityState={folder ? { expanded: !item.folded } : undefined}
               accessibilityLabel={folder ? `Folder ${folder.name}${badgeWords(item.badge)}` : undefined}>
+              {/* A folder reads as a folder before its name is read: the same glyph the file tree
+                  uses, in the same muted colour as the heading it sits on. The unfiled section
+                  keeps the room without the glyph -- it is not a folder. */}
               {folder ? (
                 <Text style={styles.sectionFold}>{item.folded ? '▸' : '▾'}</Text>
               ) : (
                 <Text style={styles.sectionFold}>{''}</Text>
               )}
+              <View style={styles.sectionGlyph}>
+                {folder ? <FolderIcon size={13} color={palette.textFaint} /> : null}
+              </View>
               <Text style={styles.sectionLabel} numberOfLines={1}>
                 {item.label}
               </Text>
@@ -261,7 +267,7 @@ export function Drawer({
         />
       );
     },
-    [activeThread, onFolderMenu, onOpenThread, onThreadMenu, onToggleFolder, questionIds, unreadIds, styles],
+    [activeThread, onFolderMenu, onOpenThread, onThreadMenu, onToggleFolder, palette.textFaint, questionIds, unreadIds, styles],
   );
 
   useEffect(() => {
@@ -314,7 +320,7 @@ export function Drawer({
               style={styles.folderButton}
               accessibilityRole="button"
               accessibilityLabel="New folder">
-              <NewFolderIcon size={20} color={palette.textFaint} />
+              <NewFolderIcon size={22} color={palette.text} />
             </Pressable>
             <Pressable
               onPress={onNewThread}
@@ -544,6 +550,8 @@ const createStyles = (palette: Palette) => ({
    *  can be folded or not: the unfiled heading has to sit where the folder names do. */
   sectionHeader: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },
   sectionFold: { width: 14, fontSize: font.micro, color: palette.textFaint },
+  /** The glyph slot, held empty on the section that is not a folder: the names have to line up. */
+  sectionGlyph: { width: 13 + space.xs, alignItems: 'center' as const, justifyContent: 'center' as const },
   sectionLabel: {
     paddingRight: space.md,
     paddingTop: space.xs,
