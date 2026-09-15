@@ -74,11 +74,19 @@ folder that is not on screen, or it could only ever move things between the two 
 between.
 
 **Why a long press, and why this is hand-rolled.** Dragging a list and dragging a row out of it are
-the same motion, and only a pause tells them apart: the pan only activates after the hold, and a
-finger that moves during it fails the gesture and the list scrolls instead. The gesture also lives
-on the whole list rather than on each row -- a row is unmounted the moment it leaves the window, and
-a gesture that lives on an unmounted row dies mid-drag -- and the drop test reads a map of the boxes
-the lines report, so nothing has to measure the window.
+the same motion, and on a finger only a pause tells them apart: the pan activates after the hold,
+and a movement during it fails the gesture and the list scrolls instead. A cursor drags on the
+move -- a mouse does not scroll a list by dragging it -- which is also the only choice there: the
+web implementation fails a gesture that carries the hold on any movement past its own threshold,
+*including after* the press was held, so a pan there activated and then died on the first move.
+
+The gesture lives on the whole list rather than on each row: a row is unmounted the moment it leaves
+the window, and a gesture that lives on an unmounted row dies mid-drag. It picks a line up where the
+press landed rather than where the pointer was when the engine called it a drag, and it finds that
+line by adding up the heights the lines report. Their position is never read from `onLayout`: on the
+web every item of a `FlatList` reports y = 0, which put no line anywhere and left the drag picking
+nothing up. The click a release leaves behind is swallowed -- a browser sends one wherever the
+button came up, so without it a drop would file a conversation and open it.
 
 That is also why `react-native-sortables` is not used here, though its gesture is what the pinned
 section used: it renders its own items, so adopting it would mean giving up the virtualized list
