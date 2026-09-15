@@ -90,6 +90,31 @@ function editorProps(tree: Tree): Record<string, unknown> {
   return found[0].props as Record<string, unknown>;
 }
 
+/**
+ * The hardware back key.
+ *
+ * The RN jest preset resolves platform files to `ios`, whose BackHandler registers nothing, so
+ * `jest.setup.js` keeps a registry the tests drive directly: the app really runs the Android one,
+ * which walks the handlers last-registered-first and stops at the first that answers true.
+ */
+function backHandler(): { __handlers: Array<() => boolean> } {
+  // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+  const back = require('react-native/Libraries/Utilities/BackHandler.ios') as {
+    default: { __handlers: Array<() => boolean> };
+  };
+  return back.default;
+}
+
+/** True when the press was handled: false is what makes Android close the app. */
+async function hardwareBack(): Promise<boolean> {
+  const handlers = backHandler().__handlers;
+  let handled = false;
+  await ReactTestRenderer.act(async () => {
+    handled = handlers[handlers.length - 1]!();
+  });
+  return handled;
+}
+
 const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
 
 function entry(over: Partial<FsEntry> & { name: string; path: string }): FsEntry {
@@ -187,6 +212,63 @@ describe('SystemFilesScreen', () => {
       'Open /home/neras/notes.md',
     ]);
     expect(texts(tree).join('\n')).toContain('4 entries');
+  });
+
+  test('back walks up the tree one folder at a time, and leaves only from the machine root', async () => {
+    const onClose = jest.fn();
+    const tree = await render(onClose);
+    receive(HOME);
+    press(tree, 'Open /home/neras/dev');
+
+    // A folder is a place you can be sent back up from, and the header says where to.
+    expect(labels(tree)).toContain('Up to /home/neras');
+
+    expect(await hardwareBack()).toBe(true);
+    expect(sent()).toContainEqual({ type: 'fs.list', path: '/home/neras' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    expect(await hardwareBack()).toBe(true);
+    expect(sent()).toContainEqual({ type: 'fs.list', path: '/home' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    expect(await hardwareBack()).toBe(true);
+    expect(sent()).toContainEqual({ type: 'fs.list', path: '/' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Nothing above the machine root: that press is the way out, and it is said as such.
+    expect(labels(tree)).not.toContain('Up to /');
+    expect(await hardwareBack()).toBe(true);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('the cross leaves from anywhere, without walking the tree first', async () => {
+    const onClose = jest.fn();
+    const tree = await render(onClose);
+    receive(HOME);
+    press(tree, 'Open /home/neras/dev');
+
+    press(tree, 'Close files');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('the cross asks before it throws away a dirty buffer', async () => {
+    const onClose = jest.fn();
+    const tree = await render(onClose);
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult());
+    press(tree, 'Edit file');
+    const editor = editorProps(tree);
+    ReactTestRenderer.act(() => {
+      (editor.onChange as (text: string) => void)('mine');
+    });
+
+    press(tree, 'Close files');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(texts(tree)).toContain('Discard your changes?');
+
+    press(tree, 'Discard changes');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   test('a file that is not markdown opens in the read-only editor, with its cursor line in the header', async () => {

@@ -314,9 +314,37 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
       leaveEditing();
       return true;
     }
+    // Back walks up the tree, one folder at a time, and the machine root is the last place there
+    // is to come back *from* -- so that is where the press leaves the page. Leaving from a folder
+    // was the bug: the folder you are standing in is not the thing you asked to close.
+    if (snapshot.dir !== null && snapshot.dir !== '/') {
+      fsStore.navigate(parentOf(snapshot.dir));
+      return true;
+    }
     onClose();
     return true;
   }, [confirm, leaveEditing, onClose, prompt, sheetEntry]);
+
+  /**
+   * The cross: leave, from wherever you are.
+   *
+   * It is the one control that always closes -- the chevron walks up a folder at a time -- which
+   * is why it is the one that carries the guard: an unsaved buffer is not something a tap on a
+   * cross may throw away silently.
+   */
+  const closeExplorer = useCallback(() => {
+    const snapshot = fsStore.getSnapshot();
+    if (snapshot.mode === 'edit' && snapshot.dirty) {
+      setConfirm({
+        title: 'Discard your changes?',
+        hint: 'the file on the server is not touched',
+        confirmLabel: 'Discard changes',
+        run: onClose,
+      });
+      return;
+    }
+    onClose();
+  }, [onClose]);
 
   useHardwareBack(goBack);
 
@@ -408,18 +436,23 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
   const markdownRead =
     state.mode === 'read' && file !== null && file.text !== null && !file.truncated && !file.error && languageForFile(file.path) === 'markdown';
   const inFile = state.mode === 'read' || state.mode === 'edit';
+  /** What the chevron goes back to. Nothing above the machine root, so nothing to draw there. */
+  const parentDir = state.dir !== null && state.dir !== '/' ? parentOf(state.dir) : null;
+  const backLabel = inFile ? 'Back to files' : parentDir !== null ? `Up to ${parentDir}` : null;
 
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Pressable
-          onPress={goBack}
-          hitSlop={8}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel={inFile ? 'Back to files' : 'Close files'}>
-          <Text style={styles.backGlyph}>‹</Text>
-        </Pressable>
+        {backLabel !== null ? (
+          <Pressable
+            onPress={goBack}
+            hitSlop={8}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel={backLabel}>
+            <Text style={styles.backGlyph}>‹</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.headerMain}>
           <View style={styles.titleRow}>
             <Text style={styles.title} numberOfLines={1}>
@@ -456,6 +489,14 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
             <Text style={[styles.headerActionText, styles.headerActionTextOn]}>Save</Text>
           </Pressable>
         ) : null}
+        <Pressable
+          onPress={closeExplorer}
+          hitSlop={8}
+          style={styles.closeButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close files">
+          <Text style={styles.closeGlyph}>✕</Text>
+        </Pressable>
       </View>
 
       {!inFile ? (
@@ -728,6 +769,15 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  closeGlyph: { fontSize: 18, lineHeight: 20, color: palette.text },
   headerMain: { flex: 1, gap: 1 },
   titleRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.sm },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },

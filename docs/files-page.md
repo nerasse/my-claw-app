@@ -22,6 +22,25 @@ server-side); opened from More it starts wherever the owner last was. The two en
 distinct on purpose: **Session files** is the conversation's own attachments, **System files** is
 the machine.
 
+## Getting back out
+
+Three controls, three meanings, and none of them is a trap:
+
+- **The chevron, top left**: *back*. It walks up one folder at a time, and the label says where to
+  (`Up to /home/neras`). Opening a file turns it into `Back to files`, which is the same move --
+  a file is one level below the listing you came from. There is nothing above the machine root, so
+  at `/` the chevron is not drawn at all rather than drawn doing something else.
+- **The hardware back key**: the same walk, through the same function, so the two can never
+  disagree. The press that has nowhere to go is the one that leaves the page.
+- **The cross, top right**: *leave*, from wherever you are, without walking the tree first. It is
+  the one control that always closes, which is why it is the one that carries the guard: a dirty
+  buffer gets the discard question, never a silent close.
+
+Leaving from a folder on a back press was the bug the owner reported: the folder you are standing
+in is not the thing you asked to close, and getting out meant walking up to the root through the
+breadcrumb. The breadcrumb is still the way to *jump* several levels at once; it is no longer the
+only way up.
+
 ## The editor is one component with two hosts
 
 `src/components/CodeEditor.tsx` is the interface; `CodeEditor.native.tsx` runs CodeMirror 6
