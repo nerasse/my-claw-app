@@ -1,5 +1,6 @@
 import { mediaUrl } from '../core/mediaUrl';
-import React from 'react';
+import { recordDiag } from '../core/diagnostics';
+import React, { useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import type { AttachmentMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
@@ -30,6 +31,7 @@ export function AttachmentView({
   onAccent?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const [failed, setFailed] = useState(false);
   const remote = mediaUrl(mediaBase, deviceInfo, att.id);
   const uri = att.uri ?? remote;
   // The server generates a preview frame for videos; without one the stage would stay black
@@ -54,7 +56,24 @@ export function AttachmentView({
     return <VoiceNote att={att} uri={uri} transcript={transcript} onAccent={onAccent} />;
   }
 
-  if ((att.type === 'image' || att.type === 'video') && uri) {
+  // Why the picture is not on screen, when it never arrives: the id and the screen it was asked
+  // of, never the query -- it carries the device's token. A 404 here reads as a resolution miss
+  // server-side, and reading it off a device beat guessing at one (2026-09-15).
+  const reportFailed = () => {
+    setFailed(true);
+    recordDiag({
+      kind: 'js',
+      at: Date.now(),
+      message: 'attachment image failed to load',
+      stack: `id=${att.id} type=${att.type} filename=${att.filename ?? att.type} base=${mediaBase}`,
+    });
+  };
+
+  // An attachment with nothing to draw reads as a chip, never as a stage: one the server marked
+  // deleted has no bytes anywhere, and one whose bytes never came is the same fact from the
+  // reader's side. Drawn as an image it was an empty box under a bare filename -- which reads as
+  // a picture still loading, and hid a server-side resolution miss for a day.
+  if ((att.type === 'image' || att.type === 'video') && uri && !att.deleted && !failed) {
     const media = (
       <>
         <View style={[styles.image, att.type === 'video' ? styles.videoStage : null]}>
@@ -64,6 +83,7 @@ export function AttachmentView({
               style={styles.image}
               resizeMode="contain"
               accessibilityLabel={name}
+              onError={reportFailed}
             />
           ) : (
             <>
@@ -73,6 +93,7 @@ export function AttachmentView({
                   style={styles.image}
                   resizeMode="cover"
                   accessibilityLabel={name}
+                  onError={reportFailed}
                 />
               ) : null}
               <View style={styles.play}>

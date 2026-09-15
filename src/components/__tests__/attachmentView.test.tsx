@@ -10,7 +10,10 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Image } from 'react-native';
 import { AttachmentView } from '../AttachmentView';
+import { recordDiag } from '../../core/diagnostics';
 import type { AttachmentMeta } from '../../core/protocol';
+
+jest.mock('../../core/diagnostics', () => ({ recordDiag: jest.fn() }));
 
 const BASE = 'http://host:8080';
 
@@ -70,5 +73,47 @@ describe('AttachmentView with a cookie session', () => {
   it('has nothing to show before the identity resolves', () => {
     const tree = render({ id: 'abc', type: 'image', filename: 'shot.png' }, null);
     expect(imageUris(tree)).toEqual([]);
+  });
+});
+
+/**
+ * What a picture that never arrives looks like.
+ *
+ * The image branch ignored `deleted`, so an attachment the server could not resolve drew a full
+ * stage and fetched an id that cannot exist (`media-0`): an empty box under a bare filename, which
+ * reads as a picture still loading. Measured on the owner's phone (2026-09-15), that shape hid a
+ * server-side resolution miss for a day -- the same bare filename the web had shown once before.
+ */
+describe('AttachmentView: an attachment with nothing to draw', () => {
+  const failed = recordDiag as jest.Mock;
+
+  beforeEach(() => {
+    failed.mockClear();
+  });
+
+  it('draws a deleted image as a chip, never as a stage', () => {
+    const tree = render({ id: 'gone', type: 'image', filename: 'shot.png', deleted: true }, { deviceId: '', token: '' });
+    expect(imageUris(tree)).toEqual([]);
+    const labels = tree.root.findAll(node => typeof node.children?.join === 'function');
+    expect(JSON.stringify(labels.map(node => node.children.join('')))).toContain('shot.png (deleted)');
+  });
+
+  it('falls back to the chip when the bytes never come, and names it in the diagnostics', () => {
+    const tree = render({ id: 'abc', type: 'image', filename: 'shot.png' }, { deviceId: '', token: '' });
+    expect(imageUris(tree)).toEqual([`${BASE}/media/abc`]);
+
+    const image = tree.root.findAllByType(Image)[0]!;
+    ReactTestRenderer.act(() => {
+      (image.props as { onError: () => void }).onError();
+    });
+
+    // The stage is gone: no id left to fetch, so no second request and no empty box.
+    expect(imageUris(tree)).toEqual([]);
+    expect(failed).toHaveBeenCalledTimes(1);
+    const report = failed.mock.calls[0]![0] as { message: string; stack: string };
+    expect(report.message).toContain('failed to load');
+    expect(report.stack).toContain('id=abc');
+    // The token rides the query, and the query never reaches a log.
+    expect(report.stack).not.toContain('token');
   });
 });
