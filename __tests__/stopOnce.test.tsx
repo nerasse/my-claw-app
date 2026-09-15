@@ -279,3 +279,89 @@ test('outside the window, a /stop typed and sent still goes out as the command i
 
   await settleAndUnmount(tree);
 });
+
+/** Every composite that can react to a press under one label. */
+function pressables(tree: Tree, label: string): ReactTestRenderer.ReactTestInstance[] {
+  return tree.root.findAll(
+    node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
+    { deep: true },
+  );
+}
+
+/**
+ * The state travels now: a stop taken on the web is a fact about the work in flight, broadcast as
+ * `chat.run.stopping` and replayed to a window that reloads mid-abort. So a device that never
+ * pressed anything reads "Stopping…" -- in the menu and in the composer -- and pressing either
+ * sends nothing, exactly like a second stop of a cycle taken here.
+ */
+test('a stop taken on another surface reads Stopping… in the menu and the composer, and neither sends', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.startRun(THREAD, 'r1');
+    chatStore.startStream(THREAD, 's1', 'u1');
+  });
+  await waitFor(() => labelsOf(tree).includes('Stop generating'));
+
+  // The web stopped this thread: the frame is the only thing that reaches this device -- no
+  // press here, no local mark. That is the whole point of the state travelling.
+  await emit({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+  await waitFor(() => labelsOf(tree).includes('Stopping…'));
+
+  // The composer's corner: the ■ is gone, the loader wears the word, and pressing it sends
+  // nothing -- the claim is refused like any second stop of the cycle.
+  expect(labelsOf(tree)).not.toContain('Stop generating');
+  expect(pressables(tree, 'Stopping…')).toHaveLength(1);
+  const stops = stopFrames().length;
+  await pressLabel(tree, 'Stopping…');
+  await ReactTestRenderer.act(async () => {
+    await new Promise<void>(resolve => setTimeout(resolve, 20));
+  });
+  expect(stopFrames().length).toBe(stops);
+
+  // The session menu reads the same word, and it too sends nothing.
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => pressables(tree, 'Stopping…').length === 2);
+  await pressLabel(tree, 'Stopping…');
+  await ReactTestRenderer.act(async () => {
+    await new Promise<void>(resolve => setTimeout(resolve, 20));
+  });
+  expect(stopFrames().length).toBe(stops);
+
+  // The end of the run is what takes the state down.
+  await emit({ type: 'chat.run.end', threadId: THREAD, reason: 'aborted' });
+  await waitFor(() => !labelsOf(tree).includes('Stopping…'));
+
+  await settleAndUnmount(tree);
+});
+
+test('the ■ gives way to a loader while a stop is in flight, and the loader is mute', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.startRun(THREAD, 'r1');
+    chatStore.startStream(THREAD, 's1', 'u1');
+  });
+  await waitFor(() => labelsOf(tree).includes('Stop generating'));
+
+  // The press arms the mark at once: the ■ is a loader from that instant, wearing the word the
+  // menu shows.
+  await pressLabel(tree, 'Stop generating');
+  await waitFor(() => stopFrames().length === 1);
+  await waitFor(() => labelsOf(tree).includes('Stopping…'));
+  expect(labelsOf(tree)).not.toContain('Stop generating');
+
+  // The loader is the whole story: pressing it sends nothing, and no bubble is drawn for a
+  // second stop the server would answer with silence.
+  const stops = stopFrames().length;
+  const sends = sendFrames().length;
+  await pressLabel(tree, 'Stopping…');
+  await ReactTestRenderer.act(async () => {
+    await new Promise<void>(resolve => setTimeout(resolve, 20));
+  });
+  expect(stopFrames().length).toBe(stops);
+  expect(sendFrames().length).toBe(sends);
+  expect(
+    chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.text === '/stop'),
+  ).toBe(false);
+
+  await settleAndUnmount(tree);
+});

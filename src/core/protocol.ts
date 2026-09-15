@@ -118,6 +118,23 @@ export interface RunEndFrame {
   run?: string;
 }
 
+/**
+ * A stop was claimed on this thread: the work it aborts has not departed yet.
+ *
+ * One frame per cycle, emitted when a claim answers "stopped" -- a second stop of the same cycle
+ * is answered nothing at all -- and replayed to a window that syncs while the abort travels (the
+ * live turn journal holds it, run or no run: a `/stop` against a compaction opens no journal).
+ * The work departing is what takes it down: the matching `chat.run.end` (a stopped run ends
+ * `aborted`) or the end of a compaction hold. It is what lets a stop taken on one surface read
+ * as "Stopping…" on the others, and what a window that reloads mid-stop finds.
+ */
+export interface RunStoppingFrame {
+  type: 'chat.run.stopping';
+  threadId: string;
+  /** The run `chat.run.start` announced; absent when the stop hit a cycle with no run (a compaction). */
+  run?: string;
+}
+
 export interface StreamStartFrame {
   type: 'chat.stream.start';
   id: string;
@@ -386,6 +403,14 @@ export type HistoryEntry =
        * history shows its duration the way a replayed thinking phase does.
        */
       compactionMs?: number;
+      /**
+       * This boundary stands for a compaction that was stopped: nothing was folded, the summary
+       * never landed, and `summaryOf` counts the turns the plan was about to cover -- all of them
+       * still on the thread, in full. Drawn as the boundary's sibling with "kept" where a summary
+       * landed; `summaryOf` is also what keeps it hoisted out of a run group, so the rule never
+       * reads as a bubble.
+       */
+      compactionStopped?: boolean;
       /** The run this entry belongs to, when it sits inside one. */
       run?: RunMeta;
     }
@@ -2290,6 +2315,7 @@ export type ServerFrame =
   | LocationPreviewResultFrame
   | RunStartFrame
   | RunEndFrame
+  | RunStoppingFrame
   | StreamStartFrame
   | StreamDeltaFrame
   | ReasoningDeltaFrame
@@ -2396,6 +2422,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'location.preview.result',
   'chat.run.start',
   'chat.run.end',
+  'chat.run.stopping',
   'chat.stream.start',
   'chat.stream.delta',
   'chat.reasoning.delta',

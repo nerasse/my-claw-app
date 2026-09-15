@@ -200,7 +200,10 @@ function Bar({
         {summary}
       </Text>
       {run.status === 'error' ? <Text style={styles.statusError}>error</Text> : null}
-      {run.status === 'aborted' ? <Text style={styles.statusAborted}>aborted</Text> : null}
+      {/* One vocabulary across the surfaces: the loader says "Stopping…" while the abort
+          travels, and the header of the run it cut says "Stopped" once it landed -- the same
+          word the owner would use, where `aborted` was the engine's. */}
+      {run.status === 'aborted' ? <Text style={styles.statusAborted}>Stopped</Text> : null}
     </Pressable>
   );
 }

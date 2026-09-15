@@ -273,3 +273,16 @@ test('two merged rows of one run read as a single group', () => {
   );
   expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('52 tool calls · bash · 1 min');
 });
+
+test('a stopped run wears the owner’s word, not the engine’s', () => {
+  // One vocabulary across the surfaces: the loader says "Stopping…" while the abort travels, and
+  // the header of the run it cut says "Stopped" once it landed. `aborted` was the engine's.
+  const stopped: RunInfo = { ...RUN, status: 'aborted' };
+  const tree = render(
+    <RunGroup run={stopped} items={[card('a')]} open={false} onToggle={jest.fn()} renderItem={item => <Text>{item.id}</Text>} />,
+  );
+
+  const texts = tree.root.findAllByType(Text).map(node => node.props.children);
+  expect(texts).toContain('Stopped');
+  expect(texts).not.toContain('aborted');
+});

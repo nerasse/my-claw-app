@@ -10,7 +10,7 @@ import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
-import { chatStore, isSubAgentTool, useChatItems, useCompacting, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
@@ -196,6 +196,9 @@ export function ChatScreen({
   // A compaction running on this conversation: thread state, drawn as a rule at the bottom of the
   // list rather than as an item in it (CompactionRunning says why).
   const compacting = useCompacting(threadId);
+  // A stop in flight on this conversation, whichever surface took it: the live rule drops its
+  // counter for "Stopping…", and the composer's corner turns its ■ into a loader.
+  const stopping = useStopping(threadId);
   // The questions waiting on this conversation, from the store rather than a prop: the form is a
   // row of the list, so it must survive this screen being unmounted and remounted.
   const questions = useThreadQuestions(threadId);
@@ -843,7 +846,7 @@ export function ChatScreen({
       // side of the bubble it belongs to, because an inverted cell lays its children out in
       // `column-reverse` under a scaleY flip (docs/compaction-indicator.md).
       if (row.kind === 'rule') {
-        return compacting === undefined ? null : <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} />;
+        return compacting === undefined ? null : <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} stopping={stopping} />;
       }
       if (row.kind === 'item') {
         // Grouping is a property of reading order, so it is still computed oldest-first and the
@@ -885,7 +888,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compacting, focusRow],
+    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compacting, stopping, focusRow],
   );
 
   /**
@@ -947,7 +950,7 @@ export function ChatScreen({
       (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
           {compacting !== undefined && ruleBefore === undefined ? (
-            <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} />
+            <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} stopping={stopping} />
           ) : null}
           {questionsLoose.map(ask => (
             <QuestionCard
@@ -959,7 +962,7 @@ export function ChatScreen({
           ))}
         </View>
       ) : null,
-    [compacting, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
+    [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
   );
 
   const listFooter = useMemo(
@@ -1135,6 +1138,7 @@ export function ChatScreen({
             uploadProgress={uploadProgress}
             streaming={streaming}
             onStop={onStop}
+            stopping={stopping}
             questionPending={questionPending}
             onRecallLast={recallLast}
           />
@@ -1257,6 +1261,7 @@ export function ChatScreen({
           uploadError={uploadError}
           streaming={streaming}
           onStop={onStop}
+          stopping={stopping}
           questionPending={questionPending}
           onRecallLast={recallLast}
         />

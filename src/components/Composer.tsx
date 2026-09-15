@@ -48,6 +48,7 @@ export function Composer({
   onRecordingError,
   streaming,
   onStop,
+  stopping,
   questionPending,
   onRecallLast,
 }: {
@@ -96,6 +97,13 @@ export function Composer({
   /** A run is answering in the conversation: the empty composer offers Stop instead of Send. */
   streaming?: boolean;
   onStop?: () => void;
+  /**
+   * A stop is in flight on this thread, from this device or another surface. The corner shows a
+   * loader where the ■ was, wearing the same word the session menu does, and the press goes
+   * nowhere: `chatStore.claimStop` refuses while one is in flight, so no second frame leaves and
+   * no second bubble is drawn for the one stop.
+   */
+  stopping?: boolean;
   /**
    * Up arrow on an empty field: bring back the last message sent, to fix a typo and send it
    * again. A desktop habit, and there is no arrow key to press on a phone.
@@ -366,8 +374,14 @@ export function Composer({
             style={[styles.send, hero && styles.sendHero, dense && !hero && styles.buttonDense, styles.sendStop]}
             onPress={onStop}
             accessibilityRole="button"
-            accessibilityLabel="Stop generating">
-            <Text style={styles.stopGlyph}>■</Text>
+            accessibilityLabel={stopping ? 'Stopping…' : 'Stop generating'}>
+            {stopping ? (
+              // The abort is travelling: nothing left to interrupt, so the ■ gives way to the
+              // loader and the same word every other surface shows.
+              <ActivityIndicator size="small" color={palette.accentText} />
+            ) : (
+              <Text style={styles.stopGlyph}>■</Text>
+            )}
           </Pressable>
         ) : null}
       </View>

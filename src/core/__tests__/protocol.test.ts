@@ -38,6 +38,7 @@ describe('parseServerFrame', () => {
       { type: 'chat.message', id: 'a', text: 'x', threadId: 't', attachments: [] },
       { type: 'chat.run.start', threadId: 't' },
       { type: 'chat.run.end', threadId: 't', reason: 'aborted' },
+      { type: 'chat.run.stopping', threadId: 't', run: 'r1' },
       { type: 'chat.stream.start', id: 'a', threadId: 't' },
       { type: 'chat.stream.delta', id: 'a', threadId: 't', text: 'x' },
       { type: 'chat.stream.done', id: 'a', threadId: 't' },

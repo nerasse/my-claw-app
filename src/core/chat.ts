@@ -73,6 +73,13 @@ export interface TextItem {
    * boundary written before it was measured, and then nothing is drawn rather than a zero.
    */
   compactionMs?: number;
+  /**
+   * A compaction that was stopped: nothing was folded, the summary never landed, and `summaryOf`
+   * counts the turns the plan was about to cover -- all of them still on the thread, in full.
+   * Drawn as the boundary's sibling, with "kept" where a summary landed; `summaryOf` is also what
+   * keeps it hoisted out of a run group, so the rule never reads as a bubble.
+   */
+  compactionStopped?: boolean;
   /** The run this bubble belongs to, when it sits inside one -- docs/run-grouping.md. */
   run?: RunInfo;
   ts: number;
@@ -287,6 +294,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.error ? { error: entry.error } : {}),
       ...(entry.summaryOf ? { summaryOf: entry.summaryOf } : {}),
       ...(entry.compactionMs !== undefined ? { compactionMs: entry.compactionMs } : {}),
+      ...(entry.compactionStopped ? { compactionStopped: true } : {}),
       ...(entry.run ? { run: runInfoOf(entry.run) } : {}),
       ts,
     };
@@ -334,6 +342,13 @@ class ChatStoreImpl {
    * ends -- see `claimStop` for the exact doors.
    */
   private stopping = new Set<string>();
+  /**
+   * Threads the server says a stop is in flight for (`chat.run.stopping`): a stop taken on
+   * another surface, and the state a window that reloaded mid-stop is replayed. Kept apart from
+   * the local mark so a press can still arm instantly without claiming the server's state, and
+   * read through the same `isStopping`; every door that lifts one lifts both.
+   */
+  private serverStopping = new Set<string>();
   /**
    * The run currently being answered, per thread. Live frames attach to it; sync entries carry
    * the server's id, which replaces the synthetic one when it arrives -- docs/run-grouping.md.
@@ -717,13 +732,16 @@ class ChatStoreImpl {
    * can also abort. False means one is already in flight: the server answers nothing to a second
    * request while the abort of the cycle travels ("stopping"), so the only thing a second frame
    * could produce is a second bubble for the one stop. Nothing is sent then, and the session
-   * menu entry says "Stopping…" instead of "Stop" by reading `isStopping`.
+   * menu entry says "Stopping…" instead of "Stop" by reading `isStopping` -- the union, so a
+   * stop taken on another surface refuses here exactly like one taken on this one.
    *
    * The mark is armed only while a cycle is actually in flight. A stop sent when nothing runs is
    * answered "Nothing running." at once, and there is no run end or compaction end to lift a mark
    * it set -- it would silence the next stop, the one that matters. The doors that lift it are
    * every witness that the cycle is over: `endRun` (a stopped run ends `aborted`), the end of the
-   * compaction, a session list or a page that no longer holds the run, and the thread going away.
+   * compaction, a session list or a page that no longer holds the run, a page that replaces the
+   * thread, and the thread going away. `liftStops` is the one place they all go through, so the
+   * local mark and the server's can never disagree about whether the cycle is over.
    *
    * A question waiting on the thread is the other case with nothing to wait for: the server reads
    * a stop as "cancel the question" and leaves the run alone, so the request may go and no mark is
@@ -732,7 +750,7 @@ class ChatStoreImpl {
    */
   claimStop(threadId: string): boolean {
     if (questionStore.forThread(threadId).length > 0) return true;
-    if (this.stopping.has(threadId)) return false;
+    if (this.isStopping(threadId)) return false;
     if (this.activeRuns.has(threadId) || this.openRuns.has(threadId) || this.compacting.has(threadId)) {
       this.stopping.add(threadId);
       this.emit();
@@ -740,13 +758,35 @@ class ChatStoreImpl {
     return true;
   }
 
-  /** A stop is in flight for this thread: the menu entry reads "Stopping…" and sends nothing. */
+  /**
+   * A stop is in flight for this thread: the menu entry reads "Stopping…" and sends nothing.
+   *
+   * The union of the two marks. The local one is armed by this device's press, so it can answer
+   * the instant the finger lifts; the server's arrives on `chat.run.stopping`, which is what
+   * shows a stop taken on the web over here and what a window that reloaded mid-stop is replayed.
+   */
   isStopping(threadId: string): boolean {
-    return this.stopping.has(threadId);
+    return this.stopping.has(threadId) || this.serverStopping.has(threadId);
   }
 
   /**
-   * Lifts the mark without a run end.
+   * The server says a stop was claimed on this thread and the work it aborts has not departed.
+   *
+   * One frame per cycle, replayed to a window that syncs while it holds, so it is kept even when
+   * no local press happened. Recorded only while a cycle is known here -- the same condition that
+   * arms the local mark. A frame that outlived its cycle (the end travelled first, a late replay)
+   * is dropped rather than resurrected: nothing would ever lift it again, and the thread would
+   * read "Stopping…" for good.
+   */
+  markStopping(threadId: string): void {
+    if (this.serverStopping.has(threadId)) return;
+    if (!this.activeRuns.has(threadId) && !this.openRuns.has(threadId) && !this.compacting.has(threadId)) return;
+    this.serverStopping.add(threadId);
+    this.emit();
+  }
+
+  /**
+   * Lifts the marks without a run end.
    *
    * The one stop that aborts nothing is the one answered by canceling a pending question: the run
    * carries on, no `chat.run.end` is coming for that stop, and a mark left through it would
@@ -755,7 +795,18 @@ class ChatStoreImpl {
    * the ask reached this device armed a mark the question's own cancellation lifts.
    */
   liftStop(threadId: string): void {
-    if (this.stopping.delete(threadId)) this.emit();
+    if (this.liftStops(threadId)) this.emit();
+  }
+
+  /**
+   * Every door that says the cycle is over goes through here: the two marks are one state read
+   * through `isStopping`, so they are lifted together or the display depends on which one the
+   * door remembered.
+   */
+  private liftStops(threadId: string): boolean {
+    const local = this.stopping.delete(threadId);
+    const server = this.serverStopping.delete(threadId);
+    return local || server;
   }
 
   /** The run live frames of a thread belong to, if any. */
@@ -806,7 +857,7 @@ class ChatStoreImpl {
     // does not outlive it: a Stop that aborted the summarizer ends both.
     this.compacting.delete(threadId);
     // The stop in flight is over, whatever the motive of the end -- a stopped run ends `aborted`.
-    this.stopping.delete(threadId);
+    this.liftStops(threadId);
     // And a command placeholder still waiting across the end of the run is resolved here. The one
     // command the server deliberately leaves unanswered is a stop whose abort is already
     // travelling: the web stopped the same thread a moment before, this device sent its own
@@ -919,7 +970,7 @@ class ChatStoreImpl {
       this.openRuns.delete(threadId);
       // The server says no run is answering on the thread: a stop in flight is over too, whether
       // or not its end frame ever arrives.
-      this.stopping.delete(threadId);
+      this.liftStops(threadId);
       // No run is in flight, so whatever the live frames painted under a synthetic id is the work
       // of the run this page closes: it takes that run's id, status and end. Renaming only while
       // the run was still running left a page that arrived after its end with two ids for one
@@ -972,7 +1023,7 @@ class ChatStoreImpl {
       const open = this.openRuns.get(threadId);
       if (open) this.sealRun(threadId, open.info.id, 'done', Date.now());
       this.openRuns.delete(threadId);
-      this.stopping.delete(threadId);
+      this.liftStops(threadId);
     }
     this.activeRuns = next;
     this.emit();
@@ -1061,8 +1112,11 @@ class ChatStoreImpl {
   private resetThread(threadId: string, entries: HistoryEntry[]): void {
     // A fresh page post-dates whatever compaction this window last heard of. One still in flight
     // is replayed right after the page (docs/live-turn-replay.md), which sets the state again; one
-    // that has settled is not, which is the point.
+    // that has settled is not, which is the point. The stop in flight follows the same rule for
+    // the same reason: the page is the truth over its range, and the replayed `chat.run.stopping`
+    // is what re-raises the state if the abort has not departed yet.
     this.compacting.delete(threadId);
+    this.liftStops(threadId);
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const base = this.itemsOfWithSpawnReconcile(threadId, entries);
     const known = new Set(base.map(item => item.id));
@@ -1484,7 +1538,7 @@ class ChatStoreImpl {
       const ended = this.compacting.delete(threadId);
       // A compaction was the cycle a stop was aimed at (the one case with no run behind it): its
       // end lifts the mark the same way a run end does, or the next stop would be silenced.
-      const lifted = this.stopping.delete(threadId);
+      const lifted = this.liftStops(threadId);
       if (ended || lifted) this.emit();
       return;
     }
@@ -1896,7 +1950,7 @@ class ChatStoreImpl {
     this.syncState.delete(threadId);
     this.activeRuns.delete(threadId);
     this.openRuns.delete(threadId);
-    this.stopping.delete(threadId);
+    this.liftStops(threadId);
     this.lastStream.delete(threadId);
     this.pendingCommands.delete(threadId);
     if (this.unread.delete(threadId)) this.refreshUnread();
@@ -1922,6 +1976,7 @@ class ChatStoreImpl {
     this.activeRuns.clear();
     this.openRuns.clear();
     this.stopping.clear();
+    this.serverStopping.clear();
     this.pendingCommands.clear();
     this.unread.clear();
     this.unreadSnapshot = EMPTY_THREADS;

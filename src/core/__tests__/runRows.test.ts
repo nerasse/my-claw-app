@@ -228,6 +228,15 @@ describe('isHoisted', () => {
     expect(isHoisted(agentText('c', 'out', undefined, { command: true }))).toBe(true);
     expect(isHoisted(agentText('n', 'notice', undefined, { notice: true }))).toBe(true);
     expect(isHoisted({ ...(userText('b') as ChatItem & { summaryOf?: number }), summaryOf: 3 } as unknown as ChatItem)).toBe(true);
+    // The boundary's stopped sibling hoists on the same field: the rule never becomes a bubble
+    // inside a run group, however it was stopped.
+    expect(
+      isHoisted({
+        ...(userText('bs') as ChatItem & { summaryOf?: number }),
+        summaryOf: 12,
+        compactionStopped: true,
+      } as unknown as ChatItem),
+    ).toBe(true);
     expect(isHoisted(tool('t'))).toBe(false);
     expect(isHoisted(agentText('a', 'text'))).toBe(false);
   });

@@ -91,3 +91,26 @@ test('a compaction that thinks nothing shows nothing of it', () => {
 
   expect(textOf(tree)).not.toContain('Thinking');
 });
+
+/**
+ * The counter gives way to the stop in flight (2026-09-14).
+ *
+ * Owner: "le compteur cède la place à l'état réel : on voit que ça s'arrête, pas que ça continue."
+ * A number still climbing while the abort travels says the opposite of the truth, and the word is
+ * the same one the session menu and the composer's corner show.
+ */
+test('a stop in flight takes the counter’s place', () => {
+  const tree = render({ since: Date.now() - 5_000, stopping: true });
+
+  expect(textOf(tree)).toContain('Stopping…');
+  expect(textOf(tree)).not.toContain('Compacting the context');
+});
+
+test('what the compaction had written stays readable while it is stopped', () => {
+  // The asides are content, not the counter: the words already written are still there to read,
+  // and only the line that claimed progress changes.
+  const tree = render({ since: Date.now(), stopping: true, text: 'Prior work: we fixed the runner.' });
+
+  expect(textOf(tree)).toContain('Stopping…');
+  expect(textOf(tree)).toContain('Writing the summary');
+});

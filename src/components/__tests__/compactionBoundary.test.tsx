@@ -86,3 +86,25 @@ test('the summary stays open when the cell is unmounted and rebuilt', () => {
   const rebuilt = mount({ item: item() });
   expect(texts(rebuilt)).toContain('Prior work');
 });
+
+/**
+ * The boundary's stopped sibling (2026-09-14).
+ *
+ * A compaction the owner aborted left nothing behind before this: the boundary was written only
+ * when the summary landed, so minutes of work vanished without a trace. The server now writes a
+ * `compaction_stopped` entry, replayed as this rule: same shape, same count of turns, and "kept"
+ * where a summary landed -- because nothing was folded, and every turn it names is still there.
+ */
+test('a stopped compaction is a rule too, and says how many turns it kept', () => {
+  const tree = mount({ item: item({ compactionStopped: true, text: '' }) });
+
+  expect(texts(tree)).toContain('Compaction stopped · 12 turns kept');
+  expect(texts(tree)).not.toContain('Context compacted');
+});
+
+test('a stopped compaction offers no aside: there is no summary to fold', () => {
+  const tree = mount({ item: item({ compactionStopped: true, text: '' }) });
+
+  expect(texts(tree)).not.toContain('Show what the compaction kept');
+  expect(texts(tree)).not.toContain('Summary');
+});

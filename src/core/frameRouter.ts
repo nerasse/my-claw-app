@@ -296,6 +296,14 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       }
       break;
     }
+    case 'chat.run.stopping':
+      // The server claimed a stop on this thread and the work it aborts has not departed yet. One
+      // frame per cycle, replayed to a window that syncs while it holds: this is what shows a
+      // stop taken on another surface (the web) over here, and what a window that reloaded
+      // mid-stop is handed back. Silent besides the state, like the compaction: a stop is not
+      // activity, and nothing in the drawer rings for it.
+      chatStore.markStopping(frame.threadId);
+      break;
     case 'subagents.list.result':
       subAgentStore.receive(frame);
       chatStore.reconcileSpawnRoster(frame.threadId, frame.agents);

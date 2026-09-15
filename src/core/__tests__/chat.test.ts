@@ -561,6 +561,28 @@ describe('chatStore.seedHistory', () => {
     expect(items[2]).not.toHaveProperty('summaryOf');
   });
 
+  test('a stopped compaction is carried through as its own rule, empty body included', () => {
+    // The boundary's stopped sibling: same rule, same count of turns, no summary -- nothing was
+    // folded, so the turns it names are all still there. `compactionStopped` is what labels it
+    // "kept" instead of "summarized", and `summaryOf` is what keeps it hoisted out of a run
+    // group, so the rule never reads as a bubble in the owner's own voice.
+    chatStore.seedHistory(THREAD, [
+      { id: 'h-1', role: 'user', text: 'avant', ts: '2026-01-01T00:00:01.000Z' },
+      {
+        id: 'h-2',
+        role: 'user',
+        text: '',
+        ts: '2026-01-01T00:00:02.000Z',
+        summaryOf: 12,
+        compactionStopped: true,
+      },
+    ]);
+    const items = chatStore.getItems(THREAD);
+    expect(items).toHaveLength(2);
+    expect(items[1]).toMatchObject({ kind: 'text', summaryOf: 12, compactionStopped: true, text: '' });
+    expect(items[0]).not.toHaveProperty('compactionStopped');
+  });
+
   test('a send the server never mirrors is dropped on reset (sync model)', () => {
     // With sync, unmirrored sends are dropped on reset. The old 30s window is gone.
     // A `/status` that the server never journalizes as a turn is lost after a reset.

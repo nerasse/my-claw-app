@@ -170,3 +170,97 @@ describe('a command bubble a stop left in flight', () => {
     });
   });
 });
+
+/**
+ * The state the server sends (`chat.run.stopping`).
+ *
+ * One frame per cycle when a stop is claimed, replayed to a window that syncs while the abort
+ * travels: it is what shows a stop taken on another surface over here, and what a window that
+ * reloaded mid-stop is handed back. It lives beside the local mark and reads through the same
+ * `isStopping`, so a stop taken on the web refuses a second press exactly like one taken here.
+ */
+describe('the state the server sends', () => {
+  test('received: the thread reads as stopping, with no local press behind it', () => {
+    chatStore.startRun(THREAD, 'r1');
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    expect(chatStore.isStopping(THREAD)).toBe(true);
+  });
+
+  test('a stop taken here and one taken elsewhere read as one state: the second press sends nothing', () => {
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    // The press is refused without arming the local mark: there is nothing left to claim.
+    expect(chatStore.claimStop(THREAD)).toBe(false);
+    expect(chatStore.isStopping(THREAD)).toBe(true);
+  });
+
+  test('the end of the run lifts it, whatever the motive', () => {
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    route({ type: 'chat.run.end', threadId: THREAD, reason: 'aborted' });
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+    // The next cycle's stop is free to go again.
+    chatStore.startRun(THREAD, 'r2');
+    expect(chatStore.claimStop(THREAD)).toBe(true);
+  });
+
+  test('a page that says no run is answering lifts it', () => {
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    chatStore.handleSyncResult(THREAD, oneEntry(), null, null, false);
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+  });
+
+  test('a session list that no longer holds the run lifts it', () => {
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    chatStore.seedRuns([]);
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+  });
+
+  test('the thread going away lifts it', () => {
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    chatStore.clearThread(THREAD);
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+  });
+
+  test('a page that replaces the thread drops it, and the replay right after raises it again', () => {
+    // A reset is the truth over the range it covers: one still in flight is replayed right after
+    // the page (the server sends it last), which sets the state again; one that has settled is
+    // not, which is the point.
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    chatStore.handleSyncResult(THREAD, oneEntry(), null, null, true, 'branch-switch');
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+    // The replay of the same cycle, as the sync hands it back while the abort still travels.
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    expect(chatStore.isStopping(THREAD)).toBe(true);
+  });
+
+  test('a stop against a compaction goes with the end of the compaction', () => {
+    chatStore.setCompacting(THREAD, Date.now());
+    route({ type: 'chat.run.stopping', threadId: THREAD });
+    expect(chatStore.isStopping(THREAD)).toBe(true);
+    chatStore.setCompacting(THREAD, undefined);
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+  });
+
+  test('stopping then end: the state goes with the cycle it described', () => {
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    expect(chatStore.isStopping(THREAD)).toBe(true);
+    route({ type: 'chat.run.end', threadId: THREAD, reason: 'aborted' });
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+  });
+
+  test('end then stopping: a frame out of order does not leave the thread stuck', () => {
+    // The end travelled first and the cycle is over. Left set, the state would read "Stopping…"
+    // for good: nothing is coming to lift it.
+    chatStore.startRun(THREAD, 'r1');
+    route({ type: 'chat.run.end', threadId: THREAD, reason: 'aborted' });
+    route({ type: 'chat.run.stopping', threadId: THREAD, run: 'r1' });
+    expect(chatStore.isStopping(THREAD)).toBe(false);
+  });
+});

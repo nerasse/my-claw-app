@@ -28,11 +28,19 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const count = item.summaryOf ?? 0;
+  // A stopped compaction is the boundary's sibling: same rule, same count of turns, and the
+  // wording is the only difference -- nothing was folded, so it says what it kept instead of what
+  // it summarized. The body is empty by contract (no summary was ever written), so no aside is
+  // offered: the reader sees a rule and nothing to open.
   return (
     <View style={styles.row} accessibilityRole="summary">
       <View style={styles.rule}>
         <View style={styles.line} />
-        <Text style={styles.label}>Context compacted · {turns(count)} summarized</Text>
+        <Text style={styles.label}>
+          {item.compactionStopped
+            ? `Compaction stopped · ${turns(count)} kept`
+            : `Context compacted · ${turns(count)} summarized`}
+        </Text>
         <View style={styles.line} />
       </View>
       {item.text ? (
@@ -64,7 +72,7 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
  * per thread by construction, and it goes when the boundary it becomes arrives, or when anything
  * else shows the operation is over.
  */
-export function CompactionRunning({ since, text, reasoning }: { since: number; text?: string; reasoning?: string }): React.JSX.Element {
+export function CompactionRunning({ since, text, reasoning, stopping }: { since: number; text?: string; reasoning?: string; stopping?: boolean }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const elapsed = useElapsed(since);
   const summary = text?.trim() ?? '';
@@ -73,7 +81,14 @@ export function CompactionRunning({ since, text, reasoning }: { since: number; t
     <View style={styles.row} accessibilityRole="summary">
       <View style={styles.rule}>
         <View style={styles.line} />
-        <Text style={styles.label}>Compacting the context · {formatThinkingSpan(elapsed)}</Text>
+        {/*
+          A stop in flight takes the counter's place: the operation is ending, not progressing,
+          and a number still climbing would say the opposite of the truth the moment the reader
+          looks at it. The same word as the session menu, so one stop reads the same everywhere.
+        */}
+        <Text style={styles.label}>
+          {stopping ? 'Stopping…' : `Compacting the context · ${formatThinkingSpan(elapsed)}`}
+        </Text>
         <View style={styles.line} />
       </View>
       {/*

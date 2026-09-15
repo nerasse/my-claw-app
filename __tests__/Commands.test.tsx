@@ -558,6 +558,60 @@ test('a compaction whose end was never heard is over with its run', async () => 
   await settleAndUnmount(tree);
 });
 
+/**
+ * A stop in flight on a compaction (2026-09-14).
+ *
+ * Owner: "le compteur cède la place à l'état réel : on voit que ça s'arrête, pas que ça continue."
+ * The frame carries the state, so the rule changes word the moment the abort is claimed -- here
+ * from another surface, with no press on this device.
+ */
+test('a stop in flight turns the live rule to Stopping…, and the end of the compaction takes it down', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u6', 'continue', []);
+  });
+  await emit({ type: 'chat.compacting', threadId: THREAD, since: new Date(Date.now() - 42_000).toISOString() });
+  await waitFor(() => textLines(tree).some(text => text.includes('Compacting the context')), 60);
+
+  // The web stops the compaction: the abort travels, and the counter stops claiming progress.
+  await emit({ type: 'chat.run.stopping', threadId: THREAD });
+  await waitFor(() => textLines(tree).some(text => text.includes('Stopping…')), 60);
+  expect(textLines(tree).some(text => text.includes('Compacting the context'))).toBe(false);
+
+  // The compaction settles: the rule goes with it, the way it does for any other end.
+  await emit({ type: 'chat.compacting', threadId: THREAD });
+  await waitFor(() => tree.root.findAllByType(CompactionRunning).length === 0, 60);
+
+  await settleAndUnmount(tree);
+});
+
+/**
+ * The trace a stopped compaction leaves (2026-09-14).
+ *
+ * Before this, a compaction the owner aborted wrote nothing: the boundary only ever landed when
+ * the summary did, so minutes of work left no mark. The server appends a `compaction_stopped`
+ * entry and replays it here as the boundary's sibling -- same rule, same count, "kept" instead of
+ * "summarized", and nothing to open because no summary was ever written.
+ */
+test('a stopped compaction comes back from history as its own rule, with nothing to open', async () => {
+  const tree = await renderApp();
+  await emit({
+    type: 'chat.history',
+    threadId: THREAD,
+    messages: [
+      { id: 'h-1', role: 'user', text: 'avant', ts: new Date().toISOString() },
+      { id: 'h-2', role: 'user', text: '', ts: new Date().toISOString(), summaryOf: 12, compactionStopped: true },
+    ],
+  });
+  await waitFor(() => textLines(tree).some(text => text.includes('Compaction stopped · 12 turns kept')), 60);
+  expect(textLines(tree).some(text => text.includes('Context compacted'))).toBe(false);
+  // No summary landed, so no control offers to open one.
+  expect(labelsOf(tree)).not.toContain('Summary');
+  expect(labelsOf(tree)).not.toContain('Show what the compaction kept');
+
+  await settleAndUnmount(tree);
+});
+
 test('a compaction summary is folded under the result, and opens on tap', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
