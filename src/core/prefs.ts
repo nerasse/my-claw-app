@@ -15,6 +15,12 @@ export interface Prefs {
    * under the answer whatever this is set to.
    */
   chatFontScale: number;
+  /**
+   * Folders the owner folded away in the conversation list, by id. Device-local on purpose: a fold
+   * makes room on a small screen, and the same folders unfolded on a wide one are not a
+   * contradiction to be resolved but two rooms arranged differently.
+   */
+  collapsedFolders: string[];
 }
 
 export { DEFAULT_SERVER_URL };
@@ -25,6 +31,7 @@ const DEFAULTS: Prefs = {
   lastThreadId: null,
   updateOnMobileData: false,
   chatFontScale: 1,
+  collapsedFolders: [],
 };
 
 const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
@@ -32,6 +39,11 @@ const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
 /** The scale range offered in settings, and what a stored value is clamped to on load. */
 export const CHAT_SCALE_MIN = 0.85;
 export const CHAT_SCALE_MAX = 1.3;
+
+/** Folder ids travel as one comma-separated string: ids carry no comma, and the file stays legible. */
+export function parseCollapsedFolders(raw: string | undefined): string[] {
+  return raw ? raw.split(',').filter(id => id !== '') : [];
+}
 
 export function clampChatScale(value: number): number {
   if (!Number.isFinite(value)) return DEFAULTS.chatFontScale;
@@ -75,6 +87,7 @@ class PrefsStore {
         lastThreadId: raw.lastThreadId?.trim() ? raw.lastThreadId : null,
         updateOnMobileData: raw.updateOnMobileData === 'true',
         chatFontScale: clampChatScale(Number(raw.chatFontScale)),
+        collapsedFolders: parseCollapsedFolders(raw.collapsedFolders),
       };
     } catch {
       this.current = DEFAULTS;

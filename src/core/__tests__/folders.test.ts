@@ -108,6 +108,15 @@ describe('sectionBadge', () => {
     expect(sectionBadge([], waiting, active)).toBeNull();
   });
 
+  test('a draft never raises a badge', () => {
+    // A draft is something the owner wrote and did not send: nobody is waiting on it, and a folder
+    // that lit up for it would be asking him to go and finish his own sentence.
+    const withDraft = session('b', { hasDraft: true });
+
+    expect(sectionBadge([withDraft], waiting, active)).toBeNull();
+    expect(sectionBadge([withDraft, session('a')], waiting, active)).toEqual({ kind: 'activity', count: 1 });
+  });
+
   test('only the rows it is given are counted', () => {
     // Under a filter the folder wears what its own contents say on screen, not what is filed
     // away out of sight.

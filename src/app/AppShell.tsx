@@ -384,12 +384,21 @@ export function AppShell(): React.JSX.Element {
   const [workspaceFilterOpen, setWorkspaceFilterOpen] = useState(false);
   const [workspaceQuery, setWorkspaceQuery] = useState('');
   /**
-   * Folders the owner folded away. Here for the same reason the filter is: three mounts, one list.
-   * Not remembered across a restart yet -- a fold is a gesture of the moment, not a setting.
+   * Folders the owner folded away, remembered on the device. Kept in the shell for the same reason
+   * the filter is -- three mounts, one list -- and in the settings bag for a different one: a fold
+   * makes room on a phone, and having to redo it at every launch is the kind of small tax that
+   * makes a list feel unlike a room.
    */
-  const [collapsedFolders, setCollapsedFolders] = useState<string[]>([]);
+  const [collapsedFolders, setCollapsedFolders] = useState<string[]>(prefs.get().collapsedFolders);
+  useEffect(() => {
+    const apply = () => setCollapsedFolders(prefs.get().collapsedFolders);
+    apply();
+    return prefs.subscribe(apply);
+  }, []);
   const toggleFolder = useCallback((folderId: string) => {
-    setCollapsedFolders(current =>
+    const current = prefs.get().collapsedFolders;
+    prefs.set(
+      'collapsedFolders',
       current.includes(folderId) ? current.filter(id => id !== folderId) : [...current, folderId],
     );
   }, []);

@@ -189,3 +189,30 @@ test('a quiet folder carries nothing, and its other sections keep their own coun
 
   await unmount(tree);
 });
+
+test('a fold is remembered on the device, and the list comes back folded', async () => {
+  // Second launch: the settings bag already holds the fold, so the drawer draws it before anyone
+  // touches it. Nothing else about the list changes.
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', collapsedFolders: 'f1' });
+  const tree = await renderAppHome();
+  await ReactTestRenderer.act(async () => {
+    sessionStore.replace(
+      [
+        session('cf-1', 'cf chat', { folderId: 'f1' }),
+        session('cf-2', 'cf other', { folderId: 'f1' }),
+        session('plain', 'no folder chat', { workspace: 'dev' }),
+      ],
+      [CUBEFLOW, CARRIERE],
+    );
+  });
+
+  await waitFor(() => labelsOf(tree).includes('Folder CubeFlow'));
+  expect(labelsOf(tree)).not.toContain(row('cf chat'));
+  expect(textsOf(tree)).toContain('CubeFlow · 2');
+
+  await pressAny(tree, 'Folder CubeFlow');
+  expect(labelsOf(tree)).toContain(row('cf chat'));
+  expect(bridge.prefsSet).toHaveBeenCalledWith('collapsedFolders', '');
+
+  await unmount(tree);
+});

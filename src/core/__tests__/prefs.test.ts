@@ -1,4 +1,4 @@
-import { DEFAULT_SERVER_URL, prefs } from '../prefs';
+import { DEFAULT_SERVER_URL, parseCollapsedFolders, prefs } from '../prefs';
 import { deviceBridge } from '../nativeBridge';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -11,7 +11,7 @@ beforeEach(() => {
 describe('prefs.hydrate', () => {
   test('falls back to defaults when nothing is stored', async () => {
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1 });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [] });
     expect(prefs.isHydrated()).toBe(true);
   });
 
@@ -22,13 +22,25 @@ describe('prefs.hydrate', () => {
       lastThreadId: 'thread-9',
     });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9', updateOnMobileData: false, chatFontScale: 1 });
+    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9', updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [] });
   });
 
   test('ignores a corrupted theme mode and an empty url', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ themeMode: 'neon', serverUrl: '   ', lastThreadId: '' });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1 });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [] });
+  });
+
+  test('reads back the folders that were folded away', async () => {
+    bridge.prefsGetAll.mockResolvedValueOnce({ collapsedFolders: 'f2,f1' });
+    const loaded = await prefs.hydrate();
+    expect(loaded.collapsedFolders).toEqual(['f2', 'f1']);
+  });
+
+  test('an empty or absent folded list is no folders folded', async () => {
+    expect(parseCollapsedFolders(undefined)).toEqual([]);
+    expect(parseCollapsedFolders('')).toEqual([]);
+    await expect(prefs.hydrate()).resolves.toMatchObject({ collapsedFolders: [] });
   });
 
   test('a broken bridge leaves the app on defaults instead of throwing', async () => {
@@ -38,6 +50,15 @@ describe('prefs.hydrate', () => {
 });
 
 describe('prefs.set', () => {
+  test('a folded list is stored as one comma-separated value', async () => {
+    await prefs.hydrate();
+    prefs.set('collapsedFolders', ['f1', 'f2']);
+    expect(bridge.prefsSet).toHaveBeenCalledWith('collapsedFolders', 'f1,f2');
+
+    prefs.set('collapsedFolders', []);
+    expect(bridge.prefsSet).toHaveBeenLastCalledWith('collapsedFolders', '');
+  });
+
   test('writes through and notifies once per real change', async () => {
     await prefs.hydrate();
     const listener = jest.fn();

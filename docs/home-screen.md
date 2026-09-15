@@ -21,7 +21,10 @@ is making a claim it cannot back.
 
 Tapping a folder folds it. Folded is not hidden: the header stays with its count, which is the
 whole reason to fold one. The fold lives in the shell, next to the workspace filter and for the same
-reason -- three mounts, one list -- and is remembered nowhere, like the filter.
+reason -- three mounts, one list -- and is remembered on the device, unlike the filter: a fold makes
+room on a phone, and redoing it at every launch is the small tax that makes a list feel unlike a
+room. It travels as one comma-separated value in the settings bag (`prefs.collapsedFolders`), and
+folder ids carry no comma.
 
 What is drawn follows from what the filter left:
 
