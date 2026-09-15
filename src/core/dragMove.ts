@@ -23,6 +23,34 @@ export interface LineBox extends ListLine {
   height: number;
 }
 
+/**
+ * Where every drawn line sits in the list's content, in the order the list draws them.
+ *
+ * Heights are summed, never read from `onLayout`: on the web every item of a `FlatList` reports
+ * y = 0 -- what react-native-web measures there is the item, not the item in the list -- so a hit
+ * test that trusted those y values found no line at all and picking anything up did nothing at
+ * all. Heights are right on both platforms, two entries are contiguous, and the list draws
+ * `separator` pixels between two of them.
+ *
+ * The walk stops at the first line with no height: nothing can be over a line that has not been
+ * laid out, and where the ones after it would sit is a guess.
+ */
+export function stackLines(
+  lines: readonly ListLine[],
+  heights: ReadonlyMap<string, number>,
+  separator: number,
+): LineBox[] {
+  const boxes: LineBox[] = [];
+  let y = 0;
+  for (const line of lines) {
+    const height = heights.get(line.key);
+    if (height === undefined) break;
+    boxes.push({ ...line, y, height });
+    y += height + separator;
+  }
+  return boxes;
+}
+
 /** The line under a finger, if it is over one. */
 export function lineAt(boxes: Iterable<LineBox>, contentY: number): LineBox | undefined {
   for (const box of boxes) {

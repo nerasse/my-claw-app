@@ -21,8 +21,9 @@ import { FilterIcon, FolderIcon, GearIcon, NewFolderIcon, PlusIcon } from '../co
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
-import { fileDrop, lineAt, orderDrop, sameDrop, targetOf, type DropMove, type LineBox, type ListLine } from '../core/dragMove';
+import { fileDrop, lineAt, orderDrop, sameDrop, stackLines, targetOf, type DropMove, type LineBox, type ListLine } from '../core/dragMove';
 import { matchesWorkspace } from '../core/workspaceFilter';
+import { pointerFine } from '../core/platform';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
 
@@ -74,6 +75,13 @@ const lineOf = (item: DrawerEntry): ListLine => ({
 type DragSubject =
   | { kind: 'thread'; session: SessionSummary }
   | { kind: 'folder'; folder: FolderSummary };
+
+/**
+ * The rule the list draws between two entries. `stackLines` sums it in, so a finger lands one
+ * pixel lower per line above it -- and the drawing below reads the same number, so the two cannot
+ * drift apart.
+ */
+export const SEPARATOR_HEIGHT = 1;
 
 /** How long a finger has to hold still before moving becomes a drag rather than a scroll. */
 const DRAG_HOLD_MS = 350;
@@ -193,8 +201,12 @@ export function Drawer({
   const progress = useRef(new Animated.Value(0)).current;
   const searchRef = useRef<TextInput>(null);
   const [query, setQuery] = useState('');
-  /** Where every drawn line sits in the list's content, keyed by entry. Written by `onLayout`. */
-  const lineBoxesRef = useRef(new Map<string, LineBox>());
+  /**
+   * How tall each drawn line is, keyed by entry. Written by `onLayout`, which is the one thing
+   * about a line that can be trusted on both platforms -- see `stackLines` for why its position
+   * is summed instead of read.
+   */
+  const lineHeightsRef = useRef(new Map<string, number>());
   /** What the finger is carrying: a ref, because the gesture reads it on every move. */
   const draggedRef = useRef<DragSubject | null>(null);
   /** What a release would do right now, already narrowed by the hit test. */
@@ -305,15 +317,27 @@ export function Drawer({
     folderIdsRef.current = folderIds;
   }, [folderIds]);
 
-  /** Records where a drawn line sits, in the list's own content coordinates. */
-  const measureLine = useCallback((line: ListLine, event: LayoutChangeEvent): void => {
-    const { y, height } = event.nativeEvent.layout;
-    lineBoxesRef.current.set(line.key, { ...line, y, height });
+  /** The drawn entries as lines, in the order the list draws them: what a finger can be over. */
+  const lines = useMemo(() => entries.map(lineOf), [entries]);
+  const linesRef = useRef(lines);
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
+
+  /** Records how tall a drawn line is. Where it sits is where those heights add up to. */
+  const measureLine = useCallback((key: string, event: LayoutChangeEvent): void => {
+    lineHeightsRef.current.set(key, event.nativeEvent.layout.height);
   }, []);
 
-  /** The line under a finger: the viewport's own y, plus what has scrolled past above it. */
+  /**
+   * The line under a finger: the viewport's own y, plus what has scrolled past above it.
+   *
+   * The stack is walked on every move rather than cached: thirty lines of arithmetic cost less
+   * than keeping a cache honest through a scroll, a search and a fold.
+   */
   const lineUnder = useCallback(
-    (y: number): LineBox | undefined => lineAt(lineBoxesRef.current.values(), scrollOffsetRef.current + y),
+    (y: number): LineBox | undefined =>
+      lineAt(stackLines(linesRef.current, lineHeightsRef.current, SEPARATOR_HEIGHT), scrollOffsetRef.current + y),
     [],
   );
 
@@ -407,14 +431,56 @@ export function Drawer({
     [chipPos, driveAutoScroll, lineUnder, reflectDrop],
   );
 
+  /**
+   * The click a release sends, which belongs to the drag and not to whatever is under the pointer.
+   *
+   * A browser dispatches that click where the button came up, whatever a gesture did with the press
+   * first: without this, dropping a conversation both files it and opens it. It is the one press
+   * that arrives with no press-down of its own, and the flag is raised on the release and lowered
+   * on the next press-down -- so nothing else is ever swallowed, and a tap opens as it always did.
+   */
+  const swallowedPressRef = useRef(false);
+  /** Where the press landed. The drag picks up there, not where the pointer was when it began. */
+  const pressAtRef = useRef<{ x: number; y: number } | null>(null);
+  /** True while the press being handled is the one that release sent. */
+  const pressIsTheDrags = useCallback((): boolean => swallowedPressRef.current, []);
+
+  const openThread = useCallback(
+    (threadId: string): void => {
+      if (pressIsTheDrags()) return;
+      onOpenThread(threadId);
+    },
+    [onOpenThread, pressIsTheDrags],
+  );
+
+  const toggleFolder = useCallback(
+    (folderId: string): void => {
+      if (pressIsTheDrags()) return;
+      onToggleFolder(folderId);
+    },
+    [onToggleFolder, pressIsTheDrags],
+  );
+
+  const openFolderMenu = useCallback(
+    (folder: FolderSummary): void => {
+      if (pressIsTheDrags()) return;
+      onFolderMenu(folder);
+    },
+    [onFolderMenu, pressIsTheDrags],
+  );
+
   const endDrag = useCallback(
     (canceled: boolean): void => {
       stopAutoScroll();
       const move = dropRef.current;
+      const carried = draggedRef.current !== null;
       draggedRef.current = null;
       dropRef.current = null;
       setDragging(null);
       setDropMove(null);
+      // A drag that carried something leaves a click behind it on the web; one that carried
+      // nothing leaves the press alone, so a hold that picks nothing up is still a tap.
+      if (carried) swallowedPressRef.current = true;
       // Nothing to do: the finger let go outside every section, or over the one it came from.
       if (canceled || !move) return;
       if (move.kind === 'file') moveRef.current(move.threadId, move.folderId);
@@ -428,26 +494,40 @@ export function Drawer({
    *
    * `activateAfterLongPress` is what makes a drag and a scroll the same motion told apart by a
    * pause -- moving during the hold fails the gesture and the list scrolls, which is the only way
-   * to reach a folder that is not on screen.
+   * to reach a folder that is not on screen. On a cursor it is left out, for two reasons. A mouse
+   * drags on the spot, so a hold under a pointer reads as the app ignoring the drag; and the web
+   * implementation of the option fails the gesture on any movement past its own threshold *after*
+   * the press has been held as well -- measured in a browser, the pan activated and then died on
+   * the first move, which is the bug that made this gesture do nothing at all there.
    *
    * The callbacks stay on the JS thread: the hit test is a lookup in a Map, not a worklet, and
    * that is also what makes the whole thing testable without a device.
    */
-  const dragGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activateAfterLongPress(DRAG_HOLD_MS)
-        .runOnJS(true)
-        .activeCursor('grabbing')
-        .withTestId('drawerDrag')
-        // `onStart` is the activation, so it fires only once the hold has been kept: the drag
-        // never begins on a gesture the list is going to scroll instead.
-        .onStart(event => beginDrag(event.y, event.x))
-        .onUpdate(event => updateDrag(event.y, event.x))
-        .onEnd((_event, success) => endDrag(!success))
-        .onFinalize(() => stopAutoScroll()),
-    [beginDrag, endDrag, stopAutoScroll, updateDrag],
-  );
+  const dragGesture = useMemo(() => {
+    const gesture = Gesture.Pan()
+      .runOnJS(true)
+      .activeCursor('grabbing')
+      .withTestId('drawerDrag')
+      // Every press starts here, whether it ends up being a drag or a tap: it is what tells the
+      // click the last release sent that the owner has touched the list again.
+      .onBegin(event => {
+        swallowedPressRef.current = false;
+        pressAtRef.current = { x: event.x, y: event.y };
+      })
+      // `onStart` is the activation, so it fires only once the hold has been kept: the drag
+      // never begins on a gesture the list is going to scroll instead.
+      .onStart(event => {
+        // Where the press landed rather than where the pointer had got to: a cursor has no hold,
+        // so this fires one mouse move after the press, and the row under the finger is the row
+        // the press landed on.
+        const at = pressAtRef.current ?? { x: event.x, y: event.y };
+        beginDrag(at.y, at.x);
+      })
+      .onUpdate(event => updateDrag(event.y, event.x))
+      .onEnd((_event, success) => endDrag(!success))
+      .onFinalize(() => stopAutoScroll());
+    return pointerFine ? gesture : gesture.activateAfterLongPress(DRAG_HOLD_MS);
+  }, [beginDrag, endDrag, stopAutoScroll, updateDrag]);
 
   const renderEntry = useCallback(
     ({ item }: { item: DrawerEntry }) => {
@@ -466,7 +546,7 @@ export function Drawer({
       const wrap = (body: React.JSX.Element): React.JSX.Element => (
         <View
           testID={`line:${item.key}`}
-          onLayout={event => measureLine(line, event)}
+          onLayout={event => measureLine(item.key, event)}
           style={[dropped && styles.dropTarget, lifted && styles.lifted]}>
           {body}
         </View>
@@ -477,7 +557,7 @@ export function Drawer({
         return wrap(
           <View style={styles.sectionRow}>
             <Pressable
-              onPress={folder ? () => onToggleFolder(folder.id) : undefined}
+              onPress={folder ? () => toggleFolder(folder.id) : undefined}
               disabled={folder === null}
               style={styles.sectionHeader}
               accessibilityRole={folder ? 'button' : undefined}
@@ -508,7 +588,7 @@ export function Drawer({
             )}
             {folder ? (
               <Pressable
-                onPress={() => onFolderMenu(folder)}
+                onPress={() => openFolderMenu(folder)}
                 hitSlop={6}
                 style={styles.sectionMenu}
                 accessibilityRole="button"
@@ -525,7 +605,7 @@ export function Drawer({
           active={item.session.threadId === activeThread}
           unread={unreadIds.has(item.session.threadId)}
           question={questionIds.has(item.session.threadId)}
-          onOpen={onOpenThread}
+          onOpen={openThread}
           onMenu={onThreadMenu}
         />,
       );
@@ -535,10 +615,10 @@ export function Drawer({
       dragging,
       dropMove,
       measureLine,
-      onFolderMenu,
-      onOpenThread,
       onThreadMenu,
-      onToggleFolder,
+      openFolderMenu,
+      openThread,
+      toggleFolder,
       palette.textFaint,
       questionIds,
       unreadIds,
@@ -914,7 +994,7 @@ const createStyles = (palette: Palette) => ({
   },
   filterChipText: { fontSize: font.small, color: palette.text },
   filterChipGlyph: { fontSize: font.small, color: palette.textMuted },
-  separator: { height: 1, backgroundColor: palette.border, marginHorizontal: 0 },
+  separator: { height: SEPARATOR_HEIGHT, backgroundColor: palette.border, marginHorizontal: 0 },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
   /** The rule above the footer rides the same inset as the list separators and the footer's own
    *  hairlines, instead of running the full width of the panel. A borderTop on the footer would

@@ -1,4 +1,4 @@
-import { fileDrop, lineAt, orderDrop, sameDrop, targetOf, type LineBox } from '../dragMove';
+import { fileDrop, lineAt, orderDrop, sameDrop, stackLines, targetOf, type LineBox, type ListLine } from '../dragMove';
 
 function box(key: string, y: number, height: number, over: Partial<LineBox> = {}): LineBox {
   return { key, folderId: null, role: 'row', y, height, ...over };
@@ -126,5 +126,38 @@ describe('sameDrop', () => {
 
   test('two sections are two moves', () => {
     expect(sameDrop(fileDrop({ threadId: 't' }, { folderId: 'f1' }), fileDrop({ threadId: 't' }, { folderId: 'f2' }))).toBe(false);
+  });
+});
+
+describe('stackLines', () => {
+  const line = (key: string): ListLine => ({ key, folderId: null, role: 'row' });
+  const lines = [line('a'), line('b'), line('c')];
+
+  test('a line sits under the ones drawn before it', () => {
+    const boxes = stackLines(lines, new Map([['a', 30], ['b', 60], ['c', 20]]), 1);
+    expect(boxes.map(placed => placed.y)).toEqual([0, 31, 92]);
+    expect(boxes.map(placed => placed.height)).toEqual([30, 60, 20]);
+  });
+
+  test('the rule the list draws between two entries takes its pixel', () => {
+    // The separator is a line of the list, not a gap in the sum: what is drawn between two
+    // entries is drawn inside the content, and a finger below it is one pixel lower for it.
+    const boxes = stackLines([line('a'), line('b')], new Map([['a', 40], ['b', 40]]), 1);
+    expect(lineAt(boxes, 39)?.key).toBe('a');
+    expect(lineAt(boxes, 41)?.key).toBe('b');
+    // And the rule itself belongs to neither: a finger on the pixel between two lines is over
+    // nothing, which is what makes the gap under the last section a place a release does nothing.
+    expect(lineAt(boxes, 40.5)).toBeUndefined();
+  });
+
+  test('a line that was never laid out ends the walk', () => {
+    // Where the lines after it would sit depends on a height nobody knows yet: guessing it would
+    // put a finger on a line it is not over.
+    const boxes = stackLines(lines, new Map([['a', 30], ['c', 20]]), 1);
+    expect(boxes.map(placed => placed.key)).toEqual(['a']);
+  });
+
+  test('nothing drawn, nothing to be over', () => {
+    expect(stackLines([], new Map(), 1)).toEqual([]);
   });
 });
