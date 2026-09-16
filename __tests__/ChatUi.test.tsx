@@ -11,6 +11,7 @@ import { sessionStore } from '../src/core/sessions';
 import { darkPalette, lightPalette } from '../src/theme/palettes';
 import type { HistoryEntry } from '../src/core/protocol';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
+import { clearAllDrafts } from '../src/core/drafts';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-ui';
@@ -61,6 +62,9 @@ function stringsOf(tree: Tree): string[] {
 
 beforeEach(() => {
   chatStore.clearAll();
+  // Staged attachments live in a module-level map, like the text: without this, a file one test
+  // picked is still in the composer of the next one.
+  clearAllDrafts();
   commandStore.replace([
     { name: 'status', description: 'Session diagnostics: context, tokens, cost' },
     { name: 'model', description: 'Show or change current model' },
@@ -166,6 +170,9 @@ test('a gallery photo (content:// uri) is copied to the cache before staging', a
   const tree = await renderWithHistory();
 
   await pressLabel(tree, 'Add attachment');
+  await waitFor(
+    () => tree.root.findAll(node => node.props.children === 'Photo from gallery', { deep: true }).length > 0,
+  );
   await pressText(tree, 'Photo from gallery');
 
   const callback = launchImageLibrary.mock.calls.at(-1)[1];
@@ -202,7 +209,14 @@ test('an upload that fails gives the typed message back instead of eating it', a
   const { launchImageLibrary } = require('react-native-image-picker');
   const tree = await renderWithHistory();
 
+  // Refused with a status, so it is not retried and the failure is final. Armed before the pick,
+  // because the upload starts there now; the send is the retry.
+  bridge.uploadFile.mockResolvedValue({ status: 507, body: 'Insufficient Storage' });
+
   await pressLabel(tree, 'Add attachment');
+  await waitFor(
+    () => tree.root.findAll(node => node.props.children === 'Photo from gallery', { deep: true }).length > 0,
+  );
   await pressText(tree, 'Photo from gallery');
   const callback = launchImageLibrary.mock.calls.at(-1)[1];
   await ReactTestRenderer.act(async () => {
@@ -212,9 +226,6 @@ test('an upload that fails gives the typed message back instead of eating it', a
     });
   });
   await waitFor(() => stringsOf(tree).includes('photo.jpg'));
-
-  // Refused with a status, so it is not retried and the failure is final.
-  bridge.uploadFile.mockResolvedValueOnce({ status: 507, body: 'Insufficient Storage' });
   await typeInto(tree, 'regarde ca');
   await pressLabel(tree, 'Send message');
 
@@ -224,6 +235,47 @@ test('an upload that fails gives the typed message back instead of eating it', a
   expect(inputOf(tree).props.value).toBe('regarde ca');
   expect(stringsOf(tree)).toContain('photo.jpg');
   expect(bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('regarde ca'))).toBe(false);
+
+  bridge.uploadFile.mockResolvedValue({ status: 200, body: JSON.stringify({ id: 'media-1' }) });
+  await unmount(tree);
+});
+
+/** How many times this test's photo reached the bridge, whatever another test left in flight. */
+function photoUploads(): number {
+  return bridge.uploadFile.mock.calls.filter(call => call[2] === 'photo.jpg').length;
+}
+
+test('a picked file is on the server before the send, which does not push it again', async () => {
+  const { launchImageLibrary } = require('react-native-image-picker');
+  const tree = await renderWithHistory();
+
+  const uploads = photoUploads();
+  // An id of its own: the bridge mock's call history is shared with every test before this one.
+  bridge.uploadFile.mockResolvedValue({ status: 200, body: JSON.stringify({ id: 'media-staged' }) });
+  await pressLabel(tree, 'Add attachment');
+  await waitFor(
+    () => tree.root.findAll(node => node.props.children === 'Photo from gallery', { deep: true }).length > 0,
+  );
+  await pressText(tree, 'Photo from gallery');
+  const callback = launchImageLibrary.mock.calls.at(-1)[1];
+  await ReactTestRenderer.act(async () => {
+    callback({
+      didCancel: false,
+      assets: [{ uri: 'content://media/external/images/42', fileName: 'photo.jpg', type: 'image/jpeg', fileSize: 1234 }],
+    });
+  });
+
+  // Nothing has been sent, and the bytes are already on the machine: that is what puts the file
+  // in the conversation's files and lets another device open it before anything is written.
+  await waitFor(() => photoUploads() === uploads + 1);
+  expect(bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('media-staged'))).toBe(false);
+
+  await typeInto(tree, 'look at this');
+  await pressLabel(tree, 'Send message');
+  await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('media-staged')));
+
+  // One upload, not two: the message carries the id the staging already paid for.
+  expect(photoUploads()).toBe(uploads + 1);
 
   bridge.uploadFile.mockResolvedValue({ status: 200, body: JSON.stringify({ id: 'media-1' }) });
   await unmount(tree);

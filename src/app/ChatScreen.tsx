@@ -22,12 +22,13 @@ import { probeText, revealFieldAboveKeyboard } from '../core/revealField';
 import { keyboardNow, keyboardResumeMismatch } from '../core/keyboard';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
-import { encodeCommandsList, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
+import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
+import { mediaUrl } from '../core/mediaUrl';
 import { clearDraft, draftAttachmentsOf, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
-import { uuid } from '../core/utils';
+import { uuid, viewerFor } from '../core/utils';
 import { getCurrentLocation } from '../core/location';
 import { locationPreview } from '../core/locationPreview';
 import { LocationEditor } from '../components/LocationEditor';
@@ -39,6 +40,13 @@ import { watchFileDrop } from '../core/fileDrop';
 import { selectableProps } from '../core/webProps';
 import { RowBoundary } from './RowBoundary';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+
+/** The map without one key, without touching the one it came from. */
+function without<T>(map: Record<string, T>, key: string): Record<string, T> {
+  const next: Record<string, T> = {};
+  for (const [k, value] of Object.entries(map)) if (k !== key) next[k] = value;
+  return next;
+}
 
 function pickAssetToPending(asset: { uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }): PendingAttachment | null {
   if (!asset.uri) return null;
@@ -239,6 +247,10 @@ export function ChatScreen({
   const [clipboardImage, setClipboardImage] = useState(false);
   /** Percent of each staged file that has reached the server, keyed by attachment id. */
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  /** A staged upload that failed. The chip says which one, and the send tries it again. */
+  const [uploadFailed, setUploadFailed] = useState<Record<string, true>>({});
+  /** The upload running for each staged file, so a send waits for it instead of pushing twice. */
+  const uploadsRef = useRef(new Map<string, Promise<string>>());
   const [location, setLocation] = useState<LocationData | undefined>();
   const [locationBusy, setLocationBusy] = useState(false);
   /** Owner decision on the display address: null = provider value, '' = coordinates only. */
@@ -318,6 +330,40 @@ export function ChatScreen({
     inCommandRef.current = inCommand;
   }, [draft]);
 
+  /**
+   * A picked file goes to the server at once, not at send time.
+   *
+   * Three things rest on it. The file is on the machine either way, so it shows up in the
+   * conversation's files and another device can open it before anything is sent. The chip has the
+   * server's own copy to draw a thumbnail from. And a send has nothing left to push but words.
+   *
+   * A failure is not a banner: the chip says which file it was, and the send uploads it again.
+   */
+  const startUpload = useCallback(
+    (pending: PendingAttachment): void => {
+      if (!deviceInfo || uploadsRef.current.has(pending.id)) return;
+      const job = uploadMedia(mediaBase, deviceInfo, threadId, pending, (bytes, total) => {
+        setUploadProgress(current => ({ ...current, [pending.id]: Math.round((bytes / total) * 100) }));
+      })
+        .then(uploaded => {
+          setAttachments(current =>
+            current.map(item => (item.id === pending.id ? { ...item, mediaId: uploaded.id } : item)),
+          );
+          return uploaded.id;
+        })
+        .catch((err: unknown) => {
+          // Out of the map: a later send uploads it again rather than awaiting a refusal.
+          uploadsRef.current.delete(pending.id);
+          setUploadFailed(current => ({ ...current, [pending.id]: true }));
+          throw err;
+        });
+      uploadsRef.current.set(pending.id, job);
+      // Nobody is awaiting it yet. The chip reads the failure, and the send reads it if it comes.
+      job.catch(() => {});
+    },
+    [deviceInfo, mediaBase, threadId],
+  );
+
   const addAssets = useCallback(async (assets: Array<{ uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }>) => {
     const prepared: PendingAttachment[] = [];
     for (const asset of assets) {
@@ -338,8 +384,9 @@ export function ChatScreen({
     }
     if (prepared.length > 0) {
       setAttachments(current => [...current, ...prepared]);
+      for (const pending of prepared) startUpload(pending);
     }
-  }, []);
+  }, [startUpload]);
 
   const pickPhotos = useCallback(() => {
     setAttachOpen(false);
@@ -482,23 +529,24 @@ export function ChatScreen({
    * decision to send it: the note waits in the composer like any attachment, so a caption or a
    * second file can join it, and it leaves on the same send as everything else.
    */
-  const stageVoiceNote = useCallback((recording: VoiceRecording) => {
-    const filename = voiceFilename();
-    setUploadError(null);
-    setAttachments(current => [
-      ...current,
-      {
+  const stageVoiceNote = useCallback(
+    (recording: VoiceRecording) => {
+      const pending: PendingAttachment = {
         id: `voice-${recording.uri}`,
         uri: recording.uri,
-        filename,
+        filename: voiceFilename(),
         type: 'audio',
         mimeType: 'audio/mp4',
         sizeBytes: recording.sizeBytes,
         audioAsVoice: true,
         durationMs: recording.durationMs,
-      },
-    ]);
-  }, []);
+      };
+      setUploadError(null);
+      setAttachments(current => [...current, pending]);
+      startUpload(pending);
+    },
+    [startUpload],
+  );
 
   const submit = useCallback(() => {
     // The button is disabled while an upload runs, and this is what covers the keyboard: Enter
@@ -546,12 +594,23 @@ export function ChatScreen({
         try {
           const refs: OutgoingAttachment[] = [];
           for (const attachment of attachments) {
-            const uploaded = await uploadMedia(mediaBase, deviceInfo, threadId, attachment, (bytes, total) => {
-              setUploadProgress(current => ({ ...current, [attachment.id]: Math.round((bytes / total) * 100) }));
-            });
+            // The bytes are usually already there: staged uploads start at pick. Awaiting the one
+            // in flight is what keeps a send from pushing a second copy of the same file.
+            const staged =
+              attachment.mediaId ?? (await uploadsRef.current.get(attachment.id)?.catch(() => undefined));
+            const id =
+              staged ??
+              (
+                await uploadMedia(mediaBase, deviceInfo, threadId, attachment, (bytes, total) => {
+                  setUploadProgress(current => ({
+                    ...current,
+                    [attachment.id]: Math.round((bytes / total) * 100),
+                  }));
+                })
+              ).id;
             refs.push({
-              id: uploaded.id,
-              type: uploaded.type,
+              id,
+              type: attachment.type,
               uri: attachment.uri,
               filename: attachment.filename,
               ...(attachment.audioAsVoice ? { audioAsVoice: true } : {}),
@@ -559,6 +618,9 @@ export function ChatScreen({
             });
           }
           setAttachments([]);
+          setUploadProgress({});
+          setUploadFailed({});
+          uploadsRef.current.clear();
           setLocation(undefined);
           setAddressOverride(null);
           onSend(text, refs, locationToSend);
@@ -610,6 +672,62 @@ export function ChatScreen({
       return onOpenFile(target);
     },
     [onOpenImage, onOpenText, onOpenVideo, onOpenFile],
+  );
+
+  /**
+   * The chip goes, and the file follows it: a staged file that is thrown away is not kept on the
+   * server (owner decision, 2026-09-15). An upload still in flight is awaited first -- deleting
+   * before it lands would leave the file there with nothing pointing at it.
+   */
+  const removeAttachment = useCallback(
+    (id: string): void => {
+      const staged = attachmentsRef.current.find(item => item.id === id);
+      const inFlight = uploadsRef.current.get(id);
+      uploadsRef.current.delete(id);
+      setAttachments(current => current.filter(item => item.id !== id));
+      setUploadProgress(current => without(current, id));
+      setUploadFailed(current => without(current, id));
+      if (!threadId) return;
+      const drop = (mediaId: string): void => {
+        connection.send(encodeFileDelete(threadId, mediaId)).catch(() => {});
+      };
+      if (staged?.mediaId) drop(staged.mediaId);
+      else if (inFlight) inFlight.then(drop).catch(() => {});
+    },
+    [threadId],
+  );
+
+  /**
+   * A staged chip opens what the conversation's files page would open: same viewers, same url.
+   *
+   * The server's copy once there is one, the file this device picked before that. A tap that lands
+   * during the upload has to open something: the picked file is right here, and refusing read as
+   * a dead chip.
+   */
+  const openStaged = useCallback(
+    (attachment: PendingAttachment): void => {
+      const remote =
+        deviceInfo && attachment.mediaId ? mediaUrl(mediaBase, deviceInfo, attachment.mediaId) : undefined;
+      const url = remote ?? attachment.uri;
+      if (!url) return;
+      openAttachment(viewerFor(attachment.type, attachment.filename) ?? 'file', {
+        url,
+        filename: attachment.filename,
+        sizeBytes: attachment.sizeBytes,
+      });
+    },
+    [deviceInfo, mediaBase, openAttachment],
+  );
+
+  /** The square the chip draws: the local file where there is one, the server's thumb otherwise. */
+  const attachmentThumb = useCallback(
+    (attachment: PendingAttachment): string | undefined => {
+      if (attachment.type !== 'image' && attachment.type !== 'video') return undefined;
+      if (attachment.uri) return attachment.uri;
+      if (!deviceInfo || !attachment.mediaId) return undefined;
+      return mediaUrl(mediaBase, deviceInfo, attachment.mediaId, { thumb: '1' });
+    },
+    [deviceInfo, mediaBase],
   );
 
   // Newest first, because the list is inverted. Reversing the data rather than the reading of it
@@ -1169,7 +1287,10 @@ export function ChatScreen({
             location={location}
             locationLabel={locationLabel}
             onPickAttachment={openAttach}
-            onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+            onRemoveAttachment={removeAttachment}
+          onOpenAttachment={openStaged}
+          attachmentThumb={attachmentThumb}
+          uploadFailed={uploadFailed}
             onRemoveLocation={removeLocation}
             onPressLocation={openLocationSheet}
             locationBusy={locationBusy}
@@ -1292,7 +1413,10 @@ export function ChatScreen({
           location={location}
           locationLabel={locationLabel}
           onPickAttachment={openAttach}
-          onRemoveAttachment={id => setAttachments(current => current.filter(item => item.id !== id))}
+          onRemoveAttachment={removeAttachment}
+          onOpenAttachment={openStaged}
+          attachmentThumb={attachmentThumb}
+          uploadFailed={uploadFailed}
           onRemoveLocation={removeLocation}
           onPressLocation={openLocationSheet}
           locationBusy={locationBusy}

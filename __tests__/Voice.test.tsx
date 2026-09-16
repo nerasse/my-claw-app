@@ -162,14 +162,17 @@ test('releasing the mic stages the note, and sending it is a separate act', asyn
 
   await touch.up();
 
-  // Staged, not gone: nothing has left the device yet.
+  // Staged, not sent: the take is on the server the moment it is staged, and nothing has been
+  // written to the conversation yet.
   await waitFor(() => labelsOf(tree).includes('Remove voice message'));
-  expect(bridge.uploadFile).not.toHaveBeenCalled();
+  await waitFor(() => bridge.uploadFile.mock.calls.length > 0);
   expect(chatSends()).toHaveLength(0);
 
   await press(tree, 'Send message');
   await waitFor(() => chatSends().length > 0);
 
+  // One upload for the whole act: the send references the id the staging already paid for.
+  expect(bridge.uploadFile.mock.calls).toHaveLength(1);
   const [uri, url, filename, type, threadId] = bridge.uploadFile.mock.calls[0];
   expect(uri).toBe('file:///cache/voice.m4a');
   expect(url).toContain('/media?device=dev-test');
@@ -258,7 +261,7 @@ test('a caption typed after the recording leaves with it, in one message', async
   await unmount(tree);
 });
 
-test('a staged recording can be dropped before it is ever sent', async () => {
+test('a staged recording is dropped, and the copy it put on the server with it', async () => {
   const tree = await renderApp();
 
   const touch = finger(tree);
@@ -266,12 +269,22 @@ test('a staged recording can be dropped before it is ever sent', async () => {
   await touch.up();
   await waitFor(() => labelsOf(tree).includes('Remove voice message'));
 
+  // A take reaches the server when it is staged, not when it is sent: that is what lets another
+  // device play it, and what the chip draws from.
+  await waitFor(() => bridge.uploadFile.mock.calls.length > 0);
+  const frames = bridge.sendMessage.mock.calls.length;
+
   await press(tree, 'Remove voice message');
   await waitFor(() => !labelsOf(tree).includes('Remove voice message'));
 
   // Nothing staged, so the corner offers the microphone again rather than a send arrow.
   expect(labelsOf(tree)).toContain('Record voice message');
-  expect(bridge.uploadFile).not.toHaveBeenCalled();
+  // And the file it had put there goes with the chip, since nothing was ever sent.
+  await waitFor(() =>
+    bridge.sendMessage.mock.calls
+      .slice(frames)
+      .some(([frame]) => String(frame).includes('files.delete')),
+  );
   expect(chatSends()).toHaveLength(0);
 
   await unmount(tree);

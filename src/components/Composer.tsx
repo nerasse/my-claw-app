@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   Text,
   TextInput,
@@ -23,6 +24,14 @@ import type { PendingAttachment } from '../core/upload';
 import { formatBytes } from '../core/utils';
 import { font, lineHeightFor, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
+/** The word a chip shows when there is no picture to show: same four as the files page. */
+const TYPE_WORD: Record<PendingAttachment['type'], string> = {
+  image: 'IMG',
+  audio: 'AUD',
+  video: 'VID',
+  file: 'FILE',
+};
+
 export function Composer({
   value,
   onChange,
@@ -38,6 +47,9 @@ export function Composer({
   locationLabel,
   onPickAttachment,
   onRemoveAttachment,
+  onOpenAttachment,
+  attachmentThumb,
+  uploadFailed,
   onRemoveLocation,
   onPressLocation,
   locationBusy,
@@ -83,6 +95,12 @@ export function Composer({
   /** Opens the attachment picker sheet. */
   onPickAttachment?: () => void;
   onRemoveAttachment?: (id: string) => void;
+  /** A tap on a staged chip: the same viewers the conversation's files open in. */
+  onOpenAttachment?: (attachment: PendingAttachment) => void;
+  /** The square the chip draws for a picture or a video, when it has one to draw. */
+  attachmentThumb?: (attachment: PendingAttachment) => string | undefined;
+  /** Staged files whose bytes never reached the server, keyed by attachment id. */
+  uploadFailed?: Record<string, true>;
   onRemoveLocation?: () => void;
   /** Opens the staged location editor: address preview, edit and removal. */
   onPressLocation?: () => void;
@@ -267,8 +285,8 @@ export function Composer({
           ) : null}
         </View>
       ) : null}
-      {/* Recordings get a full row each; anything else stays a chip, since a file name is all
-          there is to show about it. */}
+      {/* Recordings get a full row each; anything else is a chip: a square, so a glance says what
+          it is, then the name, because twenty pictures have to stay tellable apart. */}
       {recordings.length > 0 ? (
         <StagedVoiceList attachments={recordings} onRemove={onRemoveAttachment} />
       ) : null}
@@ -276,12 +294,37 @@ export function Composer({
         <View style={styles.chips}>
           {files.map(attachment => {
             const percent = uploadProgress?.[attachment.id];
+            const failed = uploadFailed?.[attachment.id] === true;
+            const thumb = attachmentThumb?.(attachment);
+            const open = onOpenAttachment ? () => onOpenAttachment(attachment) : undefined;
             return (
-              <View key={attachment.id} style={styles.chip}>
+              <Pressable
+                key={attachment.id}
+                style={[styles.chip, failed ? styles.chipFailed : null]}
+                onPress={open}
+                disabled={!open}
+                accessibilityRole={open ? 'button' : undefined}
+                accessibilityLabel={open ? `Preview attachment ${attachment.filename}` : undefined}>
+                {thumb ? (
+                  <Image
+                    source={{ uri: thumb }}
+                    style={styles.chipThumb}
+                    resizeMode="cover"
+                    accessibilityIgnoresInvertColors
+                  />
+                ) : (
+                  <View style={[styles.chipThumb, styles.chipGlyph]}>
+                    <Text style={styles.chipGlyphText}>{TYPE_WORD[attachment.type]}</Text>
+                  </View>
+                )}
                 <Text style={styles.chipText} numberOfLines={1}>
                   {attachment.filename}
                   {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ''}
-                  {percent !== undefined && percent < 100 ? ` · ${percent}%` : ''}
+                  {failed
+                    ? ' · failed'
+                    : percent !== undefined && percent < 100
+                      ? ` · ${percent}%`
+                      : ''}
                 </Text>
                 {onRemoveAttachment ? (
                   <Pressable
@@ -297,7 +340,7 @@ export function Composer({
                     <View style={[styles.chipFill, { width: `${percent}%` as never }]} />
                   </View>
                 ) : null}
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -444,6 +487,10 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingVertical: 4,
   },
+  chipFailed: { borderWidth: 1, borderColor: palette.danger },
+  chipThumb: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: palette.surfaceAlt },
+  chipGlyph: { alignItems: 'center' as const, justifyContent: 'center' as const },
+  chipGlyphText: { fontSize: 9, fontWeight: '600' as const, color: palette.textMuted },
   chipText: { flexShrink: 1, fontSize: font.small, color: palette.text },
   chipRemove: { fontSize: font.meta, lineHeight: 15, color: palette.textMuted },
   chipTrack: {

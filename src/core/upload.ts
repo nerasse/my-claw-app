@@ -10,6 +10,11 @@ export interface PendingAttachment {
   type: AttachmentMeta['type'];
   mimeType: string;
   sizeBytes?: number;
+  /**
+   * The id the server gave it, once the bytes are there. Set at pick time, never cleared: the send
+   * references it instead of pushing the same file a second time.
+   */
+  mediaId?: string;
   /** Set on a held-mic take, and carried through to the wire so the server applies its policy. */
   audioAsVoice?: boolean;
   durationMs?: number;
