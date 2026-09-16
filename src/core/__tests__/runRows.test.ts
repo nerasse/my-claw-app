@@ -277,3 +277,41 @@ describe('folded runs: the work never travelled', () => {
     expect(rows.map(labelOfRow)).toEqual(['g:r1', 'f:r1:12']);
   });
 });
+
+/**
+ * A bubble the reader cannot read.
+ *
+ * The server drops the bubbles it has nothing to say with before sending them, so one that
+ * arrives empty is a row with no prose, no attachment, no thought and nothing to act on: a blank
+ * bubble in the middle of a conversation. It also cuts the group it lands in, since a row is what
+ * breaks the fold (2026-09-16).
+ */
+describe('a bubble with nothing to draw', () => {
+  const bare = (extra: Partial<ChatItem> = {}): ChatItem =>
+    ({ kind: 'text', id: 'empty', role: 'agent', text: '', attachments: [], streaming: false, ts: 1, ...extra }) as ChatItem;
+
+  test('is not a row at all', () => {
+    expect(buildRows([bare()])).toEqual([]);
+    // And it does not cut the group it landed in: the two cards stay one run.
+    const rows = buildRows([tool('t1', 'r1'), bare(), tool('t2', 'r1')]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe('group');
+  });
+
+  test('a send waiting for its turn is not empty: it says so, and keeps its row', () => {
+    expect(buildRows([bare({ pending: true })])).toHaveLength(1);
+    expect(buildRows([bare({ queuedSince: 5, queuedReason: 'compaction' })])).toHaveLength(1);
+  });
+
+  test('a chip is enough to keep the bubble', () => {
+    const chip = { id: 'm1', type: 'image', filename: 'fr-CV.png', deleted: true } as ChatItem extends { attachments: (infer A)[] } ? A : never;
+    expect(buildRows([bare({ attachments: [chip] })])).toHaveLength(1);
+  });
+
+  test('a thought is enough to keep the bubble', () => {
+    expect(buildRows([bare({ reasoning: 'je regarde' })])).toHaveLength(1);
+    expect(buildRows([bare({ reasoningTokens: 12 })])).toHaveLength(1);
+    expect(buildRows([bare({ error: 'not delivered' })])).toHaveLength(1);
+    expect(buildRows([bare({ streaming: true })])).toHaveLength(1);
+  });
+});

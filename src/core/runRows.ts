@@ -127,6 +127,37 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  * - A segment with nothing left in it produces no group: a run that only ever wrote its answer
  *   renders as plain bubbles, never as an empty header.
  */
+/**
+ * Whether a row would draw nothing at all.
+ *
+ * A bubble is a row because it has something to say: prose, a file, a thought, a reason it is
+ * still on screen (waiting for its turn, stopped by an error, streaming). None of that is a
+ * blank bubble, and the server drops the ones it has nothing to say with before sending them --
+ * so an empty one that arrives is a hole in the conversation, and since any row breaks the fold
+ * it also cuts the group it landed in (2026-09-16).
+ */
+function hasNothingToShow(item: ChatItem): boolean {
+  if (item.kind !== 'text') return false;
+  const says = item.text.trim() !== '';
+  const shows = (item.attachments?.length ?? 0) > 0;
+  const thought =
+    Boolean(item.reasoning?.trim()) || item.reasoningTokens !== undefined || item.reasoningMs !== undefined;
+  const heard = item.transcripts !== undefined && Object.keys(item.transcripts).length > 0;
+  const why =
+    Boolean(item.error) || item.streaming || item.pending === true || item.queuedSince !== undefined;
+  // A separator or an aside is drawn apart from the message it came from, and has no prose of
+  // its own: the boundary, the notice, the command output.
+  const apart =
+    Boolean(item.location) ||
+    item.command === true ||
+    item.notice === true ||
+    Boolean(item.details) ||
+    item.summaryOf !== undefined ||
+    item.compactionMs !== undefined ||
+    item.compactionStopped === true;
+  return !(says || shows || thought || heard || why || apart);
+}
+
 export function buildRows(items: ChatItem[]): ChatRow[] {
   const rows: ChatRow[] = [];
   let run: RunInfo | null = null;
@@ -177,6 +208,7 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
   };
 
   for (const item of items) {
+    if (hasNothingToShow(item)) continue;
     if (item.kind === 'run') {
       // The work of this run never travelled, so there is nothing to accumulate: the header is
       // the row. It still ends whatever group was open, exactly like any other break.
