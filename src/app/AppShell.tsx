@@ -1188,6 +1188,7 @@ export function AppShell(): React.JSX.Element {
       setWorkspacesBusy,
       setProviderBusy,
       openStatusPage: openStatus,
+      openThread,
       setModelOpen,
       setJobsEditor,
       setJobsSaving,

@@ -71,6 +71,8 @@ export function isSubAgentThread(threadId: string): boolean {
 export interface ServerFrameHandlers {
   /** The thread on screen right now, not the one captured when the listener was registered. */
   activeThreadId: () => string | null;
+  /** Opens a conversation returned by a command such as `/new` or `/fork`. */
+  openThread?: (threadId: string) => void;
   /** The parent conversation of the sub-agent on screen, null when a conversation is showing. */
   subagentParent: () => string | null;
   /** The runs page currently open, checked before a late answer is accepted. */
@@ -137,6 +139,7 @@ export interface ServerFrameHandlers {
 export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandlers): void {
   const {
     activeThreadId,
+    openThread,
     subagentParent,
     jobSessionsPage,
     jobsSaving,
@@ -645,6 +648,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
           applyRemoteDraft(frame.threadId, frame.compose);
         }
       }
+      if (frame.newThreadId) openThread?.(frame.newThreadId);
       break;
     case 'status.result':
       // Pushed by the server for as long as the page is watched: the store keeps it when the page

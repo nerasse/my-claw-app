@@ -1091,6 +1091,8 @@ export interface CommandResultFrame {
   reset?: 'branch-switch';
   /** Text to prefill in the composer (the retried/undone user message). */
   compose?: string;
+  /** A new conversation the app should open after the command completes (for `/new` and `/fork`). */
+  newThreadId?: string;
   /** The command's input bubble is noise (undo, retry, branches): drop the optimistic one. */
   dropInput?: boolean;
 }

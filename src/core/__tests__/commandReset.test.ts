@@ -11,8 +11,10 @@ import { routeServerFrame, type ServerFrameHandlers } from '../frameRouter';
 import { clearAllDrafts, draftTextOf } from '../drafts';
 import type { ServerFrame } from '../protocol';
 
+const openThread = jest.fn();
 const handlers = {
   activeThreadId: () => null,
+  openThread,
 } as unknown as ServerFrameHandlers;
 const THREAD = 't1';
 
@@ -22,6 +24,7 @@ function route(frame: ServerFrame): void {
 
 beforeEach(() => {
   mockSend.mockClear();
+  openThread.mockClear();
   chatStore.clearAll();
   clearAllDrafts();
 });
@@ -58,7 +61,19 @@ it('a plain command result does not refetch nor prefill', () => {
     text: 'Status report',
   });
   expect(mockSend).not.toHaveBeenCalled();
+  expect(openThread).not.toHaveBeenCalled();
   expect(draftTextOf(THREAD)).toBe('');
+});
+
+it('a command result opens the returned thread', () => {
+  route({
+    type: 'chat.command.result',
+    threadId: THREAD,
+    replyToId: 'send-1',
+    text: 'New session started.',
+    newThreadId: 'new-thread',
+  });
+  expect(openThread).toHaveBeenCalledWith('new-thread');
 });
 
 it('a dropInput result removes the optimistic command bubble', () => {
