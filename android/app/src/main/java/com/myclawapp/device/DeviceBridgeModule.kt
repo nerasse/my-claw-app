@@ -23,6 +23,10 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.provider.MediaStore
@@ -1436,19 +1440,54 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    * One notification-ding for an incoming question sheet, played by the system's own sound so
    * no asset ships in the APK. The sheet on screen is the surface; a device that is not looking
    * at the thread gets the tray through the push instead (server-side skipDevice), never this.
+   *
+   * A MediaPlayer follows neither the ringer mode nor the notification volume: it played the
+   * notification sound at media volume, in vibrate and in silent alike, which is how the app came
+   * to ding through a silenced phone. The mode is read first, the way the system itself treats one
+   * of its own notifications -- nothing when silent, a short buzz when vibrating, the sound
+   * otherwise -- and the sound goes out on the notification stream rather than the media one.
    */
   @ReactMethod
   fun playAlertSound(promise: Promise) {
     try {
-      // MediaPlayer is used the same way VoiceAudio plays a note: one shot, release on
-      // completion so a second question is not silenced by a leaked player.
-      val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-      val player = MediaPlayer.create(reactContext, uri)
-      player?.setOnCompletionListener { it.release() }
-      player?.start()
+      val audio = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+      when (audio.ringerMode) {
+        AudioManager.RINGER_MODE_SILENT -> Unit
+        AudioManager.RINGER_MODE_VIBRATE -> vibrateOnce()
+        else -> {
+          // One shot, released on completion so a second question is not silenced by a leaked
+          // player, and set up by hand to carry the notification attributes MediaPlayer.create
+          // would leave out.
+          val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+          val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+          val player = MediaPlayer()
+          player.setAudioAttributes(attributes)
+          player.setDataSource(reactContext, uri)
+          player.setOnCompletionListener { it.release() }
+          player.prepare()
+          player.start()
+        }
+      }
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("ALERT_SOUND_FAILED", e.message, e)
+    }
+  }
+
+  /** A short buzz in the system's own notification shape, since the app ships no sound asset. */
+  private fun vibrateOnce() {
+    @Suppress("DEPRECATION")
+    val vibrator = reactContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+    if (!vibrator.hasVibrator()) return
+    val pattern = longArrayOf(0, 120, 100, 120)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+    } else {
+      @Suppress("DEPRECATION")
+      vibrator.vibrate(pattern, -1)
     }
   }
 
