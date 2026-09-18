@@ -1468,6 +1468,20 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   /**
+   * The two channels as Android really holds them, for the `diag.report` frame
+   * (NotificationSounds.diagnostics): what a channel froze at its first creation is otherwise
+   * readable only from the phone's own settings screen.
+   */
+  @ReactMethod
+  fun getNotificationChannelState(promise: Promise) {
+    try {
+      promise.resolve(NotificationSounds.diagnostics(reactContext))
+    } catch (e: Exception) {
+      promise.reject("CHANNEL_STATE_FAILED", e.message ?: "could not read the notification channels", e)
+    }
+  }
+
+  /**
    * The one entry point for a change of sound. `system` opens the ringtone picker, `file` the
    * document picker whose answer is copied into the app and served through the FileProvider,
    * `silent` is applied directly -- refused for the ring, which exists to be heard. All three

@@ -1,5 +1,6 @@
 import { DeviceEventEmitter, NativeModules } from 'react-native';
 import { useEffect, useState } from 'react';
+import type { NotificationChannelsState } from './protocol';
 
 export interface DeviceInfoNative {
   deviceId: string;
@@ -75,9 +76,10 @@ export interface NotificationSoundsNative {
   ordinary: NotificationSoundChoice;
   ring: NotificationSoundChoice;
   /**
-   * The Android channel names derived from the choices (`runs` / `ring` for the defaults). A
-   * channel freezes its sound at creation, so the name is the choice's whole identity on the
-   * wire: the server publishes every notification on the name the device reports.
+   * The Android channel names derived from the choices and the settings recipe
+   * (`runs-<8 hex>` / `ring-<8 hex>`). A channel freezes its sound at creation, so the name is
+   * the choice's whole identity on the wire: the server publishes every notification on the
+   * name the device reports, and the device only reports a name whose channel it verified.
    */
   channels: { ordinary: string; ring: string };
 }
@@ -195,6 +197,11 @@ export interface DeviceBridgeNative {
    * not a per-app setting (a browser leaves them to the platform).
    */
   getNotificationSounds(): Promise<NotificationSoundsNative | null>;
+  /**
+   * The two channels as Android really holds them; null where the platform has no channels of
+   * ours (a browser). `diag.report` carries it (docs/notifications.md).
+   */
+  getNotificationChannelState(): Promise<NotificationChannelsState | null>;
   /**
    * Opens the system picker (`system`), the document picker (`file`), or applies `silent`
    * directly. Resolves the new state, or null when the owner backed out with nothing chosen.
@@ -335,6 +342,7 @@ export const deviceBridge: DeviceBridgeNative = {
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
   playAlertSound: uri => native?.playAlertSound(uri) ?? Promise.resolve(),
   getNotificationSounds: () => native?.getNotificationSounds() ?? Promise.resolve(null),
+  getNotificationChannelState: () => native?.getNotificationChannelState() ?? Promise.resolve(null),
   pickNotificationSound: (usage, source) =>
     native?.pickNotificationSound(usage, source) ?? Promise.resolve(null),
   previewNotificationSound: usage => native?.previewNotificationSound(usage) ?? Promise.resolve(),

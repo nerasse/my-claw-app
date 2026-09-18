@@ -3,6 +3,7 @@
 // code compile against APIs the phone does not have.
 import { useEffect, useState } from 'react';
 import { pastedName } from './fileDrop.web';
+import type { NotificationChannelsState } from './protocol';
 
 /**
  * Web implementation of the single native door (see nativeBridge.ts).
@@ -175,6 +176,8 @@ export interface DeviceBridgeNative {
    * point here resolves the empty answer (null, or nothing) rather than pretending otherwise.
    */
   getNotificationSounds(): Promise<NotificationSoundsNative | null>;
+  /** See nativeBridge.ts: a browser holds no Android channel to report. */
+  getNotificationChannelState(): Promise<NotificationChannelsState | null>;
   pickNotificationSound(
     usage: NotificationUsage,
     source: 'system' | 'file' | 'silent',
@@ -759,6 +762,7 @@ export const deviceBridge: DeviceBridgeNative = {
   drainInstallResult: () => {},
   cancelNotification: () => Promise.resolve(),
   getNotificationSounds: () => Promise.resolve(null),
+  getNotificationChannelState: () => Promise.resolve(null),
   pickNotificationSound: () => Promise.resolve(null),
   previewNotificationSound: () => Promise.resolve(),
   resetNotificationSound: () => Promise.resolve(null),

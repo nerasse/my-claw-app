@@ -124,9 +124,18 @@ export async function loadDiagnostics(): Promise<void> {
   await collectExits(lastExit);
 }
 
-export function flushDiagnostics(): void {
-  if (pending.length === 0) return;
-  connection.send(encodeDiagReport(pending)).catch(() => {});
+/**
+ * Ships what is pending, plus the real state of the notification channels.
+ *
+ * The channels ride along even when nothing crashed: a wrong sound is usually a healthy phone,
+ * and the point of the field is to be readable from the server without adb. Read from the
+ * bridge first, so the frame carries a fact about the device rather than a recomputation of
+ * the choice (docs/notifications.md).
+ */
+export async function flushDiagnostics(): Promise<void> {
+  const channels = await deviceBridge.getNotificationChannelState().catch(() => null);
+  if (pending.length === 0 && !channels) return;
+  connection.send(encodeDiagReport(pending, channels)).catch(() => {});
 }
 
 /** Drops the reports the server took, in order: the frame is sent oldest-first. */

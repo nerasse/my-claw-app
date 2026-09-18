@@ -43,10 +43,12 @@ data class ImportedSound(val uri: Uri, val name: String, val size: Long)
  * from them.
  *
  * Android freezes a channel at the first creation and resurrects a deleted one with its old
- * settings, so a sound change cannot be an update: it is a new channel, named from the choice,
- * with the old one deleted. The name is therefore a wire contract -- the server publishes on the
- * name the device reports (docs/notifications.md) -- and it has to be stable across boots, which
- * is why this object is the only place that reads the stored choice and derives anything.
+ * settings, so a sound change cannot be an update: it is a new channel, named from the choice
+ * and the recipe, with the old one deleted. A name is only ever announced after the channel it
+ * points at has been read back and found conforming -- the name is a claim, the channel is the
+ * fact. The name is a wire contract -- the server publishes on the name the device reports
+ * (docs/notifications.md) -- and it has to be stable across boots, which is why this object is
+ * the only place that reads the stored choice and derives anything.
  *
  * It is called from both sides that must agree: `MainApplication` at boot, where the channels
  * have to exist before the push renderer can post to them, and `DeviceBridgeModule` after every
@@ -55,6 +57,17 @@ data class ImportedSound(val uri: Uri, val name: String, val size: Long)
 object NotificationSounds {
   private const val PREFS = "claw_notification_sounds"
   private const val DIR = "notification-sounds"
+
+  /**
+   * The settings recipe this app freezes into a channel: importance, sound and vibration, as
+   * `createChannel` applies them. Bump it whenever that recipe changes, because a channel that
+   * already exists keeps the recipe it was born with forever -- only a new name can carry a new
+   * recipe.
+   */
+  private const val RECIPE = 2
+
+  /** Names tried, the base included, before a repair gives up instead of spinning the boot. */
+  private const val MAX_NAMES = 10
 
   private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -85,21 +98,97 @@ object NotificationSounds {
   // --- derivation --------------------------------------------------------------------------
 
   /**
-   * The channel name a choice publishes on. The default keeps the names every device had before
-   * it could choose (`runs` / `ring`), so a boot with no choice creates exactly what exists. Any
-   * other choice appends eight hex digits of the choice itself.
+   * The name the current choice derives, before any repair: `runs-` / `ring-` plus eight hex
+   * digits hashed from RECIPE, the usage and the choice itself.
    *
    * The hash covers the usage as well as the uri: the same file picked for both usages plays in
    * two channels that freeze different behaviour (the ring vibrates long), and one name cannot
-   * hold both. FNV-1a over UTF-16 code units, like the notification ids, folded to 8 lowercase
-   * hex digits -- which keeps the name inside the grammar the server enforces
-   * (`^[a-z][a-z0-9_-]{0,40}$`, validChannelName in the server's notifications/push.ts).
+   * hold both. It covers RECIPE for a blunter reason: a name that already exists keeps its
+   * frozen settings whatever is handed to createNotificationChannel, so changing what a channel
+   * must carry can only change what a name means by changing the name -- otherwise a channel
+   * created before a recipe changed keeps that recipe for the life of the install. FNV-1a over
+   * UTF-16 code units, like the notification ids, folded to 8 lowercase hex digits -- which
+   * keeps the name inside the grammar the server enforces (`^[a-z][a-z0-9_-]{0,40}$`,
+   * validChannelName in the server's notifications/push.ts).
    */
-  fun channelName(context: Context, usage: SoundUsage): String {
+  private fun derivedName(context: Context, usage: SoundUsage): String {
     val choice = choice(context, usage)
-    if (choice.kind == "default") return usage.prefix
-    val spec = if (choice.kind == "silent") "${usage.key}|silent" else "${usage.key}|${choice.uri}"
-    return "${usage.prefix}-${hash8(spec)}"
+    val spec = when (choice.kind) {
+      "default" -> "${usage.key}|default"
+      "silent" -> "${usage.key}|silent"
+      else -> "${usage.key}|${choice.uri}"
+    }
+    return "${usage.prefix}-${hash8("$RECIPE|$spec")}"
+  }
+
+  /**
+   * The name to use and announce: the derived one while it is free or already carries the
+   * recipe, else the first suffixed variant that does (`-v2`, `-v3`, ...).
+   *
+   * The read-back is the point. The push renderer creates these channels too -- at
+   * IMPORTANCE_DEFAULT, without sound or vibration -- and its creation can win the race on a
+   * phone where a push arrived before this app ever pre-created anything. Creating an id that
+   * already exists changes nothing (a channel is frozen at birth), so a name is trusted only
+   * once `getNotificationChannel` agreed with the recipe; a name that cannot be repaired is
+   * left behind and the walk moves on.
+   *
+   * Bounded: a platform that would refuse the recipe outright must not spin the boot forever,
+   * and the last name tried is still the app's best claim.
+   */
+  private fun verifiedName(context: Context, manager: NotificationManager, usage: SoundUsage): String {
+    val base = derivedName(context, usage)
+    var candidate = base
+    var index = 2
+    var attempts = MAX_NAMES
+    while (true) {
+      val existing = manager.getNotificationChannel(channelId(context, candidate))
+      if (existing == null) {
+        createChannel(context, manager, usage, candidate)
+        val created = manager.getNotificationChannel(channelId(context, candidate))
+        if (created != null && conforms(context, usage, created)) return candidate
+      } else if (conforms(context, usage, existing)) {
+        return candidate
+      }
+      attempts -= 1
+      if (attempts <= 0) return candidate
+      candidate = "$base-v$index"
+      index += 1
+    }
+  }
+
+  /**
+   * Whether a channel really holds the recipe: importance, sound and vibration, read from the
+   * channel itself rather than trusted from the create call. These are the three settings
+   * Android freezes at creation, and therefore the three that can make an existing name
+   * unusable.
+   */
+  private fun conforms(context: Context, usage: SoundUsage, channel: NotificationChannel): Boolean {
+    if (channel.importance != NotificationManager.IMPORTANCE_HIGH) return false
+    if (!sameSound(context, channel.sound, expectedSound(context, usage))) return false
+    return channel.shouldVibrate() == (usage == SoundUsage.RING)
+  }
+
+  /** The sound the recipe wants for this usage; null is the silent choice. */
+  private fun expectedSound(context: Context, usage: SoundUsage): Uri? {
+    val choice = choice(context, usage)
+    return when (choice.kind) {
+      "silent" -> null
+      "uri" -> choice.uri
+      // The system's own pick, set explicitly so the stored uri and the wanted uri compare equal.
+      else -> defaultUri(usage)
+    }
+  }
+
+  private fun sameSound(context: Context, actual: Uri?, expected: Uri?): Boolean {
+    if (actual == null || expected == null) return actual == expected
+    if (sameUri(actual, expected)) return true
+    // A provider may hand the channel a canonicalized uri on the way in; compare through the
+    // same resolver rather than call a working sound wrong and walk to a needless new name.
+    return try {
+      sameUri(actual, context.contentResolver.canonicalize(expected))
+    } catch (_: Exception) {
+      false
+    }
   }
 
   private fun hash8(input: String): String {
@@ -119,26 +208,29 @@ object NotificationSounds {
 
   /**
    * Creates the channel the current choice names and deletes the one it replaced, for both
-   * usages. The single create/delete path, called at boot and after every change: the previous
-   * name is remembered in the same preferences, so a boot with an unchanged choice is a create
-   * that is a no-op plus a delete that never fires.
+   * usages. The single create/delete path, called at boot, after every change, and from
+   * `state()` before it answers: the previous name is remembered in the same preferences, so a
+   * boot with an unchanged choice is a create that is a no-op plus a delete that never fires.
    */
   fun applyChannels(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val manager = context.getSystemService(NotificationManager::class.java) ?: return
-    val store = prefs(context)
-    for (usage in SoundUsage.entries) {
-      val name = channelName(context, usage)
-      ensureChannel(context, manager, usage, name)
-      val previous = store.getString("${usage.key}.channel", null)
-      if (previous != null && previous != name) {
-        manager.deleteNotificationChannel(channelId(context, previous))
-      }
-      store.edit().putString("${usage.key}.channel", name).apply()
-    }
+    for (usage in SoundUsage.entries) applyUsage(context, manager, usage)
   }
 
-  private fun ensureChannel(
+  /** One usage's verified name, remembered, with the name it replaced deleted. */
+  private fun applyUsage(context: Context, manager: NotificationManager, usage: SoundUsage): String {
+    val name = verifiedName(context, manager, usage)
+    val store = prefs(context)
+    val previous = store.getString("${usage.key}.channel", null)
+    if (previous != null && previous != name) {
+      manager.deleteNotificationChannel(channelId(context, previous))
+    }
+    store.edit().putString("${usage.key}.channel", name).apply()
+    return name
+  }
+
+  private fun createChannel(
     context: Context,
     manager: NotificationManager,
     usage: SoundUsage,
@@ -156,13 +248,17 @@ object NotificationSounds {
         if (uri != null) {
           if (isImported(context, uri)) grantToPlayer(context, uri)
           channel.setSound(uri, attributes())
+        } else {
+          channel.setSound(null, null)
         }
       }
-      // The default: nothing set, so the system's own notification sound plays. The ring's
+      // The default: the system's own tone, set explicitly so what the channel stores is exactly
+      // what the recipe expects -- a null here is the same silence as "silent". The ring's
       // default is the alarm tone, on the notification stream like any other notification sound
       // -- the phone's mode decides what it does (the owner was explicit).
-      else -> if (usage == SoundUsage.RING) {
-        channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), attributes())
+      else -> {
+        val uri = expectedSound(context, usage)
+        if (uri != null) channel.setSound(uri, attributes()) else channel.setSound(null, null)
       }
     }
     if (usage == SoundUsage.RING) {
@@ -358,13 +454,25 @@ object NotificationSounds {
 
   // --- state -------------------------------------------------------------------------------
 
-  /** The whole selection plus the derived channel names, as the settings page and the wire see it. */
+  /**
+   * The whole selection plus the channel names in use, as the settings page and the wire see it.
+   * Resolved through the verification path rather than derived: the name announced to the
+   * server must be one whose channel conforms, and answering is also when a phone whose channel
+   * was frozen by someone else's first creation gets repaired.
+   */
   fun state(context: Context): WritableMap {
     val map = Arguments.createMap()
     for (usage in SoundUsage.entries) map.putMap(usage.key, choiceMap(choice(context, usage)))
+    val manager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      context.getSystemService(NotificationManager::class.java)
+    } else {
+      null
+    }
     val channels = Arguments.createMap()
-    channels.putString(SoundUsage.ORDINARY.key, channelName(context, SoundUsage.ORDINARY))
-    channels.putString(SoundUsage.RING.key, channelName(context, SoundUsage.RING))
+    for (usage in SoundUsage.entries) {
+      val name = if (manager != null) applyUsage(context, manager, usage) else derivedName(context, usage)
+      channels.putString(usage.key, name)
+    }
     map.putMap("channels", channels)
     return map
   }
@@ -377,5 +485,40 @@ object NotificationSounds {
       map.putString("name", choice.name)
     }
     return map
+  }
+
+  // --- diagnostics ---------------------------------------------------------------------------
+
+  /**
+   * The two channels as the device really holds them, for the `diag.report` frame
+   * (docs/notifications.md): the name the recipe derives, the channel in use, its importance,
+   * the sound the recipe wants, whether it vibrates, and the sound the channel itself reports.
+   * Facts read from `getNotificationChannel`, not a recomputation of the choice -- a channel
+   * whose settings were frozen by something else's first creation has to read as the difference
+   * it is.
+   */
+  fun diagnostics(context: Context): WritableMap {
+    val result = Arguments.createMap()
+    val manager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      context.getSystemService(NotificationManager::class.java)
+    } else {
+      null
+    }
+    for (usage in SoundUsage.entries) {
+      val map = Arguments.createMap()
+      val derived = derivedName(context, usage)
+      val name = prefs(context).getString("${usage.key}.channel", null) ?: derived
+      map.putString("expected", derived)
+      map.putString("id", channelId(context, name))
+      val channel = manager?.getNotificationChannel(channelId(context, name))
+      if (channel != null) {
+        map.putInt("importance", channel.importance)
+        map.putString("sound", expectedSound(context, usage)?.toString())
+        map.putBoolean("vibration", channel.shouldVibrate())
+        map.putString("effectiveSound", channel.sound?.toString())
+      }
+      result.putMap(usage.key, map)
+    }
+    return result
   }
 }

@@ -240,9 +240,12 @@ jest.mock('./src/core/nativeBridge', () => ({
       Promise.resolve({
         ordinary: { kind: 'default' },
         ring: { kind: 'default' },
-        channels: { ordinary: 'runs', ring: 'ring' },
+        channels: { ordinary: 'runs-7c4a10e2', ring: 'ring-2b8d3f61' },
       }),
     ),
+    // Null by default: a suite that does not ask for channel state must not grow a diag.report
+    // frame it never asserted. The diagnostics suite hands it a state and pins what travels.
+    getNotificationChannelState: jest.fn(() => Promise.resolve(null)),
     pickNotificationSound: jest.fn(() => Promise.resolve(null)),
     previewNotificationSound: jest.fn(() => Promise.resolve()),
     resetNotificationSound: jest.fn(() => Promise.resolve(null)),

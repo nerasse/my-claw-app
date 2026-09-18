@@ -2665,8 +2665,15 @@ export function encodeDiagSnapshot(threadId: string): string {
   return JSON.stringify({ type: 'diag.snapshot', threadId });
 }
 
-export function encodeDiagReport(reports: DiagReport[]): string {
-  return JSON.stringify({ type: 'diag.report', reports });
+export function encodeDiagReport(
+  reports: DiagReport[],
+  notificationChannels?: NotificationChannelsState | null,
+): string {
+  return JSON.stringify({
+    type: 'diag.report',
+    reports,
+    ...(notificationChannels ? { notificationChannels } : {}),
+  });
 }
 
 /** One post-mortem. `exit` entries come from Android, the others from the JS side. */
@@ -2677,6 +2684,27 @@ export interface DiagReport {
   stack?: string;
   appVersion?: string;
   reason?: string;
+}
+
+/**
+ * One notification channel as the device really holds it, read back from Android
+ * (docs/notifications.md). `expected` is the name the sound recipe derives, `sound` the uri that
+ * recipe wants; the rest is what `getNotificationChannel` answered, so a channel that froze
+ * someone else's settings reads as the difference it is instead of a belief.
+ */
+export interface NotificationChannelState {
+  expected: string;
+  id: string;
+  importance?: number;
+  sound?: string | null;
+  vibration?: boolean;
+  effectiveSound?: string | null;
+}
+
+/** Both usages' channels, as `diag.report` carries them. */
+export interface NotificationChannelsState {
+  ordinary: NotificationChannelState;
+  ring: NotificationChannelState;
 }
 
 export interface LogsTailQuery {

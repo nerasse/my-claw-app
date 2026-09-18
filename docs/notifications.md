@@ -76,26 +76,52 @@ c'est le boot, sans JS, qui pré-crée les canaux.
 
 Contrainte Android qui dicte tout : les réglages d'un canal sont figés à sa première création,
 et recréer un canal supprimé le ressuscite avec ses vieux réglages. Un changement de son est donc
-**un nouveau nom de canal**, dérivé du choix :
+**un nouveau nom de canal**, dérivé du choix et de la **recette** (importance, son, vibration,
+tels que l'app les pose) :
 
 | Choix | Nom de canal |
 | --- | --- |
-| défaut du système | `runs` / `ring` (les noms publiés, rétrocompatibles) |
-| n'importe quel autre | `runs-<8 hex>` / `ring-<8 hex>` |
+| défaut du système | `runs-<8 hex>` / `ring-<8 hex>` |
+| silencieux (ordinaire) | `runs-<8 hex>` |
+| un fichier importé ou un son système | `runs-<8 hex>` / `ring-<8 hex>` |
 
-Le hash (FNV-1a 32 bits, minuscules) porte l'URI **et** l'usage : le même fichier choisi pour les
-deux usages vit dans deux canaux qui gèlent des comportements différents (la sonnerie vibre
-longtemps), et un nom ne peut en porter qu'un. Le nom reste dans la grammaire que le serveur
-accepte (`validChannelName` : ^[a-z][a-z0-9_-]{0,40}$), et un même choix donne toujours le même
-nom : c'est ce qui fait qu'un boot sans changement ne recrée rien. Le nom affiché dans les
-réglages Android reste « Runs » / « Ring », quelle que soit la variante.
+Plus aucun nom fixe : les `runs` / `ring` des premières versions ont disparu, parce que c'est
+précisément un nom fixe qu'un premier créateur autre que l'app peut geler. Le hash (FNV-1a
+32 bits, minuscules) couvre maintenant la recette (`RECIPE`, NotificationSounds.kt), l'usage
+**et** le choix : le même fichier choisi pour les deux usages vit dans deux canaux qui gèlent
+des comportements différents (la sonnerie vibre longtemps), et un nom ne peut en porter qu'un.
+Changer la recette (importance, type de flux, vibrations) change tous les noms, sinon un canal
+déjà créé garderait l'ancienne recette pour toujours. Le nom reste dans la grammaire que le
+serveur accepte (`validChannelName` : ^[a-z][a-z0-9_-]{0,40}$), et un même choix donne toujours
+le même nom : c'est ce qui fait qu'un boot sans changement ne recrée rien. Le nom affiché dans
+les réglages Android reste « Runs » / « Ring », quelle que soit la variante.
+
+**La vérification.** Le nom n'est jamais annoncé de confiance : après chaque
+`createNotificationChannel`, l'app relit le canal (`getNotificationChannel`) et le compare à
+l'intention — importance `IMPORTANCE_HIGH`, son attendu (le défaut est posé explicitement via
+`setSound(RingtoneManager.getDefaultUri(...))` pour que l'égalité soit vérifiable, « silencieux »
+pose `setSound(null, null)`), vibration. Si ça ne correspond pas — le cas du canal créé en
+premier par le renderer d'expo-unified-push, en `IMPORTANCE_DEFAULT`, sans son ni vibration :
+créer un id qui existe ne change rien — l'app sonde les noms suffixés (`-v2`, `-v3`, ...)
+jusqu'au premier libre ou conforme, et c'est celui-là qu'elle annonce. `state()` et
+`getNotificationSounds()` passent par ce chemin **avant de répondre** : le nom envoyé au serveur
+est toujours celui d'un canal conforme, et un téléphone déjà cassé se répare au boot suivant
+(l'ancien nom, lui, est supprimé — c'est le nom précédent gardé dans les mêmes préférences).
 
 `NotificationSounds.applyChannels(context)` est la seule fonction qui crée le canal du choix
-courant et supprime celui qu'il remplace (le nom précédent est gardé dans les mêmes prefs).
-`MainApplication` l'appelle au boot, `DeviceBridgeModule` après chaque changement. Le serveur
-suit le choix par la frame `notifications.channels { deviceId, channels }`, envoyée à chaque
-connexion et à chaque changement (comme `notifications.state`) : c'est `entry.channels` côté
-serveur qui décide du `type` du payload, donc du canal sur lequel la notification est publiée.
+courant et supprime celui qu'il remplace. `MainApplication` l'appelle au boot,
+`DeviceBridgeModule` après chaque changement, et `state()` avant chaque réponse. Le serveur suit
+le choix par la frame `notifications.channels { deviceId, channels }`, envoyée à chaque connexion
+et à chaque changement (comme `notifications.state`) : c'est `entry.channels` côté serveur qui
+décide du `type` du payload, donc du canal sur lequel la notification est publiée.
+
+**Le diagnostic.** Le rapport de diagnostic (`diag.report`) porte un champ
+`notificationChannels` : par usage, `expected` (le nom que la recette dérive), `id` (le canal en
+service), `importance`, `sound` (l'URI voulue par la recette, ou null), `vibration`, et
+`effectiveSound` (le son que le canal rapporte réellement, lu par `getNotificationChannel`).
+C'est un fait sur l'appareil, pas une opinion : tout est relu du canal. Il part avec le rapport
+au boot même quand `reports` est vide (un son qui ne suit pas est un téléphone en bonne santé),
+lu par `getNotificationChannelState()` du bridge.
 
 Les fichiers importés sont copiés dans `filesDir/notification-sounds/` et exposés par un
 **FileProvider** (`${applicationId}.fileprovider`, `res/xml/file_paths.xml`). Le son d'un canal
@@ -152,10 +178,11 @@ par le JS : elle s'affiche donc même quand l'app est **tuée**. Le payload port
 | `myclaw://job/<jobId>` | ouvre la page Jobs |
 
 **Bannière en haut de l'écran** : la lib crée son canal en `IMPORTANCE_DEFAULT` (son, pas de
-bannière). `MainApplication.kt` pré-crée au boot le canal `com.myclawapp:unified_push_channel:runs`
-en `IMPORTANCE_HIGH` — les réglages d'un canal sont figés à la première création, donc la
-bannière s'affiche et l'utilisateur peut toujours l'ajuster dans Paramètres → Apps →
-my-claw-app → Notifications → canal « Runs ».
+bannière). `MainApplication.kt` pré-crée au boot les canaux de la recette en `IMPORTANCE_HIGH` —
+les réglages d'un canal sont figés à la première création, donc la bannière s'affiche et
+l'utilisateur peut toujours l'ajuster dans Paramètres → Apps → my-claw-app → Notifications →
+canal « Runs ». Si la lib a gagné la course et créé le canal en premier, la vérification le
+détecte et l'app bascule sur un nom suffixé (`runs-<8 hex>-v2`), celui qu'elle annonce au serveur.
 
 Le schéma `myclaw` est déclaré dans `AndroidManifest.xml` (intent-filter `VIEW` sur
 `MainActivity`). `AppShell` résout `Linking.getInitialURL()` au démarrage (cas du démarrage à
@@ -199,12 +226,14 @@ conversation ne s'empilent plus, le second remplace le premier.
 | `web/sw.js` | affichage et tap côté navigateur (l'app peut être fermée) |
 | `src/app/GeneralSettingsScreen.tsx` | la ligne « notifications » : l'état de la permission et le geste qui la demande |
 | `src/app/NotificationsScreen.tsx` | les deux sons (choix, écoute, retour au défaut) et les fichiers importés |
-| `android/.../NotificationSounds.kt` | les choix, les noms de canaux dérivés, la création/suppression des canaux |
-| `android/.../DeviceBridgeModule.kt` | les méthodes `*NotificationSound*`, `playAlertSound(uri)`, `cancelNotification(id)` |
+| `android/.../NotificationSounds.kt` | les choix, les noms dérivés (recette + choix), la vérification, la création/suppression des canaux |
+| `android/.../DeviceBridgeModule.kt` | les méthodes `*NotificationSound*`, `getNotificationChannelState`, `playAlertSound(uri)`, `cancelNotification(id)` |
+| `src/core/diagnostics.ts` | le rapport de diagnostic, l'état réel des canaux compris |
 | `src/core/protocol.ts` | frames `notifications.info` / `register` / `state` / `channels` |
 | `src/app/AppShell.tsx` | enregistrement à la réception de la clé, état premier-plan, ouverture sur tap, effacement à l'ouverture, envoi des noms de canaux à la connexion |
 | `__tests__/Notifications.test.tsx` | le cycle complet, avec le distributeur et `Linking` mockés |
 | `__tests__/NotificationSounds.test.tsx` | la page, les frames `notifications.channels` exactes, le ding du son choisi |
+| `src/core/__tests__/diagnosticChannels.test.ts` | le champ `notificationChannels` de la frame `diag.report` |
 
 ## Plateformes
 

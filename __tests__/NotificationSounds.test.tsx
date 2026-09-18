@@ -41,7 +41,8 @@ const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const DEFAULTS: NotificationSoundsNative = {
   ordinary: { kind: 'default' },
   ring: { kind: 'default' },
-  channels: { ordinary: 'runs', ring: 'ring' },
+  // The defaults are derived too: every name hashes the recipe and the choice. Opaque here.
+  channels: { ordinary: 'runs-7c4a10e2', ring: 'ring-2b8d3f61' },
 };
 
 const CHIME_URI = 'content://media/internal/audio/media/71';
@@ -50,14 +51,14 @@ const CHIME: NotificationSoundsNative = {
   ring: { kind: 'default' },
   // The derived name of the choice above, as NotificationSounds.kt computes it. Opaque on
   // purpose: the test pins that whatever the device derived is what travels, unchanged.
-  channels: { ordinary: 'runs-7c9ef1a2', ring: 'ring' },
+  channels: { ordinary: 'runs-7c9ef1a2', ring: 'ring-2b8d3f61' },
 };
 
 const IMPORTED_URI = 'content://com.myclawapp.fileprovider/notification-sounds/chime.mp3';
 const IMPORTED: NotificationSoundsNative = {
   ordinary: { kind: 'uri', uri: IMPORTED_URI, name: 'chime.mp3' },
   ring: { kind: 'default' },
-  channels: { ordinary: 'runs-1f2e3d4c', ring: 'ring' },
+  channels: { ordinary: 'runs-1f2e3d4c', ring: 'ring-2b8d3f61' },
 };
 
 function emit(frame: Record<string, unknown>): Promise<void> {
