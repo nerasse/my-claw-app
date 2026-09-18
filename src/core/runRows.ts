@@ -128,6 +128,22 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  *   renders as plain bubbles, never as an empty header.
  */
 /**
+ * The sends that never made it out, taken to the bottom of the thread.
+ *
+ * They wait for a connection, not for a turn: the run keeps writing while they wait, so a bubble
+ * left in its reading order scrolls away from the only place the owner looks. Every other wait
+ * keeps its place -- a send the server holds has a turn coming, which is a fact about the thread,
+ * and its bubble belongs where it was typed.
+ */
+export function pinnedSends(rows: ChatRow[]): ChatRow[] {
+  const pinned = rows.filter(
+    row => row.kind === 'item' && row.item.kind === 'text' && row.item.queuedReason === 'undelivered',
+  );
+  if (pinned.length === 0) return rows;
+  return [...rows.filter(row => !pinned.includes(row)), ...pinned];
+}
+
+/**
  * Whether a row would draw nothing at all.
  *
  * A bubble is a row because it has something to say: prose, a file, a thought, a reason it is

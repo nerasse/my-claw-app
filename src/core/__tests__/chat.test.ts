@@ -117,10 +117,10 @@ describe('chatStore streaming', () => {
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ text: 'moitie de la reponse', streaming: false });
   });
 
-  test('a failed send is marked on the user bubble', () => {
+  test('a send the device refused waits on the user bubble, it is not called lost', () => {
     chatStore.addUserMessage(THREAD, 'u1', 'hi');
-    chatStore.markSendFailed(THREAD, 'u1');
-    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ role: 'user', error: 'not sent' });
+    chatStore.markUndelivered(THREAD, 'u1');
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ role: 'user', pending: false, queuedReason: 'undelivered' });
   });
 });
 
@@ -228,7 +228,7 @@ describe('chatStore compaction hold', () => {
     expect(item!.kind === 'text' ? item!.queuedSince : undefined).toBeGreaterThan(0);
 
     // What the router does on chat.stream.start, in that order: the wait is over, the run writes.
-    chatStore.clearQueued(THREAD, undefined, 'compaction');
+    chatStore.clearQueued(THREAD, undefined, ['compaction']);
     chatStore.startStream(THREAD, 's1', 'm1');
     const cleared = chatStore.getItems(THREAD)[0];
     expect(cleared!.kind === 'text' ? cleared!.queuedSince : undefined).toBeUndefined();
@@ -273,7 +273,7 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     const held = () => chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.queuedSince !== undefined);
 
     // What the router does on chat.stream.start and chat.message, for the current turn.
-    chatStore.clearQueued(THREAD, undefined, 'compaction');
+    chatStore.clearQueued(THREAD, undefined, ['compaction']);
     expect(held()).toBe(true);
 
     // The drain: the run reached a turn boundary and read it. This is the real acceptance.
@@ -286,7 +286,7 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     // is proof it is over -- and three frames clear it so a lost one cannot strand the badge.
     chatStore.addUserMessage(THREAD, 'm1', 'pendant la compaction');
     chatStore.markQueued(THREAD, 'm1', 'compaction');
-    chatStore.clearQueued(THREAD, undefined, 'compaction');
+    chatStore.clearQueued(THREAD, undefined, ['compaction']);
     expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.queuedSince !== undefined)).toBe(false);
   });
 
@@ -1562,7 +1562,8 @@ describe('a parked send holds the bottom of the thread', () => {
 describe('a send waits for its receipt', () => {
   // A socket a NAT timeout or a VPN switch killed stays OPEN for the browser: the send left, the
   // server never got it, and nothing said so. The server receipts every send (0.6.3); a bubble
-  // still waiting after the delay says it was not delivered and offers to go again.
+  // still waiting after the delay is marked undelivered, and the app retries it on its own rather
+  // than leave the owner a verdict to clear by hand (2026-09-16).
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -1571,7 +1572,7 @@ describe('a send waits for its receipt', () => {
     return item?.kind === 'text' ? item : undefined;
   };
 
-  test('the receipt lifts the wait; none within the delay marks the bubble undelivered', () => {
+  test('the receipt lifts the wait; none within the delay leaves the bubble waiting, and retrying', () => {
     jest.useFakeTimers();
     chatStore.addUserMessage(THREAD, 'u1', 'hello');
     chatStore.expectReceipt(THREAD, 'u1', 15_000);
@@ -1581,27 +1582,38 @@ describe('a send waits for its receipt', () => {
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false });
     jest.advanceTimersByTime(20_000);
     expect(textAt(0)?.error).toBeUndefined();
+    expect(textAt(0)?.queuedReason).toBeUndefined();
 
     chatStore.addUserMessage(THREAD, 'u2', 'lost');
     chatStore.expectReceipt(THREAD, 'u2', 15_000);
     jest.advanceTimersByTime(14_999);
-    expect(textAt(1)?.error).toBeUndefined();
+    expect(textAt(1)?.queuedReason).toBeUndefined();
     jest.advanceTimersByTime(1);
-    expect(chatStore.getItems(THREAD)[1]).toMatchObject({ pending: false, error: 'not delivered' });
+    expect(chatStore.getItems(THREAD)[1]).toMatchObject({ pending: false, queuedReason: 'undelivered' });
+    // The failure is not a verdict: nothing to clear by hand, and the retry does not restart the
+    // clock the bubble counts its wait from.
+    const waitedSince = textAt(1)?.queuedSince;
+    chatStore.expectReceipt(THREAD, 'u2', 15_000);
+    jest.advanceTimersByTime(15_000);
+    expect(textAt(1)?.queuedSince).toBe(waitedSince);
+    expect(chatStore.getItems(THREAD)[1]).toMatchObject({ queuedReason: 'undelivered' });
   });
 
-  test('sending again clears the verdict and waits anew; a late receipt for the first try settles it', () => {
+  test('sending again waits anew, and a late receipt for the first try settles the bubble', () => {
     jest.useFakeTimers();
     chatStore.addUserMessage(THREAD, 'u1', 'hello');
     chatStore.expectReceipt(THREAD, 'u1', 15_000);
     jest.advanceTimersByTime(15_000);
-    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ error: 'not delivered' });
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ queuedReason: 'undelivered' });
 
     chatStore.expectReceipt(THREAD, 'u1', 15_000);
-    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: true });
-    expect(textAt(0)?.error).toBeUndefined();
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: true, queuedReason: 'undelivered' });
+    // No timer is left for this one: the first try did reach the server, and the bubble goes back
+    // to being an answered message rather than sitting under a mark nothing would clear.
     chatStore.markDelivered(THREAD, 'u1');
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false });
+    expect(textAt(0)?.queuedReason).toBeUndefined();
+    expect(textAt(0)?.queuedSince).toBeUndefined();
   });
 
   test('a receipt for a bubble nobody waits on, or that is gone, changes nothing', () => {
@@ -1612,13 +1624,14 @@ describe('a send waits for its receipt', () => {
     expect(textAt(0)?.pending).toBeUndefined();
   });
 
-  test('a failed send stops waiting: one verdict, not two', () => {
+  test('a socket that refuses the frame stops the wait: one state, not two', () => {
     jest.useFakeTimers();
     chatStore.addUserMessage(THREAD, 'u1', 'hello');
     chatStore.expectReceipt(THREAD, 'u1', 15_000);
-    chatStore.markSendFailed(THREAD, 'u1');
+    chatStore.markUndelivered(THREAD, 'u1');
     jest.advanceTimersByTime(20_000);
-    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false, error: 'not sent' });
+    expect(chatStore.getItems(THREAD)[0]).toMatchObject({ pending: false, queuedReason: 'undelivered' });
+    expect(textAt(0)?.error).toBeUndefined();
   });
 });
 

@@ -14,6 +14,16 @@ export interface RunInfo {
   endTs?: number;
 }
 
+/**
+ * Why a bubble is waiting rather than answered.
+ *
+ * `compaction` and `injection` are the server holding a send it has: behind a history rewrite, or
+ * in the active run's mailbox for the next turn. `undelivered` is the send the server never got --
+ * the socket refused it, or it claimed to be open and nothing was receipted -- and it is the app
+ * that holds it, retrying on its own (2026-09-16).
+ */
+export type QueuedReason = 'compaction' | 'injection' | 'undelivered';
+
 export interface TextItem {
   kind: 'text';
   id: string;
@@ -50,7 +60,7 @@ export interface TextItem {
   queuedSince?: number;
   /** Why the server parked this send: a compaction holding the history, or the run's mailbox
    *  holding it for the next turn. Drives the bubble's label. */
-  queuedReason?: 'compaction' | 'injection';
+  queuedReason?: QueuedReason;
   /**
    * Sent, receipt awaited (`chat.send.received`). A socket a NAT timeout or a VPN switch killed
    * stays OPEN for a browser, so a send can leave without arriving: the receipt is the only proof.
@@ -1458,10 +1468,24 @@ class ChatStoreImpl {
     this.patch(threadId, id, { transcripts });
   }
 
-  /** The native outbox could neither send nor queue the frame: say so on the bubble. */
-  markSendFailed(threadId: string, id: string, error = 'not sent'): void {
+  /**
+   * The send never made it out: the socket refused the frame, or it called itself open and no
+   * receipt came. The bubble says it is waiting rather than failed.
+   *
+   * A verdict the owner had to clear by hand read as a message he had lost, and it was wrong: the
+   * app retries the same id on its own, so the bubble belongs with the sends that wait their turn.
+   * The first failure is what the elapsed time counts from, and a retry does not restart it.
+   */
+  markUndelivered(threadId: string, id: string): void {
     this.stopWaiting(id);
-    this.patch(threadId, id, { pending: false, error });
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    if (!item || item.kind !== 'text' || item.queuedReason === 'undelivered') return;
+    this.patch(threadId, id, {
+      pending: false,
+      error: undefined,
+      queuedSince: Date.now(),
+      queuedReason: 'undelivered',
+    });
   }
 
   /**
@@ -1476,7 +1500,7 @@ class ChatStoreImpl {
     this.patch(threadId, id, { pending: true, error: undefined });
     const timer = setTimeout(() => {
       this.awaitingReceipt.delete(id);
-      this.patch(threadId, id, { pending: false, error: 'not delivered' });
+      this.markUndelivered(threadId, id);
     }, timeoutMs);
     this.awaitingReceipt.set(id, timer);
   }
@@ -1489,9 +1513,19 @@ class ChatStoreImpl {
     return this.receipts;
   }
 
-  /** The server has the send: whatever the socket claimed, this one arrived. */
+  /**
+   * The server has the send: whatever the socket claimed, this one arrived.
+   *
+   * A receipt also settles a bubble the app had given up on: the first try may have reached the
+   * server after all, and a resend would then land on the same id. There is no timer left to stop
+   * in that case, which is why the mark is what this looks at.
+   */
   markDelivered(threadId: string, id: string): void {
-    if (!this.stopWaiting(id)) return;
+    const waited = this.stopWaiting(id);
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    if (!item || item.kind !== 'text') return;
+    if (!waited && item.queuedReason !== 'undelivered') return;
+    this.clearQueued(threadId, id, ['undelivered']);
     this.patch(threadId, id, { pending: false, error: undefined });
   }
 
@@ -1617,10 +1651,12 @@ class ChatStoreImpl {
    * *all* the sends typed while it rewrites the history, and a per-thread slot kept only the last
    * of them, so the bubbles before it stayed under a badge nothing was ever going to clear.
    *
-   * `only` is what keeps the two waits apart, and they are not the same wait at all.
+   * `only` is what keeps the waits apart, and they are not the same wait at all.
    *
    * A compaction holds the send with nothing on the wire, so any sign of life means it is over:
-   * a stream, an answer, the end of a run, all three, so a lost frame cannot strand the mark.
+   * a stream, an answer, the end of a run, all three, so a lost frame cannot strand the mark. An
+   * `undelivered` send is never in that list: the run ending says nothing about whether the frame
+   * ever reached the server, and only the receipt settles it.
    *
    * An injection waits for the *next turn boundary* of a run that is talking the whole time. The
    * streamer seals a segment and opens another at every reasoning block and after every tool
@@ -1629,13 +1665,13 @@ class ChatStoreImpl {
    * ack for that id (fired at the drain) and the end of the run lift it -- the run may also die
    * without ever acking.
    */
-  clearQueued(threadId: string, id?: string, only?: 'compaction'): void {
+  clearQueued(threadId: string, id?: string, only?: readonly QueuedReason[]): void {
     const items = this.threads.get(threadId);
     const matches = (item: ChatItem): item is TextItem =>
       item.kind === 'text' &&
       item.queuedSince !== undefined &&
       (id === undefined || item.id === id) &&
-      (only === undefined || item.queuedReason === only);
+      (only === undefined || (item.queuedReason !== undefined && only.includes(item.queuedReason)));
     if (!items?.some(matches)) return;
     this.threads.set(
       threadId,
@@ -2141,6 +2177,25 @@ export function useChatItems(threadId: string | null): ChatItem[] {
  */
 export function useChatItemCount(threadId: string | null): number {
   const snapshot = useCallback(() => (threadId ? chatStore.getItems(threadId).length : 0), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+/**
+ * The sends still waiting to get out, as a key that changes only when the set does.
+ *
+ * The retry loop lives in the shell, and a shell handed the items re-renders for every streamed
+ * token. What it watches is this key; the store's own list is read inside the loop, at the moment
+ * it is time to try, so nothing needs to be captured (2026-09-16).
+ */
+export function useWaitingSendsKey(threadId: string | null): string {
+  const snapshot = useCallback(() => {
+    if (!threadId) return '';
+    return chatStore
+      .getItems(threadId)
+      .filter((item): item is TextItem => item.kind === 'text' && item.queuedReason === 'undelivered')
+      .map(item => `${item.id}:${item.queuedSince ?? 0}`)
+      .join(',');
+  }, [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 

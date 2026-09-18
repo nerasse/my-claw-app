@@ -1,4 +1,4 @@
-import { buildRows, isHoisted, type ChatRow } from '../runRows';
+import { buildRows, isHoisted, pinnedSends, type ChatRow } from '../runRows';
 import type { ChatItem } from '../chat';
 
 /** A finished run's items, status, timeline. */
@@ -313,5 +313,29 @@ describe('a bubble with nothing to draw', () => {
     expect(buildRows([bare({ reasoningTokens: 12 })])).toHaveLength(1);
     expect(buildRows([bare({ error: 'not delivered' })])).toHaveLength(1);
     expect(buildRows([bare({ streaming: true })])).toHaveLength(1);
+  });
+});
+
+describe('a send that never made it out', () => {
+  const labelOf = (row: ChatRow): string => (row.kind === 'item' ? row.item.id : row.kind);
+  const user = (id: string, extra: Partial<ChatItem> = {}): ChatItem =>
+    ({ kind: 'text', id, role: 'user', text: id, attachments: [], streaming: false, ts: 1, ...extra }) as ChatItem;
+
+  test('waits at the bottom, under everything the run wrote after it', () => {
+    const rows = buildRows([
+      user('lost', { queuedReason: 'undelivered', queuedSince: 5 }),
+      tool('t1'),
+      { kind: 'text', id: 'answer', role: 'agent', text: 'voila', attachments: [], streaming: false, ts: 9 } as ChatItem,
+    ]);
+    const pinned = pinnedSends(rows);
+    expect(labelOf(pinned[pinned.length - 1]!)).toBe('lost');
+  });
+
+  test('a send the server holds keeps its place: it has a turn coming', () => {
+    const rows = buildRows([
+      user('parked', { queuedReason: 'injection', queuedSince: 5 }),
+      { kind: 'text', id: 'answer', role: 'agent', text: 'voila', attachments: [], streaming: false, ts: 9 } as ChatItem,
+    ]);
+    expect(pinnedSends(rows)).toEqual(rows);
   });
 });

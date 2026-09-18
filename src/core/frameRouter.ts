@@ -219,7 +219,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'chat.message':
       // Compaction marks only: a run that answers mid-flight (a notice, a media bubble) has not
       // read what is parked in its mailbox.
-      chatStore.clearQueued(frame.threadId, undefined, 'compaction');
+      chatStore.clearQueued(frame.threadId, undefined, ['compaction']);
       chatStore.addAgentMessage(
         frame.threadId,
         frame.id,
@@ -267,12 +267,13 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // the bubble wore "waiting for the compaction" while its run was well underway (2026-09-11).
       // Compaction marks only: an injection is still parked in the mailbox of the run that just
       // started, and clearing it here would read as accepted a message the run has not looked at.
-      chatStore.clearQueued(frame.threadId, undefined, 'compaction');
+      chatStore.clearQueued(frame.threadId, undefined, ['compaction']);
       chatStore.startRun(frame.threadId, frame.run);
       break;
     case 'chat.run.end': {
       const ended = chatStore.endRun(frame.threadId, frame.reason);
-      chatStore.clearQueued(frame.threadId);
+      // The run died with the message still in its mailbox, and it will never look at it.
+      chatStore.clearQueued(frame.threadId, undefined, ['compaction', 'injection']);
       // The run just finished on the thread on screen: one ring, exactly like a question hitting
       // the open thread. A run ending on any other thread (or the device in the background) is
       // the push's business -- server-side skipDevice keeps the tray silent for the foreground
@@ -337,7 +338,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // and after every tool round, so this fires many times during the very turn an injected
       // message is still waiting for -- lifting its badge here read as accepted a message the run
       // had not looked at yet.
-      chatStore.clearQueued(frame.threadId, undefined, 'compaction');
+      chatStore.clearQueued(frame.threadId, undefined, ['compaction']);
       chatStore.startStream(frame.threadId, frame.id, frame.replyToId);
       noteActivity(frame.threadId, '');
       break;
@@ -603,7 +604,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'chat.send.acked':
       // The run drained a queued injection at a turn boundary: lift the mark on the bubble that
       // carried it. The stream that follows opens its own bubble; this one stays answered.
-      chatStore.clearQueued(frame.threadId, frame.replyToId);
+      // Drained, so it is answered: no wait of any kind is left on that bubble.
+      chatStore.clearQueued(frame.threadId, frame.replyToId, ['compaction', 'injection']);
       break;
     case 'chat.command.pending':
       chatStore.addCommandPending(frame.threadId, frame.replyToId, frame.text);

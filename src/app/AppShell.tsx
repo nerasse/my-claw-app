@@ -12,6 +12,7 @@ import { connection } from '../core/connection';
 import {
   chatStore,
   useChatItemCount,
+  useWaitingSendsKey,
   useSpawnCards,
   useActiveRun,
   useCompacting,
@@ -22,6 +23,7 @@ import {
   type TextItem,
 } from '../core/chat';
 import { formatTranscript } from '../core/transcript';
+import { retryDelayAfter, sendsToRetry } from '../core/sendRetry';
 import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
@@ -1620,7 +1622,9 @@ export function AppShell(): React.JSX.Element {
           location,
         ),
       );
-      if (!delivered) chatStore.markSendFailed(threadId, id);
+      // Neither sent nor queued by the device: the app holds it now and retries it itself, so the
+      // bubble waits instead of claiming the message is lost.
+      if (!delivered) chatStore.markUndelivered(threadId, id);
     },
     [catalog.defaultModel],
   );
@@ -1664,6 +1668,40 @@ export function AppShell(): React.JSX.Element {
     },
     [sendChatTo],
   );
+
+  const waitingKey = useWaitingSendsKey(activeThread);
+
+  /**
+   * The sends the server never got, retried by the app itself.
+   *
+   * A socket that dies under a NAT timeout or a VPN switch stays OPEN for the browser, so a message
+   * leaves and nothing comes back. The bubble holds what the owner typed, and the same id goes out
+   * again -- the server takes a repeated id once, so a first try that did arrive is not answered
+   * twice. The attempt chain lives as long as there is something waiting: it starts when the send
+   * fails, keeps going while the set of waiting sends is the same, and dies with the last receipt.
+   * The delay opens up with the wait, and never stops, because the receipt is the only proof
+   * (2026-09-16).
+   */
+  useEffect(() => {
+    if (!activeThread || waitingKey === '') return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      if (stopped) return;
+      const now = Date.now();
+      const waiting = sendsToRetry(chatStore.getItems(activeThread));
+      if (waiting.length === 0) return;
+      for (const item of waiting) resendChat(item);
+      const waited = now - Math.min(...waiting.map(item => item.queuedSince ?? now));
+      timer = setTimeout(tick, retryDelayAfter(waited));
+    };
+    timer = setTimeout(tick, retryDelayAfter(0));
+    return () => {
+      stopped = true;
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [waitingKey, activeThread, resendChat]);
+
 
   // Push notifications (docs/notifications.md). The distributor answers registrations on its
   // own channel: whenever it hands out an endpoint the server gets it, and a lost registration

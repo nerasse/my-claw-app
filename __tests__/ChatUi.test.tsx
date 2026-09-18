@@ -1085,20 +1085,25 @@ test('a send waits for the server receipt, and one that never got it can be sent
   });
   await waitFor(() => !textsOf(tree).includes('sending…'));
 
-  // A verdict on it (the outbox refused, or the wait ran out) offers to send again: same id, so the
-  // server takes a message that did arrive once and a lost one for the first time.
+  // It never got out (the outbox refused, or the wait ran out). The bubble waits and says the app
+  // is trying, and the press is a way to go now rather than the only way out: same id either way,
+  // so the server takes a message that did arrive once and a lost one for the first time.
   await ReactTestRenderer.act(async () => {
-    chatStore.markSendFailed(THREAD, sent.id, 'not delivered');
+    chatStore.markUndelivered(THREAD, sent.id);
   });
-  await waitFor(() => textsOf(tree).includes('not delivered · tap to send again'));
+  // The wording is composed with the elapsed time, so it is found in the tree rather than among
+  // the plain text nodes.
+  const waitingWords = () => JSON.stringify(tree.toJSON());
+  await waitFor(() => waitingWords().includes('not sent, trying again'));
+  await waitFor(() => waitingWords().includes('tap to send'));
   bridge.sendMessage.mockClear();
-  await pressLabel(tree, 'Send again');
+  await pressLabel(tree, `Send ${sent.id} now`);
   await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('"chat.send"')));
   const again = JSON.parse(String(bridge.sendMessage.mock.calls.find(([frame]) => String(frame).includes('"chat.send"'))?.[0])) as { id: string; text: string };
   expect(again.id).toBe(sent.id);
   expect(again.text).toBe('es-tu la ?');
   await waitFor(() => textsOf(tree).includes('sending…'));
-  expect(textsOf(tree)).not.toContain('not delivered · tap to send again');
+  expect(waitingWords()).not.toContain('not sent, trying again');
   // Exactly one bubble for the message, whatever the number of tries.
   expect(chatStore.getItems(THREAD).filter(item => item.id === sent.id)).toHaveLength(1);
 

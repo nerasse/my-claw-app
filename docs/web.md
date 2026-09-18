@@ -78,10 +78,22 @@ outbox never saw it because the socket said yes. The heartbeat (`ping` answered 
 `pong`, two misses and the socket is closed) brings the link back, but the message sent in between
 is lost without a word. So every `chat.send` waits for the server's `chat.send.received`
 (`hello.receipts` announces it): the bubble reads "sending…" until then, and 15 s without a receipt
-on a link that called itself open, it reads "not delivered · tap to send again". Sending again
-reuses the id: the server takes a repeated id once, so a receipt that was merely late costs
-nothing. Armed only on an open link, never on a queued send, whose receipt comes with the
-reconnect. Store side in `chatStore.expectReceipt` / `markDelivered`.
+on a link that called itself open, the send is marked `undelivered` and the app retries it itself,
+under the same id -- the server takes a repeated id once, so a receipt that was merely late costs
+nothing, and a first try that did arrive is not answered twice. Armed only on an open link, never
+on a queued send, whose receipt comes with the reconnect. Store side in `chatStore.expectReceipt` /
+`markDelivered` / `markUndelivered`.
+
+**A send that never got out is not a verdict the owner has to clear.** It reads "not sent, trying
+again", with the time it has been waiting, and it is drawn at the bottom of the thread under
+everything the run wrote after it: it waits for a connection, not for a turn, and a bubble left in
+its reading order scrolls away from the only place the owner looks (`pinnedSends`, in
+`core/runRows.ts`). The retry is the send path itself, so the press on the label is a way to go now
+rather than the only way out: `core/sendRetry.ts` holds the delay, which opens up with the wait
+(5 s, then 15 s, then 30 s) and never stops. Only the receipt ends it, or an ack for the id if the
+run drained the message. The two waits the server owns keep their place instead -- behind a
+compaction, or in the run's mailbox for the next turn boundary -- because those have a turn coming,
+which is a fact about the thread.
 
 ## Package shims
 

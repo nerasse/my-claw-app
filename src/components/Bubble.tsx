@@ -155,7 +155,23 @@ export const Bubble = React.memo(function BubbleView({
             would resume (so nothing starts until it ends), or a run is already active and the
             message waits in its mailbox for the next turn boundary. Counted either way, because a
             still line during the wait reads as a message that never left. */}
-        {item.queuedSince ? (
+        {/* The app is holding this one and retrying it on its own: the press is an offer to go now,
+            not the only way out -- a message the owner had to rescue by hand read as one he had lost.
+            While an attempt is in flight the bubble says so instead, below. */}
+        {item.queuedSince && item.queuedReason === 'undelivered' && !item.pending && onResend ? (
+          <Pressable
+            onPress={() => onResend(item)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Send ${item.id} now`}>
+            <Text style={[styles.queued, agent ? null : styles.queuedUser]}>
+              {'not sent, trying again'}
+              <CommandElapsed since={item.queuedSince} onAccent={!agent} />
+              {' · tap to send'}
+            </Text>
+          </Pressable>
+        ) : null}
+        {item.queuedSince && item.queuedReason !== 'undelivered' ? (
           <Text style={[styles.queued, agent ? null : styles.queuedUser]}>
             {item.queuedReason === 'injection' ? 'queued for the next turn' : 'waiting for the compaction'}
             <CommandElapsed since={item.queuedSince} onAccent={!agent} />

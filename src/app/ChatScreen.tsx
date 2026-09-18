@@ -11,7 +11,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
-import { buildRows, compactionRuleBefore, withCompactionRule, type ChatRow } from '../core/runRows';
+import { buildRows, compactionRuleBefore, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
@@ -746,7 +746,13 @@ export function ChatScreen({
   // rows and not from raw items: a collapsed group is one row, an open one renders its children
   // inside it -- docs/run-grouping.md. The compaction rule is a row too, inserted above the send
   // it holds -- `withCompactionRule`.
-  const rows = useMemo(() => withCompactionRule(buildRows(items), ruleBefore), [items, ruleBefore]);
+  // And a send the server never got is pinned under all of it: it waits for a connection, not for a
+  // turn, so a bubble left in its reading order scrolls away from the only place the owner looks
+  // while the run keeps writing -- `pinnedSends`.
+  const rows = useMemo(
+    () => pinnedSends(withCompactionRule(buildRows(items), ruleBefore)),
+    [items, ruleBefore],
+  );
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
 
   /**
