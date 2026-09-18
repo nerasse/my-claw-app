@@ -42,21 +42,27 @@ class MainApplication : Application(), ReactApplication {
           NotificationManager.IMPORTANCE_HIGH,
         ),
       )
-      // The urgent channel, on the alarm stream: an agent that sends `ring` is asking to be heard
-      // with the phone on vibrate or silent, which is the one thing a notification stream cannot
-      // do (the system keeps silent silent). Payload type "urgent", server side
-      // notifications/push.ts; the name is a contract, since a channel's settings are frozen at
-      // first creation and a rename would silently downgrade every ring to a banner.
+      // The ring channel: louder and longer than the ordinary one, but on the notification stream
+      // like any other notification, so the phone's own mode decides. A ring is heard in normal,
+      // vibrates in vibrate, and stays quiet in silent -- the owner was explicit that no
+      // notification of his gets to override the mode he chose. The alarm ringtone is only the
+      // tone: USAGE_NOTIFICATION is what keeps it on the stream the mode governs.
+      //
+      // The name is half the wire contract (payload type "ring", server side
+      // notifications/push.ts). A channel's settings are frozen at first creation, so a change of
+      // behaviour needs a new name; "urgent" was the alarm-stream one and is deleted below so it
+      // does not linger in the system settings.
+      manager.deleteNotificationChannel("$packageName:unified_push_channel:urgent")
       manager.createNotificationChannel(
         NotificationChannel(
-          "$packageName:unified_push_channel:urgent",
-          "Urgent",
+          "$packageName:unified_push_channel:ring",
+          "Ring",
           NotificationManager.IMPORTANCE_HIGH,
         ).apply {
           setSound(
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
             AudioAttributes.Builder()
-              .setUsage(AudioAttributes.USAGE_ALARM)
+              .setUsage(AudioAttributes.USAGE_NOTIFICATION)
               .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
               .build(),
           )
