@@ -233,7 +233,21 @@ jest.mock('./src/core/nativeBridge', () => ({
       }),
     ),
     cancelRecording: jest.fn(() => Promise.resolve()),
+    // The real bridge plays whatever uri it is handed; null is the system's own notification
+    // sound. The mock mirrors the module: the argument matters (src/core/alertSound.ts picks it).
     playAlertSound: jest.fn(() => Promise.resolve()),
+    getNotificationSounds: jest.fn(() =>
+      Promise.resolve({
+        ordinary: { kind: 'default' },
+        ring: { kind: 'default' },
+        channels: { ordinary: 'runs', ring: 'ring' },
+      }),
+    ),
+    pickNotificationSound: jest.fn(() => Promise.resolve(null)),
+    previewNotificationSound: jest.fn(() => Promise.resolve()),
+    resetNotificationSound: jest.fn(() => Promise.resolve(null)),
+    listImportedSounds: jest.fn(() => Promise.resolve([])),
+    deleteImportedSound: jest.fn(() => Promise.resolve(null)),
     playAudio: jest.fn(() => Promise.resolve()),
     pausePlayback: jest.fn(() => Promise.resolve()),
     seekPlayback: jest.fn(() => Promise.resolve()),

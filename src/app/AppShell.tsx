@@ -129,6 +129,7 @@ import {
   type UiPrefsResultFrame,
   type LocationInput,
   type WorkspaceEntry,
+  encodeNotificationsChannels,
   encodeNotificationsRegister,
   encodeNotificationsState,
   encodeTagsDelete,
@@ -183,6 +184,7 @@ import { httpOrigin, uuid } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
+import { NotificationsScreen } from './NotificationsScreen';
 import { PairingScreen, usePairing } from './PairingScreen';
 import { cancelPairing } from '../core/pairingClient';
 import { OtherSettingsScreen } from './OtherSettingsScreen';
@@ -1765,6 +1767,34 @@ export function AppShell(): React.JSX.Element {
     const subscription = AppState.addEventListener('change', state => report(state === 'active'));
     return () => subscription.remove();
   }, [activeThread]);
+
+  /**
+   * The channel names the server publishes on follow the sounds picked in Settings, and only the
+   * device knows them: the name is derived natively at boot, without JS, because a channel is
+   * frozen at creation and a change of sound is a change of channel. Sent on every connection,
+   * like the state above -- a name that changed while the socket was down is otherwise missing
+   * server-side until the next sound change.
+   */
+  const sendNotificationChannels = useCallback(
+    (channels: { ordinary: string; ring: string }) => {
+      connection.send(encodeNotificationsChannels(deviceInfo?.deviceId ?? '', channels)).catch(() => {});
+    },
+    [deviceInfo],
+  );
+
+  useEffect(() => {
+    if (!pushSupported || status.state !== 'connected' || !deviceInfo) return;
+    let cancelled = false;
+    deviceBridge
+      .getNotificationSounds()
+      .then(sounds => {
+        if (!cancelled && sounds) sendNotificationChannels(sounds.channels);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [status.state, deviceInfo, sendNotificationChannels]);
 
   // A notification tap opens the thread or the jobs page it came from. The cold start (the app
   // was killed and the tap launched it) is the initial URL; a live app gets the event.
@@ -3477,6 +3507,11 @@ export function AppShell(): React.JSX.Element {
                   setPairingOpen(true);
                 }}
                 onBack={() => setSettingsPage('index')}
+              />
+            ) : settingsPage === 'notifications' ? (
+              <NotificationsScreen
+                onBack={() => setSettingsPage('index')}
+                onChannelsChange={sendNotificationChannels}
               />
             ) : settingsPage === 'other' ? (
               <OtherSettingsScreen

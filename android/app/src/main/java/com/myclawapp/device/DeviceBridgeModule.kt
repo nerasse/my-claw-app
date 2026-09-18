@@ -35,6 +35,7 @@ import android.provider.Settings
 import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
@@ -69,6 +70,10 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     private const val PREFS_NAME = "claw_prefs"
     private const val FILE_PICK_REQUEST_CODE = 4201
     private const val FILE_SAVE_REQUEST_CODE = 4202
+
+    /** The settings pickers: the system ringtone list, and the document picker for an import. */
+    private const val SOUND_SYSTEM_REQUEST_CODE = 4203
+    private const val SOUND_FILE_REQUEST_CODE = 4204
     /**
      * How much of a death trace travels. A tombstone's backtrace is the first screen; past that
      * it is memory maps and register dumps, which is more than a diagnostic report can carry and
@@ -134,6 +139,8 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   private var pendingSaveUrl: String? = null
   private var pendingSaveName: String? = null
   private var pendingSaveTransferId: String? = null
+  private var pendingSoundPromise: Promise? = null
+  private var pendingSoundUsage: SoundUsage? = null
   private var pendingLocationPromise: Promise? = null
   private var locationListener: LocationListener? = null
   private var bestLocation: Location? = null
@@ -173,6 +180,15 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   // flow: launch ACTION_GET_CONTENT, copy the results to the cache, resolve the promise.
   private val filePickListener: ActivityEventListener = object : BaseActivityEventListener() {
     override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+      if (requestCode == SOUND_SYSTEM_REQUEST_CODE || requestCode == SOUND_FILE_REQUEST_CODE) {
+        val promise = pendingSoundPromise ?: return
+        val usage = pendingSoundUsage ?: return
+        pendingSoundPromise = null
+        pendingSoundUsage = null
+        finishSoundPick(usage, requestCode, resultCode, data, promise)
+        return
+      }
+
       if (requestCode == FILE_SAVE_REQUEST_CODE) {
         val promise = pendingSavePromise ?: return
         val url = pendingSaveUrl ?: return
@@ -1437,44 +1453,225 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   /**
-   * One notification-ding for an incoming question sheet, played by the system's own sound so
-   * no asset ships in the APK. The sheet on screen is the surface; a device that is not looking
-   * at the thread gets the tray through the push instead (server-side skipDevice), never this.
+   * The two sounds the owner picked, and the channel names derived from them. The settings page
+   * renders exactly this, and the channel names are what travels to the server
+   * (notifications.channels): every push lands on a channel this device pre-created, and the name
+   * is the only handle the server has on the frozen sound inside it.
+   */
+  @ReactMethod
+  fun getNotificationSounds(promise: Promise) {
+    try {
+      promise.resolve(NotificationSounds.state(reactContext))
+    } catch (e: Exception) {
+      promise.reject("SOUNDS_FAILED", e.message ?: "could not read the sound choices", e)
+    }
+  }
+
+  /**
+   * The one entry point for a change of sound. `system` opens the ringtone picker, `file` the
+   * document picker whose answer is copied into the app and served through the FileProvider,
+   * `silent` is applied directly -- refused for the ring, which exists to be heard. All three
+   * resolve the whole new state, or null when the owner walked away having changed nothing.
+   */
+  @ReactMethod
+  fun pickNotificationSound(usage: String, source: String, promise: Promise) {
+    val parsed = SoundUsage.from(usage) ?: run {
+      promise.reject("BAD_USAGE", "unknown notification sound usage")
+      return
+    }
+    if (source == "silent") {
+      if (parsed == SoundUsage.RING) {
+        promise.reject("SILENT_RING", "the ring cannot be silent")
+        return
+      }
+      try {
+        NotificationSounds.setChoice(reactContext, parsed, SoundChoice.Silent)
+        NotificationSounds.applyChannels(reactContext)
+        promise.resolve(NotificationSounds.state(reactContext))
+      } catch (e: Exception) {
+        promise.reject("SOUND_PICK_FAILED", e.message ?: "could not silence the sound", e)
+      }
+      return
+    }
+    if (source != "system" && source != "file") {
+      promise.reject("BAD_SOURCE", "unknown notification sound source")
+      return
+    }
+    val activity = reactContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "no current activity")
+      return
+    }
+    if (pendingSoundPromise != null) {
+      promise.reject("PICK_IN_PROGRESS", "a sound pick is already in progress")
+      return
+    }
+    val intent = if (source == "system") {
+      NotificationSounds.pickerIntent(reactContext, parsed)
+    } else {
+      Intent(Intent.ACTION_GET_CONTENT).apply {
+        type = "audio/*"
+        addCategory(Intent.CATEGORY_OPENABLE)
+      }
+    }
+    pendingSoundPromise = promise
+    pendingSoundUsage = parsed
+    activity.startActivityForResult(
+      intent,
+      if (source == "system") SOUND_SYSTEM_REQUEST_CODE else SOUND_FILE_REQUEST_CODE,
+    )
+  }
+
+  /** One shot of the usage's current choice, for the settings preview button. */
+  @ReactMethod
+  fun previewNotificationSound(usage: String, promise: Promise) {
+    val parsed = SoundUsage.from(usage) ?: run {
+      promise.reject("BAD_USAGE", "unknown notification sound usage")
+      return
+    }
+    try {
+      // No ringer-mode gate, unlike playAlertSound: the owner pressed Listen, so the app plays.
+      // The phone's mode still governs the stream the sound goes out on, like it will for the
+      // real notification.
+      NotificationSounds.previewUri(reactContext, parsed)?.let { playOnce(it) }
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("PREVIEW_FAILED", e.message ?: "could not play the sound", e)
+    }
+  }
+
+  /** Back to the system's own sound for one usage; resolves the whole new state. */
+  @ReactMethod
+  fun resetNotificationSound(usage: String, promise: Promise) {
+    val parsed = SoundUsage.from(usage) ?: run {
+      promise.reject("BAD_USAGE", "unknown notification sound usage")
+      return
+    }
+    try {
+      NotificationSounds.setChoice(reactContext, parsed, SoundChoice.Default)
+      NotificationSounds.applyChannels(reactContext)
+      promise.resolve(NotificationSounds.state(reactContext))
+    } catch (e: Exception) {
+      promise.reject("SOUND_RESET_FAILED", e.message ?: "could not reset the sound", e)
+    }
+  }
+
+  /** The files the owner imported, read from disk rather than from a memory of the last listing. */
+  @ReactMethod
+  fun listImportedSounds(promise: Promise) {
+    try {
+      val result = Arguments.createArray()
+      for (sound in NotificationSounds.listImported(reactContext)) {
+        val map = Arguments.createMap()
+        map.putString("uri", sound.uri.toString())
+        map.putString("name", sound.name)
+        map.putDouble("size", sound.size.toDouble())
+        result.pushMap(map)
+      }
+      promise.resolve(result)
+    } catch (e: Exception) {
+      promise.reject("SOUNDS_FAILED", e.message ?: "could not list the imported sounds", e)
+    }
+  }
+
+  /**
+   * Deletes one imported file. A usage still pointing at it falls back to the default, channels
+   * included -- the resolved state is what lets the settings page tell the server the name
+   * changed. Only the app's own imported folder is addressable.
+   */
+  @ReactMethod
+  fun deleteImportedSound(uri: String, promise: Promise) {
+    try {
+      if (!NotificationSounds.deleteImported(reactContext, Uri.parse(uri))) {
+        promise.reject("NOT_IMPORTED", "not an imported notification sound")
+        return
+      }
+      NotificationSounds.applyChannels(reactContext)
+      promise.resolve(NotificationSounds.state(reactContext))
+    } catch (e: Exception) {
+      promise.reject("SOUND_DELETE_FAILED", e.message ?: "could not delete the sound", e)
+    }
+  }
+
+  /**
+   * The picker's answer. Both pickers resolve the whole new state through the same path as every
+   * other change: write the choice, apply the channels (create the new name, delete the one it
+   * replaced), answer. Nothing changes when the owner backed out.
+   */
+  private fun finishSoundPick(usage: SoundUsage, requestCode: Int, resultCode: Int, data: Intent?, promise: Promise) {
+    try {
+      if (resultCode != Activity.RESULT_OK || data == null) {
+        promise.resolve(null)
+        return
+      }
+      if (requestCode == SOUND_SYSTEM_REQUEST_CODE) {
+        // RESULT_OK without the extra is not an answer; with it, a null value is the Silent item.
+        if (!data.hasExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)) {
+          promise.resolve(null)
+          return
+        }
+        val picked = IntentCompat.getParcelableExtra(data, RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+        NotificationSounds.setChoice(reactContext, usage, NotificationSounds.fromPicker(reactContext, usage, picked))
+      } else {
+        val source = data.data
+        if (source == null) {
+          promise.resolve(null)
+          return
+        }
+        val imported = NotificationSounds.importSound(reactContext, source)
+        NotificationSounds.setChoice(reactContext, usage, SoundChoice.of(imported.uri, imported.name))
+      }
+      NotificationSounds.applyChannels(reactContext)
+      promise.resolve(NotificationSounds.state(reactContext))
+    } catch (e: Exception) {
+      promise.reject("SOUND_PICK_FAILED", e.message ?: "could not apply the sound", e)
+    }
+  }
+
+  /**
+   * One notification-ding for an incoming question sheet, played by the sound the owner picked
+   * for the ordinary notifications (a uri; null is the system's own notification sound). The
+   * sheet on screen is the surface; a device that is not looking at the thread gets the tray
+   * through the push instead (server-side skipDevice), never this.
    *
    * A MediaPlayer follows neither the ringer mode nor the notification volume: it played the
    * notification sound at media volume, in vibrate and in silent alike, which is how the app came
    * to ding through a silenced phone. The mode is read first, the way the system itself treats one
    * of its own notifications -- nothing when silent, a short buzz when vibrating, the sound
    * otherwise -- and the sound goes out on the notification stream rather than the media one.
+   * The choice of sound is the caller's (src/core/alertSound.ts reads it); the mode never is.
    */
   @ReactMethod
-  fun playAlertSound(promise: Promise) {
+  fun playAlertSound(uri: String?, promise: Promise) {
     try {
       val audio = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
       when (audio.ringerMode) {
         AudioManager.RINGER_MODE_SILENT -> Unit
         AudioManager.RINGER_MODE_VIBRATE -> vibrateOnce()
-        else -> {
-          // One shot, released on completion so a second question is not silenced by a leaked
-          // player, and set up by hand to carry the notification attributes MediaPlayer.create
-          // would leave out.
-          val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-          val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-          val player = MediaPlayer()
-          player.setAudioAttributes(attributes)
-          player.setDataSource(reactContext, uri)
-          player.setOnCompletionListener { it.release() }
-          player.prepare()
-          player.start()
-        }
+        else -> playOnce(if (uri != null) Uri.parse(uri) else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
       }
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("ALERT_SOUND_FAILED", e.message, e)
     }
+  }
+
+  /**
+   * One sound, once. Set up by hand to carry the notification attributes `MediaPlayer.create`
+   * would leave out, and released on completion so a second sound is not silenced by a leaked
+   * player.
+   */
+  private fun playOnce(uri: Uri) {
+    val attributes = AudioAttributes.Builder()
+      .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+      .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+      .build()
+    val player = MediaPlayer()
+    player.setAudioAttributes(attributes)
+    player.setDataSource(reactContext, uri)
+    player.setOnCompletionListener { it.release() }
+    player.prepare()
+    player.start()
   }
 
   /** A short buzz in the system's own notification shape, since the app ships no sound asset. */

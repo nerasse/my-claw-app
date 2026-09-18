@@ -58,6 +58,37 @@ export interface VoicePlaybackEvent {
   durationMs: number;
 }
 
+/** Which of the two notification sounds a choice belongs to: the ordinary one, or the ring. */
+export type NotificationUsage = 'ordinary' | 'ring';
+
+/**
+ * One usage's chosen sound: the system's own, silent (ordinary only: a ring that does not ring is
+ * not a ring), or a specific uri -- a sound picked from the system list or a file imported into
+ * the app. `name` is only there to label the choice.
+ */
+export type NotificationSoundChoice =
+  | { kind: 'default' }
+  | { kind: 'silent' }
+  | { kind: 'uri'; uri: string; name: string };
+
+export interface NotificationSoundsNative {
+  ordinary: NotificationSoundChoice;
+  ring: NotificationSoundChoice;
+  /**
+   * The Android channel names derived from the choices (`runs` / `ring` for the defaults). A
+   * channel freezes its sound at creation, so the name is the choice's whole identity on the
+   * wire: the server publishes every notification on the name the device reports.
+   */
+  channels: { ordinary: string; ring: string };
+}
+
+/** An audio file copied into the app, as the imported-sounds list shows it. */
+export interface ImportedSoundNative {
+  uri: string;
+  name: string;
+  size: number;
+}
+
 export const VOICE_LEVEL_EVENT = 'claw:voice:level';
 export const VOICE_PLAYBACK_EVENT = 'claw:voice:playback';
 
@@ -157,8 +188,35 @@ export interface DeviceBridgeNative {
    * context did not exist.
    */
   cancelNotification(id: number): Promise<void>;
-  /** Plays the system notification sound once, for an incoming question sheet. */
-  playAlertSound(): Promise<void>;
+  /** Plays the alert once: the chosen uri, or the system notification sound when null. */
+  playAlertSound(uri: string | null): Promise<void>;
+  /**
+   * The two chosen sounds and their derived channel names; null where notification sounds are
+   * not a per-app setting (a browser leaves them to the platform).
+   */
+  getNotificationSounds(): Promise<NotificationSoundsNative | null>;
+  /**
+   * Opens the system picker (`system`), the document picker (`file`), or applies `silent`
+   * directly. Resolves the new state, or null when the owner backed out with nothing chosen.
+   */
+  pickNotificationSound(
+    usage: NotificationUsage,
+    source: 'system' | 'file' | 'silent',
+  ): Promise<NotificationSoundsNative | null>;
+  /**
+   * Plays the usage's current sound once. An explicit tap, so the ringer mode does not mute the
+   * attempt itself; the silent choice simply has nothing to play.
+   */
+  previewNotificationSound(usage: NotificationUsage): Promise<void>;
+  /** Back to the system's own sound; resolves the new state. */
+  resetNotificationSound(usage: NotificationUsage): Promise<NotificationSoundsNative | null>;
+  /** The files imported into the app, read from disk. */
+  listImportedSounds(): Promise<ImportedSoundNative[]>;
+  /**
+   * Deletes an imported file. A usage still pointing at it falls back to the default, channels
+   * included, so the caller must forward the resolved state; false when the uri is not ours.
+   */
+  deleteImportedSound(uri: string): Promise<NotificationSoundsNative | null>;
   pickFile(): Promise<PickedFile[]>;
   /**
    * Whether the clipboard holds an image, read from the clip description alone.
@@ -275,7 +333,14 @@ export const deviceBridge: DeviceBridgeNative = {
   stagedApkJournal: () => native?.stagedApkJournal() ?? Promise.resolve(''),
   drainInstallResult: () => native?.drainInstallResult(),
   cancelNotification: id => native?.cancelNotification(id) ?? Promise.resolve(),
-  playAlertSound: () => native?.playAlertSound() ?? Promise.resolve(),
+  playAlertSound: uri => native?.playAlertSound(uri) ?? Promise.resolve(),
+  getNotificationSounds: () => native?.getNotificationSounds() ?? Promise.resolve(null),
+  pickNotificationSound: (usage, source) =>
+    native?.pickNotificationSound(usage, source) ?? Promise.resolve(null),
+  previewNotificationSound: usage => native?.previewNotificationSound(usage) ?? Promise.resolve(),
+  resetNotificationSound: usage => native?.resetNotificationSound(usage) ?? Promise.resolve(null),
+  listImportedSounds: () => native?.listImportedSounds() ?? Promise.resolve([]),
+  deleteImportedSound: uri => native?.deleteImportedSound(uri) ?? Promise.resolve(null),
   pickFile: () => native?.pickFile() ?? Promise.resolve([]),
   clipboardHasImage: () => native?.clipboardHasImage() ?? Promise.resolve(false),
   clipboardImage: () => native?.clipboardImage() ?? Promise.resolve(null),

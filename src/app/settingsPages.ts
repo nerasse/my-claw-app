@@ -12,6 +12,7 @@ import {
 export type SettingsPage =
   | 'index'
   | 'general'
+  | 'notifications'
   | 'agents'
   | 'agent'
   | 'providers'

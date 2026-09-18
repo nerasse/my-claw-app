@@ -3372,6 +3372,26 @@ export function encodeNotificationsState(state: { foreground: boolean; threadId?
   });
 }
 
+/**
+ * The sounds this device picked, carried by the names of the Android channels it pre-created.
+ * Sent after connecting and on every sound change: the server stores the names and publishes
+ * each notification on the one this device reported, because a channel freezes its sound at
+ * creation and the name is the only handle on it (docs/notifications.md).
+ */
+export function encodeNotificationsChannels(
+  deviceId: string,
+  channels: { ordinary?: string; ring?: string },
+): string {
+  return JSON.stringify({
+    type: 'notifications.channels',
+    deviceId,
+    channels: {
+      ...(channels.ordinary ? { ordinary: channels.ordinary } : {}),
+      ...(channels.ring ? { ring: channels.ring } : {}),
+    },
+  });
+}
+
 // --- Session sync (lot 4) ---
 
 /**

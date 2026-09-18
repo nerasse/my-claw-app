@@ -7,13 +7,19 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other';
+  key: 'general' | 'notifications' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other';
 }> = [
   {
     title: 'General',
     hint: 'appearance, voice, server',
     accessibilityLabel: 'Open general',
     key: 'general',
+  },
+  {
+    title: 'Notifications',
+    hint: 'sounds for runs and rings',
+    accessibilityLabel: 'Open notifications',
+    key: 'notifications',
   },
   {
     // The prompt files live here since they are per workspace: a workspace is the directory, its
@@ -96,7 +102,7 @@ export function SettingsScreen({
   providersCount: number;
   onBack: () => void;
   onOpenCategory: (
-    category: 'general' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other',
+    category: 'general' | 'notifications' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other',
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

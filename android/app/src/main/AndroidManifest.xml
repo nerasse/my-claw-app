@@ -51,6 +51,19 @@
         android:foregroundServiceType="dataSync"
         android:stopWithTask="false" />
 
+      <!-- The imported notification sounds. A channel's sound uri is played by the system's own
+           player, which cannot read this app's private files; the provider is what lets it read
+           the copy after the app is dead. Not exported: access is granted per uri. -->
+      <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="${applicationId}.fileprovider"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+          android:name="android.support.FILE_PROVIDER_PATHS"
+          android:resource="@xml/file_paths" />
+      </provider>
+
       <!-- The update install result: PackageInstaller answers a broadcast PendingIntent, and a
            receiver declared here is the one reliable delivery path across API levels. It is
            exported=false because the intent is created by this app only. -->

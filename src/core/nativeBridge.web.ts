@@ -66,6 +66,28 @@ export interface VoicePlaybackEvent {
   durationMs: number;
 }
 
+/** Which of the two notification sounds a choice belongs to: the ordinary one, or the ring. */
+export type NotificationUsage = 'ordinary' | 'ring';
+
+/** See nativeBridge.ts: notification sounds are an Android setting, the browser has no choice. */
+export type NotificationSoundChoice =
+  | { kind: 'default' }
+  | { kind: 'silent' }
+  | { kind: 'uri'; uri: string; name: string };
+
+export interface NotificationSoundsNative {
+  ordinary: NotificationSoundChoice;
+  ring: NotificationSoundChoice;
+  channels: { ordinary: string; ring: string };
+}
+
+/** An audio file copied into the app; a browser never imports one. */
+export interface ImportedSoundNative {
+  uri: string;
+  name: string;
+  size: number;
+}
+
 export const VOICE_LEVEL_EVENT = 'claw:voice:level';
 export const VOICE_PLAYBACK_EVENT = 'claw:voice:playback';
 export const TRANSFER_PROGRESS_EVENT = 'claw:transfer:progress';
@@ -148,6 +170,19 @@ export interface DeviceBridgeNative {
   stagedApkJournal(): Promise<string>;
   drainInstallResult(): void;
   cancelNotification(id: number): Promise<void>;
+  /**
+   * A browser has no per-app notification sound to offer: the platform decides, so every entry
+   * point here resolves the empty answer (null, or nothing) rather than pretending otherwise.
+   */
+  getNotificationSounds(): Promise<NotificationSoundsNative | null>;
+  pickNotificationSound(
+    usage: NotificationUsage,
+    source: 'system' | 'file' | 'silent',
+  ): Promise<NotificationSoundsNative | null>;
+  previewNotificationSound(usage: NotificationUsage): Promise<void>;
+  resetNotificationSound(usage: NotificationUsage): Promise<NotificationSoundsNative | null>;
+  listImportedSounds(): Promise<ImportedSoundNative[]>;
+  deleteImportedSound(uri: string): Promise<NotificationSoundsNative | null>;
   pickFile(): Promise<PickedFile[]>;
   clipboardHasImage(): Promise<boolean>;
   clipboardImage(): Promise<PickedFile | null>;
@@ -723,6 +758,12 @@ export const deviceBridge: DeviceBridgeNative = {
   stagedApkJournal: () => Promise.resolve(''),
   drainInstallResult: () => {},
   cancelNotification: () => Promise.resolve(),
+  getNotificationSounds: () => Promise.resolve(null),
+  pickNotificationSound: () => Promise.resolve(null),
+  previewNotificationSound: () => Promise.resolve(),
+  resetNotificationSound: () => Promise.resolve(null),
+  listImportedSounds: () => Promise.resolve([]),
+  deleteImportedSound: () => Promise.resolve(null),
   pickFile: () =>
     new Promise(resolve => {
       const input = document.createElement('input');

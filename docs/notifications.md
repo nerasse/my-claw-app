@@ -66,6 +66,51 @@ Deux règles particulières, l'une parce qu'elle prêtait à confusion, l'autre 
 
 Témoin : `src/core/__tests__/runEndSound.test.ts`.
 
+## Les sons que l'owner choisit
+
+Réglages → Notifications laisse choisir les deux sons : le son ordinaire (défaut du système, un
+fichier importé, ou silencieux) et la sonnerie (défaut du système ou un fichier -- silencieux y
+est refusé, une sonnerie qui ne sonne pas est un contresens). Le choix vit dans ses propres
+SharedPreferences (`claw_notification_sounds`) parce qu'il doit survivre à la mort du process :
+c'est le boot, sans JS, qui pré-crée les canaux.
+
+Contrainte Android qui dicte tout : les réglages d'un canal sont figés à sa première création,
+et recréer un canal supprimé le ressuscite avec ses vieux réglages. Un changement de son est donc
+**un nouveau nom de canal**, dérivé du choix :
+
+| Choix | Nom de canal |
+| --- | --- |
+| défaut du système | `runs` / `ring` (les noms publiés, rétrocompatibles) |
+| n'importe quel autre | `runs-<8 hex>` / `ring-<8 hex>` |
+
+Le hash (FNV-1a 32 bits, minuscules) porte l'URI **et** l'usage : le même fichier choisi pour les
+deux usages vit dans deux canaux qui gèlent des comportements différents (la sonnerie vibre
+longtemps), et un nom ne peut en porter qu'un. Le nom reste dans la grammaire que le serveur
+accepte (`validChannelName` : ^[a-z][a-z0-9_-]{0,40}$), et un même choix donne toujours le même
+nom : c'est ce qui fait qu'un boot sans changement ne recrée rien. Le nom affiché dans les
+réglages Android reste « Runs » / « Ring », quelle que soit la variante.
+
+`NotificationSounds.applyChannels(context)` est la seule fonction qui crée le canal du choix
+courant et supprime celui qu'il remplace (le nom précédent est gardé dans les mêmes prefs).
+`MainApplication` l'appelle au boot, `DeviceBridgeModule` après chaque changement. Le serveur
+suit le choix par la frame `notifications.channels { deviceId, channels }`, envoyée à chaque
+connexion et à chaque changement (comme `notifications.state`) : c'est `entry.channels` côté
+serveur qui décide du `type` du payload, donc du canal sur lequel la notification est publiée.
+
+Les fichiers importés sont copiés dans `filesDir/notification-sounds/` et exposés par un
+**FileProvider** (`${applicationId}.fileprovider`, `res/xml/file_paths.xml`). Le son d'un canal
+est lu par le lecteur du système (SystemUI, ou system_server avant Android 10), qui n'a aucune
+permission sur les fichiers privés de l'app : sans provider ni grant, le son est silencieusement
+abandonné (« error loading sound »). `applyChannels` refait le `grantUriPermission` à chaque
+boot, parce qu'un grant ne survit pas au redémarrage -- et le renderer démarre le process avant
+de jouer quoi que ce soit, donc un push qui réveille une app tuée est couvert. Supprimer un
+fichier encore choisi fait retomber l'usage sur le défaut, canal compris.
+
+Le ding des questions et de fin de run (`src/core/alertSound.ts`) joue le son ordinaire choisi,
+avec le même contrôle du mode sonnerie qu'avant (lu nativement au moment de jouer) : le choix
+silencieux ne joue rien, « défaut » retombe sur la sonnerie système. Sur le web il n'y a rien à
+choisir (le navigateur possède ses sons) et le ding WebAudio reste tel quel.
+
 ## Le navigateur : une permission, et une seule occasion de la demander
 
 Le web a le même transport (Web Push, VAPID, `sw.js` pour l'affichage et le tap) et une
@@ -153,10 +198,13 @@ conversation ne s'empilent plus, le second remplace le premier.
 | `src/core/notifications.web.ts` | le pendant navigateur : `pushSupported`, `notificationPermission`, subscription Web Push |
 | `web/sw.js` | affichage et tap côté navigateur (l'app peut être fermée) |
 | `src/app/GeneralSettingsScreen.tsx` | la ligne « notifications » : l'état de la permission et le geste qui la demande |
-| `src/core/protocol.ts` | frames `notifications.info` / `register` / `state` |
-| `src/app/AppShell.tsx` | enregistrement à la réception de la clé, état premier-plan, ouverture sur tap, effacement à l'ouverture |
-| `android/.../DeviceBridgeModule.kt` | `cancelNotification(id)` : le seul moyen d'atteindre une notification posée par un service sans JS |
+| `src/app/NotificationsScreen.tsx` | les deux sons (choix, écoute, retour au défaut) et les fichiers importés |
+| `android/.../NotificationSounds.kt` | les choix, les noms de canaux dérivés, la création/suppression des canaux |
+| `android/.../DeviceBridgeModule.kt` | les méthodes `*NotificationSound*`, `playAlertSound(uri)`, `cancelNotification(id)` |
+| `src/core/protocol.ts` | frames `notifications.info` / `register` / `state` / `channels` |
+| `src/app/AppShell.tsx` | enregistrement à la réception de la clé, état premier-plan, ouverture sur tap, effacement à l'ouverture, envoi des noms de canaux à la connexion |
 | `__tests__/Notifications.test.tsx` | le cycle complet, avec le distributeur et `Linking` mockés |
+| `__tests__/NotificationSounds.test.tsx` | la page, les frames `notifications.channels` exactes, le ding du son choisi |
 
 ## Plateformes
 
