@@ -10,6 +10,7 @@ import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
+import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
@@ -138,7 +139,7 @@ export function ChatScreen({
   onBubbleMenu: (item: TextItem) => void;
   /** A message of the owner's that never got its receipt is sent again, same id. */
   onResend: (item: TextItem) => void;
-  onOpenImage: (target: { url: string; filename: string; sizeBytes?: number }) => void;
+  onOpenImage: (images: MediaItem[], index: number) => void;
   onOpenText: (target: { url: string; filename: string }) => void;
   onOpenVideo: (target: { url: string; filename: string }) => void;
   onOpenFile: (target: { url: string; filename: string; sizeBytes?: number }) => void;
@@ -666,12 +667,32 @@ export function ChatScreen({
   // screen genuinely changes.
   const openAttachment = useCallback(
     (kind: 'image' | 'text' | 'video' | 'file', target: { url: string; filename: string; sizeBytes?: number }) => {
-      if (kind === 'image') return onOpenImage(target);
+      // One picture is a gallery of one: the same viewer, so nothing has two behaviours.
+      if (kind === 'image') return onOpenImage([{ ...target }], 0);
       if (kind === 'text') return onOpenText(target);
       if (kind === 'video') return onOpenVideo(target);
       return onOpenFile(target);
     },
     [onOpenImage, onOpenText, onOpenVideo, onOpenFile],
+  );
+
+  /**
+   * A run of captures opens as one visit.
+   *
+   * The gallery holds pictures, and a carousel may carry a video among them: that slide opens the
+   * player instead, and the pictures around it stay a gallery of their own. Landing on the tapped
+   * one matters -- a gallery that opens on the first picture makes the tap look broken.
+   */
+  const openMedia = useCallback(
+    (media: MediaItem[], index: number): void => {
+      const item = media[index];
+      if (!item) return;
+      if (item.video) return onOpenVideo({ url: item.url, filename: item.filename });
+      const images = media.filter(entry => !entry.video);
+      const at = images.findIndex(entry => entry.url === item.url && entry.filename === item.filename);
+      return onOpenImage(images, at < 0 ? 0 : at);
+    },
+    [onOpenImage, onOpenVideo],
   );
 
   /**
@@ -997,12 +1018,13 @@ export function ChatScreen({
           onMenu={onBubbleMenu}
           onResend={onResend}
           onOpenAttachment={openAttachment}
+          onOpenMedia={openMedia}
           expandReasoning={uiPrefs?.expandReasoning ?? false}
         />
         </View>
       );
     },
-    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onResend, onOpenSubAgent, openAttachment, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onResend, onOpenSubAgent, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const renderRowContent = useCallback(

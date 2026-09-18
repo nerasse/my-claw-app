@@ -209,6 +209,7 @@ import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
 import { FilesScreen } from './FilesScreen';
+import type { MediaItem } from '../components/MediaCarousel';
 import { ImageViewer } from './ImageViewer';
 import { SelectionViewer } from './SelectionViewer';
 import { TextViewer } from './TextViewer';
@@ -578,11 +579,15 @@ export function AppShell(): React.JSX.Element {
   const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<SessionFileMeta | null>(null);
+  // The gallery holds the run of pictures the tapped one belongs to, and where it was in it.
   const [imageViewer, setImageViewer] = useState<{
-    url: string;
-    filename: string;
-    sizeBytes?: number;
+    images: MediaItem[];
+    index: number;
   } | null>(null);
+  const openImage = useCallback(
+    (images: MediaItem[], index: number): void => setImageViewer({ images, index }),
+    [],
+  );
   const [textViewer, setTextViewer] = useState<{
     url: string;
     filename: string;
@@ -3308,7 +3313,7 @@ export function AppShell(): React.JSX.Element {
               : {})}
             onBubbleMenu={setBubbleMenu}
             onResend={resendChat}
-            onOpenImage={setImageViewer}
+            onOpenImage={openImage}
             onOpenText={setTextViewer}
             onOpenVideo={setVideoViewer}
             onOpenFile={setFileViewer}
@@ -3949,7 +3954,7 @@ export function AppShell(): React.JSX.Element {
               onBack={() => setFilesOpen(false)}
               error={filesError ?? undefined}
               onDelete={setFileToDelete}
-              onOpenImage={setImageViewer}
+              onOpenImage={openImage}
               onOpenText={setTextViewer}
               onOpenVideo={setVideoViewer}
             />
@@ -4099,9 +4104,8 @@ export function AppShell(): React.JSX.Element {
 
       {imageViewer ? (
         <ImageViewer
-          url={imageViewer.url}
-          filename={imageViewer.filename}
-          sizeBytes={imageViewer.sizeBytes}
+          images={imageViewer.images}
+          index={imageViewer.index}
           onClose={() => setImageViewer(null)}
         />
       ) : null}

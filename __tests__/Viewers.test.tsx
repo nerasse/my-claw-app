@@ -36,7 +36,11 @@ async function render(element: React.JSX.Element): Promise<ReactTestRenderer.Rea
 
 test('the image viewer keeps its controls clear of the status bar', async () => {
   const tree = await render(
-    <ImageViewer url="http://h/media/1" filename="photo.png" onClose={() => {}} />,
+    <ImageViewer
+      images={[{ url: 'http://h/media/1', filename: 'photo.png' }]}
+      index={0}
+      onClose={() => {}}
+    />,
   );
 
   // The layer is laid out against the shell's outer box: a negative top would lift the whole

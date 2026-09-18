@@ -4,6 +4,7 @@ import type { TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
+import { MediaCarousel, isCarouselMedia, mediaItemsOf, type MediaItem } from './MediaCarousel';
 import { CollapsibleAside } from './CollapsibleAside';
 import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine } from './ReasoningLine';
@@ -30,6 +31,7 @@ export const Bubble = React.memo(function BubbleView({
   showTime,
   onMenu,
   onOpenAttachment,
+  onOpenMedia,
   onResend,
   expandReasoning,
 }: {
@@ -46,6 +48,8 @@ export const Bubble = React.memo(function BubbleView({
     kind: 'image' | 'text' | 'video' | 'file',
     target: { url: string; filename: string; sizeBytes?: number },
   ) => void;
+  /** A run of pictures opens as one gallery, at the index that was tapped. */
+  onOpenMedia?: (items: MediaItem[], index: number) => void;
   /** Server-owned pref: reasoning blocks start expanded instead of folded. */
   expandReasoning?: boolean;
 }): React.JSX.Element {
@@ -60,7 +64,7 @@ export const Bubble = React.memo(function BubbleView({
   // photo is, said after it), the agent's answer reads as a reply, then the file it produced. The
   // live `addAgentMessage` merges the media bubble the router sends after the streamed text into
   // the stream bubble, so this order is what a finished turn shows on screen.
-  const attachmentsEl = item.attachments.map(att => (
+  const single = (att: (typeof item.attachments)[number]): React.JSX.Element => (
     <AttachmentView
       key={att.id}
       att={att}
@@ -72,7 +76,36 @@ export const Bubble = React.memo(function BubbleView({
       transcript={item.transcripts?.[att.id]}
       onAccent={!agent}
     />
-  ));
+  );
+  // Consecutive pictures become one carousel; everything else keeps its own row, in the order the
+  // message carried it. A run is only grouped when every attachment of it can actually be drawn --
+  // a picture with no bytes left is a chip, and a carousel with a hole in it would hide that.
+  const attachmentsEl: React.JSX.Element[] = [];
+  let run: typeof item.attachments = [];
+  const flush = (): void => {
+    if (run.length === 0) return;
+    const items = mediaItemsOf(run, mediaBase, deviceInfo);
+    if (items.length > 1 && items.length === run.length) {
+      attachmentsEl.push(
+        <MediaCarousel
+          key={`carousel-${run[0].id}`}
+          items={items}
+          onOpen={index => onOpenMedia?.(items, index)}
+        />,
+      );
+    } else {
+      for (const att of run) attachmentsEl.push(single(att));
+    }
+    run = [];
+  };
+  for (const att of item.attachments) {
+    if (isCarouselMedia(att)) run.push(att);
+    else {
+      flush();
+      attachmentsEl.push(single(att));
+    }
+  }
+  flush();
   const textEl = item.text ? (
     agent && !item.command && !item.notice ? (
       <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />

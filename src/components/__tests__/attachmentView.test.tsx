@@ -8,7 +8,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Image } from 'react-native';
+import { Image, StyleSheet } from 'react-native';
 import { AttachmentView } from '../AttachmentView';
 import { recordDiag } from '../../core/diagnostics';
 import type { AttachmentMeta } from '../../core/protocol';
@@ -115,5 +115,29 @@ describe('AttachmentView: an attachment with nothing to draw', () => {
     expect(report.stack).toContain('id=abc');
     // The token rides the query, and the query never reaches a log.
     expect(report.stack).not.toContain('token');
+  });
+});
+
+describe("a picture takes its own shape", () => {
+  const original = (Image as unknown as { getSize?: unknown }).getSize;
+
+  it('sizes a wide capture by its ratio instead of the old 190 square', () => {
+    // The browser capture of a report is 1280x520. In a 350pt bubble that is a 142pt picture;
+    // the square it replaces drew it 190x77 inside a 190 box, and the empty band under it is
+    // what the owner kept scrolling past (2026-09-17).
+    (Image as unknown as { getSize: unknown }).getSize = (_uri: string, ok?: (w: number, h: number) => void) =>
+      ok?.(1280, 520);
+    try {
+      const tree = render({ id: 'wide', type: 'image', filename: 'shot.png' }, { deviceId: 'd', token: 't' });
+      const stage = tree.root.findAll(node => typeof node.props.onLayout === 'function')[0]!;
+      ReactTestRenderer.act(() => {
+        stage.props.onLayout({ nativeEvent: { layout: { width: 350 } } });
+      });
+      const box = StyleSheet.flatten(stage.props.style) as { height?: number };
+      expect(box.height).toBe(142);
+      expect(box.height).toBeLessThan(190);
+    } finally {
+      (Image as unknown as { getSize: unknown }).getSize = original;
+    }
   });
 });

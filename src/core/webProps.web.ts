@@ -47,6 +47,30 @@ export function onAccentProps(): Partial<ViewProps> {
  * pixels for good and the first line is sliced by the top edge. That was the composer's broken
  * border on the web, and it moved with the caret, which is what made it look intermittent.
  */
+/**
+ * Pointer movement on the surface that shows a picture full screen.
+ *
+ * On a desktop the bars are hidden after five seconds of idleness, and the only thing that used to
+ * bring them back was a click -- which on a zoomable picture is also a zoom, so the gesture that
+ * reveals the controls is the gesture that changes what you were looking at. Every lightbox ever
+ * written answers to a mouse move instead. Spread as `Partial<ViewProps>`; React forwards
+ * `onPointerMove` and `onPointerEnter` to the div react-native-web renders.
+ */
+export function pointerActivityProps(activity: () => void): Partial<ViewProps> {
+  return { onPointerMove: activity, onPointerEnter: activity } as Partial<ViewProps>;
+}
+
+/**
+ * A pointer resting on the bars themselves. They hold while it is there: the close cross must not
+ * vanish from under a mouse that is on its way to press it.
+ */
+export function pointerHoverProps(onHover: (hovering: boolean) => void): Partial<ViewProps> {
+  return {
+    onPointerEnter: () => onHover(true),
+    onPointerLeave: () => onHover(false),
+  } as Partial<ViewProps>;
+}
+
 export function autoGrow(node: unknown, maxHeight: number): void {
   if (!(node instanceof HTMLTextAreaElement)) return;
   // A textarea is two rows tall by default, and that intrinsic height is a floor `scrollHeight`

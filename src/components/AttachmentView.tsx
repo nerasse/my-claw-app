@@ -6,6 +6,7 @@ import type { AttachmentMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
 import { viewerFor } from '../core/utils';
 import { VoiceNote } from './VoiceNote';
+import { mediaHeight, useMediaRatio } from './MediaCarousel';
 import { PlayPauseIcon } from './icons';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
@@ -32,8 +33,12 @@ export function AttachmentView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [failed, setFailed] = useState(false);
+  const [stageWidth, setStageWidth] = useState(0);
   const remote = mediaUrl(mediaBase, deviceInfo, att.id);
   const uri = att.uri ?? remote;
+  // Only pictures have a shape worth measuring; asking for a voice note's header would be a
+  // request for nothing.
+  const ratio = useMediaRatio(att.type === 'image' || att.type === 'video' ? uri : undefined);
   // The server generates a preview frame for videos; without one the stage would stay black
   // until play. The thumbnail request is per-id, cached server-side after the first fetch.
   const thumbUri =
@@ -74,13 +79,19 @@ export function AttachmentView({
   // reader's side. Drawn as an image it was an empty box under a bare filename -- which reads as
   // a picture still loading, and hid a server-side resolution miss for a day.
   if ((att.type === 'image' || att.type === 'video') && uri && !att.deleted && !failed) {
+    // The picture's own shape, not a square: a wide browser capture drawn `contain` in a 190x190
+    // box was 190x77 inside it, and the two thirds of empty height are what ate the thread
+    // (owner, 2026-09-17). Full width, height from the ratio, clamped at both ends.
     const media = (
       <>
-        <View style={[styles.image, att.type === 'video' ? styles.videoStage : null]}>
+        <View
+          style={[styles.stage, att.type === 'video' ? styles.videoStage : null, { height: mediaHeight(stageWidth, ratio) }]}
+          onLayout={event => setStageWidth(event.nativeEvent.layout.width)}
+        >
           {att.type === 'image' ? (
             <Image
               source={{ uri }}
-              style={styles.image}
+              style={styles.media}
               resizeMode="contain"
               accessibilityLabel={name}
               onError={reportFailed}
@@ -90,7 +101,7 @@ export function AttachmentView({
               {thumbUri ? (
                 <Image
                   source={{ uri: thumbUri }}
-                  style={styles.image}
+                  style={styles.media}
                   resizeMode="cover"
                   accessibilityLabel={name}
                   onError={reportFailed}
@@ -140,12 +151,14 @@ export function AttachmentView({
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   imageWrap: { marginBottom: space.xs },
-  image: {
-    width: 190,
-    height: 190,
+  stage: {
+    width: '100%' as const,
     borderRadius: radius.sm,
     backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
+  media: { width: '100%' as const, height: '100%' as const },
   videoStage: {
     backgroundColor: '#000',
     alignItems: 'center' as const,
@@ -163,7 +176,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  caption: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, maxWidth: 190, marginTop: 2 },
+  caption: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, marginTop: 2 },
   captionOnAccent: { color: palette.onAccentMuted },
   chip: {
     alignSelf: 'flex-start' as const,

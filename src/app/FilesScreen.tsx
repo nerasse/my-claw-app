@@ -7,6 +7,7 @@ import { formatBytes, formatDate, viewerFor } from '../core/utils';
 import { TrashIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
+import type { MediaItem } from '../components/MediaCarousel';
 import { FileViewer } from './FileViewer';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
@@ -89,7 +90,7 @@ export function FilesScreen({
   onBack: () => void;
   /** Asks for the delete; the shell confirms before anything leaves. */
   onDelete: (file: SessionFileMeta) => void;
-  onOpenImage: (file: { url: string; filename: string; sizeBytes?: number }) => void;
+  onOpenImage: (images: MediaItem[], index: number) => void;
   onOpenText: (file: { url: string; filename: string }) => void;
   onOpenVideo: (file: { url: string; filename: string }) => void;
   /** Server-side refusal for this screen. Without it a failed delete just looks inert. */
@@ -110,7 +111,7 @@ export function FilesScreen({
         sizeBytes: item.sizeBytes,
       };
       const kind = viewerFor(item.type, item.filename);
-      if (kind === 'image') onOpenImage(target);
+      if (kind === 'image') onOpenImage([{ ...target }], 0);
       else if (kind === 'text') onOpenText(target);
       else if (kind === 'video') onOpenVideo(target);
       else setViewer(item);
