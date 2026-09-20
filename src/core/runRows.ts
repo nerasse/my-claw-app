@@ -10,8 +10,8 @@ import type { ChatItem, RunInfo, RunSummaryItem } from './chat';
  */
 export type ChatRow =
   | { kind: 'item'; item: ChatItem }
-  | { kind: 'group'; run: RunInfo; items: ChatItem[] }
-  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[] }
+  | { kind: 'group'; run: RunInfo; items: ChatItem[]; runTail?: boolean }
+  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[]; runTail?: boolean }
   /**
    * The live compaction rule, as a row of the list rather than a decoration on a cell.
    *
@@ -22,6 +22,22 @@ export type ChatRow =
    * data, which is what the inversion is built on, and that holds whatever the cell does.
    */
   | { kind: 'rule' };
+
+/**
+ * The identity of a fold, stable across the moment its items arrive.
+ *
+ * A folded row is replaced by the group of items it stood for, and the reader must not lose the
+ * state they just set: a group that snaps shut the moment it fills is the bug this key exists to
+ * prevent (docs/run-hydration.md). The server keys a summary on the first entry it stands for
+ * (`run-<id>`), and the items it hands back carry `foldOf` with that same string, so both sides
+ * of the swap read one fold.
+ */
+export function foldKeyOf(row: Extract<ChatRow, { kind: 'group' | 'folded' }>): string {
+  if (row.kind === 'folded') return row.summaries[0]?.id ?? row.run.id;
+  const first = row.items[0];
+  const fetchedFor = first && first.kind !== 'run' ? first.foldOf : undefined;
+  return fetchedFor ?? first?.id ?? row.run.id;
+}
 
 /** The oldest item a row draws, which is where a rule standing above the row has to attach. */
 export function firstItemOfRow(row: ChatRow): string | undefined {
@@ -92,6 +108,18 @@ export function isAgentProse(item: ChatItem): boolean {
 }
 
 /**
+ * A message the agent addressed to the owner: the words it wrote, or the pictures it sent.
+ *
+ * The counterpart of `isMessage` in the server's `display.ts`, and the rule the fold follows:
+ * everything else in a terminal run is work, and folds between two messages. A phase that only
+ * thought before calling a tool wrote nothing and carries nothing -- it stays in the fold.
+ */
+export function isAgentMessage(item: ChatItem): boolean {
+  if (item.kind !== 'text' || item.role !== 'agent') return false;
+  return isAgentProse(item) || (item.attachments?.length ?? 0) > 0;
+}
+
+/**
  * The bubble the live compaction rule has to stand above, if there is one.
  *
  * The rule lives in the list header, which on an inverted list is the bottom of the screen: exactly
@@ -106,7 +134,7 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
 }
 
 /**
- * Splits a thread into rows, folding every finished run's work under one group per segment.
+ * Splits a thread into rows, folding the work between two messages under one group per burst.
  *
  * Rules, in the order a reader meets them:
  * - A folded row (the server sent a header instead of the work) is a `folded` row. Two adjacent
@@ -114,17 +142,15 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  *   must see one group, not the same run twice with its work split at an arbitrary count.
  * - An item with no run, and every item of a run still `running`, is a plain row: nothing is
  *   grouped while the run answers.
- * - Inside a terminal run, hoisted bubbles (see `isHoisted`) stay rows and cut the group into
- *   segments around them.
- * - The last prose of a run that finished (`done`) is its answer, not its work: it leaves the
- *   group and stands as the row after it. A run that wrote none -- all cards, or phases that only
- *   thought -- never answered, and keeps everything folded. The answer is found by *content*, not
- *   by position: an entry that landed after it does not demote it.
- * - A run that was stopped (`aborted`) or died (`error`) never answered at all: the prose it left
- *   is work written *before* the calls that followed it, and hoisting it would draw it after them.
- *   Nothing is elected then -- the group holds everything in the order it was written, and the
- *   hoisted rows around it (the error included) keep their places.
- * - A segment with nothing left in it produces no group: a run that only ever wrote its answer
+ * - Inside a terminal run, hoisted bubbles (see `isHoisted`) and the agent's own messages (see
+ *   `isAgentMessage`) stay rows and cut the fold into bursts around them. A message is what the
+ *   reader follows, and the work between two of them is what the header hides -- the owner asked
+ *   for exactly that (2026-09-17: "je veux pouvoir tous les voir, ce qu'il y a entre se
+ *   regroupe"). Messages are hoisted by position, so the order they were written in survives; the
+ *   answer election this replaces is gone with its reordering bugs.
+ * - The last fold of a run carries its status and total span (`runTail`): a run has several
+ *   headers now, and repeating "Stopped" or "4 min" on every one of them says nothing.
+ * - A burst with nothing left in it produces no group: a run that only ever wrote messages
  *   renders as plain bubbles, never as an empty header.
  */
 /**
@@ -184,42 +210,8 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
 
   const closeRun = () => {
     if (!run) return;
-    if (current.length > 0) {
-      // The answer is the last prose the agent wrote in the run, not the last item held. A card
-      // left running when the run ended is re-appended after it by the store, and "the last item"
-      // then read a card as the run's answer -- so the real answer stayed inside the group, under
-      // a header that had moved below it. Measured on a real thread, 2026-09-10.
-      //
-      // A run that wrote no prose -- all cards, or phases that only thought -- died before saying
-      // anything, and then nothing is hoisted out: everything stays in the group.
-      //
-      // And only a run that finished has an answer to elect. On a run that was stopped or died,
-      // the last prose is an interim step written before the tool calls that came after it:
-      // electing it drew it under all of them, and the reading order lied about where the run
-      // actually stopped (2026-09-14). Everything then stays folded, in the order it was written,
-      // and the hoisted rows around it keep cutting the group.
-      //
-      // The scan walks back over what is not prose rather than stopping at it, so a thinking phase
-      // the model produced after its answer cannot demote that answer, exactly as a stray card
-      // cannot.
-      let answerAt = -1;
-      if (run.status === 'done') {
-        for (let i = current.length - 1; i >= 0; i -= 1) {
-          if (isAgentProse(current[i]!)) {
-            answerAt = i;
-            break;
-          }
-        }
-      }
-      if (answerAt >= 0) {
-        const rest = current.filter((_, i) => i !== answerAt);
-        if (rest.length > 0) rows.push({ kind: 'group', run, items: rest });
-        rows.push({ kind: 'item', item: current[answerAt]! });
-      } else {
-        rows.push({ kind: 'group', run, items: current });
-      }
-      current = [];
-    }
+    if (current.length > 0) rows.push({ kind: 'group', run, items: current });
+    current = [];
     run = null;
   };
 
@@ -235,10 +227,12 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
       continue;
     }
     const itemRun = item.run;
-    // Same terminal run as the one being folded: keep accumulating, hoisting the bubbles that
-    // must stay readable (which cuts the group into segments around them).
+    // Bubbles the fold never swallows: the hoisted ones, and the agent's own messages.
+    const stays = isHoisted(item) || isAgentMessage(item);
+    // Same terminal run as the one being folded: keep accumulating, cutting the group around
+    // every bubble that must stay readable.
     if (itemRun && itemRun.status !== 'running' && run && run.id === itemRun.id) {
-      if (isHoisted(item)) {
+      if (stays) {
         if (current.length > 0) rows.push({ kind: 'group', run, items: current });
         current = [];
         rows.push({ kind: 'item', item });
@@ -254,12 +248,33 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
       continue;
     }
     run = itemRun;
-    if (isHoisted(item)) {
+    if (stays) {
       rows.push({ kind: 'item', item });
     } else {
       current = [item];
     }
   }
   closeRun();
-  return rows;
+  return markRunTails(rows);
+}
+
+/**
+ * Marks the last fold of each run, which is the one that carries its status and total span.
+ *
+ * Computed here rather than in the renderer: a run's folds sit in the rows in order, and only the
+ * list that built them knows which one a reader meets last. A run whose last message has no work
+ * after it keeps the mark on its last fold anyway -- the status has to stand somewhere.
+ */
+function markRunTails(rows: ChatRow[]): ChatRow[] {
+  const last = new Map<string, number>();
+  rows.forEach((row, index) => {
+    if (row.kind === 'group' || row.kind === 'folded') last.set(row.run.id, index);
+  });
+  if (last.size === 0) return rows;
+  return rows.map((row, index) => {
+    if ((row.kind === 'group' || row.kind === 'folded') && last.get(row.run.id) === index) {
+      return { ...row, runTail: true };
+    }
+    return row;
+  });
 }

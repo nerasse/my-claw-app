@@ -1,30 +1,24 @@
 /**
- * What a run's answer is, and what merely looks like one.
+ * What stays out of a fold, and what merely looks like it should.
  *
- * Measured on a reopened thread: a run that died carried four phases with reasoning and no prose
- * at all, and the last of them -- written before the last tool call -- was drawn as a card of its
- * own, after the whole folded group:
+ * The rule is per message now (2026-09-17): a phase with words, or one carrying a picture, is
+ * what the reader follows and never folds; the work between two messages is what the header
+ * hides. A phase that only thought is work, and folds with the cards.
  *
- *     [ 11 tool calls, bash, 24 min      error ]
- *     [ Reasoning                        13:25 ]
- *     [ Anthropic stream error api_error 13:26 ]
+ * The election this file used to guard is gone with its two bugs, both measured on a real thread:
+ * matching the answer on the item's kind alone elected a thinking phase (it is a `text` item with
+ * an empty `text`), and on a stopped run electing the *last* prose drew it under the calls that
+ * followed it -- the reading order lied about where the run stopped. Messages hoisted by position
+ * cannot be reordered, whatever the run's status, so both are impossible by construction.
  *
- * A thinking phase is a `text` item with an empty `text`, so matching the answer on the item's
- * kind alone elected it. The answer is prose the agent wrote; a run that wrote none never
- * answered, and keeps all of its work folded.
- *
- * And only a run that *finished* has an answer at all (2026-09-14). On a run that was stopped or
- * died, the last prose is an interim step written before the calls that followed it, and electing
- * it drew it under all of them: nothing is elected then, and the whole run folds in order.
- *
- * The other rule in this file is the other half of the same demand: an error is never folded
- * away. A run that died after its stream opened carries the message on the phase itself, inside
- * the run, and a group closed by default hid it.
+ * The other rule in this file is unchanged: an error is never folded away. A run that died after
+ * its stream opened carries the message on the phase itself, inside the run, and a group closed
+ * by default hid it.
  *
  * Both doors are checked here, because they are the same verdict reached twice: a page of history
  * rebuilt by `itemsOf`, and a run painted live then sealed by `endRun`.
  */
-import { buildRows, isAgentProse, isHoisted, type ChatRow } from '../runRows';
+import { buildRows, isAgentMessage, isAgentProse, isHoisted, type ChatRow } from '../runRows';
 import { chatStore, type ChatItem } from '../chat';
 import type { HistoryEntry } from '../protocol';
 
@@ -124,27 +118,26 @@ describe('the answer of a run is prose the agent wrote', () => {
     expect(groupItems(items)).toEqual(['t1', 'p1', 't2', 'p2']);
   });
 
-  test('a run that died after writing prose keeps that prose folded, where it was written', () => {
-    // The owner's rule (2026-09-14): only a run that finished has an answer to elect. On a run
-    // that died, the prose came before whatever followed it, and hoisting it out drew it after
-    // all of that -- the group holds the whole run, in order.
+  test('a run that died keeps its prose on screen, at the place it was written', () => {
+    // The owner's rule (2026-09-17): a stopped or failed run keeps its messages too. The old
+    // election hoisted nothing there, because hoisting the *last* prose would have drawn it under
+    // the calls that followed it; by position, nothing can move.
     const items = [userText('u'), tool('t1'), phase('p1', 'how to say it'), prose('a', 'here is the answer')];
-    expect(rowsOf(items)).toEqual(['u', 'g:r1']);
-    expect(groupItems(items)).toEqual(['t1', 'p1', 'a']);
+    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'a']);
+    expect(groupItems(items)).toEqual(['t1', 'p1']);
   });
 
-  test('a phase produced after the answer does not become the answer', () => {
-    // The scan walks back from the end: stopping at the first agent item found the phase, and the
-    // real answer stayed inside the group under a header drawn below it. A finished run, which is
-    // where the election lives at all -- a stopped or failed one elects nothing.
+  test('a thought produced after a message folds after it, and is not a message', () => {
+    // An empty phase with reasoning is work: it draws a reasoning line, and it hides in the fold
+    // like a card. The scan-back election used to have to walk past it; nothing walks now.
     const items = [
       userText('u'),
       tool('t1', 'done'),
       prose('a', 'here is the answer', 'done'),
       phase('p-after', 'second thoughts', '', 'done'),
     ];
-    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'a']);
-    expect(groupItems(items)).toEqual(['t1', 'p-after']);
+    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    expect(groupItems(items)).toEqual(['t1']);
   });
 
   test('text made only of whitespace is not prose', () => {
@@ -160,8 +153,19 @@ describe('isAgentProse', () => {
     expect(isAgentProse(phase('p', 'thinking'))).toBe(false);
     expect(isAgentProse(phase('p', 'thinking', '   '))).toBe(false);
     expect(isAgentProse(tool('t1'))).toBe(false);
-    // The owner's own turn is prose, but never the run's answer: `isHoisted` takes it out first.
+    // The owner's own turn is prose, but never the agent's: `isHoisted` takes it out first.
     expect(isAgentProse(userText('u'))).toBe(false);
+  });
+});
+
+describe('isAgentMessage', () => {
+  test('a picture with no words is a message; a thought or a card is work', () => {
+    const shot = { id: 'att', type: 'image', filename: 'a.png' };
+    expect(isAgentMessage(prose('a', 'words'))).toBe(true);
+    expect(isAgentMessage({ ...(phase('p', 'thinking') as ChatItem & { attachments?: unknown[] }), attachments: [shot] } as ChatItem)).toBe(true);
+    expect(isAgentMessage(phase('p', 'thinking'))).toBe(false);
+    expect(isAgentMessage(tool('t1'))).toBe(false);
+    expect(isAgentMessage(userText('u'))).toBe(false);
   });
 });
 
@@ -320,23 +324,22 @@ describe('an error is never folded away', () => {
     expect(groupItems(items)).toEqual(['t1']);
   });
 
-  test('an error in the middle of a run cuts the group in two, in order', () => {
+  test('an error in the middle of a run cuts the fold in two, in order', () => {
     const items = [userText('u'), tool('t1'), failedPhase('p-dead', 'retrying'), tool('t2'), prose('a', 'recovered')];
-    // The row keeps its place: the work before the failure, the failure, then the work after it.
-    // The run died, so the prose that follows the last call is work too -- nothing is elected,
-    // and the second segment holds it where it was written.
-    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'p-dead', 'g:r1']);
+    // The row keeps its place: the work before the failure, the failure, then the work after it,
+    // and the message after that.
+    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'p-dead', 'g:r1', 'a']);
     const groups = buildRows(items).filter(row => row.kind === 'group');
-    expect(groups.map(group => (group.kind === 'group' ? group.items.map(i => i.id) : []))).toEqual([['t1'], ['t2', 'a']]);
+    expect(groups.map(group => (group.kind === 'group' ? group.items.map(i => i.id) : []))).toEqual([['t1'], ['t2']]);
   });
 
   test('a failed tool call is work and stays folded', () => {
     // A command that came back non-zero is what the run did, not why it stopped. `isHoisted`
-    // stops on the kind before it ever looks at an outcome. And the run died: the prose at its
-    // end is work as well, folded with the rest.
+    // stops on the kind before it ever looks at an outcome. The prose that follows it is a
+    // message, and stays.
     const items = [userText('u'), tool('t1'), failedTool('t-bad'), prose('a', 'done anyway')];
-    expect(rowsOf(items)).toEqual(['u', 'g:r1']);
-    expect(groupItems(items)).toEqual(['t1', 't-bad', 'a']);
+    expect(rowsOf(items)).toEqual(['u', 'g:r1', 'a']);
+    expect(groupItems(items)).toEqual(['t1', 't-bad']);
     expect(isHoisted(failedTool('t-bad'))).toBe(false);
   });
 

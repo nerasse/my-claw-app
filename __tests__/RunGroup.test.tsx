@@ -106,6 +106,7 @@ const group = (items: ChatItem[], open: boolean, onToggle = jest.fn()) =>
       run={RUN}
       items={items}
       open={open}
+      runTail
       onToggle={onToggle}
       renderItem={item => <Text>{item.id}</Text>}
     />,
@@ -118,6 +119,49 @@ test('a collapsed group is one bar, and it says what it holds', () => {
   expect(texts).toContain('3 tool calls · bash · 1 min');
   // Nothing of the body is mounted while it is closed: that is what makes a long thread cheap.
   expect(texts).not.toContain('a');
+});
+
+test('the run\'s span and status ride its last fold, and only there', () => {
+  // One run has a header per burst now: the duration and the "Stopped" badge belong to the run,
+  // so they stand where the run ended, not on eleven headers.
+  const stopped: RunInfo = { ...RUN, status: 'aborted' };
+  const items = [card('a'), card('b')];
+  const middle = render(
+    <RunGroup run={stopped} items={items} open={false} onToggle={jest.fn()} renderItem={item => <Text>{item.id}</Text>} />,
+  );
+  const middleTexts = middle.root.findAllByType(Text).map(node => node.props.children);
+  expect(middleTexts).toContain('2 tool calls · bash');
+  expect(middleTexts).not.toContain('1 min');
+  expect(middleTexts).not.toContain('Stopped');
+
+  const tail = render(
+    <RunGroup
+      run={stopped}
+      items={items}
+      open={false}
+      runTail
+      onToggle={jest.fn()}
+      renderItem={item => <Text>{item.id}</Text>}
+    />,
+  );
+  const tailTexts = tail.root.findAllByType(Text).map(node => node.props.children);
+  expect(tailTexts).toContain('2 tool calls · bash · 1 min');
+  expect(tailTexts).toContain('Stopped');
+});
+
+test('a fold that only holds thoughts says so, instead of "run"', () => {
+  const thinking: ChatItem = {
+    kind: 'text',
+    id: 'p1',
+    role: 'agent',
+    text: '',
+    reasoning: 'weighing the options',
+    attachments: [],
+    streaming: false,
+    ts: 5,
+  } as ChatItem;
+  const tree = group([thinking, { ...thinking, id: 'p2' } as ChatItem], false);
+  expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('2 thoughts · 1 min');
 });
 
 test('a long open group carries a bar at the bottom too', () => {
@@ -145,7 +189,7 @@ test('the bar at the bottom closes the group', () => {
   const items = Array.from({ length: 8 }, (_, i) => card(`c${i}`));
   const tree = group(items, true, onToggle);
   press(tree, 1);
-  expect(onToggle).toHaveBeenCalledWith(RUN);
+  expect(onToggle).toHaveBeenCalledTimes(1);
 });
 
 test('the open state is the caller, so it survives the row being replaced', () => {
@@ -160,7 +204,7 @@ test('the open state is the caller, so it survives the row being replaced', () =
   press(folded, 0);
   // The press reports the toggle and nothing else: the screen is what remembers it, and being
   // open is what fetches (see the two tests below).
-  expect(onToggle).toHaveBeenCalledWith(RUN);
+  expect(onToggle).toHaveBeenCalledTimes(1);
 
   // The screen having recorded it, the group that replaces the row renders open.
   const items = Array.from({ length: 8 }, (_, i) => card(`c${i}`));
@@ -267,6 +311,7 @@ test('two merged rows of one run read as a single group', () => {
       run={RUN}
       summaries={[summaryRow('run-older', 40), summaryRow('run-newer', 12)]}
       open={false}
+      runTail
       onToggle={jest.fn()}
       onOpen={jest.fn()}
     />,
@@ -279,7 +324,14 @@ test('a stopped run wears the owner’s word, not the engine’s', () => {
   // the header of the run it cut says "Stopped" once it landed. `aborted` was the engine's.
   const stopped: RunInfo = { ...RUN, status: 'aborted' };
   const tree = render(
-    <RunGroup run={stopped} items={[card('a')]} open={false} onToggle={jest.fn()} renderItem={item => <Text>{item.id}</Text>} />,
+    <RunGroup
+      run={stopped}
+      items={[card('a')]}
+      open={false}
+      runTail
+      onToggle={jest.fn()}
+      renderItem={item => <Text>{item.id}</Text>}
+    />,
   );
 
   const texts = tree.root.findAllByType(Text).map(node => node.props.children);

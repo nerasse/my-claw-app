@@ -1,4 +1,4 @@
-import { buildRows, isHoisted, pinnedSends, type ChatRow } from '../runRows';
+import { buildRows, foldKeyOf, isAgentMessage, isHoisted, pinnedSends, type ChatRow } from '../runRows';
 import type { ChatItem } from '../chat';
 
 /** A finished run's items, status, timeline. */
@@ -61,13 +61,36 @@ const labelOfRow = (row: ChatRow): string => {
 };
 
 describe('buildRows', () => {
-  test('a finished run folds its work under one group, answer stays outside', () => {
-    const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a1', 'thinking', 'r1'), agentText('a2', 'answer', 'r1')]);
-    expect(rows).toHaveLength(3);
-    expect(rows[0]).toMatchObject({ kind: 'item' });
-    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1' } });
-    expect(rows[2]).toMatchObject({ kind: 'item', item: { id: 'a2' } });
-    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 'a1']);
+  test('every message stays, and the work folds between two of them', () => {
+    // The owner's rule (2026-09-17): a message is what the reader follows, and what lies between
+    // two of them is what the header hides. It used to be the last prose alone that survived.
+    const rows = buildRows([
+      userText('u'),
+      tool('t1', 'r1'),
+      agentText('a1', 'first point', 'r1'),
+      tool('t2', 'r1'),
+      agentText('a2', 'answer', 'r1'),
+    ]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a1', 'g:r1', 'a2']);
+    const groups = rows.filter(r => r.kind === 'group') as Array<{ items: ChatItem[] }>;
+    expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['t2']]);
+  });
+
+  test('a message the reader can see never lands inside a fold', () => {
+    // The invariant, on a longer run: every message is a row, wherever it was written.
+    const items = [
+      userText('u'),
+      tool('t1', 'r1'),
+      agentText('a1', 'point one', 'r1'),
+      tool('t2', 'r1'),
+      agentText('a2', 'point two', 'r1'),
+      tool('t3', 'r1'),
+      agentText('a3', 'voila', 'r1'),
+    ];
+    const rows = buildRows(items);
+    const held = rows.flatMap(row => (row.kind === 'group' ? row.items : []));
+    expect(held.some(item => item.id.startsWith('a'))).toBe(false);
+    expect(rows.filter(row => row.kind === 'item' && row.item.kind === 'text' && row.item.role === 'agent')).toHaveLength(3);
   });
 
   test('a running run is never grouped, even with a closed run before it', () => {
@@ -107,16 +130,15 @@ describe('buildRows', () => {
 
   /**
    * Measured on a real thread (2026-09-10): a tool card left `running` when the run ended is
-   * re-appended after the answer by the store, and "the answer is the last item" then swallows the
-   * answer into its own run's group -- the reader saw the last message inside the collapsed work.
-   * The answer is the last prose the agent wrote, wherever the stray card landed.
+   * re-appended after the answer by the store. The election had to defend against it -- "the last
+   * item" read the card as the answer. Messages hoisted by position need no defence: the card
+   * folds into the burst it landed in, after the message, and the order is the one written.
    */
-  test('an answer followed by a stray card is still the answer, and leaves the group', () => {
+  test('a stray card that lands after a message folds after it, in order', () => {
     const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a', 'answer', 'r1'), tool('t-late', 'r1')]);
-    expect(rows).toHaveLength(3);
-    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1' } });
-    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 't-late']);
-    expect(rows[2]).toMatchObject({ kind: 'item', item: { id: 'a' } });
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    const groups = rows.filter(r => r.kind === 'group') as Array<{ items: ChatItem[] }>;
+    expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['t-late']]);
   });
 
   test('a run whose only content is its answer produces no group', () => {
@@ -145,12 +167,12 @@ describe('buildRows', () => {
   });
 
   /**
-   * The owner's rule (2026-09-14): only a run that finished has an answer to elect. On a run that
-   * was stopped or died, the prose is an interim step written *before* the calls that followed it
-   * -- hoisting it out drew it under all of them, and the reading order lied about where the run
-   * actually stopped. Everything stays folded then, in the order it was written.
+   * The owner's rule (2026-09-17): a stopped or failed run keeps its messages too, each at the
+   * place it was written. The old rule elected nothing there because hoisting the *last* prose
+   * would draw it under the calls that followed it -- the reading order lied about where the run
+   * stopped. Messages hoisted by position cannot lie, whatever the run's status.
    */
-  test('a stopped run elects nothing: its prose stays in the group, at the place it was written', () => {
+  test('a stopped run keeps its messages, in the order they were written', () => {
     const rows = buildRows(
       [
         userText('u'),
@@ -159,12 +181,12 @@ describe('buildRows', () => {
         tool('t2', 'r1'),
       ].map(i => (i.id === 'u' ? i : { ...i, run: run('r1', 'aborted', 100, 200) })),
     );
-    expect(rows).toHaveLength(2);
-    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1', status: 'aborted' } });
-    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 'a', 't2']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
+    expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['t2']]);
   });
 
-  test('a run that died on an error elects nothing either', () => {
+  test('a run that died on an error keeps them too', () => {
     const rows = buildRows(
       [
         userText('u'),
@@ -173,12 +195,10 @@ describe('buildRows', () => {
         tool('t2', 'r1'),
       ].map(i => (i.id === 'u' ? i : { ...i, run: run('r1', 'error', 100, 200) })),
     );
-    expect(rows).toHaveLength(2);
-    expect(rows[1]).toMatchObject({ kind: 'group', run: { id: 'r1', status: 'error' } });
-    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 'a', 't2']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
   });
 
-  test('a hoisted bubble still cuts a stopped run, and the prose stays on its side of it', () => {
+  test('a hoisted bubble still cuts a stopped run, and the message stays on its side of it', () => {
     const rows = buildRows(
       [
         userText('u'),
@@ -188,23 +208,68 @@ describe('buildRows', () => {
         agentText('a', 'what it had written', 'r1'),
       ].map(i => (i.id === 'u' || i.id === 'steer' ? i : { ...i, run: run('r1', 'aborted', 100, 200) })),
     );
-    // The injected turn keeps its place and splits the group around it; nothing is hoisted out of
-    // the second segment, so the prose stays where it was written.
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'steer', 'g:r1']);
+    // The injected turn keeps its place and splits the fold around it; the message stays where it
+    // was written, on the side it was written.
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'steer', 'g:r1', 'a']);
     const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
-    expect(groups.map(group => group.items.map(i => i.id))).toEqual([['t1'], ['t2', 'a']]);
+    expect(groups.map(group => group.items.map(i => i.id))).toEqual([['t1'], ['t2']]);
   });
 
-  test('a finished run still elects its answer, even past a phase that follows it', () => {
-    // The nominal case, unchanged: the answer is found by content, not by position.
+  test('a thought after the last message folds after it, and is not a message', () => {
+    // The counterpart: an empty phase with reasoning is work. Nothing is elected, nothing moves.
     const rows = buildRows([
       userText('u'),
       tool('t1', 'r1'),
       agentText('a', 'here is the answer', 'r1'),
       agentText('p-after', '', 'r1', { reasoning: 'second thoughts' }),
     ]);
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a']);
-    expect((rows[1] as { items: ChatItem[] }).items.map(i => i.id)).toEqual(['t1', 'p-after']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
+    expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['p-after']]);
+  });
+
+  test('the status and the total span ride the run\'s last fold, and only there', () => {
+    // One run has several headers now; repeating "Stopped" or the run's duration on every one of
+    // them said nothing. The last fold is where the run ended, so the mark lands there.
+    const rows = buildRows([
+      userText('u'),
+      tool('t1', 'r1'),
+      agentText('a1', 'point one', 'r1'),
+      tool('t2', 'r1'),
+      agentText('a2', 'voila', 'r1'),
+    ]);
+    const groups = rows.filter(row => row.kind === 'group');
+    expect(groups.map(group => (group.kind === 'group' ? group.runTail : undefined))).toEqual([undefined, true]);
+  });
+
+  test('a run whose last message has no work after it still marks its last fold', () => {
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a', 'voila', 'r1')]);
+    const groups = rows.filter(row => row.kind === 'group');
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ runTail: true });
+  });
+
+  test('a picture with no words is a message too', () => {
+    // The browser tool's captures ride the end marker and land on a phase that can carry no
+    // prose. Folding that phase away would hide the pictures the run was asked for.
+    const shot = agentText('m1', '', 'r1', {
+      attachments: [{ id: 'att-1', type: 'image', filename: 'a.png' }] as never,
+    });
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), shot, tool('t2', 'r1'), agentText('a', 'voila', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'm1', 'g:r1', 'a']);
+  });
+
+  test('a fold keeps its key when its items arrive', () => {
+    // The swap the key exists for: the server's row is `run-<first entry>`, and the items it
+    // hands back carry that string in `foldOf`, so the group that replaces the row reads the
+    // same fold -- and the open state the reader set survives (docs/run-hydration.md).
+    const rows = buildRows([userText('u'), folded('a', 'r1')]);
+    const foldedRow = rows[1];
+    expect(foldedRow?.kind === 'folded' ? foldKeyOf(foldedRow) : '').toBe('run-a');
+
+    const hydrated = buildRows([userText('u'), { ...tool('t1', 'r1'), foldOf: 'run-a' } as ChatItem]);
+    const groupRow = hydrated[1];
+    expect(groupRow?.kind === 'group' ? foldKeyOf(groupRow) : '').toBe('run-a');
   });
 
   test('a command result inside a run is hoisted like an injected turn', () => {
@@ -219,6 +284,23 @@ describe('buildRows', () => {
     expect(groups).toHaveLength(2);
     // The command row sits between the two group segments.
     expect(rows.map(r => (r.kind === 'item' ? r.item.id : 'group'))).toEqual(['u', 'group', 'cmd', 'group', 'a']);
+  });
+});
+
+describe('isAgentMessage', () => {
+  test('prose or a picture is a message; a thought or a card is work', () => {
+    expect(isAgentMessage(agentText('a', 'words'))).toBe(true);
+    expect(
+      isAgentMessage(
+        agentText('m', '', undefined, { attachments: [{ id: 'att', type: 'image', filename: 'a.png' }] as never }),
+      ),
+    ).toBe(true);
+    // The phase the model only thought in: reasoning yes, words no.
+    expect(isAgentMessage(agentText('p', '', undefined, { reasoning: 'thinking' } as never))).toBe(false);
+    expect(isAgentMessage(tool('t1'))).toBe(false);
+    // The owner's turn is a message to the thread, but never the agent's own: `isHoisted` takes
+    // it out first, and this predicate must not double as that door.
+    expect(isAgentMessage(userText('u'))).toBe(false);
   });
 });
 

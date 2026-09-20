@@ -11,12 +11,25 @@ function clock(ms: number): string {
   return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
-/** What the header says, from counts alone: it must read the same whether the work is here or not. */
-function headline(toolCount: number, firstTool: string | undefined, duration: string): string {
+/**
+ * What the header says, from counts alone: it must read the same whether the work is here or not.
+ *
+ * A burst between two messages is usually a run of tool calls, and sometimes only a thought the
+ * model had before writing the next one -- "run" said nothing about those, and "N thoughts" names
+ * exactly what opening it shows (the reasoning lines of the phases it hides).
+ */
+function headline(
+  toolCount: number,
+  firstTool: string | undefined,
+  thoughts: number,
+  duration: string,
+): string {
   const parts: string[] = [];
   if (toolCount > 0) {
     parts.push(`${toolCount} tool call${toolCount === 1 ? '' : 's'}`);
     if (firstTool) parts.push(firstTool);
+  } else if (thoughts > 0) {
+    parts.push(`${thoughts} thought${thoughts === 1 ? '' : 's'}`);
   }
   if (duration) parts.push(duration);
   return parts.length > 0 ? parts.join(' · ') : 'run';
@@ -52,13 +65,16 @@ export const RunGroup = React.memo(function RunGroupView({
   run,
   items,
   open,
+  runTail,
   onToggle,
   renderItem,
 }: {
   run: RunInfo;
   items: ChatItem[];
   open: boolean;
-  onToggle: (run: RunInfo) => void;
+  /** The run's last fold: the one that carries its status and total span -- `markRunTails`. */
+  runTail?: boolean;
+  onToggle: () => void;
   /** Renders one child, with its own grouping and time flags, at its index in `items`. */
   renderItem: (item: ChatItem, index: number, children: ChatItem[]) => React.ReactNode;
 }): React.JSX.Element {
@@ -66,12 +82,12 @@ export const RunGroup = React.memo(function RunGroupView({
 
   const toolCount = items.reduce((n, item) => (item.kind === 'tool' ? n + 1 : n), 0);
   const firstTool = items.find(item => item.kind === 'tool')?.name;
-  const summary = headline(toolCount, firstTool, durationOf(run));
-  const toggle = (): void => onToggle(run);
+  const summary = headline(toolCount, firstTool, items.length - toolCount, runTail ? durationOf(run) : '');
+  const toggle = (): void => onToggle();
 
   return (
     <View style={styles.wrap}>
-      <Bar run={run} summary={summary} open={open} onPress={toggle} styles={styles} />
+      <Bar run={run} summary={summary} open={open} runTail={runTail} onPress={toggle} styles={styles} />
       {open ? (
         <View style={styles.body}>
           {items.map((item, index) => (
@@ -80,7 +96,7 @@ export const RunGroup = React.memo(function RunGroupView({
         </View>
       ) : null}
       {open && items.length >= FOOTER_FROM_ITEMS ? (
-        <Bar run={run} summary={summary} open onPress={toggle} styles={styles} footer />
+        <Bar run={run} summary={summary} open runTail={runTail} onPress={toggle} styles={styles} footer />
       ) : null}
     </View>
   );
@@ -101,13 +117,16 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   run,
   summaries,
   open,
+  runTail,
   onToggle,
   onOpen,
 }: {
   run: RunInfo;
   summaries: RunSummaryItem[];
   open: boolean;
-  onToggle: (run: RunInfo) => void;
+  /** The run's last fold: the one that carries its status and total span -- `markRunTails`. */
+  runTail?: boolean;
+  onToggle: () => void;
   /** Fires when the group is opened: the rows are replaced by their items when the answer lands. */
   onOpen: (summaries: RunSummaryItem[]) => void;
 }): React.JSX.Element {
@@ -116,7 +135,7 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   const toolCount = summaries.reduce((n, row) => n + row.toolCount, 0);
   const itemCount = summaries.reduce((n, row) => n + row.itemCount, 0);
   const firstTool = summaries.find(row => row.firstTool !== undefined)?.firstTool;
-  const summary = headline(toolCount, firstTool, durationOf(run));
+  const summary = headline(toolCount, firstTool, itemCount - toolCount, runTail ? durationOf(run) : '');
   const failed = summaries.some(row => row.hydration === 'failed');
 
   /**
@@ -142,9 +161,10 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
         run={run}
         summary={summary}
         open={open}
+        runTail={runTail}
         // Only the fold state moves here: the effect above is what asks, so a group opened by a
         // press and a group reopened by a redraw cannot take two different paths.
-        onPress={() => onToggle(run)}
+        onPress={() => onToggle()}
         styles={styles}
       />
       {open ? (
@@ -177,6 +197,7 @@ function Bar({
   run,
   summary,
   open,
+  runTail,
   onPress,
   styles,
   footer = false,
@@ -184,6 +205,7 @@ function Bar({
   run: RunInfo;
   summary: string;
   open: boolean;
+  runTail?: boolean;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
   footer?: boolean;
@@ -199,11 +221,13 @@ function Bar({
       <Text style={styles.summary} numberOfLines={1}>
         {summary}
       </Text>
-      {run.status === 'error' ? <Text style={styles.statusError}>error</Text> : null}
+      {/* The status belongs to the run, not to each of its folds: it rides the last one, where
+          the run actually stopped. Repeated on eleven headers it said nothing. */}
+      {runTail && run.status === 'error' ? <Text style={styles.statusError}>error</Text> : null}
       {/* One vocabulary across the surfaces: the loader says "Stopping…" while the abort
           travels, and the header of the run it cut says "Stopped" once it landed -- the same
           word the owner would use, where `aborted` was the engine's. */}
-      {run.status === 'aborted' ? <Text style={styles.statusAborted}>Stopped</Text> : null}
+      {runTail && run.status === 'aborted' ? <Text style={styles.statusAborted}>Stopped</Text> : null}
     </Pressable>
   );
 }

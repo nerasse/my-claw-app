@@ -92,6 +92,14 @@ export interface TextItem {
   compactionStopped?: boolean;
   /** The run this bubble belongs to, when it sits inside one -- docs/run-grouping.md. */
   run?: RunInfo;
+  /**
+   * The fold row this bubble was fetched for, when it came back from `chat.run.items`.
+   *
+   * It is what keeps a group's open state across the swap from the folded row to the items it
+   * stood for: the row was keyed `run-<first entry>`, and `foldKeyOf` reads the same string here
+   * (docs/run-hydration.md).
+   */
+  foldOf?: string;
   ts: number;
 }
 
@@ -100,6 +108,8 @@ export interface ToolItem extends ToolCallPayload {
   ts: number;
   /** The run this card belongs to, when it sits inside one -- docs/run-grouping.md. */
   run?: RunInfo;
+  /** The fold row this card was fetched for -- `foldOf` on a bubble, same reason. */
+  foldOf?: string;
   /**
    * The run ended while this call was still in flight, so its result frame is never coming.
    *
@@ -1334,7 +1344,11 @@ class ChatStoreImpl {
     if (!row || row.kind !== 'run') return;
     const known = new Set(existing.map(item => item.id));
     known.delete(rowId);
-    const items = itemsOf(entries).filter(item => !known.has(item.id));
+    // `foldOf` names the row these items replace: the group that takes its place reads it as its
+    // own key, so the state the reader set on the row survives the swap.
+    const items = itemsOf(entries)
+      .filter(item => !known.has(item.id))
+      .map(item => ({ ...item, foldOf: rowId }));
     if (items.length === 0) {
       // Nothing to show and nothing to blame: the row would sit there claiming work that never
       // arrives, so it says it failed rather than spinning for good.

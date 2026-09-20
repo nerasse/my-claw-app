@@ -28,7 +28,7 @@ an id the live run never used:
   docs/run-hydration.md) standing for the cards the client holds one by one.
 
 Appended, both land at the end: the same error a second time and the same run a second time, below
-the answer they precede. Session 37e36291 is the captured case, and the reader saw
+the message they precede. Session 37e36291 is the captured case, and the reader saw
 `question, error, question, 5 tool calls, answer, error, 5 tool calls`.
 
 ## Where a delta puts what it carries
@@ -58,7 +58,7 @@ already had is never rearranged and a plain fresh frame -- the common case -- st
   **Unless its run travelled folded.** A card still marked `running` from a run whose work this
   page now carries as one header can never be reconciled: the page does not hold its id at all, so
   it stays live for good and is re-appended after the page on every sync. There it sits *after* the
-  answer, and the group then swallows the answer into itself -- the run's own last message rendered
+  message, and the group then swallows the message into itself -- the run's own last words rendered
   as part of its collapsed work. An item whose run is folded by the incoming page is dropped.
 
 Everything else inside the range defers to the window. That is the point: it is the truth there.

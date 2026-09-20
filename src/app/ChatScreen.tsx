@@ -11,8 +11,8 @@ import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
-import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
-import { buildRows, compactionRuleBefore, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
+import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunSummaryItem, type TextItem } from '../core/chat';
+import { buildRows, compactionRuleBefore, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
@@ -77,10 +77,10 @@ const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
   // The rule has no id of its own: one compaction runs at a time on a thread, so one rule.
   if (row.kind === 'rule') return 'rule:compaction';
-  // Not the run id alone: while one segment of a run is hydrated and the next is not, a group row
-  // and a folded row of the same run sit side by side, and two rows sharing a key drop one.
-  if (row.kind === 'folded') return `fold:${row.summaries[0]?.id ?? row.run.id}`;
-  return `run:${row.run.id}:${row.items[0]?.id ?? ''}`;
+  // Not the run id alone: a run has one fold per burst now, and two rows sharing a key drop one.
+  // `foldKeyOf` is stable across the swap from a folded row to the items it stood for, which is
+  // what lets the open state ride along -- docs/run-hydration.md.
+  return `fold:${foldKeyOf(row)}`;
 };
 
 export function ChatScreen({
@@ -818,28 +818,30 @@ export function ChatScreen({
   }, []);
 
   /**
-   * Which run groups the reader has opened, by run id.
+   * Which folds the reader has opened, by fold key.
    *
-   * Here rather than inside `RunGroup` because the row is remounted under their fingers: a folded
-   * group whose work arrives becomes a group of real items, with a different list key, and state
-   * held in the component meant the group they just opened snapped shut the moment it filled. The
-   * run id is the one identity that survives that -- and it is also why the two halves of a run
-   * cut by an injection open together, which reads right: it is one turn.
+   * Per fold, not per run: a run has one header per burst now, and tapping the one between two
+   * messages opens exactly what its count promised (owner's rule, 2026-09-17). Here rather than
+   * inside `RunGroup` because the row is remounted under their fingers: a folded group whose work
+   * arrives becomes a group of real items, with a different list key, and state held in the
+   * component meant the group they just opened snapped shut the moment it filled. `foldKeyOf` is
+   * the identity that survives that swap -- the server keys a summary on the first entry it
+   * stands for, and the items it hands back carry the same string.
    */
-  const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedFolds, setExpandedFolds] = useState<ReadonlySet<string>>(() => new Set());
   // This screen is not remounted when the reader changes thread, so the set has to be emptied by
-  // hand: a group is folded again every time a thread is opened, and holding run ids of threads
+  // hand: a group is folded again every time a thread is opened, and holding fold keys of threads
   // nobody is reading is a leak. It is no longer what keeps an empty group from being drawn --
   // being open is what fetches now (`FoldedRunGroup`), so a group reopened by a redraw fills
   // itself instead of sitting on a skeleton.
-  useEffect(() => setExpandedRuns(new Set()), [threadId]);
+  useEffect(() => setExpandedFolds(new Set()), [threadId]);
   // Stable per thread: the group asks for its work from an effect keyed on this, and a fresh
   // closure every render would re-run it on every store change for nothing.
   const openRun = useCallback((summaries: RunSummaryItem[]) => requestRunItems(threadId, summaries), [threadId]);
-  const toggleRun = useCallback((run: RunInfo) => {
-    setExpandedRuns(current => {
+  const toggleFold = useCallback((key: string) => {
+    setExpandedFolds(current => {
       const next = new Set(current);
-      if (!next.delete(run.id)) next.add(run.id);
+      if (!next.delete(key)) next.add(key);
       return next;
     });
   }, []);
@@ -1048,9 +1050,10 @@ export function ChatScreen({
           <FoldedRunGroup
             run={row.run}
             summaries={row.summaries}
-            open={expandedRuns.has(row.run.id)}
-            onToggle={run => {
-              toggleRun(run);
+            open={expandedFolds.has(foldKeyOf(row))}
+            runTail={row.runTail}
+            onToggle={() => {
+              toggleFold(foldKeyOf(row));
               focusRow(keyOfRow(row));
             }}
             onOpen={openRun}
@@ -1063,9 +1066,10 @@ export function ChatScreen({
         <RunGroup
           run={row.run}
           items={row.items}
-          open={expandedRuns.has(row.run.id)}
-          onToggle={run => {
-            toggleRun(run);
+          open={expandedFolds.has(foldKeyOf(row))}
+          runTail={row.runTail}
+          onToggle={() => {
+            toggleFold(foldKeyOf(row));
             focusRow(keyOfRow(row));
           }}
           renderItem={(item, index, children) => {
@@ -1075,7 +1079,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedRuns, toggleRun, openRun, compacting, stopping, focusRow],
+    [grouped, itemIndexById, renderItemContent, expandedFolds, toggleFold, openRun, compacting, stopping, focusRow],
   );
 
   /**
