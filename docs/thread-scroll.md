@@ -39,47 +39,33 @@ prepend can draw one stale frame before settling (react-native#58186). Neither i
 for an anchor implementation of our own -- the symptom they describe is a hitch, not the permanent
 drift above.
 
-## `viewPosition: 1`, and why it is not 0
+## Nothing moves the list on a fold
 
-Not moving is not the same as showing. Unfolding a block is a request to **read** what was revealed,
-so the row is moved explicitly, in both directions:
+It did, and that was the bug. Every block that folds -- run groups, `ToolCard`, `SubAgentCard`,
+`ScrollableBlock`, and every `CollapsibleAside`, reasoning and compaction summaries included --
+used to call `scrollToIndex({ index, viewPosition: 1 })` to bring the opened row to the top of the
+reading area. That put a **second writer** on an offset `maintainVisibleContentPosition` was already
+adjusting, and it computed its destination **before** the layout it was reacting to, through an API
+that has no `getItemLayout` to work from and falls back to the average cell length. The owner's
+report was the result: the row that was tapped ended up somewhere else, opening and closing alike.
 
-- **opening** brings the top of the row to the top of the reading area, so the content is read from
-  its first line instead of hunted for by scrolling up;
-- **closing** asks for the same row again, so it stays where the reader left it -- it came to the top
-  when it opened -- rather than dropping them back down the thread.
+So the fold scroll is gone, and `maintainVisibleContentPosition` is the only writer. It already
+does this job, and it does it natively: the anchor is the newest visible row, and whether the folded
+block sits above or below it, the anchor's position in content coordinates does not change -- so the
+window does not move and the row under the finger stays under the finger. There is no destination to
+compute, no estimate to be wrong, and no second writer to disagree with.
 
-The value is `1`, not the usual `0`, and that is arithmetic rather than taste.
-`VirtualizedList.scrollToIndex` computes:
+The reasoning that made it look necessary is worth keeping: nothing here can be derived from an
+index. Heights are unknowable (markdown, images, tool output) so `getItemLayout` is out, and
+`scrollToIndex` without it estimates from the average measured cell. A fold is also the one gesture
+whose target **changes size as you look at it**, which is exactly what the anchor prop exists for.
 
-```
-offset = max(0, cellOffset(index) - viewPosition * (viewportLength - cellLength))
-```
-
-The ScrollView is flipped with the content, so an offset does not address the same edge it would in a
-normal list: `0` targets the bottom edge and `1` the top one.
-
-## How a row asks
-
-A row does not know its index -- only the screen does, and only at the moment of the tap. Two
-contexts, split on purpose (`components/RowFocus.tsx`):
-
-- `FocusRequestHost` carries the handler, provided once around the list;
-- `RowKey` carries the row's own name, provided per row by `renderRow`.
-
-They are separate because both halves have to compare **by value**. `VirtualizedList` is a
-`PureComponent`: a fresh object identity per row, or a handler rebuilt when `focusRow` changes, would
-re-render every cell on screen on each arrival. A string and a `useCallback` do not. `focusRow`
-therefore reads the rows from a ref rather than closing over them.
-
-Every block that folds calls `useRowFocus()` when it toggles: run groups (through the screen, which
-already owns their state), `ToolCard`, `SubAgentCard`, `ScrollableBlock`, and every
-`CollapsibleAside` -- reasoning and compaction summaries included. Outside a thread there is no
-host, the hook returns `undefined`, and the same components work unchanged.
-
-`onScrollToIndexFailed` is mandatory, not a nicety: without `getItemLayout` -- and there can be none
-here, markdown, images and tool output have no knowable height -- `scrollToIndex` asserts unless it
-is given one. It retries once, once the window has caught up.
+A known React Native defect sits next to this and is *not* what was happening
+([react-native#58578](https://github.com/react/react-native/issues/58578), open, present in 0.86):
+on a shrink, the anchor delta is applied to an offset the platform already clamped, driving it below
+zero. On an inverted list offset zero is the **newest** message, so its worst case is landing on the
+bottom of the thread -- where a reader near the end already is -- not the jump away from the tapped
+row that was reported. Worth knowing, not worth a workaround.
 
 ## What was not taken
 
@@ -91,8 +77,6 @@ something that stays simple to deploy: one native prop beats a dependency tree h
 
 ## Tests
 
-`__tests__/threadScroll.test.tsx` -- the props the list is handed, and an unfold actually asking for
-a scroll with `viewPosition: 1`. `src/components/__tests__/rowFocus.test.tsx` -- the aside asks for
-its row in both directions, and asks for nothing when it is not in a thread. Five mutations kill:
-dropping the anchor, dropping either `focus?.()`, `viewPosition: 0`, and dropping the failure
-handler.
+`__tests__/threadScroll.test.tsx` -- the props the list is handed, and folding a row asks for no
+scroll at all (neither `scrollToIndex` nor `scrollToOffset`). Two mutations kill: putting a
+`scrollToIndex` back on the fold, and dropping `maintainVisibleContentPosition`.

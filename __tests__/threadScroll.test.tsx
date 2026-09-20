@@ -129,20 +129,23 @@ test('the jump button brings the follow back', async () => {
   expect(threadList(tree).props.maintainVisibleContentPosition.autoscrollToTopThreshold).toBe(2_147_483_647);
 });
 
-test('an index the list has never measured is asked for again rather than crashing', async () => {
+test('no fold has a scroll to fail, so the list carries no failure handler', async () => {
   const tree = await renderThread();
   const list = threadList(tree);
 
-  // No getItemLayout: heights are unknowable (markdown, images, tool output), so VirtualizedList
-  // requires a failure handler and asserts without one.
-  expect(typeof list.props.onScrollToIndexFailed).toBe('function');
+  // The failure handler existed for one caller and one API: `scrollToIndex` without
+  // `getItemLayout`. Nothing folds through it any more, so nothing needs it.
+  expect(list.props.onScrollToIndexFailed).toBeUndefined();
 });
 
-test('unfolding a tool card brings its row to the top of the reading area', async () => {
+test('unfolding a tool card asks the list to move nothing', async () => {
   const tree = await renderThread();
   const list = threadList(tree);
   const scrolled = jest
     .spyOn(list.instance as FlatList, 'scrollToIndex')
+    .mockImplementation(() => {});
+  const offset = jest
+    .spyOn(list.instance as FlatList, 'scrollToOffset')
     .mockImplementation(() => {});
 
   const card = tree.root.find(
@@ -154,8 +157,10 @@ test('unfolding a tool card brings its row to the top of the reading area', asyn
     card.props.onPress();
   });
 
-  expect(scrolled).toHaveBeenCalled();
-  // 1, not 0: the axis is flipped with the content, so the usual value lands the row at the bottom.
-  expect((scrolled.mock.calls[0][0] as { viewPosition: number }).viewPosition).toBe(1);
+  // The anchor prop already holds the reading position while a row changes height. Asking for a
+  // second, computed destination is what used to fight it and move the row that was tapped.
+  expect(scrolled).not.toHaveBeenCalled();
+  expect(offset).not.toHaveBeenCalled();
   scrolled.mockRestore();
+  offset.mockRestore();
 });

@@ -4,7 +4,6 @@ import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
 import { chatSelectable } from '../core/platform';
 import { setAsideExpanded, useStoredAsideExpansion } from '../core/asideExpansion';
-import { useRowFocus } from './RowFocus';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -57,13 +56,9 @@ export function CollapsibleAside({
   const [localOpen, setLocalOpen] = useState(defaultOpen);
   const storedOpen = useStoredAsideExpansion(persistKey);
   const open = persistKey === undefined ? localOpen : storedOpen;
-  // The thread brings this row where it belongs when the fold changes: opening so its first line
-  // is at the top of the screen, closing so it stays where the reader left it. No-op elsewhere.
-  const focus = useRowFocus();
   const setOpen = (next: boolean): void => {
     if (persistKey === undefined) setLocalOpen(next);
     else setAsideExpanded(persistKey, next);
-    focus?.();
   };
 
   // A pref flipped while this aside is on screen should be honoured, not wait for the next turn:

@@ -3,7 +3,6 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
-import { useRowFocus } from './RowFocus';
 import { formatDuration, summarizeArgs } from '../core/utils';
 import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
@@ -42,9 +41,6 @@ export const ToolCard = React.memo(function ToolCardView({
   expandTools?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  // The thread brings this row to the top when the card folds or unfolds, so the detail is read
-  // from its first line rather than hunted for. Nothing outside a thread, so it may be absent.
-  const focus = useRowFocus();
   const [open, setOpen] = useState(false);
   // The arguments are a second fold inside the first. What the owner opens a card for is the
   // result; the call that produced it is context, and for an edit tool it is the whole patch
@@ -156,7 +152,6 @@ export const ToolCard = React.memo(function ToolCardView({
         onPress={() => {
           setOpen(value => !value);
           userTookControl.current = true;
-          focus?.();
         }}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
@@ -216,10 +211,7 @@ export const ToolCard = React.memo(function ToolCardView({
           ) : null}
           {rest ? (
           <Pressable
-            onPress={() => {
-              setArgsOpen(value => !value);
-              focus?.();
-            }}
+            onPress={() => setArgsOpen(value => !value)}
             accessibilityRole="button"
             accessibilityState={{ expanded: argsOpen }}
             accessibilityLabel={`Arguments of ${item.name}`}

@@ -4,7 +4,6 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
 import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
-import { FocusRequestHost, RowKey } from '../components/RowFocus';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
@@ -776,46 +775,11 @@ export function ChatScreen({
   );
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
 
-  /**
-   * The rows as they are now, for a scroll asked from a gesture rather than from the store.
-   *
-   * Held in a ref on purpose: `focusRow` has to keep one identity or the row renderer stops being
-   * pure and every cell on screen re-renders on each arrival (see `renderListItem` below). The
-   * index of a row is a fact about the list at the moment of the tap, never a value to capture.
-   */
-  const rowsRef = useRef(reversedRows);
-  useEffect(() => {
-    rowsRef.current = reversedRows;
-  }, [reversedRows]);
-
-  /**
-   * Brings a row to the top of the reading area, called by whatever just changed its fold.
-   *
-   * Both directions, for two different reasons: opening, so the revealed content is read from its
-   * first line instead of by scrolling up to hunt for it; closing, so the row stays where the
-   * reader left it -- it came to the top when it opened -- rather than dropping them somewhere
-   * else in the thread.
-   *
-   * `viewPosition: 1`, not the usual 0. The axis is flipped along with the content, so on an
-   * inverted list `0` means the bottom edge and `1` the top one (VirtualizedList computes
-   * `offset = cellOffset - viewPosition * (viewport - cellHeight)`).
-   */
-  const focusRow = useCallback((key: string) => {
-    const index = rowsRef.current.findIndex(row => keyOfRow(row) === key);
-    if (index < 0) return;
-    listRef.current?.scrollToIndex({ index, viewPosition: 1, animated: true });
-  }, []);
-
-  /**
-   * `scrollToIndex` without `getItemLayout` asserts unless it is given one of these, and it fires
-   * for a row past everything measured. Heights here are unknowable -- markdown, images, tool
-   * output -- so there is no offset to compute from: ask again once the window has caught up.
-   */
-  const onScrollToIndexFailed = useCallback((info: { index: number }) => {
-    setTimeout(() => {
-      listRef.current?.scrollToIndex({ index: info.index, viewPosition: 1, animated: true });
-    }, 120);
-  }, []);
+  // Nothing here moves the list when a row folds. It used to, to put the opened row at the top of
+  // the reading area, and it fought `maintainVisibleContentPosition` for the same offset: the two
+  // writers disagreed and the thread jumped away from the row that was tapped. The prop alone
+  // already holds the reading position while a row changes height, and it is the only writer left.
+  // docs/thread-scroll.md
 
   /**
    * Which folds the reader has opened, by fold key.
@@ -1052,10 +1016,7 @@ export function ChatScreen({
             summaries={row.summaries}
             open={expandedFolds.has(foldKeyOf(row))}
             runTail={row.runTail}
-            onToggle={() => {
-              toggleFold(foldKeyOf(row));
-              focusRow(keyOfRow(row));
-            }}
+            onToggle={() => toggleFold(foldKeyOf(row))}
             onOpen={openRun}
           />
         );
@@ -1068,10 +1029,7 @@ export function ChatScreen({
           items={row.items}
           open={expandedFolds.has(foldKeyOf(row))}
           runTail={row.runTail}
-          onToggle={() => {
-            toggleFold(foldKeyOf(row));
-            focusRow(keyOfRow(row));
-          }}
+          onToggle={() => toggleFold(foldKeyOf(row))}
           renderItem={(item, index, children) => {
             const childGrouped = isGrouped(children, index);
             return renderItemContent(item, childGrouped, !isGrouped(children, index + 1));
@@ -1079,7 +1037,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedFolds, toggleFold, openRun, compacting, stopping, focusRow],
+    [grouped, itemIndexById, renderItemContent, expandedFolds, toggleFold, openRun, compacting, stopping],
   );
 
   /**
@@ -1092,9 +1050,7 @@ export function ChatScreen({
       const key = keyOfRow(row);
       return (
         <RowBoundary itemId={key}>
-          {/* Its own name, so anything inside that folds can ask the list to move without knowing
-              where it is. A string, so this stays cheap: the row renderer must keep one identity. */}
-          <RowKey id={key}>{renderRowContent(row)}</RowKey>
+          {renderRowContent(row)}
         </RowBoundary>
       );
     },
@@ -1353,7 +1309,6 @@ export function ChatScreen({
                 left is the middle of nowhere in the one arriving. It also fired onEndReached at
                 once, paging in old entries nobody asked for, over recycled cells still holding
                 the previous thread's rows. */}
-            <FocusRequestHost onRequestFocus={focusRow}>
             <FlatList
               key={threadId}
               ref={listRef}
@@ -1374,7 +1329,6 @@ export function ChatScreen({
                 minIndexForVisible: 0,
                 ...(following ? { autoscrollToTopThreshold: FOLLOW_THRESHOLD } : {}),
               }}
-              onScrollToIndexFailed={onScrollToIndexFailed}
               data={reversedRows}
               keyExtractor={keyOfRow}
               contentContainerStyle={contentStyle}
@@ -1393,7 +1347,6 @@ export function ChatScreen({
               // removeClippedSubviews is deliberately off: the ⋯ menu sits absolutely positioned
               // outside its bubble, and Android clips exactly that away.
             />
-            </FocusRequestHost>
 
         {indicator}
 
