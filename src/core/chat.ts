@@ -1405,6 +1405,13 @@ class ChatStoreImpl {
     attachments: AttachmentMeta[] = [],
     location?: LocationData,
   ): void {
+    // Born with the wait it is about to have. A compaction rewrites the history this send's run
+    // would resume, so the server parks it -- and the thread has to say so on the first frame it
+    // draws. Born without the mark, the bubble was ordered as an ordinary message and then jumped
+    // under the rule the instant the server's ack landed: the owner saw the message land before
+    // the compaction and settle after it (2026-09-20). The mark is the same one `markQueued`
+    // would set, so that ack stays the no-op it should be.
+    const held = this.compacting.has(threadId);
     this.append(threadId, {
       kind: 'text',
       id,
@@ -1412,6 +1419,7 @@ class ChatStoreImpl {
       text,
       attachments,
       streaming: false,
+      ...(held ? { queuedSince: Date.now(), queuedReason: 'compaction' as const } : {}),
       ...(location ? { location } : {}),
       ts: Date.now(),
     });

@@ -290,6 +290,29 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     expect(chatStore.getItems(THREAD).some(item => item.kind === 'text' && item.queuedSince !== undefined)).toBe(false);
   });
 
+  test('a send born while a compaction runs is born parked by it', () => {
+    // The bubble must say what it waits for on its first frame. Born without the mark, it was
+    // ordered as an ordinary message and jumped under the rule when the ack landed.
+    chatStore.setCompacting(THREAD, 1000);
+    chatStore.addUserMessage(THREAD, 'm1', 'le vocal pendant la compaction');
+
+    const [item] = chatStore.getItems(THREAD);
+    expect(item).toMatchObject({ queuedReason: 'compaction' });
+    expect((item as { queuedSince?: number }).queuedSince).toBeGreaterThan(0);
+
+    // The ack the server sends is the no-op it should be: the same mark, not a second one.
+    const born = (item as { queuedSince: number }).queuedSince;
+    chatStore.markQueued(THREAD, 'm1', 'compaction');
+    expect((chatStore.getItems(THREAD)[0] as { queuedSince: number }).queuedSince).toBe(born);
+  });
+
+  test('a send born with nothing running carries no wait', () => {
+    chatStore.addUserMessage(THREAD, 'm1', 'bonjour');
+    const [item] = chatStore.getItems(THREAD);
+    expect((item as { queuedSince?: number }).queuedSince).toBeUndefined();
+    expect((item as { queuedReason?: string }).queuedReason).toBeUndefined();
+  });
+
   test('a compaction boundary is drawn once, however many times the server names it', () => {
     chatStore.addCompactionBoundary(THREAD, 'e-42', 'ce qui precede', 813);
     // The same cut again: live first, then a history load. One rule, not two.
