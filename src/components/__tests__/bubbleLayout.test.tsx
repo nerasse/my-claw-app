@@ -105,6 +105,36 @@ describe('Bubble layout', () => {
     expect(widths.length).toBeGreaterThan(0);
   });
 
+  it('lets the words heard in a voice note take the bubble, like any other text', () => {
+    const heard = 'Le texte entendu, assez long pour se replier sur plusieurs lignes dans la bulle.';
+    const tree = render({
+      kind: 'text',
+      id: 'u2',
+      role: 'user',
+      text: '',
+      attachments: [
+        { id: 'a1', type: 'audio', filename: 'voice.m4a', uri: 'file:///voice.m4a', durationMs: 22_960 },
+      ],
+      transcripts: { a1: heard },
+      streaming: false,
+      ts: 1,
+    });
+    const transcript = tree.root.findAll(
+      node => node.props.children === heard && node.props.style !== undefined,
+    );
+    expect(transcript.length).toBeGreaterThan(0);
+    // A `maxWidth: 260` here dated from when a bubble was sized by its content, so 260 *was* the
+    // width of a voice bubble; bubbles have been full width since, and the words sat in 30% of a
+    // desktop bubble and stopped 110pt short of the edge on a phone (owner, 2026-09-20).
+    const flat = transcript.flatMap(node =>
+      Array.isArray(node.props.style) ? node.props.style : [node.props.style],
+    );
+    const capped = flat.filter(
+      entry => entry && typeof entry === 'object' && 'maxWidth' in (entry as object),
+    );
+    expect(capped).toEqual([]);
+  });
+
   it('lays the message menu under the bubble, on the author side', () => {
     // Agent (system): the ⋯ row is right-aligned.
     const agentTree = render({

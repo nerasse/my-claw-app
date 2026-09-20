@@ -37,12 +37,17 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /**
    * The transcript sits inside the bubble instead of arriving as its own message: what was said
    * and the recording of it are one thing, and a separate echo pushed the conversation apart.
+   *
+   * It takes the bubble's width, like every other text. A `maxWidth: 260` used to sit here, from
+   * when a bubble was sized by its content -- 260 *was* the width of a voice bubble then. Bubbles
+   * became full width on 2026-08-31 and the cap stayed, so the words filled 30% of a desktop
+   * bubble and stopped 110pt short of the edge on a phone; being a fixed pt, it also bit harder
+   * the larger the message-size setting (owner, 2026-09-20).
    */
   transcript: {
     fontSize: scaleFont(font.small, scale),
     color: palette.textMuted,
     fontStyle: 'italic' as const,
-    maxWidth: 260,
   },
   transcriptOnAccent: { color: palette.onAccentMuted },
 });
