@@ -85,6 +85,25 @@ export const RunGroup = React.memo(function RunGroupView({
   const summary = headline(toolCount, firstTool, items.length - toolCount, runTail ? durationOf(run) : '');
   const toggle = (): void => onToggle();
 
+  /**
+   * A fold of one card hides nothing.
+   *
+   * The header exists to stand for work the reader has not asked to see, and a single tool call
+   * between two messages is one card behind one bar: everything the bar says, the card says
+   * itself. The owner asked for the card, twice (2026-09-21: "quand il n'y a qu'un seul tool
+   * call, ne regroupe pas"). The row is still the group -- the run's span and the word it stopped
+   * on have no other home -- so what it carried is drawn as a line under the card.
+   */
+  const only = items.length === 1 ? items[0] : undefined;
+  if (only !== undefined && only.kind === 'tool') {
+    return (
+      <View style={styles.wrap}>
+        <View key={only.id}>{renderItem(only, 0, items)}</View>
+        {runTail ? <TailLine run={run} /> : null}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrap}>
       <Bar run={run} summary={summary} open={open} runTail={runTail} onPress={toggle} styles={styles} />
@@ -188,6 +207,29 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
 });
 
 /**
+ * What the bar of a fold was carrying, for the fold that no longer draws one.
+ *
+ * A group's bar is its only control -- open it, close it -- and a fold of one card has nothing to
+ * open. The two things it said are not about the fold though: the run's span, and the word it
+ * stopped on. "Stopped" and "error" exist nowhere else in the thread, so they stand here, under
+ * the card, in the same words the bar used.
+ */
+function TailLine({ run }: { run: RunInfo }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  const span = durationOf(run);
+  const failed = run.status === 'error';
+  const stopped = run.status === 'aborted';
+  if (span === '' && !failed && !stopped) return null;
+  return (
+    <View style={styles.tailLine}>
+      {span === '' ? null : <Text style={styles.tailSpan}>{span}</Text>}
+      {failed ? <Text style={styles.statusError}>error</Text> : null}
+      {stopped ? <Text style={styles.statusAborted}>Stopped</Text> : null}
+    </View>
+  );
+}
+
+/**
  * The group's control, drawn identically at its top and at its bottom.
  *
  * Same bar both ends on purpose: whichever one the reader reaches, it says what the group is and
@@ -234,6 +276,14 @@ function Bar({
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   wrap: { width: '100%' as const, marginBottom: space.xs },
+  tailLine: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'flex-end' as const,
+    paddingHorizontal: 8,
+    marginTop: 2,
+  },
+  tailSpan: { fontSize: scaleFont(font.small, scale), color: palette.textFaint },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -255,11 +305,13 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     fontSize: scaleFont(font.small, scale),
     color: palette.danger,
     fontWeight: '600' as const,
+    marginLeft: space.xs,
   },
   statusAborted: {
     fontSize: scaleFont(font.small, scale),
     color: palette.textFaint,
     fontWeight: '600' as const,
+    marginLeft: space.xs,
   },
   body: { marginTop: space.xs },
   skeleton: {

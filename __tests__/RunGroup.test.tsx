@@ -338,3 +338,64 @@ test('a stopped run wears the owner’s word, not the engine’s', () => {
   expect(texts).toContain('Stopped');
   expect(texts).not.toContain('aborted');
 });
+
+/** A group drawn with the run's tail on it, or without it. */
+const groupWith = (items: ChatItem[], runTail: boolean, run: RunInfo = RUN) =>
+  render(
+    <RunGroup
+      run={run}
+      items={items}
+      open={false}
+      {...(runTail ? { runTail: true } : {})}
+      onToggle={jest.fn()}
+      renderItem={item => <Text>{item.id}</Text>}
+    />,
+  );
+
+const textsOf = (tree: ReactTestRenderer.ReactTestRenderer): unknown[] =>
+  tree.root.findAllByType(Text).map(node => node.props.children);
+
+test('a fold of a single tool call draws the card, and no bar to open', () => {
+  // The owner, twice in one message: "quand il n'y a qu'un seul tool call, ne regroupe pas"
+  // (2026-09-21). One card behind one bar is a press for nothing -- the bar said the same thing
+  // the card says, and the card is what he was after.
+  const tree = groupWith([card('a')], false);
+  expect(bars(tree)).toHaveLength(0);
+  expect(textsOf(tree)).toContain('a');
+});
+
+test('a fold of a single thought still folds: the thought is what the bar stands for', () => {
+  // The rule is about a card, not about every short fold: a lone thinking phase is a body the
+  // reader has not asked for, which is exactly what a group is for.
+  const thinking = {
+    kind: 'text',
+    id: 'p1',
+    role: 'agent',
+    text: '',
+    reasoning: 'weighing the options',
+    attachments: [],
+    streaming: false,
+    ts: 5,
+  } as ChatItem;
+  const tree = groupWith([thinking], true);
+  expect(bars(tree)).toHaveLength(1);
+  expect(textsOf(tree)).toContain('1 thought · 1 min');
+});
+
+test('the run\'s span and the word it stopped on stand under the lone card', () => {
+  // What the bar carried is not about the fold: "Stopped" and the run's span exist nowhere else in
+  // the thread, so they move under the card rather than disappearing with the bar.
+  const stopped: RunInfo = { ...RUN, status: 'aborted' };
+  const tree = groupWith([card('a')], true, stopped);
+  expect(bars(tree)).toHaveLength(0);
+  expect(textsOf(tree)).toContain('a');
+  expect(textsOf(tree)).toContain('Stopped');
+  expect(textsOf(tree)).toContain('1 min');
+});
+
+test('a lone card that is not the run\'s tail draws nothing under it', () => {
+  // The line is the tail's, and a fold the run did not end on has none: the span would be the
+  // run's, said twice.
+  const tree = groupWith([card('a')], false);
+  expect(textsOf(tree)).not.toContain('1 min');
+});
