@@ -116,6 +116,7 @@ import {
   type LogsTailQuery,
   type McpEntry,
   type ModelOption,
+  type BrowserUnblockResultFrame,
   type UnavailableModel,
   type SessionFileMeta,
   type SessionSummary,
@@ -609,6 +610,7 @@ export function AppShell(): React.JSX.Element {
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [browserError, setBrowserError] = useState<string | null>(null);
+  const [browserUnblock, setBrowserUnblock] = useState<BrowserUnblockResultFrame | null>(null);
   /** The More sheet in the drawer footer: Archived, Agents, Jobs, Browser, Statistics, Settings. */
   const [moreOpen, setMoreOpen] = useState(false);
   const [diagSnapshot, setDiagSnapshot] = useState('');
@@ -1198,6 +1200,7 @@ export function AppShell(): React.JSX.Element {
       setJobRuns,
       setRunsError,
       setBrowserError,
+      setBrowserUnblock,
       setApprovals,
       setApprovalHistory,
       onQuestionAskOnActiveThread: () => {
@@ -3973,7 +3976,16 @@ export function AppShell(): React.JSX.Element {
               <EmptyCategoryScreen title="Other" onBack={() => setSettingsPage('index')} />
             )
           ) : browserOpen ? (
-            <BrowserScreen error={browserError} onClose={() => setBrowserOpen(false)} />
+            <BrowserScreen
+              error={browserError}
+              unblock={browserUnblock}
+              onClose={() => {
+                setBrowserOpen(false);
+                // A result is a moment, not a state: reopening the page shows where to connect,
+                // not what a button did last time.
+                setBrowserUnblock(null);
+              }}
+            />
           ) : archivesOpen ? (
             <ArchivesScreen
               sessions={archivedSessions}

@@ -5,7 +5,7 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useBrowserInfo } from '../core/browser';
 import { connection } from '../core/connection';
-import { encodeBrowserInfo } from '../core/protocol';
+import { encodeBrowserInfo, encodeBrowserUnblock, type BrowserUnblockResultFrame } from '../core/protocol';
 
 /** How long a "copied" mark stays up. Long enough to be read, short enough not to look stuck. */
 const COPIED_MS = 1500;
@@ -34,12 +34,29 @@ function useCopy(): { copied: string | null; copy: (key: string, value: string) 
  * runs the agent, and the agent has a shell -- but because a screen that displays it unasked is
  * one someone else reads over a shoulder.
  */
-export function BrowserScreen({ error, onClose }: { error: string | null; onClose: () => void }): React.JSX.Element {
+export function BrowserScreen({
+  error,
+  unblock,
+  onClose,
+}: {
+  error: string | null;
+  /** What the last unlock did, handed down by the shell: a result is a moment, not a state. */
+  unblock?: BrowserUnblockResultFrame | null;
+  onClose: () => void;
+}): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const info = useBrowserInfo();
   const { copied, copy } = useCopy();
   const [revealed, setRevealed] = useState(false);
+  const [unsent, setUnsent] = useState(false);
   useDismissKeyboard();
+
+  const unlock = useCallback(() => {
+    setUnsent(false);
+    // The answer arrives as its own frame and lands in `unblock`; a send that could not even be
+    // queued would otherwise look like a button that does nothing.
+    connection.send(encodeBrowserUnblock()).catch(() => setUnsent(true));
+  }, []);
 
   const refresh = useCallback(() => {
     connection.send(encodeBrowserInfo()).catch(() => {});
@@ -87,6 +104,37 @@ export function BrowserScreen({ error, onClose }: { error: string | null; onClos
         <Text style={styles.empty}>asking the server…</Text>
       ) : (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Unlock</Text>
+            {/*
+              The way out of the one failure this page cannot be diagnosed from: a native file
+              picker opens behind the browser window (nothing on that display raises it, there is
+              no window manager), its modal grab eats every click, and the screen looks normal.
+            */}
+            <Text style={styles.hint}>
+              Nothing clickable, browser looking normal? A file picker or a dialog is probably
+              open behind the window. This raises what is hiding, closes a file picker nobody
+              asked for, and puts the browser back in front.
+            </Text>
+            <View style={styles.row}>
+              <Pressable
+                onPress={unlock}
+                style={styles.primaryButton}
+                accessibilityRole="button"
+                accessibilityLabel="Unlock the browser">
+                <Text style={styles.primaryText}>Unlock</Text>
+              </Pressable>
+            </View>
+            {unblock ? (
+              <Text
+                style={unblock.ok ? styles.hint : styles.error}
+                accessibilityLabel="Browser unlock result">
+                {unblock.message}
+              </Text>
+            ) : null}
+            {unsent ? <Text style={styles.error}>could not reach the server</Text> : null}
+          </View>
+
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Connect</Text>
             {info.webUrl ? (

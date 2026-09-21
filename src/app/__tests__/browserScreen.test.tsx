@@ -13,7 +13,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { BrowserScreen } from '../BrowserScreen';
 import { browserStore } from '../../core/browser';
 import { connection } from '../../core/connection';
-import { parseServerFrame, type BrowserInfoResultFrame } from '../../core/protocol';
+import { parseServerFrame, type BrowserInfoResultFrame, type BrowserUnblockResultFrame } from '../../core/protocol';
 
 // The real singleton owns a socket and its reconnect timers; reaching it from a screen test
 // leaks them past the run.
@@ -63,10 +63,10 @@ describe('BrowserScreen', () => {
 
   /** The store is module-level and its listeners outlive a test: a tree left mounted is still
    *  subscribed, so the next reset() re-renders it outside any act() and prints as an error. */
-  function render(): ReactTestRenderer.ReactTestRenderer {
+  function render(unblock?: BrowserUnblockResultFrame | null): ReactTestRenderer.ReactTestRenderer {
     let tree!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
-      tree = ReactTestRenderer.create(<BrowserScreen error={null} onClose={() => {}} />);
+      tree = ReactTestRenderer.create(<BrowserScreen error={null} unblock={unblock} onClose={() => {}} />);
     });
     mounted = tree;
     return tree;
@@ -162,5 +162,40 @@ describe('BrowserScreen', () => {
     // parseServerFrame is a whitelist: a type missing from it is dropped before any router runs,
     // which is invisible to a test that hands routeFrame an already-typed object.
     expect(parseServerFrame(JSON.stringify(info()))).not.toBeNull();
+  });
+
+  it('asks the server to unlock, from the page that says nothing is clickable', () => {
+    const tree = render();
+    ReactTestRenderer.act(() => browserStore.replace(info()));
+
+    pressLabelled(tree, 'Unlock the browser');
+    expect(connection.send).toHaveBeenCalledWith(JSON.stringify({ type: 'browser.unblock' }));
+  });
+
+  it('shows what the unlock did, and stays quiet when nothing was stuck', () => {
+    const stuck = render({
+      type: 'browser.unblock.result',
+      ok: true,
+      message: 'closed "Open File"',
+      actions: [{ action: 'closed', window: 'Open File' }],
+    });
+    ReactTestRenderer.act(() => browserStore.replace(info()));
+    expect(texts(stuck)).toContain('closed "Open File"');
+
+    ReactTestRenderer.act(() => stuck.unmount());
+    mounted = null;
+    const idle = render({
+      type: 'browser.unblock.result',
+      ok: true,
+      message: 'nothing was stuck behind the browser',
+      actions: [],
+    });
+    ReactTestRenderer.act(() => browserStore.replace(info()));
+    expect(texts(idle)).toContain('nothing was stuck behind the browser');
+  });
+
+  it('lets the unlock result through the parser too', () => {
+    const frame = { type: 'browser.unblock.result', ok: true, message: 'closed "Open File"', actions: [] };
+    expect(parseServerFrame(JSON.stringify(frame))).not.toBeNull();
   });
 });

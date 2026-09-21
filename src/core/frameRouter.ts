@@ -34,6 +34,7 @@ import {
   encodeSubAgentsList,
   type ApprovalRequestFrame,
   type ApprovalHistoryResultFrame,
+  type BrowserUnblockResultFrame,
   type ConfigResultFrame,
   type ConfigSavedFrame,
   type JobEntry,
@@ -119,6 +120,8 @@ export interface ServerFrameHandlers {
   setRunsError: (message: string | null) => void;
   /** A refused browser.info: the page says why instead of sitting on "loading". */
   setBrowserError: (message: string | null) => void;
+  /** What the last unlock did: the page shows the line, and an answer clears its error. */
+  setBrowserUnblock: (frame: BrowserUnblockResultFrame) => void;
   setApprovals: (update: (current: ApprovalRequestFrame[]) => ApprovalRequestFrame[]) => void;
   setApprovalHistory: (frame: ApprovalHistoryResultFrame) => void;
   /** A question landed on the thread on screen: the device rings once, the push does the rest. */
@@ -180,6 +183,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setJobRuns,
     setRunsError,
     setBrowserError,
+    setBrowserUnblock,
     setApprovals,
     setApprovalHistory,
     onQuestionAskOnActiveThread,
@@ -684,6 +688,10 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'browser.info.result':
       browserStore.replace(frame);
+      break;
+    case 'browser.unblock.result':
+      setBrowserUnblock(frame);
+      setBrowserError(null);
       break;
     case 'jobs.list.result':
       // The fresh listing is also the answer to a save or a delete: a pending one closes

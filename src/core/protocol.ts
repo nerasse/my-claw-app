@@ -1840,6 +1840,18 @@ export interface BrowserTabEntry {
   url: string;
 }
 
+/**
+ * The way out of a dialog that took the VNC session hostage: raise what is hiding behind the
+ * browser window, close a file picker nobody asked for, put the browser back in front.
+ */
+export interface BrowserUnblockResultFrame {
+  type: 'browser.unblock.result';
+  ok: boolean;
+  /** One line for the page to show as-is: what was closed, raised, or that nothing was stuck. */
+  message: string;
+  actions: Array<{ action: 'closed' | 'raised'; window: string }>;
+}
+
 /** What a human needs to drive the browser by hand: where to connect, with what password, and
  *  whether anything is running behind it. See docs/browser-page.md in the server repo. */
 export interface BrowserInfoResultFrame {
@@ -2318,6 +2330,7 @@ export interface HelloFrame {
 
 export type ServerFrame =
   | BrowserInfoResultFrame
+  | BrowserUnblockResultFrame
   | ChatMessageFrame
   | ChatUserFrame
   | ChatCompactionFrame
@@ -2498,6 +2511,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'session.instructions.result',
   'jobs.list.result',
   'browser.info.result',
+  'browser.unblock.result',
   'jobs.runs.result',
   'subagents.list.result',
   'subagents.callers.result',
@@ -3341,6 +3355,11 @@ export function encodeJobsList(): string {
 /** Asks for the browser's connection details and current state. Read-only, no arguments. */
 export function encodeBrowserInfo(): string {
   return JSON.stringify({ type: 'browser.info' });
+}
+
+/** Asks the server to unstick the browser session; the answer comes back as its own frame. */
+export function encodeBrowserUnblock(): string {
+  return JSON.stringify({ type: 'browser.unblock' });
 }
 
 /** Creates (no id) or updates a job. The schedule is parsed server-side. */
