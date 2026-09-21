@@ -24,6 +24,8 @@ export interface JobDraft {
   skills: JobScope;
   mcp: JobScope;
   tools: JobScope;
+  subagents: boolean;
+  browser: boolean;
 }
 
 function draftOf(job: JobEntry | null): JobDraft {
@@ -40,6 +42,8 @@ function draftOf(job: JobEntry | null): JobDraft {
       skills: { mode: 'inherit' },
       mcp: { mode: 'inherit' },
       tools: { mode: 'inherit' },
+      subagents: true,
+      browser: true,
     };
   }
   const schedule = (() => {
@@ -61,6 +65,8 @@ function draftOf(job: JobEntry | null): JobDraft {
     skills: scopeOf(job.skillsMode, job.skills),
     mcp: scopeOf(job.mcpMode, job.mcp),
     tools: scopeOf(job.toolsMode, job.tools),
+    subagents: job.subagents === true,
+    browser: job.browser === true,
   };
 }
 
@@ -364,6 +370,44 @@ export function JobsEditorScreen({
               </Pressable>
             ))}
           </View>
+          {/* Capabilities, not permissions: a job is the orchestrator's stand-in while nobody
+              watches, so both are granted and the switch is the narrowing. */}
+          <View style={styles.chips}>
+            {(
+              [
+                [true, 'Sub-agents'],
+                [false, 'No sub-agents'],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={label}
+                onPress={() => setDraft(current => ({ ...current, subagents: value }))}
+                style={[styles.chip, draft.subagents === value ? styles.chipActive : styles.chipIdle]}
+                accessibilityRole="button"
+                accessibilityLabel={`Job ${label}`}
+                accessibilityState={{ selected: draft.subagents === value }}>
+                <Text style={draft.subagents === value ? styles.chipTextActive : styles.chipTextIdle}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.chips}>
+            {(
+              [
+                [true, 'Browser'],
+                [false, 'No browser'],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={label}
+                onPress={() => setDraft(current => ({ ...current, browser: value }))}
+                style={[styles.chip, draft.browser === value ? styles.chipActive : styles.chipIdle]}
+                accessibilityRole="button"
+                accessibilityLabel={`Job ${label}`}
+                accessibilityState={{ selected: draft.browser === value }}>
+                <Text style={draft.browser === value ? styles.chipTextActive : styles.chipTextIdle}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         <View style={styles.category}>
@@ -480,6 +524,8 @@ function toFields(job: JobEntry | null, draft: JobDraft): JobFieldsOut {
     skills: draft.skills,
     mcp: draft.mcp,
     tools: draft.tools,
+    subagents: draft.subagents,
+    browser: draft.browser,
   };
 }
 

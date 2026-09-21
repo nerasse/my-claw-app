@@ -1812,6 +1812,9 @@ export interface JobEntry {
   mcp?: string[];
   toolsMode: JobScopeMode;
   tools?: string[];
+  /** The job's capability switches, resolved server-side: granted unless turned off. */
+  subagents: boolean;
+  browser: boolean;
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: 'ok' | 'error' | null;
@@ -3362,6 +3365,9 @@ export interface JobFieldsOut {
   skills: JobScope;
   mcp: JobScope;
   tools: JobScope;
+  /** Both always carried: a job is the orchestrator's stand-in, so the switches are the narrowing. */
+  subagents: boolean;
+  browser: boolean;
 }
 
 /** Lists the scheduled tasks; every mutation answers with the same fresh listing. */
@@ -3395,6 +3401,8 @@ export function encodeJobsSave(fields: JobFieldsOut): string {
   frame.skills = fields.skills;
   frame.mcp = fields.mcp;
   frame.tools = fields.tools;
+  frame.subagents = fields.subagents;
+  frame.browser = fields.browser;
   return JSON.stringify(frame);
 }
 

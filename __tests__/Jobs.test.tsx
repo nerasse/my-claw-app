@@ -59,6 +59,8 @@ function job(over: Record<string, unknown> = {}): Record<string, unknown> {
     skillsMode: 'inherit',
     mcpMode: 'inherit',
     toolsMode: 'inherit',
+    subagents: true,
+    browser: true,
     nextRunAt: '2026-08-09T09:00:00.000Z',
     lastRunAt: '2026-08-08T09:00:00.000Z',
     lastStatus: 'ok',
@@ -732,5 +734,49 @@ test('back answers the delete confirmation, and leaves the editor under it open'
   expect(labelsOf(tree)).toContain('Job name');
   expect(sentOfType('jobs.delete').length).toBe(0);
 
+  await unmount(tree);
+});
+
+test('a fresh job carries both capabilities, granted by default', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emitCatalogs(tree);
+  await pressLabel(tree, 'Add job');
+  await waitFor(() => labelsOf(tree).includes('Job prompt'));
+
+  // No chip touched: the editor's own default is the grant, which is the server's too.
+  await typeInto(tree, 'Job prompt', 'do things');
+  await pressLabel(tree, 'Save job');
+  const saves = sentOfType('jobs.save');
+  expect(saves.length).toBe(1);
+  expect(saves[0]).toMatchObject({ subagents: true, browser: true });
+  await unmount(tree);
+});
+
+test('the capability switches read the job and ride on the save', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emitCatalogs(tree);
+  await emit({ type: 'jobs.list.result', jobs: [job({ subagents: false, browser: false })] });
+  await pressLabel(tree, 'Edit job Morning report');
+  await waitFor(() => labelsOf(tree).includes('Job No browser'));
+
+  // A job that denied both must read as denied: a switch that always opened on "granted" would
+  // silently hand the capability back on the next save.
+  await pressLabel(tree, 'Save job');
+  const saves = sentOfType('jobs.save');
+  expect(saves.length).toBe(1);
+  expect(saves[0]).toMatchObject({ subagents: false, browser: false });
+
+  // And a tap is the whole answer, in both directions. The server answers every mutation with the
+  // fresh listing, and that answer is what closes the editor and re-arms it.
+  await emit({ type: 'jobs.list.result', jobs: [job({ subagents: false, browser: false })] });
+  await waitFor(() => !labelsOf(tree).includes('Edit job model'));
+  await pressLabel(tree, 'Edit job Morning report');
+  await waitFor(() => labelsOf(tree).includes('Job Sub-agents'));
+  await pressLabel(tree, 'Job Sub-agents');
+  await pressLabel(tree, 'Job Browser');
+  await pressLabel(tree, 'Save job');
+  expect(sentOfType('jobs.save')[1]).toMatchObject({ subagents: true, browser: true });
   await unmount(tree);
 });
