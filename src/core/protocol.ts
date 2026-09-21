@@ -2116,6 +2116,12 @@ export interface AgentsConfigResultFrame {
   effortLevels: string[];
   /** The vision fallback model ("" when none): what image runs reroute to when the model can't take them. */
   fallback: string;
+  /**
+   * Provider-failure retries: when a model call that failed on the provider's side is tried again
+   * before the run gives up, and the waits it uses. `delaysMs` arrives already resolved, so the
+   * page renders the schedule instead of holding a copy of the default (docs/provider-failures.md
+   * on the server). */
+  retry?: { enabled: boolean; delaysMs: number[] };
   providers: ProviderInfo[];
   agents: AgentInfo[];
 }
@@ -3164,6 +3170,17 @@ export function encodeAgentsIterationsSet(agent: string, value: number | null): 
 
 export function encodeAgentsContextCapSet(agent: string, value: number | null): string {
   return JSON.stringify({ type: 'agents.contextcap.set', agent, value });
+}
+
+/**
+ * The provider-failure retry switch (`llm.providerRetry` on the server). The delays are only sent
+ * when the page changed them: absent means "keep whatever the server has", which is what keeps the
+ * switch a one-tap operation.
+ */
+export function encodeAgentsRetrySet(enabled: boolean, delaysMs?: number[]): string {
+  return JSON.stringify(
+    delaysMs === undefined ? { type: 'agents.retry.set', enabled } : { type: 'agents.retry.set', enabled, delaysMs },
+  );
 }
 
 export function encodeAgentFileGet(agent: string): string {

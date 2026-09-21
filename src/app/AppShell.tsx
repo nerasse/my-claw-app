@@ -48,6 +48,7 @@ import {
   encodeAgentsWorkspaceSet,
   encodeAgentsIterationsSet,
   encodeAgentsContextCapSet,
+  encodeAgentsRetrySet,
   encodeAgentFileGet,
   encodeAgentFileSet,
   encodeAgentFileCreate,
@@ -3030,6 +3031,9 @@ export function AppShell(): React.JSX.Element {
         setSettingsPage('agent');
       }}
       onNewAgent={() => setSettingsPage('newagent')}
+      // One tap, no confirmation: the switch is its own feedback, and the server answers with the
+      // whole snapshot so the row can never disagree with what was stored.
+      onSetRetry={enabled => connection.send(encodeAgentsRetrySet(enabled)).catch(() => {})}
     />
   );
   const providersPage = (

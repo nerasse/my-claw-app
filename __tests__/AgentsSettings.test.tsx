@@ -11,6 +11,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { agentsStore } from '../src/core/agents';
+import { retryScheduleText } from '../src/app/AgentsSettingsScreen';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
@@ -508,4 +509,53 @@ describe('providers', () => {
     expect(textsOf(tree)).not.toContain('definition');
     await settleAndUnmount(tree);
   });
+});
+
+/**
+ * The provider-failure retry switch, at the top of the defaults.
+ *
+ * One tap, no confirmation: the row is its own feedback, and the server answers with the whole
+ * snapshot, so what the page shows is what was stored. The schedule is rendered from the frame --
+ * the app holds no copy of the default to disagree with the server about.
+ */
+test('the provider-retry switch sends agents.retry.set and reads the schedule the server resolved', async () => {
+  const tree = await boot();
+  await emit(agentsConfig({ retry: { enabled: true, delaysMs: [30_000, 60_000, 120_000] } }));
+  await waitFor(() => labelsOf(tree).includes('Retry on provider failure'));
+  expect(textsOf(tree).some(text => text.includes('30 s, 1 min, 2 min'))).toBe(true);
+
+  const toggle = tree.root.find(
+    node =>
+      node.props.accessibilityLabel === 'Retry on provider failure' &&
+      typeof node.props.onValueChange === 'function',
+  );
+  await ReactTestRenderer.act(async () => {
+    toggle.props.onValueChange(false);
+  });
+
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'agents.retry.set', enabled: false })]),
+  );
+
+  // The answer is the state the server stored, and the hint now says what "off" does.
+  await emit(agentsConfig({ retry: { enabled: false, delaysMs: [30_000, 60_000, 120_000] } }));
+  await waitFor(() => textsOf(tree).some(text => text.includes('moves to the next model at once')));
+  await settleAndUnmount(tree);
+});
+
+test('a server that predates the switch draws no retry row', async () => {
+  const tree = await boot();
+  await emit(agentsConfig());
+  await waitFor(() => labelsOf(tree).includes('Open agent Scheduled tasks'));
+
+  // Not drawn rather than drawn lying: an older server would ignore the frame entirely.
+  expect(labelsOf(tree)).not.toContain('Retry on provider failure');
+  expect(textsOf(tree).some(text => text.includes('Retry on provider failure'))).toBe(false);
+  await settleAndUnmount(tree);
+});
+
+test('the schedule reads in seconds under a minute', () => {
+  expect(retryScheduleText([30_000, 60_000, 120_000])).toBe('30 s, 1 min, 2 min');
+  expect(retryScheduleText([5_000])).toBe('5 s');
+  expect(retryScheduleText([])).toBe('no wait');
 });

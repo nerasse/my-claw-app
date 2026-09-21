@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { AgentInfo, AgentsConfigResultFrame } from '../core/protocol';
 import type { AgentsStatus } from '../core/agents';
 import { useModelCatalog, useModelIndex } from '../core/model';
@@ -9,6 +9,14 @@ import { useDismissKeyboard } from '../core/keyboard';
 /** "global" and "orchestrator" both mean the same row in the app: the umbrella default. */
 export function inheritLabel(agent: AgentInfo): string {
   return agent.inheritsFrom === 'orchestrator' ? 'inherits from the orchestrator' : 'inherits the global default';
+}
+
+/** "30 s, 1 min, 2 min": the waits as the owner reads them, seconds under a minute. */
+export function retryScheduleText(delaysMs: readonly number[]): string {
+  if (delaysMs.length === 0) return 'no wait';
+  return delaysMs
+    .map(ms => (ms % 60_000 === 0 ? `${ms / 60_000} min` : `${Math.round(ms / 1000)} s`))
+    .join(', ');
 }
 
 function unavailableText(status: AgentsStatus, error: string | null): string {
@@ -43,6 +51,7 @@ export function AgentsSettingsScreen({
   onOpenFallback,
   onOpenAgent,
   onNewAgent,
+  onSetRetry,
 }: {
   config: AgentsConfigResultFrame | null;
   status: AgentsStatus;
@@ -52,6 +61,7 @@ export function AgentsSettingsScreen({
   onOpenFallback: () => void;
   onOpenAgent: (key: string) => void;
   onNewAgent: () => void;
+  onSetRetry: (enabled: boolean) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
@@ -93,6 +103,28 @@ export function AgentsSettingsScreen({
           <View style={styles.category}>
             <Text style={styles.section}>defaults</Text>
             <View style={styles.card}>
+              {/* Above the model rows: a provider failure is what the schedule is for, and the
+                  switch is what decides whether a run survives one at all. Absent on a server
+                  that predates it, so the row is not drawn rather than drawn lying. */}
+              {config.retry ? (
+                <View style={styles.switchRow}>
+                  <View style={styles.switchLabel}>
+                    <Text style={styles.switchTitle}>Retry on provider failure</Text>
+                    <Text style={styles.hint}>
+                      {config.retry.enabled
+                        ? `a call the provider refused is tried again after ${retryScheduleText(config.retry.delaysMs)}, before another model is used`
+                        : 'a failed call moves to the next model at once'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={config.retry.enabled}
+                    onValueChange={value => onSetRetry(value)}
+                    accessibilityLabel="Retry on provider failure"
+                    accessibilityRole="switch"
+                  />
+                </View>
+              ) : null}
+              {config.retry ? <View style={styles.separator} /> : null}
               <Pressable
                 style={[styles.row, styles.link]}
                 onPress={onOpenDefaultModel}
@@ -234,6 +266,15 @@ const createStyles = (palette: Palette) => ({
   linkGlyph: { fontSize: 20, color: palette.textFaint },
   hint: { fontSize: font.small, color: palette.textMuted },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
+  switchRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+  },
+  switchLabel: { flex: 1, gap: 2 },
+  switchTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   badge: {
     fontSize: font.micro,
     color: palette.textFaint,
