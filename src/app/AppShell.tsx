@@ -3203,6 +3203,13 @@ export function AppShell(): React.JSX.Element {
       .send(encodeProvidersUpsert(key, { apiKeyEnv: name }))
       .catch(() => {});
   };
+  // The .env line itself goes away; the claim falls back to the captured pin. The server
+  // broadcasts a fresh providers.env.result right after the write.
+  const removeEnvLine = (name: string): void => {
+    if (providerBusy) return;
+    setProviderBusy(true);
+    connection.send(encodeProvidersEnvRemove(name)).catch(() => {});
+  };
   const unbindProviderEnv = (): void => {
     const key = providerEdit?.key;
     if (!key || providerBusy) return;
@@ -3735,6 +3742,8 @@ export function AppShell(): React.JSX.Element {
                     else setSettingsPage('provider');
                     setProviderEdit(null);
                   }}
+                  onEnvSet={saveEnvValue}
+                  onEnvRemove={removeEnvLine}
                 />
               ) : (
                 providersPage

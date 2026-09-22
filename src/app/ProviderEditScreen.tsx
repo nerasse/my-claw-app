@@ -33,6 +33,8 @@ export function ProviderEditScreen({
   onSave,
   onDelete,
   onOpenEnv,
+  onEnvSet,
+  onEnvRemove,
 }: {
   mode: 'create' | 'edit';
   /** The entry being edited, null in create mode. */
@@ -56,6 +58,9 @@ export function ProviderEditScreen({
   onDelete: () => void;
   onOpenEnv: () => void;
   onBack: () => void;
+  /** Writes one ~/.my-claw/.env line -- the Claude Code version lever lives there. */
+  onEnvSet: (name: string, value: string) => void;
+  onEnvRemove: (name: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [key, setKey] = useState(provider?.key ?? '');
@@ -73,6 +78,8 @@ export function ProviderEditScreen({
   const [fallbackModel, setFallbackModel] = useState(provider?.fallbackModel ?? '');
   const [apiKeyEnv, setApiKeyEnv] = useState(provider?.keyEnv ?? (mode === 'create' ? '' : ''));
   const [envValue, setEnvValue] = useState('');
+  const [cliVersion, setCliVersion] = useState('');
+  const claim = env?.claudeClaim;
 
   const envName = apiKeyEnv.trim();
   const envSet = envNamePresent(env, envName);
@@ -300,6 +307,54 @@ export function ProviderEditScreen({
           ) : null}
         </View>
 
+        {providerType === 'anthropic' ? (
+          <View style={styles.envCard}>
+            <Text style={styles.envTitle}>Claude Code version</Text>
+            <Text style={styles.note}>
+              {claim
+                ? claim.overridden
+                  ? `claims ${claim.version} · overridden in .env (the captured client claims ${claim.pinned})`
+                  : `claims ${claim.version} · the captured client, no override`
+                : 'the version subscription requests claim in their headers. Anthropic gates a new model on it.'}
+            </Text>
+            <Text style={styles.note}>
+              Stored in ~/.my-claw/.env as ANTHROPIC_CLI_VERSION. Applies on the next request of a run in flight: no restart, no end of run.
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={cliVersion}
+              onChangeText={setCliVersion}
+              placeholder={claim ? `pinned: ${claim.pinned}` : '2.1.280'}
+              placeholderTextColor={styles.placeholder.color}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="Claude Code version"
+            />
+            <Pressable
+              onPress={() => {
+                const value = cliVersion.trim();
+                if (!value) return;
+                onEnvSet('ANTHROPIC_CLI_VERSION', value);
+                setCliVersion('');
+              }}
+              style={[styles.saveButton, cliVersion.trim() ? styles.saveEnabled : styles.saveDisabled]}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !cliVersion.trim() }}
+              accessibilityLabel="Save Claude Code version">
+              <Text style={cliVersion.trim() ? styles.saveText : styles.saveTextOff}>Set version</Text>
+            </Pressable>
+            {claim?.overridden ? (
+              <Pressable
+                onPress={() => onEnvRemove('ANTHROPIC_CLI_VERSION')}
+                style={styles.dangerRow}
+                accessibilityRole="button"
+                accessibilityLabel="Use the pinned Claude Code version">
+                <Text style={styles.dangerText}>Use the pinned version</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
         <Pressable
           onPress={() =>
             onSave({
@@ -381,6 +436,15 @@ const createStyles = (palette: Palette) => ({
     color: palette.text,
   },
   placeholder: { color: palette.textFaint },
+  envCard: {
+    marginTop: space.lg,
+  },
+  envTitle: {
+    color: palette.text,
+    fontSize: font.body,
+    fontWeight: '600' as const,
+    marginBottom: space.xs,
+  },
   note: { fontSize: font.micro, color: palette.textFaint },
   segment: {
     flexDirection: 'row' as const,

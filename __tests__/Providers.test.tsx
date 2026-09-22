@@ -549,3 +549,56 @@ test('an override opens on the effective values and offers a reset, not a delete
   expect(labelsOf(tree)).not.toContain('Delete model');
   await settleAndUnmount(tree);
 });
+
+/**
+ * The Claude Code version lever, on the anthropic provider page (owner, 2026-09-22): a new model
+ * is gated on the client version the subscription request claims, and a release must not be the
+ * only way to move it. The card writes one .env line and shows where the number comes from; the
+ * server re-broadcasts the claim right after the write, hot from the next request.
+ */
+test('the anthropic provider page steers the claimed client version through .env', async () => {
+  const tree = await bootToProviders();
+  await emit({ ...providersConfig(), providers: [{ key: 'claude', type: 'anthropic', discover: true, models: 1 }] });
+  await emit(envResult({ claudeClaim: { version: '2.1.280', pinned: '2.1.280', overridden: false } }));
+  await pressLabel(tree, 'Open provider claude');
+  await waitFor(() => labelsOf(tree).includes('Edit provider'));
+  await pressLabel(tree, 'Edit provider');
+  await waitFor(() => labelsOf(tree).includes('Claude Code version'));
+
+  // The claim is on screen, and says it is the captured client while nothing is steering.
+  expect(textsOf(tree).join('\n')).toContain('claims 2.1.280');
+
+  await typeInto(tree, 'Claude Code version', '2.1.300');
+  const before = sentFrames().length;
+  await pressLabel(tree, 'Save Claude Code version');
+  await waitFor(() => sentFrames().length > before, 60);
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'providers.env.set', name: 'ANTHROPIC_CLI_VERSION', value: '2.1.300' }),
+    ]),
+  );
+
+  // The write is answered with a fresh claim: the page now knows the line is steering it, and
+  // offers the way back to the pin. A removal is its own frame on the .env line, never an upsert.
+  await emit(envResult({ claudeClaim: { version: '2.1.300', pinned: '2.1.280', overridden: true } }));
+  await waitFor(() => labelsOf(tree).includes('Use the pinned Claude Code version'), 60);
+  await pressLabel(tree, 'Use the pinned Claude Code version');
+  await waitFor(
+    () => sentFrames().some(f => f.type === 'providers.env.remove' && f.name === 'ANTHROPIC_CLI_VERSION'),
+    60,
+  );
+
+  await settleAndUnmount(tree);
+});
+
+test('a provider that is not anthropic gets no version card', async () => {
+  const tree = await bootToProviders();
+  await emit(envResult({ claudeClaim: { version: '2.1.280', pinned: '2.1.280', overridden: false } }));
+  await pressLabel(tree, 'Open provider litellm');
+  await waitFor(() => labelsOf(tree).includes('Edit provider'));
+  await pressLabel(tree, 'Edit provider');
+  await waitFor(() => labelsOf(tree).includes('Save provider'));
+  expect(labelsOf(tree)).not.toContain('Claude Code version');
+
+  await settleAndUnmount(tree);
+});

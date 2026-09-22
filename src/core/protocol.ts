@@ -2193,6 +2193,12 @@ export interface ProvidersEnvResultFrame {
   present: string[];
   /** provider key -> the env name it reads. */
   usedBy: Record<string, string>;
+  /**
+   * What a Claude subscription request claims as its client version: the wire value, the captured
+   * pin it defaults to, and whether ~/.my-claw/.env is steering it. Absent from a server older
+   * than the lever, which is why the provider page draws its pinned-only line without it.
+   */
+  claudeClaim?: { version: string; pinned: string; overridden: boolean };
 }
 
 /** The one editable provider shape: everything `providers.upsert` accepts. Empty strings on an
