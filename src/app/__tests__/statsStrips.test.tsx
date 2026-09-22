@@ -45,7 +45,7 @@ function payload(): StatsPayload {
     reconciliation: [],
     cache: { promptTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, readSharePct: 0, writeSharePct: 0 },
     filter: {},
-    facets: { models: [], providers: [], callers: [], sessions: [] },
+    facets: { models: [], providers: [], callers: [], sessions: [], workspaces: [], folders: [] },
   };
 }
 

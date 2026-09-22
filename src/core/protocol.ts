@@ -1386,6 +1386,10 @@ export interface StatsFilter {
   provider?: string;
   caller?: string;
   sessionId?: string;
+  /** Where the call ran from: a workspace key, "default", or the unknown sentinel. */
+  workspace?: string;
+  /** The folder the call was filed as at call time, or the none sentinel. */
+  folderId?: string;
   errorsOnly?: boolean;
   unpricedOnly?: boolean;
 }
@@ -1402,6 +1406,16 @@ export interface StatsFacets {
   providers: string[];
   callers: string[];
   sessions: StatsFacetSession[];
+  /** Where the window's calls ran from, the unknown sentinel included. */
+  workspaces: string[];
+  /** The folders the window's calls were filed as, named. */
+  folders: StatsFacetFolder[];
+}
+
+/** One folder as the filter sheet offers it: the id the filter matches, and what to call it. */
+export interface StatsFacetFolder {
+  folderId: string;
+  label: string;
 }
 
 /** A conversation as the filter sheet offers it: the same label the ranking uses. */
@@ -1461,6 +1475,11 @@ export interface StatsSessionRow extends StatsTotals {
   labelSource: StatsLabelSource;
   /** The session is gone from disk. Its rows are not, and this is what says so. */
   deleted: boolean;
+  /**
+   * A run of a sub-agent or the browser, not a conversation of the drawer. The page files these
+   * under "delegated runs" instead of counting 364 workers as 364 chats.
+   */
+  delegated: boolean;
   firstAt: string;
   lastAt: string;
 }

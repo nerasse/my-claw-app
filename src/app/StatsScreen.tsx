@@ -10,6 +10,7 @@ import {
   FILTER_CHIPS,
   chipValue,
   choicesOf,
+  callerLabel,
   filterCount,
   filterSummary,
   isChoice,
@@ -45,9 +46,15 @@ import type {
  *
  * Six tabs, on one window and one filter. The page is a lot of figures and the folds were the wrong
  * shape for it -- a screen that unrolled nine sections in a column buried the eight below the third.
- * A tab answers one question at a time, and the filter row above them holds the same six dimensions
+ * A tab answers one question at a time, and the filter row above them holds the same dimensions
  * wherever it is used: the narrowing happens in SQL, on the server, so every figure on the tab
  * describes the same smaller population and none of them is a re-scaled total.
+ *
+ * The sixth tab is a drawer, on purpose. Endpoints, sources and the provider ledger are what the
+ * owner opens one day in a hundred (2026-09-22: "cacher les analytiques useless 99% du temps"),
+ * and each of them is a table nobody reads on an ordinary visit. Advanced holds them all, out of
+ * the rotation, with the vocabulary settled: an endpoint is an endpoint, and who drove a call is
+ * its "source" (main agent, sub-agents, compaction, browser) rather than its "caller".
  *
  * One request per period, per filter, per opening: nothing pushes an install-wide total, so the page
  * asks, and says so when the answer is refused.
@@ -55,15 +62,15 @@ import type {
 
 const PERIODS: readonly StatsPeriod[] = ['7d', '30d', '90d', 'all'];
 
-type StatsTab = 'overview' | 'models' | 'hosts' | 'conversations' | 'cache' | 'reliability';
+type StatsTab = 'overview' | 'models' | 'conversations' | 'cache' | 'reliability' | 'advanced';
 
 const TABS: ReadonlyArray<{ key: StatsTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'models', label: 'Models' },
-  { key: 'hosts', label: 'Hosts' },
   { key: 'conversations', label: 'Conversations' },
   { key: 'cache', label: 'Cache' },
   { key: 'reliability', label: 'Reliability' },
+  { key: 'advanced', label: 'Advanced' },
 ];
 
 /** How many conversations the ranking draws before it folds the rest into one line. */
@@ -473,15 +480,16 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
             {tab === 'overview' ? <Overview stats={payload} /> : null}
             {tab === 'models' ? <Models rows={payload.models} /> : null}
-            {tab === 'hosts' ? (
-              <>
-                <Providers rows={payload.providers} />
-                <Reconciliation entries={payload.reconciliation} />
-              </>
-            ) : null}
             {tab === 'conversations' ? <Sessions stats={payload} /> : null}
             {tab === 'cache' ? <CacheFold cache={payload.cache} /> : null}
             {tab === 'reliability' ? <Reliability rows={payload.reliability} /> : null}
+            {tab === 'advanced' ? (
+              <>
+                <Providers rows={payload.providers} />
+                <Callers rows={payload.callers} />
+                <Reconciliation entries={payload.reconciliation} />
+              </>
+            ) : null}
           </ScrollView>
         )
       ) : null}
@@ -584,7 +592,6 @@ function Overview({ stats }: { stats: StatsPayload }): React.JSX.Element {
         {reach ? <Text style={styles.codeNote}>{reach}</Text> : null}
       </Card>
       <Timeline stats={stats} />
-      <Callers rows={stats.callers} />
       <TopModels rows={stats.models.slice(0, OVERVIEW_ROWS)} rest={Math.max(0, stats.models.length - OVERVIEW_ROWS)} />
     </>
   );
@@ -653,43 +660,87 @@ function Timeline({ stats }: { stats: StatsPayload }): React.JSX.Element {
  * Which conversations spent it, the ones that no longer exist included. Their calls are still on
  * disk and dropping them would make this ranking add up to less than the total above it, so they
  * are listed and marked, never quietly folded into the living ones.
+ *
+ * In two sections. A run of a sub-agent or the browser is a worker, not a chat -- measured on this
+ * install, 364 of the 533 sessions of one window were workers (2026-09-22) -- so the conversations
+ * answer "which chat cost this" and the delegated runs sit under them, folded by default. Their
+ * money is kept, never merged into the payer's row: the owner asked for the runs as their own
+ * section, and a spend the rows cannot account for is what this page never shows.
  */
 function Sessions({ stats }: { stats: StatsPayload }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const note = horizonNote(stats);
-  const rows = stats.sessions;
-  const shown = rows.slice(0, SESSION_ROWS);
-  const rest = rows.slice(SESSION_ROWS);
-  const deleted = rows.filter(row => row.deleted).length;
+  const [delegatedOpen, setDelegatedOpen] = useState(false);
+  const own = stats.sessions.filter(row => !row.delegated);
+  const delegated = stats.sessions.filter(row => row.delegated);
   return (
-    <Card>
-      <CardHead title="conversations" trailing={`${rows.length}`} />
-      {deleted > 0 ? (
-        <Text style={styles.cardNote}>{`${deleted} of them no longer exist on disk; their calls do.`}</Text>
-      ) : null}
-      {note ? <Text style={styles.frontier}>{note}</Text> : null}
-      <View style={styles.rank}>
-        {shown.map(row => {
-          const label = sessionLabel(row);
-          return (
-            <RankRow
-              key={row.sessionId}
-              name={label.text}
-              mono={label.mono}
-              muted={row.deleted}
-              badge={row.deleted ? 'deleted' : undefined}
-              detail={`${row.firstAt.slice(0, 10)} → ${row.lastAt.slice(0, 10)}`}
-              totals={row}
-              accessibilityLabel={sessionRowLabel(row)}
+    <>
+      <Card>
+        <CardHead title="conversations" trailing={`${own.length}`} />
+        {own.some(row => row.deleted) ? (
+          <Text style={styles.cardNote}>{`${own.filter(row => row.deleted).length} of them no longer exist on disk; their calls do.`}</Text>
+        ) : null}
+        {note ? <Text style={styles.frontier}>{note}</Text> : null}
+        <View style={styles.rank}>
+          {own.slice(0, SESSION_ROWS).map(row => {
+            const label = sessionLabel(row);
+            return (
+              <RankRow
+                key={row.sessionId}
+                name={label.text}
+                mono={label.mono}
+                muted={row.deleted}
+                badge={row.deleted ? 'deleted' : undefined}
+                detail={`${row.firstAt.slice(0, 10)} → ${row.lastAt.slice(0, 10)}`}
+                totals={row}
+                accessibilityLabel={sessionRowLabel(row)}
+              />
+            );
+          })}
+        </View>
+        {own.length === 0 ? <Text style={styles.cardNote}>no conversation recorded in this window.</Text> : null}
+        {own.length > SESSION_ROWS ? (
+          <Text style={styles.codeNote}>{`+ ${own.length - SESSION_ROWS} more, ${own.slice(SESSION_ROWS).filter(row => row.deleted).length} of them deleted`}</Text>
+        ) : null}
+      </Card>
+      {delegated.length > 0 ? (
+        <Card>
+          <Pressable
+            onPress={() => setDelegatedOpen(open => !open)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: delegatedOpen }}
+            accessibilityLabel={delegatedOpen ? 'Fold delegated runs' : 'Unfold delegated runs'}>
+            <CardHead
+              title={delegatedOpen ? '▾ delegated runs' : '▸ delegated runs'}
+              trailing={`${delegated.length} · sub-agents and browser`}
             />
-          );
-        })}
-      </View>
-      {rows.length === 0 ? <Text style={styles.cardNote}>no conversation recorded in this window.</Text> : null}
-      {rest.length > 0 ? (
-        <Text style={styles.codeNote}>{`+ ${rest.length} more, ${rest.filter(row => row.deleted).length} of them deleted`}</Text>
+          </Pressable>
+          <Text style={styles.cardNote}>worker runs a conversation drove; their calls are billed to it.</Text>
+          {delegatedOpen ? (
+            <View style={styles.rank}>
+              {delegated.slice(0, SESSION_ROWS).map(row => {
+                const label = sessionLabel(row);
+                return (
+                  <RankRow
+                    key={row.sessionId}
+                    name={label.text}
+                    mono={label.mono}
+                    muted={row.deleted}
+                    badge={row.deleted ? 'deleted' : undefined}
+                    detail={`${row.firstAt.slice(0, 10)} → ${row.lastAt.slice(0, 10)}`}
+                    totals={row}
+                    accessibilityLabel={sessionRowLabel(row)}
+                  />
+                );
+              })}
+              {delegated.length > SESSION_ROWS ? (
+                <Text style={styles.codeNote}>{`+ ${delegated.length - SESSION_ROWS} more`}</Text>
+              ) : null}
+            </View>
+          ) : null}
+        </Card>
       ) : null}
-    </Card>
+    </>
   );
 }
 
@@ -714,7 +765,7 @@ function Providers({ rows }: { rows: StatsProviderRow[] }): React.JSX.Element | 
   if (rows.length === 0) return null;
   return (
     <Card>
-      <CardHead title="providers" trailing={`${rows.length} · by what they are worth`} />
+      <CardHead title="endpoints" trailing={`${rows.length} · by what they are worth`} />
       <Text style={styles.cardNote}>An endpoint pin where the model carries one (`streamlake/fp8`), the host otherwise.</Text>
       <View style={styles.rank}>
         {rows.map(row => (
@@ -726,18 +777,18 @@ function Providers({ rows }: { rows: StatsProviderRow[] }): React.JSX.Element | 
   );
 }
 
-/** Who drove the calls: the orchestrator, the sub-agents it spawned, the browser, the compactions. */
+/** Who drove the calls: the main agent, the sub-agents it spawned, the browser, the compactions. */
 function Callers({ rows }: { rows: StatsCallerRow[] }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   if (rows.length === 0) return null;
   const total = rows.reduce((sum, row) => sum + row.calls, 0) || 1;
   return (
     <Card>
-      <CardHead title="callers" trailing={`${rows.length}`} />
+      <CardHead title="source" trailing={`${rows.length}`} />
       <View style={styles.rank}>
         {rows.map(row => (
           <View key={row.caller}>
-            <RankRow name={row.caller} totals={row} detail={`${Math.round((row.calls / total) * 100)}% of calls`} />
+            <RankRow name={callerLabel(row.caller)} totals={row} detail={`${Math.round((row.calls / total) * 100)}% of calls`} />
             <Meter pct={(row.calls / total) * 100} />
           </View>
         ))}

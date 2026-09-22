@@ -10,15 +10,29 @@ describes the filter the page is asked through.
   with `· filtered` appended once anything is narrowing.
 - Four period buttons: `7d`, `30d`, `90d`, `all`. A period press re-asks the server **with the
   filter on screen**, so the two always travel together.
-- **The filter row**: `Model`, `Host`, `Caller`, `Conversation`, `Failed only`, `Unpriced`. A chip
-  carries its value once it is set -- `Model · glm-5.2` -- so the row *is* the state of the report;
-  a choice chip opens a sheet of values (with a search row for models and conversations, the two
-  lists long enough to need one), a predicate chip is its own list and a tap is the answer. `✕ clear`
-  appears as soon as anything is set, and a report that matches nothing says what narrowed it and
-  offers the way back.
-- **Six tabs**: Overview, Models, Hosts, Conversations, Cache, Reliability. They are the answer to a
-  page that had grown nine folds in one column: a tab answers one question, and the filter row sits
-  above all of them because it narrows all of them.
+- **The filter row**: `Workspace`, `Folder`, `Model`, `Endpoint`, `Source`, `Conversation`,
+  `Failed only`, `Unpriced`. The first two are the scoping ones -- "how much did that project cost"
+  is the question this page gets asked. A chip carries its value once it is set -- `Model · glm-5.2`
+  -- so the row *is* the state of the report; a choice chip opens a sheet of values (with a search
+  row for models and conversations, the two lists long enough to need one), a predicate chip is its
+  own list and a tap is the answer. `✕ clear` appears as soon as anything is set, and a report that
+  matches nothing says what narrowed it and offers the way back.
+- **Six tabs**: Overview, Models, Conversations, Cache, Reliability, Advanced. They are the answer
+  to a page that had grown nine folds in one column: a tab answers one question, and the filter row
+  sits above all of them because it narrows all of them.
+
+**Advanced is a drawer, on purpose** (2026-09-22: "cacher les analytiques useless 99% du temps").
+The endpoints ranking, the source split and the OpenRouter ledger are tables nobody reads on an
+ordinary visit, so they moved out of the rotation together. The vocabulary moved with them:
+`Hosts` is `Endpoint`, `Caller` is `Source`, and its values are drawn as `main agent`,
+`sub-agents`, `browser`, `compaction`, `compaction · speculative` (`callerLabel`; the rows keep
+their raw values, only the labels are spoken).
+
+**Conversations is two sections** (2026-09-22). A run of a sub-agent or the browser is a worker,
+not a chat -- measured on this install, 364 of one window's 533 sessions were workers -- so the
+conversations section lists the chats and "delegated runs" sits under it, folded by default and
+openable. Nothing is merged into the payer's row: the runs keep their own spend where the owner
+asked for it.
 
 The tabs and the filter are app-side state; the **narrowing is not**. It leaves with the period as
 `stats.get { period, filter }` and the server applies it in SQL, before the aggregation. That is the

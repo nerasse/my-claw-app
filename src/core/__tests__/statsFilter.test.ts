@@ -1,5 +1,6 @@
 import {
   FILTER_CHIPS,
+  callerLabel,
   chipValue,
   choicesOf,
   filterCount,
@@ -19,6 +20,11 @@ const FACETS: StatsFacets = {
   models: ['z-ai/glm-5.2@streamlake/fp8', 'vendor/model-small'],
   providers: ['https://api.vendor.test/v1', 'https://openrouter.ai/api/v1'],
   callers: ['browser', 'orchestrator'],
+  workspaces: ['(unknown)', 'dev'],
+  folders: [
+    { folderId: '(none)', label: '(none)' },
+    { folderId: 'folder-career', label: 'career' },
+  ],
   sessions: [
     { sessionId: 'fixture/alive', label: 'Plan de travail', labelSource: 'title', deleted: false },
     { sessionId: 'fixture/gone', label: 'fixture/gone-7f3c1d', labelSource: 'id', deleted: true },
@@ -104,9 +110,10 @@ describe('the rows a sheet offers', () => {
     expect(choicesOf(FACETS, 'provider')[0]).toEqual({ value: 'https://api.vendor.test/v1', label: 'api.vendor.test' });
     expect(choicesOf(FACETS, 'sessionId')[1]).toEqual({ value: 'fixture/gone', label: 'fixture/gone-7f3c1d · deleted' });
     // The value that travels is the one the server matches on, never the label.
+    // The label is what the page calls it; the value that travels is still what the rows carry.
     expect(choicesOf(FACETS, 'caller')).toEqual([
       { value: 'browser', label: 'browser' },
-      { value: 'orchestrator', label: 'orchestrator' },
+      { value: 'orchestrator', label: 'main agent' },
     ]);
   });
 
@@ -122,7 +129,52 @@ describe('the sentence an empty screen owes', () => {
       'model model-small · failed only',
     );
     expect(filterSummary({ provider: 'https://openrouter.ai/api/v1', sessionId: 'fixture/gone' }, FACETS)).toBe(
-      'host openrouter.ai · conversation fixture/gone-7f3c1d · deleted',
+      'endpoint openrouter.ai · conversation fixture/gone-7f3c1d · deleted',
     );
+  });
+});
+
+describe('the two scoping dimensions', () => {
+  it('offers the workspaces and the named folders of the window', () => {
+    // The labels come from the server's facets: a folder is a name to the owner, and the id is
+    // only what the row carries.
+    expect(choicesOf(FACETS, 'workspace')).toEqual([
+      { value: '(unknown)', label: '(unknown)' },
+      { value: 'dev', label: 'dev' },
+    ]);
+    expect(choicesOf(FACETS, 'folderId')).toEqual([
+      { value: '(none)', label: '(none)' },
+      { value: 'folder-career', label: 'career' },
+    ]);
+  });
+
+  it('names a folder in the chip, falling back to the id for a payload that predates the field', () => {
+    expect(chipValue({ folderId: 'folder-career' }, 'folderId', FACETS)).toBe('career');
+    expect(chipValue({ folderId: 'gone-with-the-payload' }, 'folderId', FACETS)).toBe('gone-with-the-payload');
+  });
+
+  it('tells two reports apart on them like on any other dimension', () => {
+    expect(sameFilter({ workspace: 'dev' }, { workspace: 'dev' })).toBe(true);
+    expect(sameFilter({ workspace: 'dev' }, { workspace: 'career' })).toBe(false);
+    expect(sameFilter({ folderId: 'folder-career' }, {})).toBe(false);
+  });
+});
+
+describe('the vocabulary of who drove a call', () => {
+  it('calls a caller what a person would call it', () => {
+    // `orchestrator` and `compaction-speculative` are code names. The rows keep them; the page
+    // says "main agent" and "compaction · speculative".
+    expect(callerLabel('orchestrator')).toBe('main agent');
+    expect(callerLabel('subagent')).toBe('sub-agents');
+    expect(callerLabel('compaction-speculative')).toBe('compaction · speculative');
+    // An unknown value stands as itself rather than disappearing behind a wrong word.
+    expect(callerLabel('something-new')).toBe('something-new');
+  });
+
+  it('uses the same words in the sheet that it draws on the rows', () => {
+    expect(choicesOf(FACETS, 'caller')).toEqual([
+      { value: 'browser', label: 'browser' },
+      { value: 'orchestrator', label: 'main agent' },
+    ]);
   });
 });

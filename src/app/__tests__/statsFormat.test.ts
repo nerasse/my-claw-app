@@ -62,7 +62,7 @@ function payload(over: Partial<StatsPayload> = {}): StatsPayload {
     callers: [],
     reconciliation: [],
     filter: {},
-    facets: { models: [], providers: [], callers: [], sessions: [] },
+    facets: { models: [], providers: [], callers: [], sessions: [], workspaces: [], folders: [] },
     ...over,
   };
 }
@@ -74,6 +74,7 @@ function sessionRow(over: Partial<StatsSessionRow> = {}): StatsSessionRow {
     label: 'Cuisine, plan de travail',
     labelSource: 'title',
     deleted: false,
+    delegated: false,
     firstAt: '2026-05-04T08:00:00.000Z',
     lastAt: '2026-05-06T19:00:00.000Z',
     ...over,

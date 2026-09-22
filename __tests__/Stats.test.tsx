@@ -91,6 +91,7 @@ function report(period: StatsPeriod, over: Partial<StatsPayload> = {}): StatsPay
         label: 'Plan de travail cuisine',
         labelSource: 'title',
         deleted: false,
+        delegated: false,
         firstAt: '2026-05-04T08:00:00.000Z',
         lastAt: '2026-05-06T19:00:00.000Z',
         calls: 25,
@@ -106,6 +107,7 @@ function report(period: StatsPeriod, over: Partial<StatsPayload> = {}): StatsPay
         label: 'fixture/gone-7f3c1d',
         labelSource: 'id',
         deleted: true,
+        delegated: false,
         firstAt: '2026-05-05T08:00:00.000Z',
         lastAt: '2026-05-05T09:00:00.000Z',
         calls: 15,
@@ -144,6 +146,11 @@ function report(period: StatsPeriod, over: Partial<StatsPayload> = {}): StatsPay
       models: ['vendor/model-big', 'vendor/model-small'],
       providers: ['api.other.test', 'api.vendor.test'],
       callers: ['orchestrator', 'subagent'],
+      workspaces: ['default', 'dev'],
+      folders: [
+        { folderId: '(none)', label: '(none)' },
+        { folderId: 'folder-career', label: 'career' },
+      ],
       sessions: [
         { sessionId: 'fixture/alive', label: 'Plan de travail cuisine', labelSource: 'title', deleted: false },
         { sessionId: 'fixture/gone', label: 'fixture/gone-7f3c1d', labelSource: 'id', deleted: true },
@@ -436,6 +443,99 @@ test('a server that ignores the filter says so, instead of waiting for an answer
     await emit({ type: 'stats.result', stats: older });
     await waitFor(() => screen(tree).includes('this server does not apply a filter'));
     expect(screen(tree)).not.toContain('asking the server…');
+  } finally {
+    await unmount(tree);
+  }
+});
+
+/**
+ * The owner, 2026-09-22: the page "fait fouilli" and must "cacher les analytiques useless 99% du
+ * temps". What answers one day in a hundred sits in Advanced, the worker runs are filed apart from
+ * the conversations they served, and the two scoping filters -- workspace, folder -- are the first
+ * chips of the row.
+ */
+test('the conversations tab files worker runs apart, folded by default', async () => {
+  const worker = {
+    ...ZERO,
+    sessionId: 'subagent/run-9f3a',
+    label: 'researcher',
+    labelSource: 'title' as const,
+    deleted: false,
+    delegated: true,
+    firstAt: '2026-05-05T08:00:00.000Z',
+    lastAt: '2026-05-05T09:00:00.000Z',
+    calls: 5,
+    promptTokens: 50_000,
+    completionTokens: 2_000,
+    cacheReadTokens: 10_000,
+    billedUsd: 1,
+    referenceUsd: 0,
+    durationMs: 30_000,
+  };
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    await emit({ type: 'stats.result', stats: report('30d', { sessions: [...report('30d').sessions, worker] }) });
+    await waitFor(() => screen(tree).includes('total · last 30 days'));
+    await pressLabel(tree, 'Conversations');
+    await waitFor(() => screen(tree).includes('Plan de travail cuisine'));
+
+    // 364 of 533 sessions of one window were workers (measured 2026-09-22): they must not read as
+    // 364 chats. The conversations section counts its own.
+    expect(screen(tree)).not.toContain('researcher');
+    expect(screen(tree)).toContain('▸ delegated runs');
+
+    await pressLabel(tree, 'Unfold delegated runs');
+    await waitFor(() => screen(tree).includes('researcher'));
+    expect(screen(tree)).toContain('worker runs a conversation drove');
+  } finally {
+    await unmount(tree);
+  }
+});
+
+test('what one day in a hundred needs sits in Advanced, and the overview stays a shape', async () => {
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    await emit({ type: 'stats.result', stats: report('30d') });
+    await waitFor(() => screen(tree).includes('total · last 30 days'));
+
+    // "who drove it" is a table, not a shape: it left the overview with the endpoints and the
+    // ledger, and the caller values are called what a person calls them.
+    expect(screen(tree)).not.toContain('main agent');
+
+    await pressLabel(tree, 'Advanced');
+    await waitFor(() => screen(tree).includes('endpoints'));
+    const text = screen(tree);
+    expect(text).toContain('source');
+    expect(text).toContain('main agent');
+    expect(text).toContain('ledger.example');
+  } finally {
+    await unmount(tree);
+  }
+});
+
+test('the workspace and the folder are the first filters of the row', async () => {
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    await emit({ type: 'stats.result', stats: report('30d') });
+    await waitFor(() => screen(tree).includes('total · last 30 days'));
+
+    await pressLabel(tree, 'Workspace filter, off');
+    await waitFor(() => labelsOf(tree).includes('dev'));
+    await pressLabel(tree, 'dev');
+    expect(sentFrames()).toContainEqual({ type: 'stats.get', period: '30d', filter: { workspace: 'dev' } });
+
+    // The second sheet lists the facets of an answer, so the first one has to land before it can
+    // open: a sheet built from no payload would offer nothing to pick.
+    await emit({ type: 'stats.result', stats: report('30d', { filter: { workspace: 'dev' } }) });
+    await waitFor(() => labelsOf(tree).includes('Workspace filter, dev, tap to change'));
+
+    await pressLabel(tree, 'Folder filter, off');
+    await waitFor(() => labelsOf(tree).includes('career'));
+    await pressLabel(tree, 'career');
+    expect(sentFrames()).toContainEqual({ type: 'stats.get', period: '30d', filter: { workspace: 'dev', folderId: 'folder-career' } });
   } finally {
     await unmount(tree);
   }

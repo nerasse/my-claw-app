@@ -10,7 +10,7 @@ import type { StatsFacets, StatsFilter } from './protocol';
  */
 
 /** The four dimensions that take a value: each one opens a list. */
-export type FilterChoiceKey = 'model' | 'provider' | 'caller' | 'sessionId';
+export type FilterChoiceKey = 'workspace' | 'folderId' | 'model' | 'provider' | 'caller' | 'sessionId';
 /** The two that are a predicate on the call rather than a choice: tapping one toggles it. */
 export type FilterFlagKey = 'errorsOnly' | 'unpricedOnly';
 export type FilterKey = FilterChoiceKey | FilterFlagKey;
@@ -19,18 +19,22 @@ export type FilterKey = FilterChoiceKey | FilterFlagKey;
  * The chip row, in draw order.
  *
  * A chip reads `Model · glm-5.2` once the dimension is set and `Model` while it is open, so the row
- * is the state: there is no separate summary line to keep in step with it.
+ * is the state: there is no separate summary line to keep in step with it. The first two are the
+ * scoping ones -- which workspace, which folder -- because "how much did that project cost" is the
+ * question this page gets asked.
  */
 export const FILTER_CHIPS: ReadonlyArray<{ key: FilterKey; label: string; sheet?: string }> = [
+  { key: 'workspace', label: 'Workspace', sheet: 'Workspace' },
+  { key: 'folderId', label: 'Folder', sheet: 'Folder' },
   { key: 'model', label: 'Model', sheet: 'Model' },
-  { key: 'provider', label: 'Host', sheet: 'Host' },
-  { key: 'caller', label: 'Caller', sheet: 'Caller' },
+  { key: 'provider', label: 'Endpoint', sheet: 'Endpoint' },
+  { key: 'caller', label: 'Source', sheet: 'Source' },
   { key: 'sessionId', label: 'Conversation', sheet: 'Conversation' },
   { key: 'errorsOnly', label: 'Failed only' },
   { key: 'unpricedOnly', label: 'Unpriced' },
 ];
 
-const CHOICE_KEYS: readonly FilterKey[] = ['model', 'provider', 'caller', 'sessionId'];
+const CHOICE_KEYS: readonly FilterKey[] = ['workspace', 'folderId', 'model', 'provider', 'caller', 'sessionId'];
 
 export function isChoice(key: FilterKey): key is FilterChoiceKey {
   return CHOICE_KEYS.includes(key);
@@ -62,6 +66,8 @@ export function sameFilter(a: StatsFilter, b: StatsFilter): boolean {
     a.provider === b.provider &&
     a.caller === b.caller &&
     a.sessionId === b.sessionId &&
+    a.workspace === b.workspace &&
+    a.folderId === b.folderId &&
     (a.errorsOnly === true) === (b.errorsOnly === true) &&
     (a.unpricedOnly === true) === (b.unpricedOnly === true)
   );
@@ -109,6 +115,29 @@ export function sessionChoiceLabel(facets: StatsFacets | undefined, sessionId: s
   return held.deleted ? `${held.label} · deleted` : held.label;
 }
 
+/** The same, for a folder: named by the server, and the id stands in for a payload that predates the field. */
+export function folderChoiceLabel(facets: StatsFacets | undefined, folderId: string): string {
+  return facets?.folders.find((folder) => folder.folderId === folderId)?.label ?? folderId;
+}
+
+/**
+ * What `caller` values are called on screen.
+ *
+ * `compaction-speculative` is a lane inside one feature and not a word anybody says out loud. The
+ * values stay what the rows carry; only the labels change.
+ */
+const CALLER_LABELS: Record<string, string> = {
+  orchestrator: 'main agent',
+  subagent: 'sub-agents',
+  browser: 'browser',
+  compaction: 'compaction',
+  'compaction-speculative': 'compaction · speculative',
+};
+
+export function callerLabel(value: string): string {
+  return CALLER_LABELS[value] ?? value;
+}
+
 /** What a chip shows beside its dimension name, or '' while that dimension is open. */
 export function chipValue(filter: StatsFilter, key: FilterKey, facets: StatsFacets | undefined): string {
   if (!isChoice(key)) return filter[key] === true ? 'on' : '';
@@ -117,6 +146,7 @@ export function chipValue(filter: StatsFilter, key: FilterKey, facets: StatsFace
   if (key === 'provider') return hostLabel(value);
   if (key === 'model') return modelLabel(value);
   if (key === 'sessionId') return sessionChoiceLabel(facets, value);
+  if (key === 'folderId') return folderChoiceLabel(facets, value);
   return value;
 }
 
@@ -133,9 +163,11 @@ export interface FilterChoice {
  */
 export function choicesOf(facets: StatsFacets | undefined, key: FilterChoiceKey): FilterChoice[] {
   if (facets === undefined) return [];
+  if (key === 'workspace') return facets.workspaces.map((value) => ({ value, label: value }));
+  if (key === 'folderId') return facets.folders.map((folder) => ({ value: folder.folderId, label: folder.label }));
   if (key === 'model') return facets.models.map((value) => ({ value, label: value }));
   if (key === 'provider') return facets.providers.map((value) => ({ value, label: hostLabel(value) }));
-  if (key === 'caller') return facets.callers.map((value) => ({ value, label: value }));
+  if (key === 'caller') return facets.callers.map((value) => ({ value, label: callerLabel(value) }));
   return facets.sessions.map((session) => ({
     value: session.sessionId,
     label: session.deleted ? `${session.label} · deleted` : session.label,
