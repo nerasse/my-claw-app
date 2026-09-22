@@ -234,8 +234,32 @@ Object.freeze(NO_PAGE);
  * dropped the bubble outright while the owner was watching it wait.
  */
 function isLocalLive(item: ChatItem): boolean {
-  if (item.kind === 'text') return item.streaming === true || item.queuedSince !== undefined;
-  return item.kind === 'tool' && item.running === true;
+  // A finished run streams nothing and runs nothing. A bubble still flagged under one is a frame
+  // that never came, not a turn in flight, and trusting the flag is what kept a stopped run's
+  // reasoning alive through every reload, re-appended under the answer with its counter still
+  // climbing (thread 4d5775e7, 2026-09-22: "Reasoning 23 min 43 s" after the last message).
+  const alive = !item.run || item.run.status === 'running';
+  if (item.kind === 'text') return (item.streaming === true && alive) || item.queuedSince !== undefined;
+  return item.kind === 'tool' && item.running === true && alive;
+}
+
+/**
+ * What a page leaves standing beside it: the items only this device holds.
+ *
+ * When the server says no run is answering on the thread, nothing can be streaming -- a bubble the
+ * device still marks so belongs to a run that is over, and the page is the whole truth about it.
+ * The owner's own sends survive (parked, or not yet on the log), because those are this device's
+ * to keep, and so does a tool card still marked running: `reconcileRuns` settles it as
+ * interrupted right after, the state its lost result leaves it in (a decision of its own, older
+ * than this one). Otherwise the rule is the one above.
+ */
+function survivesPage(item: ChatItem, activeRun: boolean | undefined, userBubbles: boolean): boolean {
+  const ownSend = item.kind === 'text' && item.role === 'user' && item.summaryOf === undefined;
+  if (activeRun === false) {
+    if (item.kind === 'tool') return item.running === true;
+    return ownSend && (userBubbles || item.queuedSince !== undefined);
+  }
+  return isLocalLive(item) || (userBubbles && ownSend);
 }
 
 /**
@@ -247,8 +271,8 @@ function isLocalLive(item: ChatItem): boolean {
  * window was computed before the entry landed -- and never a second identity for one it does.
  * Dropping it took the owner's own message off the screen while a run was answering it.
  */
-function windowLacks(item: ChatItem): boolean {
-  return isLocalLive(item) || (item.kind === 'text' && item.role === 'user');
+function windowLacks(item: ChatItem, activeRun?: boolean): boolean {
+  return survivesPage(item, activeRun, true);
 }
 
 /** The server speaks ISO strings; the store thinks in milliseconds. */
@@ -952,14 +976,35 @@ class ChatStoreImpl {
     const items = this.threads.get(threadId);
     if (!items) return;
     let changed = false;
+    const closed: string[] = [];
     this.threads.set(
       threadId,
       items.map(item => {
-        if (item.run?.id !== runId || item.run.status === status) return item;
+        if (item.run?.id !== runId) return item;
+        // A finished run streams nothing: a bubble it left open never gets its done frame (a Stop
+        // cut the call, the socket dropped it, the abort named another streamer), and its
+        // reasoning counter kept measuring against the clock. The span freezes at the run's end,
+        // the last instant it is known to have run, and the text is whatever had arrived.
+        const stillStreaming = status !== 'running' && item.kind === 'text' && item.streaming;
+        if (item.run.status === status && !stillStreaming) return item;
         changed = true;
-        return { ...item, run: { ...item.run, status, endTs } };
+        const run = { ...item.run, status, endTs };
+        if (!stillStreaming || item.kind !== 'text') return { ...item, run };
+        closed.push(item.id);
+        const frozen =
+          item.reasoningMs === undefined && item.reasoningStartedAt !== undefined
+            ? { reasoningMs: Math.max(0, endTs - item.reasoningStartedAt) }
+            : {};
+        return { ...item, run, streaming: false, text: this.streams.get(item.id) ?? item.text, ...frozen };
       }),
     );
+    // And the stream tables let go of them, so a frame that still turns up cannot reopen a bubble
+    // of a run that is over.
+    for (const id of closed) {
+      this.streams.delete(id);
+      this.reasoning.delete(id);
+      this.reasoningStart.delete(id);
+    }
     if (changed) this.emitSoon();
   }
 
@@ -1014,7 +1059,14 @@ class ChatStoreImpl {
       // run can be running, so the search goes from the end.
       const items = this.threads.get(threadId) ?? EMPTY_ITEMS;
       const running = [...items].reverse().find(item => item.run?.status === 'running');
-      if (running?.run) this.sealRun(threadId, running.run.id, 'done', running.run.endTs ?? Date.now());
+      if (running?.run) {
+        // At its last own item, the same verdict the server's page gives a dead run (`runFold`):
+        // the clock at the moment the thread is opened made its span a function of when the owner
+        // looked -- "run · 1 h 41 min" for a run that lived 47 (2026-09-22).
+        const runId = running.run.id;
+        const last = items.reduce((ts, item) => (item.run?.id === runId ? Math.max(ts, item.ts) : ts), running.run.startTs);
+        this.sealRun(threadId, runId, 'done', running.run.endTs ?? last);
+      }
       // And the cards of that run, whether or not the seal above had anything to do: the rename
       // may have carried the page's terminal status onto them already, which leaves no run marked
       // running for the search to find while a card of it is still in flight. The server says no
@@ -1107,11 +1159,11 @@ class ChatStoreImpl {
 
     if (reset) {
       // Reset: replace the thread. Only streaming items survive, because they exist only locally.
-      this.resetThread(threadId, entries);
+      this.resetThread(threadId, entries, activeRun);
     } else if (nextBefore !== undefined) {
       // The newest page of the branch, asked for with a null cursor: what the thread *is* over
       // the range it covers, not something to add to it.
-      this.applyWindow(threadId, entries);
+      this.applyWindow(threadId, entries, activeRun);
     } else {
       // Delta: append entries, replacing any with matching ids (live tool cards settling).
       this.appendSyncEntries(threadId, entries);
@@ -1142,7 +1194,7 @@ class ChatStoreImpl {
    * Reset (replace) a thread with server entries. Only streaming items survive.
    * Called on unknown-cursor or branch-switch.
    */
-  private resetThread(threadId: string, entries: HistoryEntry[]): void {
+  private resetThread(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
     // A fresh page post-dates whatever compaction this window last heard of. One still in flight
     // is replayed right after the page (docs/live-turn-replay.md), which sets the state again; one
     // that has settled is not, which is the point. The stop in flight follows the same rule for
@@ -1155,8 +1207,9 @@ class ChatStoreImpl {
     const known = new Set(base.map(item => item.id));
 
     // Only genuinely local items survive a reset: bubbles still being streamed into.
-    // These exist only in memory, the server cannot have them.
-    const live = existing.filter(item => !known.has(item.id) && isLocalLive(item));
+    // These exist only in memory, the server cannot have them -- and none exist once the server
+    // says no run is answering (`survivesPage`).
+    const live = existing.filter(item => !known.has(item.id) && survivesPage(item, activeRun, false));
 
     this.threads.set(threadId, [...base, ...live]);
     this.spawnCards.delete(threadId);
@@ -1178,7 +1231,7 @@ class ChatStoreImpl {
    * the range defers to the window, except what only this device holds (a bubble being streamed
    * into, a card still running, a send still parked), which belongs after it.
    */
-  private applyWindow(threadId: string, entries: HistoryEntry[]): void {
+  private applyWindow(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const base = this.itemsOfWithSpawnReconcile(threadId, entries);
     if (base.length === 0) return;
@@ -1203,7 +1256,7 @@ class ChatStoreImpl {
     const live = existing
       .slice(cut)
       .filter(item => {
-        if (known.has(item.id) || !windowLacks(item)) return false;
+        if (known.has(item.id) || !windowLacks(item, activeRun)) return false;
         return !(item.run && foldedRuns.has(item.run.id));
       });
 
@@ -1299,7 +1352,7 @@ class ChatStoreImpl {
     this.refreshRunning();
     
     // The newest page replaces the thread, same as a sync reset.
-    this.resetThread(threadId, entries);
+    this.resetThread(threadId, entries, activeRun);
 
     // Same reconciliation as a sync result, after the page is in: a history page opened mid-run
     // must adopt the real run id immediately, or the frames that follow would paint under a

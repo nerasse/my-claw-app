@@ -281,6 +281,17 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       const ended = chatStore.endRun(frame.threadId, frame.reason);
       // The run died with the message still in its mailbox, and it will never look at it.
       chatStore.clearQueued(frame.threadId, undefined, ['compaction', 'injection']);
+      // A Stop cuts the call in flight and the server writes nothing of it: whatever that call
+      // had streamed -- a reasoning block, half an answer -- is on this screen and in no log, so a
+      // reload drew a different thread than the one the owner had just watched. The newest page,
+      // asked for with a null cursor, is the thread as it is persisted: the window replaces the
+      // range it covers, and the screen converges on history the moment the run ends. Only a
+      // Stop: a finished run and the log agree by construction, and a failed one writes its
+      // `failure` entry seconds after its end, which a sync this early would miss.
+      if (ended && frame.reason === 'aborted' && frame.threadId === activeThreadId()) {
+        const { leaf } = chatStore.getSyncState(frame.threadId);
+        connection.send(encodeSessionSync(frame.threadId, null, leaf ?? undefined)).catch(() => {});
+      }
       // The run just finished on the thread on screen: one ring, exactly like a question hitting
       // the open thread. A run ending on any other thread (or the device in the background) is
       // the push's business -- server-side skipDevice keeps the tray silent for the foreground
