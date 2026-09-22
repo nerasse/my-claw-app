@@ -3679,6 +3679,7 @@ export function AppShell(): React.JSX.Element {
                   mode={modelEdit.mode}
                   model={modelEdit.model}
                   provider={modelEdit.provider}
+                  providerType={agentsConfig?.providers.find(p => p.key === modelEdit.provider)?.type}
                   declared={modelEdit.model?.declared === true}
                   discovered={modelEdit.model?.discovered === true}
                   error={agentsState.error}

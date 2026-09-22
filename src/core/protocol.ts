@@ -819,6 +819,16 @@ export interface ModelOption {
   /** The model's own full context window: the ceiling list is built under it, never above. */
   context?: number;
   /**
+   * The answer budget the model was given, resolved: a declaration, a table, or a family default.
+   * Carried so the edit form shows what runs instead of an empty field the next save would clear.
+   */
+  output?: number;
+  /**
+   * The message field this model reads its own prior reasoning back from, resolved the same way.
+   * Absent means nothing is replayed for it (docs/reasoning-replay.md).
+   */
+  reasoningField?: 'reasoning_content' | 'reasoning_details';
+  /**
    * Milliseconds this model declares it may go without a byte back, absent when it declares
    * nothing and the server's transport default applies. `0` is a declaration too: no timer, the
    * Stop button is the only wall. The edit form shows it so the field is not blank over a setting.
@@ -2885,6 +2895,8 @@ export interface ModelDeclaration {
   effortLevels?: string[];
   thinkingAdaptive?: boolean;
   thinkingEnabled?: boolean;
+  /** The field this model reads its own prior reasoning back from (docs/reasoning-replay.md). */
+  reasoningField?: 'reasoning_content' | 'reasoning_details';
   /** How long a request may go silent, in milliseconds. `0` disarms the server's timer. */
   timeoutMs?: number;
 }

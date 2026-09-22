@@ -9,6 +9,12 @@ const ID_RE = /^[^\s@]+$/;
 /** Every rung the Anthropic ladder publishes, plus the off rung the resolver adds. */
 const EFFORT_RUNGS: readonly string[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
 
+/** The two fields a chat-completions endpoint may want its own reasoning back in. */
+const REASONING_FIELDS: ReadonlyArray<{ label: string; value: 'reasoning_content' | 'reasoning_details' }> = [
+  { label: 'content', value: 'reasoning_content' },
+  { label: 'details', value: 'reasoning_details' },
+];
+
 /** What the form starts from: the effective values, whatever they came from. */
 export type ModelDraft = ModelOption | UnavailableModel | null;
 
@@ -55,6 +61,7 @@ export function ModelEditScreen({
   mode,
   model,
   provider,
+  providerType,
   declared,
   discovered,
   error,
@@ -68,6 +75,12 @@ export function ModelEditScreen({
   model: ModelDraft;
   /** Provider key the declaration belongs to, pinned by the page it was opened from. */
   provider: string;
+  /**
+   * That provider's type. Only the Anthropic transport sends a thinking type, so the two switches
+   * below are dead weight everywhere else -- saying so is the difference between a stored setting
+   * and one the owner believes is doing something.
+   */
+  providerType?: string;
   /** A `llm.models` entry already carries this id, so there is something to delete. */
   declared: boolean;
   /** Discovery serves this id too, so deleting is a reset rather than a removal. */
@@ -87,7 +100,8 @@ export function ModelEditScreen({
   const [family, setFamily] = useState('');
   const [vision, setVision] = useState(option?.vision ?? false);
   const [context, setContext] = useState(numberText(option?.context));
-  const [output, setOutput] = useState('');
+  const [output, setOutput] = useState(numberText(option?.output));
+  const [reasoningField, setReasoningField] = useState<string>(option?.reasoningField ?? '');
   const [timeoutMs, setTimeoutMs] = useState(numberText(option?.timeoutMs));
   const [supportsEffort, setSupportsEffort] = useState((option?.effortLevels?.length ?? 0) > 0);
   const [rungs, setRungs] = useState<string[]>(option?.effortLevels ?? []);
@@ -123,6 +137,9 @@ export function ModelEditScreen({
     if (thinkingAdaptive || thinkingEnabled) {
       entry.thinkingAdaptive = thinkingAdaptive;
       entry.thinkingEnabled = thinkingEnabled;
+    }
+    if (reasoningField === 'reasoning_content' || reasoningField === 'reasoning_details') {
+      entry.reasoningField = reasoningField;
     }
     onSave(entry);
   };
@@ -245,7 +262,7 @@ export function ModelEditScreen({
             keyboardType="number-pad"
             accessibilityLabel="Output limit"
           />
-          <Text style={styles.note}>blank keeps what the provider or models.dev says</Text>
+          <Text style={styles.note}>blank keeps what the provider, models.dev or the model's family says</Text>
         </View>
 
         <View style={styles.category}>
@@ -316,9 +333,34 @@ export function ModelEditScreen({
               accessibilityLabel="Thinking enabled"
             />
           </View>
+          <Text style={providerType === 'anthropic' ? styles.note : styles.warnNote}>
+            {providerType === 'anthropic'
+              ? 'naming a type the model refuses is an HTTP 400, so leave both off unless /v1/models said so'
+              : `not read by ${providerType ?? 'this provider'} · only the Anthropic transport sends a thinking type, so these switches are stored but change nothing here`}
+          </Text>
+        </View>
+
+        <View style={styles.category}>
+          <Text style={styles.section}>reasoning replay</Text>
+          <View style={styles.rungs}>
+            {REASONING_FIELDS.map(choice => {
+              const on = reasoningField === choice.value;
+              return (
+                <Pressable
+                  key={choice.label}
+                  onPress={() => setReasoningField(on ? '' : choice.value)}
+                  style={[styles.rung, on ? styles.rungOn : null]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`Reasoning field ${choice.label}${on ? ', selected' : ''}`}>
+                  <Text style={on ? styles.rungTextOn : styles.rungText}>{choice.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <Text style={styles.note}>
-            Anthropic only · naming a type the model refuses is an HTTP 400, so leave both off
-            unless /v1/models said so
+            the message field this model reads its own prior reasoning back from · models.dev
+            fills it, the model's family covers the rest, and off means nothing is replayed
           </Text>
         </View>
 
@@ -390,6 +432,7 @@ const createStyles = (palette: Palette) => ({
     fontSize: font.body,
     color: palette.text,
   },
+  warnNote: { color: palette.warn, fontSize: 12, lineHeight: 17 },
   placeholder: { color: palette.textFaint },
   note: { fontSize: font.micro, color: palette.textFaint },
   switchRow: {
