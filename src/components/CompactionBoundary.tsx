@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { CollapsibleAside } from './CollapsibleAside';
 import { useElapsed } from './CommandElapsed';
-import { formatThinkingSpan } from '../core/utils';
+import { formatSpan } from '../core/utils';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 function turns(count: number): string {
@@ -36,10 +36,15 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
     <View style={styles.row} accessibilityRole="summary">
       <View style={styles.rule}>
         <View style={styles.line} />
+        {/* How long the pass took, on the rule itself: the summary may be folded shut, and a
+            stopped pass has no summary at all -- the rule is the only line every boundary draws,
+            so it is where the counter belongs (2026-09-22). Absent before it was measured: drawn
+            as nothing rather than as a zero. */}
         <Text style={styles.label}>
-          {item.compactionStopped
+          {(item.compactionStopped
             ? `Compaction stopped · ${turns(count)} kept`
-            : `Context compacted · ${turns(count)} summarized`}
+            : `Context compacted · ${turns(count)} summarized`) +
+            (item.compactionMs !== undefined ? ` · ${formatSpan(item.compactionMs)}` : '')}
         </Text>
         <View style={styles.line} />
       </View>
@@ -50,11 +55,6 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
           showHint="Show what the compaction kept"
           hideHint="Hide the summary"
           persistKey={`compaction:${item.id}`}
-          trailing={
-            item.compactionMs !== undefined ? (
-              <Text style={styles.span}>{formatThinkingSpan(item.compactionMs)}</Text>
-            ) : undefined
-          }
         />
       ) : null}
     </View>
@@ -89,7 +89,7 @@ export function CompactionRunning({ since, text, reasoning, stopping }: { since:
           looks at it. The same word as the session menu, so one stop reads the same everywhere.
         */}
         <Text style={styles.label}>
-          {stopping ? 'Stopping…' : `Compacting the context · ${formatThinkingSpan(elapsed)}`}
+          {stopping ? 'Stopping…' : `Compacting the context · ${formatSpan(elapsed)}`}
         </Text>
         <View style={styles.line} />
       </View>

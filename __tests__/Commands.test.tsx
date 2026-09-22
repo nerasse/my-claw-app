@@ -481,7 +481,7 @@ test('a slow command shows it is running, and the result replaces that bubble', 
   await waitFor(() => allTexts(tree).some(text => text.includes('Running /compact...')), 60);
   // Nothing comes over the wire for the next minute or two, so the bubble counts on its own.
   expect(tree.root.findAllByType(CommandElapsed)).toHaveLength(1);
-  expect(allTexts(tree).some(text => text.trim() === '0s')).toBe(true);
+  expect(allTexts(tree).some(text => /^\d+ ms$/.test(text.trim()))).toBe(true);
 
   await emit({ type: 'chat.command.result', threadId: THREAD, replyToId: 'u2', text: 'Context compacted (SDK session summarized).' });
   await waitFor(() => allTexts(tree).some(text => text.includes('Context compacted')), 60);
@@ -507,9 +507,9 @@ test('a compaction in flight is one rule at the bottom, and its boundary takes i
   await waitFor(() => textLines(tree).some(text => text.includes('Compacting the context')), 60);
   expect(tree.root.findAllByType(CompactionRunning)).toHaveLength(1);
   // Counted from the server's start, not from when this window heard of it, and written with the
-  // two decimals the thinking spans use: the two counters sit on the same line of the same kind of
+  // one format every span shares: the two counters sit on the same line of the same kind of
   // aside, so one format for both.
-  expect(textLines(tree).some(text => /Compacting the context · 42\.\d\ds/.test(text))).toBe(true);
+  expect(textLines(tree).some(text => /Compacting the context · 42 s/.test(text))).toBe(true);
   // A rule across the thread, like the boundary it becomes: not a bubble, so nothing to long-press.
   expect(chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.role === 'agent')).toHaveLength(0);
 

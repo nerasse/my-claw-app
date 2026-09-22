@@ -83,7 +83,7 @@ test('nothing inside the thread can start a selection, tool cards included', asy
   expect(selectableNodes(tree)).toHaveLength(0);
 
   // The output of a tool is the densest text in the thread and the most tempting to drag over.
-  await press(tree, 'Tool bash, 4ms');
+  await press(tree, 'Tool bash, 4 ms');
   await waitFor(() => textsOf(tree).includes('hello from the shell'));
   expect(selectableNodes(tree)).toHaveLength(0);
 
@@ -128,7 +128,7 @@ test('the viewer holds the whole message, reasoning included, in one selectable 
 test('a tool card sends its output to the same viewer, raw', async () => {
   const tree = await renderThread();
 
-  await press(tree, 'Tool bash, 4ms');
+  await press(tree, 'Tool bash, 4 ms');
   await waitFor(() => textsOf(tree).includes('hello from the shell'));
   await press(tree, 'Select text in bash output');
   await waitFor(() => labelsOf(tree).includes('Close the selection view'));

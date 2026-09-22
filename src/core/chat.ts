@@ -78,9 +78,10 @@ export interface TextItem {
    */
   summaryOf?: number;
   /**
-   * How long the compaction took, when the server recorded it. Drawn beside the boundary label,
-   * the way a replayed thinking phase draws its own span (`formatThinkingSpan`); absent on a
-   * boundary written before it was measured, and then nothing is drawn rather than a zero.
+   * How long the compaction took, when the server recorded it. Drawn on the boundary's own rule
+   * ("Context compacted · 3 turns summarized · 1 min 20 s"), formatted like every other span in
+   * the thread (`formatSpan`); absent on a boundary written before it was measured, and then
+   * nothing is drawn rather than a zero.
    */
   compactionMs?: number;
   /**

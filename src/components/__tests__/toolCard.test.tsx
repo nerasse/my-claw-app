@@ -249,16 +249,21 @@ describe('ToolCard elapsed time while running', () => {
     // the running one had none.
     const started = Date.now() - 42_000;
     const tree = renderTool(makeItem({ running: true, ts: started }));
-    expect(textsOf(tree)).toContain('42s');
+    expect(textsOf(tree)).toContain('42 s');
 
     ReactTestRenderer.act(() => {
       jest.advanceTimersByTime(20_000);
     });
-    expect(textsOf(tree)).toContain('1m 2s');
+    expect(textsOf(tree)).toContain('1 min 2 s');
 
     updateItem(tree, makeItem({ running: false, ts: started, durationMs: 62_400 }));
-    expect(textsOf(tree)).not.toContain('1m 2s');
-    expect(textsOf(tree).some(text => text.includes('62.4s') || text.includes('1m'))).toBe(true);
+    // Settled: the card holds the duration it earned -- proven by the counter being gone, since a
+    // live counter would still be climbing below.
+    expect(textsOf(tree)).toContain('1 min 2 s');
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(textsOf(tree)).toContain('1 min 2 s');
   });
 
   /**
@@ -271,19 +276,19 @@ describe('ToolCard elapsed time while running', () => {
     jest.setSystemTime(new Date('2026-09-06T13:25:25.000Z'));
     const started = Date.now() - 25_000;
     const tree = renderTool(makeItem({ running: true, ts: started }));
-    expect(textsOf(tree)).toContain('25s');
+    expect(textsOf(tree)).toContain('25 s');
 
     updateItem(tree, makeItem({ running: false, ok: false, interrupted: true, ts: started, durationMs: 25_000 }));
     expect(textsOf(tree)).toContain('interrupted');
     // "failed" is a verdict only a result can carry: this call never returned one.
     expect(textsOf(tree)).not.toContain('failed');
-    expect(textsOf(tree)).toContain('25s');
+    expect(textsOf(tree)).toContain('25 s');
 
     ReactTestRenderer.act(() => {
       jest.advanceTimersByTime(3 * 60 * 60 * 1000);
     });
-    expect(textsOf(tree)).toContain('25s');
-    expect(textsOf(tree).some(text => text.includes('m') && text.endsWith('s') && text !== '25s')).toBe(false);
+    expect(textsOf(tree)).toContain('25 s');
+    expect(textsOf(tree).some(text => text.includes('m') && text.endsWith('s') && text !== '25 s')).toBe(false);
   });
 
   test('a call that ran and came back with an error still reads failed', () => {

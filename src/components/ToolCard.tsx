@@ -3,12 +3,12 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
-import { formatDuration, summarizeArgs } from '../core/utils';
+import { formatSpan, summarizeArgs } from '../core/utils';
 import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
-import { formatElapsed, useElapsed } from './CommandElapsed';
+import { useElapsed } from './CommandElapsed';
 
 /**
  * One executed tool, collapsed to a single dense line and expanded on tap to show the
@@ -52,7 +52,7 @@ export const ToolCard = React.memo(function ToolCardView({
   // A tap during the run gives the owner the hand: no more auto-open and no auto-fold until the
   // run settles, then the flag clears for the next run of the card.
   const userTookControl = useRef(false);
-  const duration = formatDuration(item.durationMs);
+  const duration = item.durationMs !== undefined ? formatSpan(item.durationMs) : '';
   // The identifying argument rather than whichever one the model serialized first: see
   // core/toolSummary. Recomputed only when the call itself changes, not on every delta of the
   // turn around it.
@@ -321,7 +321,7 @@ function QuestionHistoryBody({ args, output, ok }: { args: Record<string, unknow
 function RunningFor({ since }: { since: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const elapsed = useElapsed(since);
-  return <Text style={styles.duration}>{formatElapsed(elapsed)}</Text>;
+  return <Text style={styles.duration}>{formatSpan(elapsed)}</Text>;
 }
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({

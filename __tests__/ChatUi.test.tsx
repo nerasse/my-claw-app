@@ -487,7 +487,7 @@ test('a tool card starts collapsed and reveals the command it ran on tap', async
   const card = tree.root.find(
     node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Tool bash'),
   );
-  expect(card.props.accessibilityLabel).toContain('4ms');
+  expect(card.props.accessibilityLabel).toContain('4 ms');
 
   await ReactTestRenderer.act(async () => {
     card.props.onPress();

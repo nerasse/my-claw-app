@@ -45,12 +45,12 @@ test('the counter climbs while the model is thinking', () => {
   jest.useFakeTimers();
   const tree = render({ reasoning: 'weighing options', startedAt: Date.now() - 12_000, streaming: true });
   expect(textOf(tree)).toContain('Reasoning');
-  expect(textOf(tree)).toContain('12.00s');
+  expect(textOf(tree)).toContain('12 s');
 
   ReactTestRenderer.act(() => {
     jest.advanceTimersByTime(5_000);
   });
-  expect(textOf(tree)).toContain('17.00s');
+  expect(textOf(tree)).toContain('17 s');
 
   // The interval belongs to the counter: a thread full of finished turns must not keep ticking.
   const pending = jest.getTimerCount();
@@ -63,20 +63,20 @@ test('once the answer starts, the label settles and the duration holds still', (
   jest.useFakeTimers();
   const tree = render({ reasoning: 'weighing options', startedAt: Date.now() - 60_000, durationMs: 93_000, streaming: false });
   expect(textOf(tree)).toContain('Reasoning');
-  expect(textOf(tree)).toContain('1m 33.00s');
+  expect(textOf(tree)).toContain('1 min 33 s');
 
   ReactTestRenderer.act(() => {
     jest.advanceTimersByTime(10_000);
   });
-  expect(textOf(tree)).toContain('1m 33.00s');
+  expect(textOf(tree)).toContain('1 min 33 s');
   jest.useRealTimers();
 });
 
 test('a sealed span wins over the start, so a stopped run never counts on forever', () => {
   // `streaming` can still be true for the frame between the seal and the end of the bubble.
   const tree = render({ reasoning: 'thought', startedAt: Date.now() - 60_000, durationMs: 2_000, streaming: true });
-  expect(textOf(tree)).toContain('2.00s');
-  expect(textOf(tree)).not.toContain('1m');
+  expect(textOf(tree)).toContain('2 s');
+  expect(textOf(tree)).not.toContain('1 min');
 });
 
 test('a turn replayed from server history shows the span the server recorded', () => {
@@ -84,7 +84,7 @@ test('a turn replayed from server history shows the span the server recorded', (
   // shows what the thinking cost instead of keeping the thought and losing its duration.
   const tree = render({ reasoning: 'weighing options', durationMs: 60, streaming: false });
   expect(textOf(tree)).toContain('Reasoning');
-  expect(textOf(tree)).toContain('0.06s');
+  expect(textOf(tree)).toContain('60 ms');
 });
 
 test('a replayed turn whose span nobody recorded draws no counter, rather than a zero', () => {
@@ -98,7 +98,7 @@ test('a redacted engine gets the counter too, beside its token estimate', () => 
   jest.useFakeTimers();
   const tree = render({ tokens: 1500, startedAt: Date.now() - 8_000, streaming: true });
   expect(textOf(tree)).toContain('1.5k tokens');
-  expect(textOf(tree)).toContain('8.00s');
+  expect(textOf(tree)).toContain('8 s');
   ReactTestRenderer.act(() => tree.unmount());
   jest.useRealTimers();
 });

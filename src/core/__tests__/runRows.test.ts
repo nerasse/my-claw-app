@@ -54,10 +54,11 @@ const folded = (id: string, runId: string, itemCount = 12, lastId = `${id}-last`
 
 /** One label per row, so an assertion reads as the sequence a reader would see. */
 const labelOfRow = (row: ChatRow): string => {
-  if (row.kind === 'group') return `g:${row.run.id}`;
-  if (row.kind === 'folded') return `f:${row.run.id}:${row.summaries.reduce((n, s) => n + s.itemCount, 0)}`;
+  if (row.kind === 'group') return `g:${row.run.id}${row.foot ? '+foot' : ''}`;
+  if (row.kind === 'folded') return `f:${row.run.id}:${row.summaries.reduce((n, s) => n + s.itemCount, 0)}${row.foot ? '+foot' : ''}`;
   if (row.kind === 'rule') return 'rule';
-  return row.item.id;
+  if (row.kind === 'foot') return `foot:${row.run.id}`;
+  return `${row.item.id}${row.foot ? '+foot' : ''}`;
 };
 
 describe('buildRows', () => {
@@ -71,7 +72,7 @@ describe('buildRows', () => {
       tool('t2', 'r1'),
       agentText('a2', 'answer', 'r1'),
     ]);
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a1', 'g:r1', 'a2']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a1', 'g:r1', 'a2+foot']);
     const groups = rows.filter(r => r.kind === 'group') as Array<{ items: ChatItem[] }>;
     expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['t2']]);
   });
@@ -136,7 +137,7 @@ describe('buildRows', () => {
    */
   test('a stray card that lands after a message folds after it, in order', () => {
     const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a', 'answer', 'r1'), tool('t-late', 'r1')]);
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1+foot']);
     const groups = rows.filter(r => r.kind === 'group') as Array<{ items: ChatItem[] }>;
     expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['t-late']]);
   });
@@ -163,7 +164,7 @@ describe('buildRows', () => {
       tool('t3', 'r2'),
       agentText('a2', 'answer two', 'r2'),
     ]);
-    expect(rows.map(labelOfRow)).toEqual(['u1', 'g:r1', 'a1', 'u2', 'g:r2', 'a2']);
+    expect(rows.map(labelOfRow)).toEqual(['u1', 'g:r1', 'a1+foot', 'u2', 'g:r2', 'a2+foot']);
   });
 
   /**
@@ -181,7 +182,7 @@ describe('buildRows', () => {
         tool('t2', 'r1'),
       ].map(i => (i.id === 'u' ? i : { ...i, run: run('r1', 'aborted', 100, 200) })),
     );
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1+foot']);
     const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
     expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['t2']]);
   });
@@ -195,7 +196,7 @@ describe('buildRows', () => {
         tool('t2', 'r1'),
       ].map(i => (i.id === 'u' ? i : { ...i, run: run('r1', 'error', 100, 200) })),
     );
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1+foot']);
   });
 
   test('a hoisted bubble still cuts a stopped run, and the message stays on its side of it', () => {
@@ -210,7 +211,7 @@ describe('buildRows', () => {
     );
     // The injected turn keeps its place and splits the fold around it; the message stays where it
     // was written, on the side it was written.
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'steer', 'g:r1', 'a']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'steer', 'g:r1', 'a+foot']);
     const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
     expect(groups.map(group => group.items.map(i => i.id))).toEqual([['t1'], ['t2']]);
   });
@@ -223,14 +224,14 @@ describe('buildRows', () => {
       agentText('a', 'here is the answer', 'r1'),
       agentText('p-after', '', 'r1', { reasoning: 'second thoughts' }),
     ]);
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1+foot']);
     const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
     expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['p-after']]);
   });
 
-  test('the status and the total span ride the run\'s last fold, and only there', () => {
-    // One run has several headers now; repeating "Stopped" or the run's duration on every one of
-    // them said nothing. The last fold is where the run ended, so the mark lands there.
+  test("the empreinte lands on the run's end, and only there", () => {
+    // It used to mark the last fold, where the run's span read as the fold's own time. The run
+    // ends on its answer here, so the answer is what it signs.
     const rows = buildRows([
       userText('u'),
       tool('t1', 'r1'),
@@ -238,15 +239,14 @@ describe('buildRows', () => {
       tool('t2', 'r1'),
       agentText('a2', 'voila', 'r1'),
     ]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a1', 'g:r1', 'a2+foot']);
     const groups = rows.filter(row => row.kind === 'group');
-    expect(groups.map(group => (group.kind === 'group' ? group.runTail : undefined))).toEqual([undefined, true]);
+    expect(groups.every(group => group.kind === 'group' && group.foot === undefined)).toBe(true);
   });
 
-  test('a run whose last message has no work after it still marks its last fold', () => {
+  test('a run whose last message has no work after it signs that message', () => {
     const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a', 'voila', 'r1')]);
-    const groups = rows.filter(row => row.kind === 'group');
-    expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ runTail: true });
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a+foot']);
   });
 
   test('a picture with no words is a message too', () => {
@@ -256,7 +256,7 @@ describe('buildRows', () => {
       attachments: [{ id: 'att-1', type: 'image', filename: 'a.png' }] as never,
     });
     const rows = buildRows([userText('u'), tool('t1', 'r1'), shot, tool('t2', 'r1'), agentText('a', 'voila', 'r1')]);
-    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'm1', 'g:r1', 'a']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'm1', 'g:r1', 'a+foot']);
   });
 
   test('a fold keeps its key when its items arrive', () => {
@@ -328,35 +328,35 @@ describe('folded runs: the work never travelled', () => {
     const rows = buildRows([userText('u'), folded('a', 'r1'), agentText('ans', 'answer', 'r1')]);
     // The answer stays outside, exactly as it does when the items are held: the server hoists it
     // for the same reason this list does.
-    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12', 'ans']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12', 'ans+foot']);
   });
 
   test('two adjacent rows of the same run merge into one group', () => {
     // A run cut by a page boundary folds once per page. The reader must see one group, not the
     // same run twice with its work split at an arbitrary count.
     const rows = buildRows([userText('u'), folded('older', 'r1', 40), folded('newer', 'r1', 12)]);
-    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:52']);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:52+foot']);
     const group = rows[1];
     expect(group?.kind === 'folded' ? group.summaries.length : 0).toBe(2);
   });
 
   test('rows of different runs stay apart', () => {
     const rows = buildRows([folded('a', 'r1'), folded('b', 'r2')]);
-    expect(rows.map(labelOfRow)).toEqual(['f:r1:12', 'f:r2:12']);
+    expect(rows.map(labelOfRow)).toEqual(['f:r1:12+foot', 'f:r2:12+foot']);
   });
 
   test('a bubble between two rows of one run keeps them apart', () => {
     // The owner injected a turn mid-run: it splits the group, and merging across it would put
     // work from both sides of the question under one header.
     const rows = buildRows([folded('a', 'r1'), userText('steer'), folded('b', 'r1')]);
-    expect(rows.map(labelOfRow)).toEqual(['f:r1:12', 'steer', 'f:r1:12']);
+    expect(rows.map(labelOfRow)).toEqual(['f:r1:12', 'steer', 'f:r1:12+foot']);
   });
 
   test('a folded row closes a group of held items', () => {
     // Half the run hydrated, half still folded: the two must not merge into one row, and the
     // held half must not swallow the header.
     const rows = buildRows([tool('t1', 'r1'), tool('t2', 'r1'), folded('rest', 'r1')]);
-    expect(rows.map(labelOfRow)).toEqual(['g:r1', 'f:r1:12']);
+    expect(rows.map(labelOfRow)).toEqual(['g:r1', 'f:r1:12+foot']);
   });
 });
 
@@ -419,5 +419,77 @@ describe('a send that never made it out', () => {
       { kind: 'text', id: 'answer', role: 'agent', text: 'voila', attachments: [], streaming: false, ts: 9 } as ChatItem,
     ]);
     expect(pinnedSends(rows)).toEqual(rows);
+  });
+});
+
+/**
+ * Where a finished run signs its work -- docs/run-grouping.md.
+ *
+ * The span and the status used to ride the title of the run's last fold, where "2 h 33 min" read
+ * as that fold's own time ("on a l'impression que c'est le temps du dernier regroupement",
+ * 2026-09-22). The empreinte is one faint line at the run's very end: under its last message,
+ * under its last fold when it stopped mid-work, or on its own row when neither is there.
+ */
+describe('markRunFeet', () => {
+  test("the empreinte signs the run's last message, not its folds", () => {
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), tool('t2', 'r1'), agentText('a1', 'answer', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a1+foot']);
+    const last = rows[rows.length - 1];
+    expect(last.kind === 'item' ? last.foot?.id : undefined).toBe('r1');
+  });
+
+  test('a run stopped mid-work signs its last fold instead', () => {
+    // The answer came, then the run went on and died in its work: the run ends on the fold, and
+    // that is where the signature stands -- under it, never inside its title.
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a1', 'answer', 'r1'), tool('t2', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a1', 'g:r1+foot']);
+  });
+
+  test("a run whose tail is not a message gets its own row", () => {
+    // A command output or a notice draws apart from every message: nothing to sign, so the
+    // empreinte stands after it as a row of its own.
+    const rows = buildRows([
+      userText('u'),
+      tool('t1', 'r1'),
+      agentText('c1', '$ done', 'r1', { command: true }),
+    ]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'c1', 'foot:r1']);
+  });
+
+  test('a run that drew nothing at all still stands where its work would have', () => {
+    // The only trace of such a run: an empty phase the thread has nothing to show for. Its
+    // empreinte is the run's existence, and it goes where the work would have stood.
+    const invisible = {
+      kind: 'text',
+      id: 'x',
+      role: 'agent',
+      text: ' ',
+      attachments: [],
+      streaming: false,
+      ts: 2,
+      run: run('r1'),
+    } as ChatItem;
+    const rows = buildRows([userText('u'), invisible, agentText('a1', 'later', 'r2')]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'foot:r1', 'a1+foot']);
+  });
+
+  test('every run signs its own end, and one in flight signs nothing', () => {
+    const rows = buildRows([
+      userText('u1'),
+      tool('t1', 'r1'),
+      agentText('a1', 'first', 'r1'),
+      userText('u2'),
+      tool('t2', 'r2'),
+    ]);
+    expect(rows.map(labelOfRow)).toEqual(['u1', 'g:r1', 'a1+foot', 'u2', 'g:r2+foot']);
+
+    const live = buildRows([userText('u'), { ...tool('t1', 'live'), run: run('live', 'running') } as ChatItem]);
+    // A run still going has no span and no status to sign: plain rows, no marks.
+    expect(live.map(labelOfRow)).toEqual(['u', 't1']);
+  });
+
+  test('a folded run the work of which never travelled signs its summary row', () => {
+    const rows = buildRows([userText('u'), folded('w1', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12+foot']);
   });
 });

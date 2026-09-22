@@ -5,7 +5,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { CommandElapsed, formatElapsed } from '../CommandElapsed';
+import { CommandElapsed } from '../CommandElapsed';
 
 function textsOf(tree: ReactTestRenderer.ReactTestRenderer): string[] {
   const out: string[] = [];
@@ -25,17 +25,6 @@ function textsOf(tree: ReactTestRenderer.ReactTestRenderer): string[] {
   return out;
 }
 
-test('seconds under a minute, minutes and seconds above', () => {
-  expect(formatElapsed(0)).toBe('0s');
-  expect(formatElapsed(1_999)).toBe('1s');
-  expect(formatElapsed(59_000)).toBe('59s');
-  expect(formatElapsed(60_000)).toBe('1m 0s');
-  expect(formatElapsed(110_290)).toBe('1m 50s');
-  expect(formatElapsed(15 * 60_000)).toBe('15m 0s');
-  // A clock that jumped backwards must not print a negative age.
-  expect(formatElapsed(-5_000)).toBe('0s');
-});
-
 test('the counter starts at the age of the command and ticks every second', () => {
   jest.useFakeTimers();
   const started = Date.now() - 42_000;
@@ -43,12 +32,12 @@ test('the counter starts at the age of the command and ticks every second', () =
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(<CommandElapsed since={started} />);
   });
-  expect(textsOf(tree).join('')).toContain('42s');
+  expect(textsOf(tree).join('')).toContain('42 s');
 
   ReactTestRenderer.act(() => {
     jest.advanceTimersByTime(3_000);
   });
-  expect(textsOf(tree).join('')).toContain('45s');
+  expect(textsOf(tree).join('')).toContain('45 s');
 
   // The interval is the component's own: unmounting has to take it with it, or a thread full
   // of past commands keeps ticking forever.

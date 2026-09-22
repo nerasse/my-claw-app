@@ -4,13 +4,14 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
 import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
+import { RunFoot } from '../components/RunFoot';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
-import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunSummaryItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
@@ -76,6 +77,8 @@ const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
   // The rule has no id of its own: one compaction runs at a time on a thread, so one rule.
   if (row.kind === 'rule') return 'rule:compaction';
+  // The empreinte row is the run's, and a run signs once.
+  if (row.kind === 'foot') return `foot:${row.run.id}`;
   // Not the run id alone: a run has one fold per burst now, and two rows sharing a key drop one.
   // `foldKeyOf` is stable across the swap from a folded row to the items it stood for, which is
   // what lets the open state ride along -- docs/run-hydration.md.
@@ -935,7 +938,7 @@ export function ChatScreen({
    * the global index so the same code serves free rows and the children of a run group.
    */
   const renderItemContent = useCallback(
-    (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean) => {
+    (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean, foot?: RunInfo) => {
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
       // A `question` card with an ask still pending is the form itself. Once answered or
       // canceled the ask leaves the store and the card falls back to its settled rendering,
@@ -981,6 +984,7 @@ export function ChatScreen({
           deviceInfo={deviceInfo}
           grouped={groupedFlag}
           showTime={showTimeFlag}
+          foot={foot}
           onMenu={onBubbleMenu}
           onResend={onResend}
           onOpenAttachment={openAttachment}
@@ -1001,11 +1005,16 @@ export function ChatScreen({
       if (row.kind === 'rule') {
         return compacting === undefined ? null : <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} stopping={stopping} />;
       }
+      // The empreinte alone: a run whose tail is not a message and not a fold still signs its
+      // work -- it is the run's only trace (docs/run-grouping.md).
+      if (row.kind === 'foot') {
+        return <RunFoot run={row.run} />;
+      }
       if (row.kind === 'item') {
         // Grouping is a property of reading order, so it is still computed oldest-first and the
         // item index is looked up rather than derived from the row position.
         const chronological = itemIndexById.get(row.item.id) ?? 0;
-        return renderItemContent(row.item, grouped[chronological] ?? false, !(grouped[chronological + 1] ?? false));
+        return renderItemContent(row.item, grouped[chronological] ?? false, !(grouped[chronological + 1] ?? false), row.foot);
       }
       // The work never travelled: the header draws from counts, and opening it fetches the items
       // that take its place -- docs/run-hydration.md.
@@ -1015,7 +1024,7 @@ export function ChatScreen({
             run={row.run}
             summaries={row.summaries}
             open={expandedFolds.has(foldKeyOf(row))}
-            runTail={row.runTail}
+            foot={row.foot}
             onToggle={() => toggleFold(foldKeyOf(row))}
             onOpen={openRun}
           />
@@ -1028,7 +1037,7 @@ export function ChatScreen({
           run={row.run}
           items={row.items}
           open={expandedFolds.has(foldKeyOf(row))}
-          runTail={row.runTail}
+          foot={row.foot}
           onToggle={() => toggleFold(foldKeyOf(row))}
           renderItem={(item, index, children) => {
             const childGrouped = isGrouped(children, index);

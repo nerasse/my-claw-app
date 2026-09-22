@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import type { TextItem } from '../core/chat';
+import type { RunInfo, TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
@@ -8,6 +8,7 @@ import { MediaCarousel, isCarouselMedia, mediaItemsOf, type MediaItem } from './
 import { CollapsibleAside } from './CollapsibleAside';
 import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine } from './ReasoningLine';
+import { RunFoot } from './RunFoot';
 import { LocationView } from './LocationView';
 import { chatSelectable } from '../core/platform';
 import { contextMenuProps, onAccentProps } from '../core/webProps';
@@ -29,6 +30,7 @@ export const Bubble = React.memo(function BubbleView({
   deviceInfo,
   grouped,
   showTime,
+  foot,
   onMenu,
   onOpenAttachment,
   onOpenMedia,
@@ -41,6 +43,11 @@ export const Bubble = React.memo(function BubbleView({
   /** Same author as the previous item: tighten the gap instead of repeating a full margin. */
   grouped: boolean;
   showTime: boolean;
+  /**
+   * The empreinte of the run this bubble closed: its span and its status, signed here because
+   * this is where the run ended. Sits on the `⋯` row -- docs/run-grouping.md.
+   */
+  foot?: RunInfo;
   onMenu: (item: TextItem) => void;
   /** The owner's message never got its receipt: send it again, same id. */
   onResend?: (item: TextItem) => void;
@@ -233,8 +240,10 @@ export const Bubble = React.memo(function BubbleView({
 
       {/* The ⋯ row sits under the bubble on the side the author reads from: right for the agent,
           left for the owner. It no longer steals width from the message, so the bubble fills the
-          column like a tool card. */}
-      <View style={[styles.menuRow, agent ? styles.menuRowAgent : styles.menuRowUser]}>
+          column like a tool card. The run's empreinte rides the same line, always at the right
+          end: it is a signature, and it must never read as a caption of the bubble above it. */}
+      <View style={[styles.menuRow, agent ? styles.menuRowAgent : styles.menuRowUser, foot !== undefined ? (agent ? styles.menuRowAgentFoot : styles.menuRowUserFoot) : null]}>
+        {agent && foot !== undefined ? <RunFoot run={foot} /> : null}
         <Pressable
           hitSlop={12}
           style={styles.menu}
@@ -243,6 +252,7 @@ export const Bubble = React.memo(function BubbleView({
           accessibilityLabel="Message actions">
           <Text style={styles.menuGlyph}>⋯</Text>
         </Pressable>
+        {!agent && foot !== undefined ? <RunFoot run={foot} /> : null}
       </View>
       </View>
     </View>
@@ -292,6 +302,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   menuRow: { width: '100%' as const, flexDirection: 'row' as const, marginTop: 1 },
   menuRowAgent: { justifyContent: 'flex-end' as const },
   menuRowUser: { justifyContent: 'flex-start' as const },
+  /** With an empreinte on the line: the signature right, the owner's ⋯ left. */
+  menuRowAgentFoot: { justifyContent: 'flex-end' as const },
+  menuRowUserFoot: { justifyContent: 'space-between' as const },
   menu: { width: 24, height: 22, alignItems: 'center' as const, justifyContent: 'center' as const },
   menuGlyph: { fontSize: scaleFont(font.body, scale), lineHeight: scaleFont(font.body, scale) + 2, color: palette.textFaint },
 });

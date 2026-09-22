@@ -56,24 +56,40 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function formatDuration(ms?: number): string {
-  if (typeof ms !== 'number') return '';
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
-  return `${Math.floor(ms / 60_000)}m${String(Math.round((ms % 60_000) / 1000)).padStart(2, '0')}s`;
-}
+
 
 /**
- * How long a thinking span lasted, for the line that carries it.
+ * How long something took, for whichever line in the thread says it.
  *
- * Two decimals, unlike `formatDuration`: a phase can last a tenth of a second, and rounding it to
- * `0s` reads as a phase that never happened rather than as a very short one. Measured on the
- * owner's thread, 2026-09-11.
+ * The one formater every counter shares: thinking spans, compaction, run spans, command waits,
+ * tool cards, sub-agent cards. There were four, and the thread showed the same operation in a
+ * different shape depending on where it was drawn -- the thinking one kept two decimals forever,
+ * so a long compaction read `1m 19.68s` and a thirty-minute one `30m 12.53s`. The owner called
+ * those "des chiffres après la virgule alors que le truc a duré 30 minutes" (2026-09-22).
+ *
+ * Decimals are a sub-ten-second tool: `2.3 s` tells a short phase from a rounding error, and past
+ * that the fraction is noise. Past the hour the seconds go too, which is what `2 h 33 min` means.
+ *
+ * Under a second, milliseconds are the honest unit: a tool call that took 4 ms must not read
+ * `0.1 s`, which overstates it twentyfold. And a tenth that says nothing is not printed at all:
+ * `2 s`, never `2.0 s` -- the trailing zero was the "0-0" the owner called ugly (2026-09-22).
  */
-export function formatThinkingSpan(ms: number): string {
+export function formatSpan(ms: number): string {
   const safe = Math.max(0, ms);
-  if (safe < 60_000) return `${(safe / 1000).toFixed(2)}s`;
-  return `${Math.floor(safe / 60_000)}m ${((safe % 60_000) / 1000).toFixed(2)}s`;
+  if (safe < 1_000) return `${Math.round(safe)} ms`;
+  const seconds = safe / 1000;
+  if (seconds < 10) {
+    const tenths = Math.round(seconds * 10) / 10;
+    return `${Number.isInteger(tenths) ? String(tenths) : tenths.toFixed(1)} s`;
+  }
+  const whole = Math.round(seconds);
+  if (whole < 60) return `${whole} s`;
+  const minutes = Math.floor(whole / 60);
+  const rest = whole % 60;
+  if (whole < 3600) return rest > 0 ? `${minutes} min ${rest} s` : `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes > 0 ? `${hours} h ${restMinutes} min` : `${hours} h`;
 }
 
 /**

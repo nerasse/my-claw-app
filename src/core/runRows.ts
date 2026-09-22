@@ -9,9 +9,14 @@ import type { ChatItem, RunInfo, RunSummaryItem } from './chat';
  * from counts rather than from children, and because opening it has to fetch something.
  */
 export type ChatRow =
-  | { kind: 'item'; item: ChatItem }
-  | { kind: 'group'; run: RunInfo; items: ChatItem[]; runTail?: boolean }
-  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[]; runTail?: boolean }
+  /**
+   * `foot` marks the row a finished run's empreinte draws under (`RunFoot`): its span and its
+   * status, signed at the run's very end -- the run's last message, or its last fold when it
+   * stopped mid-work. A run whose tail is neither gets `{ kind: 'foot' }` after it instead.
+   */
+  | { kind: 'item'; item: ChatItem; foot?: RunInfo }
+  | { kind: 'group'; run: RunInfo; items: ChatItem[]; foot?: RunInfo }
+  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[]; foot?: RunInfo }
   /**
    * The live compaction rule, as a row of the list rather than a decoration on a cell.
    *
@@ -21,7 +26,13 @@ export type ChatRow =
    * that, the bubble above a rule meant to stand above it (2026-09-11). A row is ordered by the
    * data, which is what the inversion is built on, and that holds whatever the cell does.
    */
-  | { kind: 'rule' };
+  | { kind: 'rule' }
+  /**
+   * The empreinte alone: a run whose last visible thing is a thought, or that drew nothing at
+   * all, has no message to sign and no fold to stand under. Its signature is then its only trace
+   * in the thread, and it stands where the work would have (2026-09-22).
+   */
+  | { kind: 'foot'; run: RunInfo };
 
 /**
  * The identity of a fold, stable across the moment its items arrive.
@@ -148,8 +159,9 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  *   for exactly that (2026-09-17: "je veux pouvoir tous les voir, ce qu'il y a entre se
  *   regroupe"). Messages are hoisted by position, so the order they were written in survives; the
  *   answer election this replaces is gone with its reordering bugs.
- * - The last fold of a run carries its status and total span (`runTail`): a run has several
- *   headers now, and repeating "Stopped" or "4 min" on every one of them says nothing.
+ * - A finished run ends with its empreinte (`RunFoot`): its total span and its status, signed
+ *   once, at the run's very end (`markRunFeet`). They used to ride the title of the run's last
+ *   fold, where the span read as the fold's own time.
  * - A burst with nothing left in it produces no group: a run that only ever wrote messages
  *   renders as plain bubbles, never as an empty header.
  */
@@ -207,6 +219,11 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
   // bubble cuts it (that bubble keeps its place in the rows), except the last one, which waits
   // for the run to close so its final phase -- the answer -- can leave the group.
   let current: ChatItem[] = [];
+  // Where a finished run that draws nothing at all goes: its empreinte is then its only trace,
+  // and it belongs where the work would have stood, not at the end of the thread. First sighting
+  // of the run, rows so far -- `markRunFeet` drops these for runs that do have rows.
+  const ghosts: { run: RunInfo; at: number }[] = [];
+  const ghostSeen = new Set<string>();
 
   const closeRun = () => {
     if (!run) return;
@@ -216,6 +233,11 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
   };
 
   for (const item of items) {
+    const itemRun = item.kind === 'run' ? item.run : item.run;
+    if (itemRun && itemRun.status !== 'running' && !ghostSeen.has(itemRun.id)) {
+      ghostSeen.add(itemRun.id);
+      ghosts.push({ run: itemRun, at: rows.length });
+    }
     if (hasNothingToShow(item)) continue;
     if (item.kind === 'run') {
       // The work of this run never travelled, so there is nothing to accumulate: the header is
@@ -226,7 +248,6 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
       else rows.push({ kind: 'folded', run: item.run, summaries: [item] });
       continue;
     }
-    const itemRun = item.run;
     // Bubbles the fold never swallows: the hoisted ones, and the agent's own messages.
     const stays = isHoisted(item) || isAgentMessage(item);
     // Same terminal run as the one being folded: keep accumulating, cutting the group around
@@ -255,26 +276,69 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
     }
   }
   closeRun();
-  return markRunTails(rows);
+  return markRunFeet(rows, ghosts);
 }
 
 /**
- * Marks the last fold of each run, which is the one that carries its status and total span.
- *
- * Computed here rather than in the renderer: a run's folds sit in the rows in order, and only the
- * list that built them knows which one a reader meets last. A run whose last message has no work
- * after it keeps the mark on its last fold anyway -- the status has to stand somewhere.
+ * Whether a row is a message the empreinte can sign: a bubble, whoever wrote it -- the words, the
+ * pictures, or the failure said in one. A notice, a command output, a location or a compaction
+ * boundary draws apart from every message and is not one.
  */
-function markRunTails(rows: ChatRow[]): ChatRow[] {
+function footAnchorOf(row: ChatRow): boolean {
+  if (row.kind !== 'item' || row.item.kind !== 'text') return false;
+  const item = row.item;
+  return (
+    item.command !== true &&
+    item.notice !== true &&
+    item.summaryOf === undefined &&
+    item.compactionMs === undefined &&
+    item.compactionStopped !== true &&
+    item.location === undefined &&
+    item.details === undefined
+  );
+}
+
+/**
+ * Marks where each finished run ends: the row its empreinte draws under, or the empreinte alone.
+ *
+ * Computed here rather than in the renderer: a run's rows sit in order, and only the list that
+ * built them knows which one a reader meets last. The run's span and status are facts of the run
+ * (the owner: the old `2 h 33 min` in a fold title "c'est pour toute la run"), so the mark lands
+ * on the very last thing the run drew:
+ *
+ * - its last message, the answer it closed on: the signature under that message;
+ * - its last fold, when it stopped in the middle of its work: a line under the fold, never in its
+ *   title, where it read as the fold's own time ("on a l'impression que c'est le temps du dernier
+ *   regroupement", 2026-09-22);
+ * - or its own row, when the run's tail is a notice or a thought, or when the run drew nothing at
+ *   all -- `ghosts` holds where those stand.
+ */
+function markRunFeet(rows: ChatRow[], ghosts: readonly { run: RunInfo; at: number }[]): ChatRow[] {
   const last = new Map<string, number>();
   rows.forEach((row, index) => {
-    if (row.kind === 'group' || row.kind === 'folded') last.set(row.run.id, index);
+    const run = row.kind === 'item' ? row.item.run : row.kind === 'group' || row.kind === 'folded' ? row.run : undefined;
+    if (!run || run.status === 'running') return;
+    last.set(run.id, index);
   });
-  if (last.size === 0) return rows;
-  return rows.map((row, index) => {
-    if ((row.kind === 'group' || row.kind === 'folded') && last.get(row.run.id) === index) {
-      return { ...row, runTail: true };
-    }
+  if (last.size === 0 && ghosts.length === 0) return rows;
+
+  // Insertions first, deepest index first, so no insertion moves the one below it. The rows
+  // themselves are re-marked before that: marking replaces rows, it never adds any.
+  const insertions: { at: number; run: RunInfo }[] = ghosts
+    .filter(ghost => !last.has(ghost.run.id))
+    .map(ghost => ({ at: ghost.at, run: ghost.run }));
+  const marked = rows.map((row, index) => {
+    const run = row.kind === 'item' ? row.item.run : row.kind === 'group' || row.kind === 'folded' ? row.run : undefined;
+    if (!run || last.get(run.id) !== index) return row;
+    if (row.kind === 'group' || row.kind === 'folded') return { ...row, foot: run };
+    if (footAnchorOf(row)) return { ...row, foot: run };
+    insertions.push({ at: index + 1, run });
     return row;
   });
+  insertions.sort((a, b) => b.at - a.at);
+  let out = marked;
+  for (const insertion of insertions) {
+    out = [...out.slice(0, insertion.at), { kind: 'foot', run: insertion.run }, ...out.slice(insertion.at)];
+  }
+  return out;
 }

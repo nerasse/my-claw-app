@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native';
+import { formatSpan } from '../core/utils';
 import { font, scaleFont, useThemedStyles, type Palette } from '../theme';
-
-/** `47s`, then `1m 47s`: the shape the server already uses when it reports a run's duration. */
-export function formatElapsed(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
 
 /**
  * Milliseconds since `since`, refreshed every second.
@@ -39,7 +33,7 @@ export function CommandElapsed({ since, onAccent = false }: { since: number; onA
   const styles = useThemedStyles(createStyles);
   const elapsed = useElapsed(since);
   return (
-    <Text style={[styles.elapsed, onAccent ? styles.elapsedAccent : null]}>{` ${formatElapsed(elapsed)}`}</Text>
+    <Text style={[styles.elapsed, onAccent ? styles.elapsedAccent : null]}>{` ${formatSpan(elapsed)}`}</Text>
   );
 }
 

@@ -61,7 +61,7 @@ test('the counter keeps two decimals, like a thinking span', () => {
   // "0s c'est chelou": the owner asked for the thinking spans to carry two decimals, and the
   // compaction counter reads beside them.
   const tree = render({ since: Date.now() - 5_000 });
-  expect(textOf(tree)).toMatch(/Compacting the context · \d+\.\d\ds/);
+  expect(textOf(tree)).toMatch(/Compacting the context · \d+(\.\d)? s/);
 });
 
 /**

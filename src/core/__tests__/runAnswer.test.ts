@@ -93,6 +93,7 @@ const labelOfRow = (row: ChatRow): string => {
   if (row.kind === 'group') return `g:${row.run.id}`;
   if (row.kind === 'folded') return `f:${row.run.id}`;
   if (row.kind === 'rule') return 'rule';
+  if (row.kind === 'foot') return `foot:${row.run.id}`;
   return row.item.id;
 };
 

@@ -100,13 +100,13 @@ function pressAppLabel(tree: Tree, label: string): Promise<void> {
   });
 }
 
-const group = (items: ChatItem[], open: boolean, onToggle = jest.fn()) =>
+const group = (items: ChatItem[], open: boolean, onToggle = jest.fn(), foot: RunInfo | undefined = undefined) =>
   render(
     <RunGroup
       run={RUN}
       items={items}
       open={open}
-      runTail
+      foot={foot}
       onToggle={onToggle}
       renderItem={item => <Text>{item.id}</Text>}
     />,
@@ -116,14 +116,17 @@ test('a collapsed group is one bar, and it says what it holds', () => {
   const tree = group([card('a'), card('b'), card('c')], false);
   expect(bars(tree)).toHaveLength(1);
   const texts = tree.root.findAllByType(Text).map(node => node.props.children);
-  expect(texts).toContain('3 tool calls · bash · 1 min');
+  // The title describes the fold and nothing else: a run span in it read as the fold's own time
+  // ("on a l'impression que c'est le temps du dernier regroupement", 2026-09-22).
+  expect(texts).toContain('3 tool calls · bash');
+  expect(texts).not.toContain('3 tool calls · bash · 1 min');
   // Nothing of the body is mounted while it is closed: that is what makes a long thread cheap.
   expect(texts).not.toContain('a');
 });
 
-test('the run\'s span and status ride its last fold, and only there', () => {
-  // One run has a header per burst now: the duration and the "Stopped" badge belong to the run,
-  // so they stand where the run ended, not on eleven headers.
+test("the run's span and status ride its empreinte, and only there", () => {
+  // One run has a header per burst: the span and the status are the run's, so they stand once,
+  // where the run ended, signed as the run's.
   const stopped: RunInfo = { ...RUN, status: 'aborted' };
   const items = [card('a'), card('b')];
   const middle = render(
@@ -131,7 +134,7 @@ test('the run\'s span and status ride its last fold, and only there', () => {
   );
   const middleTexts = middle.root.findAllByType(Text).map(node => node.props.children);
   expect(middleTexts).toContain('2 tool calls · bash');
-  expect(middleTexts).not.toContain('1 min');
+  expect(middleTexts).not.toContain('run ·');
   expect(middleTexts).not.toContain('Stopped');
 
   const tail = render(
@@ -139,14 +142,16 @@ test('the run\'s span and status ride its last fold, and only there', () => {
       run={stopped}
       items={items}
       open={false}
-      runTail
+      foot={stopped}
       onToggle={jest.fn()}
       renderItem={item => <Text>{item.id}</Text>}
     />,
   );
   const tailTexts = tail.root.findAllByType(Text).map(node => node.props.children);
-  expect(tailTexts).toContain('2 tool calls · bash · 1 min');
-  expect(tailTexts).toContain('Stopped');
+  // The word `run` scopes the number: this is the run's 1 min, not the fold's.
+  expect(tailTexts).toContain('run · 1 min');
+  expect(tailTexts).toContain(' · Stopped');
+  expect(tailTexts).not.toContain('2 tool calls · bash · 1 min');
 });
 
 test('a fold that only holds thoughts says so, instead of "run"', () => {
@@ -161,7 +166,7 @@ test('a fold that only holds thoughts says so, instead of "run"', () => {
     ts: 5,
   } as ChatItem;
   const tree = group([thinking, { ...thinking, id: 'p2' } as ChatItem], false);
-  expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('2 thoughts · 1 min');
+  expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('2 thoughts');
 });
 
 test('a long open group carries a bar at the bottom too', () => {
@@ -311,42 +316,55 @@ test('two merged rows of one run read as a single group', () => {
       run={RUN}
       summaries={[summaryRow('run-older', 40), summaryRow('run-newer', 12)]}
       open={false}
-      runTail
+      foot={RUN}
       onToggle={jest.fn()}
       onOpen={jest.fn()}
     />,
   );
-  expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('52 tool calls · bash · 1 min');
+  const texts = tree.root.findAllByType(Text).map(node => node.props.children);
+  expect(texts).toContain('52 tool calls · bash');
+  // The merged folds read as one group, and the run signs once, under it.
+  expect(texts).toContain('run · 1 min');
 });
 
 test('a stopped run wears the owner’s word, not the engine’s', () => {
   // One vocabulary across the surfaces: the loader says "Stopping…" while the abort travels, and
-  // the header of the run it cut says "Stopped" once it landed. `aborted` was the engine's.
+  // the signature of the run it cut says "Stopped" once it landed. `aborted` was the engine's.
   const stopped: RunInfo = { ...RUN, status: 'aborted' };
   const tree = render(
     <RunGroup
       run={stopped}
       items={[card('a')]}
       open={false}
-      runTail
+      foot={stopped}
       onToggle={jest.fn()}
       renderItem={item => <Text>{item.id}</Text>}
     />,
   );
 
   const texts = tree.root.findAllByType(Text).map(node => node.props.children);
-  expect(texts).toContain('Stopped');
+  expect(texts).toContain(' · Stopped');
   expect(texts).not.toContain('aborted');
 });
 
-/** A group drawn with the run's tail on it, or without it. */
-const groupWith = (items: ChatItem[], runTail: boolean, run: RunInfo = RUN) =>
+test('a fold of one card draws the card, and the run signs under it', () => {
+  // The bar hides work the reader has not asked to see, and one card hides nothing -- so the run's
+  // signature is what the row still owes, drawn as its own line under the card.
+  const tree = group([card('only')], false, jest.fn(), RUN);
+  const texts = tree.root.findAllByType(Text).map(node => node.props.children);
+  expect(texts).toContain('only');
+  expect(texts).toContain('run · 1 min');
+  expect(bars(tree)).toHaveLength(0);
+});
+
+/** A group the run signs under, or one it does not. */
+const groupWith = (items: ChatItem[], foot: boolean, run: RunInfo = RUN) =>
   render(
     <RunGroup
       run={run}
       items={items}
       open={false}
-      {...(runTail ? { runTail: true } : {})}
+      foot={foot ? run : undefined}
       onToggle={jest.fn()}
       renderItem={item => <Text>{item.id}</Text>}
     />,
@@ -379,23 +397,24 @@ test('a fold of a single thought still folds: the thought is what the bar stands
   } as ChatItem;
   const tree = groupWith([thinking], true);
   expect(bars(tree)).toHaveLength(1);
-  expect(textsOf(tree)).toContain('1 thought · 1 min');
+  expect(textsOf(tree)).toContain('1 thought');
 });
 
 test('the run\'s span and the word it stopped on stand under the lone card', () => {
-  // What the bar carried is not about the fold: "Stopped" and the run's span exist nowhere else in
-  // the thread, so they move under the card rather than disappearing with the bar.
+  // What the bar carried is not about the fold: "Stopped" and the run's span exist nowhere else
+  // in the thread, so they sign under the card as the run's empreinte rather than disappearing
+  // with the bar.
   const stopped: RunInfo = { ...RUN, status: 'aborted' };
   const tree = groupWith([card('a')], true, stopped);
   expect(bars(tree)).toHaveLength(0);
   expect(textsOf(tree)).toContain('a');
-  expect(textsOf(tree)).toContain('Stopped');
-  expect(textsOf(tree)).toContain('1 min');
+  expect(textsOf(tree)).toContain(' · Stopped');
+  expect(textsOf(tree)).toContain('run · 1 min');
 });
 
-test('a lone card that is not the run\'s tail draws nothing under it', () => {
-  // The line is the tail's, and a fold the run did not end on has none: the span would be the
-  // run's, said twice.
+test('a lone card in the middle of a run draws nothing under it', () => {
+  // The signature is the run's end, and a fold the run did not end on has none: the span would be
+  // the run's, said once per fold.
   const tree = groupWith([card('a')], false);
-  expect(textsOf(tree)).not.toContain('1 min');
+  expect(textsOf(tree).some(line => String(line).includes('run ·'))).toBe(false);
 });

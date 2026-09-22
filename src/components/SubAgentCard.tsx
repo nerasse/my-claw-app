@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
-import { formatDuration } from '../core/utils';
+import { formatSpan } from '../core/utils';
 import { requestToolOutput } from '../core/toolOutput';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
@@ -119,7 +119,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
               <ActivityIndicator size="small" />
             </View>
           ) : null}
-          {formatDuration(item.durationMs) ? <Text style={styles.duration}>{formatDuration(item.durationMs)}</Text> : null}
+          {item.durationMs !== undefined ? <Text style={styles.duration}>{formatSpan(item.durationMs)}</Text> : null}
         </Pressable>
       </View>
 

@@ -6,7 +6,8 @@
  * in the component and folded itself back under the owner while he was reading it.
  *
  * The span: the duration was only ever on the live counter, so a thread opened later showed a
- * boundary with no sign of how long it took. Same gap the thinking duration had.
+ * boundary with no sign of how long it took. It now rides the rule itself -- the one line every
+ * boundary draws, summary folded shut or not -- in the span format the whole thread shares.
  */
 
 import React from 'react';
@@ -60,12 +61,15 @@ test('the rule says how many turns the summary stands for', () => {
   expect(texts(mount({ item: item() }))).toContain('12 turns summarized');
 });
 
-test('the span is drawn beside the summary, with the two decimals the thinking spans use', () => {
-  expect(texts(mount({ item: item({ compactionMs: 84_500 }) }))).toContain('1m 24.50s');
+test('the span rides the rule itself, where a folded summary cannot hide it', () => {
+  expect(texts(mount({ item: item({ compactionMs: 84_500 }) }))).toContain(
+    'Context compacted · 12 turns summarized · 1 min 25 s',
+  );
 });
 
 test('a boundary nobody timed draws no span, rather than a zero', () => {
-  expect(texts(mount({ item: item() }))).not.toContain('0.00s');
+  // Older boundaries predate the measurement: nothing is drawn, never a misleading "0 s".
+  expect(texts(mount({ item: item() }))).not.toContain('0 s');
 });
 
 test('the summary stays open when the cell is unmounted and rebuilt', () => {
@@ -100,6 +104,14 @@ test('a stopped compaction is a rule too, and says how many turns it kept', () =
 
   expect(texts(tree)).toContain('Compaction stopped · 12 turns kept');
   expect(texts(tree)).not.toContain('Context compacted');
+});
+
+test('a stopped compaction says how long it ran, on the same rule', () => {
+  // The counter was the summary's companion; a stopped pass has no summary, so it had nothing at
+  // all. The rule is where both now say it.
+  const tree = mount({ item: item({ compactionStopped: true, text: '', compactionMs: 12_400 }) });
+
+  expect(texts(tree)).toContain('Compaction stopped · 12 turns kept · 12 s');
 });
 
 test('a stopped compaction offers no aside: there is no summary to fold', () => {
