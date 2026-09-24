@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { formatBytes } from '../core/utils';
 import type { FileKind } from '../core/fileKind';
+import { CsvTable } from '../components/CsvTable';
 import { CodeEditor } from '../components/CodeEditor';
 import { languageForFile } from '../components/codeeditor/document';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
@@ -54,9 +55,12 @@ export function TextViewer({
   const saveProgress = useTransferProgress(saveId);
 
   const isMarkdown = kind ? kind === 'markdown' : filename.toLowerCase().endsWith('.md');
+  // A delimited file is read as a table: its columns are the point, and the code reader makes them
+  // a wall of commas.
+  const isTable = kind === 'csv';
   // The code reader is a WebView of its own: it scrolls itself, so it never goes inside the
   // ScrollView the prose needs.
-  const isCode = kind === 'code' || kind === 'json' || kind === 'csv' || kind === 'html';
+  const isCode = kind === 'code' || kind === 'json' || kind === 'html';
 
   useEffect(() => {
     let cancelled = false;
@@ -119,7 +123,9 @@ export function TextViewer({
       </View>
 
       {content !== null ? (
-        isCode ? (
+        isTable ? (
+          <CsvTable value={content} />
+        ) : isCode ? (
           <View style={styles.body}>
             <CodeEditor
               value={content}
