@@ -221,6 +221,7 @@ import { TextViewer } from './TextViewer';
 import { VideoViewer } from './VideoViewer';
 import { SvgViewer } from './SvgViewer';
 import { PdfViewer } from './PdfViewer';
+import { HtmlViewer } from './HtmlViewer';
 import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
@@ -610,6 +611,10 @@ export function AppShell(): React.JSX.Element {
     filename: string;
   } | null>(null);
   const [pdfViewer, setPdfViewer] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
+  const [htmlViewer, setHtmlViewer] = useState<{
     url: string;
     filename: string;
   } | null>(null);
@@ -3376,6 +3381,7 @@ export function AppShell(): React.JSX.Element {
             onOpenVideo={setVideoViewer}
             onOpenSvg={setSvgViewer}
             onOpenPdf={setPdfViewer}
+            onOpenHtml={setHtmlViewer}
             onOpenFile={setFileViewer}
             onOpenMenu={() => setCommandMenuOpen(true)}
             onCommandEntered={dispatchCommand}
@@ -4036,6 +4042,7 @@ export function AppShell(): React.JSX.Element {
               onOpenVideo={setVideoViewer}
               onOpenSvg={setSvgViewer}
               onOpenPdf={setPdfViewer}
+              onOpenHtml={setHtmlViewer}
             />
           ) : statusOpen ? (
             <StatusScreen onClose={closeStatus} />
@@ -4219,6 +4226,14 @@ export function AppShell(): React.JSX.Element {
           url={pdfViewer.url}
           filename={pdfViewer.filename}
           onClose={() => setPdfViewer(null)}
+        />
+      ) : null}
+
+      {htmlViewer ? (
+        <HtmlViewer
+          url={htmlViewer.url}
+          filename={htmlViewer.filename}
+          onClose={() => setHtmlViewer(null)}
         />
       ) : null}
 

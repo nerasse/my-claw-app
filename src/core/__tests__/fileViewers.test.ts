@@ -15,7 +15,7 @@ describe('viewerFor', () => {
     expect(viewerFor('file', 'main.py')).toBe('code');
     expect(viewerFor('file', 'data.json')).toBe('code');
     expect(viewerFor('file', 'rows.csv')).toBe('code');
-    expect(viewerFor('file', 'page.html')).toBe('code');
+    expect(viewerFor('file', 'page.html')).toBe('html');
     expect(viewerFor('file', 'config.yaml')).toBe('code');
     expect(viewerFor('file', 'Dockerfile')).toBe('code');
     expect(viewerFor('file', 'script.sh')).toBe('code');
@@ -29,6 +29,7 @@ describe('viewerFor', () => {
     expect(viewerFor('file', 'logo.svg')).toBe('svg');
     expect(viewerFor('file', 'report.pdf')).toBe('pdf');
     expect(viewerFor('file', 'capture', 'pdf')).toBe('pdf');
+    expect(viewerFor('file', 'index.html')).toBe('html');
   });
 
   it('leaves what cannot be shown to the download card', () => {

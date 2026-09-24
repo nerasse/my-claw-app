@@ -29,7 +29,7 @@ export function httpOrigin(wsUrl: string, fallback = DEFAULT_HTTP_ORIGIN): strin
  * picked but not yet sent, and a turn replayed from a log older than `kind`, have only a name, and
  * `kindForName` reads it. The coarse `type` is the last resort, which is all any caller had before.
  */
-export type ViewerKind = 'image' | 'svg' | 'text' | 'code' | 'video' | 'audio' | 'pdf' | 'file';
+export type ViewerKind = 'image' | 'svg' | 'text' | 'code' | 'video' | 'audio' | 'pdf' | 'html' | 'file';
 
 export function viewerFor(
   type: 'image' | 'audio' | 'video' | 'file',
@@ -54,8 +54,11 @@ export function viewerFor(
     case 'code':
     case 'json':
     case 'csv':
-    case 'html':
       return 'code';
+    // A page gets a preview rather than its source: the sandboxed WebView, no scripts, and the
+    // server's own CSP behind it (2026-09-23).
+    case 'html':
+      return 'html';
     case 'archive':
     case 'office':
     case 'binary':
