@@ -1,3 +1,4 @@
+import type { FileKind } from '../core/fileKind';
 import React, {
   useCallback,
   useEffect,
@@ -218,6 +219,7 @@ import { ImageViewer } from './ImageViewer';
 import { SelectionViewer } from './SelectionViewer';
 import { TextViewer } from './TextViewer';
 import { VideoViewer } from './VideoViewer';
+import { SvgViewer } from './SvgViewer';
 import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
@@ -595,8 +597,14 @@ export function AppShell(): React.JSX.Element {
   const [textViewer, setTextViewer] = useState<{
     url: string;
     filename: string;
+    /** Which rendering the reader picks: markdown prose, or a coloured code page. */
+    kind?: FileKind;
   } | null>(null);
   const [videoViewer, setVideoViewer] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
+  const [svgViewer, setSvgViewer] = useState<{
     url: string;
     filename: string;
   } | null>(null);
@@ -3361,6 +3369,7 @@ export function AppShell(): React.JSX.Element {
             onOpenImage={openImage}
             onOpenText={setTextViewer}
             onOpenVideo={setVideoViewer}
+            onOpenSvg={setSvgViewer}
             onOpenFile={setFileViewer}
             onOpenMenu={() => setCommandMenuOpen(true)}
             onCommandEntered={dispatchCommand}
@@ -4019,6 +4028,7 @@ export function AppShell(): React.JSX.Element {
               onOpenImage={openImage}
               onOpenText={setTextViewer}
               onOpenVideo={setVideoViewer}
+              onOpenSvg={setSvgViewer}
             />
           ) : statusOpen ? (
             <StatusScreen onClose={closeStatus} />
@@ -4176,6 +4186,7 @@ export function AppShell(): React.JSX.Element {
         <TextViewer
           url={textViewer.url}
           filename={textViewer.filename}
+          kind={textViewer.kind}
           onClose={() => setTextViewer(null)}
         />
       ) : null}
@@ -4185,6 +4196,14 @@ export function AppShell(): React.JSX.Element {
           url={videoViewer.url}
           filename={videoViewer.filename}
           onClose={() => setVideoViewer(null)}
+        />
+      ) : null}
+
+      {svgViewer ? (
+        <SvgViewer
+          url={svgViewer.url}
+          filename={svgViewer.filename}
+          onClose={() => setSvgViewer(null)}
         />
       ) : null}
 

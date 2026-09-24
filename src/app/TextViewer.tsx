@@ -10,29 +10,36 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { formatBytes } from '../core/utils';
+import type { FileKind } from '../core/fileKind';
+import { CodeEditor } from '../components/CodeEditor';
+import { languageForFile } from '../components/codeeditor/document';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /**
- * Full-screen text viewer for .md and .txt session files. Same layer trick as the image
- * viewer — no Modal — but it stays inside the safe area: the phone's status bar keeps its
- * icons, the top bar carries the name and the close cross, and the hardware back quits.
- * Download opens the system "Save as" dialog so the user picks the destination.
+ * Full-screen reader for everything made of text. Markdown is rendered, plain text is shown as it
+ * is, and code -- any language the editor page knows -- opens in CodeMirror, read-only and
+ * coloured. Same layer trick as the image viewer, no Modal, but it stays inside the safe area:
+ * the phone's status bar keeps its icons, the top bar carries the name and the close cross, and
+ * the hardware back quits. Download opens the system "Save as" dialog so the user picks the
+ * destination.
  */
 export function TextViewer({
   url,
   filename,
+  kind,
   onClose,
 }: {
   url: string;
   filename: string;
+  kind?: FileKind;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // opened from a bubble, with the composer's keyboard still up behind it.
   useDismissKeyboard();
-  const { palette } = useTheme();
+  const { palette, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
@@ -43,7 +50,10 @@ export function TextViewer({
   const saveId = `text-save-${filename}`;
   const saveProgress = useTransferProgress(saveId);
 
-  const isMarkdown = filename.toLowerCase().endsWith('.md');
+  const isMarkdown = kind ? kind === 'markdown' : filename.toLowerCase().endsWith('.md');
+  // The code reader is a WebView of its own: it scrolls itself, so it never goes inside the
+  // ScrollView the prose needs.
+  const isCode = kind === 'code' || kind === 'json' || kind === 'csv' || kind === 'html';
 
   useEffect(() => {
     let cancelled = false;
@@ -106,15 +116,27 @@ export function TextViewer({
       </View>
 
       {content !== null ? (
-        <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-          {isMarkdown ? (
-            <DocumentMarkdown value={content} />
-          ) : (
-            <Text style={styles.plainText} selectable>
-              {content}
-            </Text>
-          )}
-        </ScrollView>
+        isCode ? (
+          <View style={styles.body}>
+            <CodeEditor
+              value={content}
+              language={languageForFile(filename)}
+              readOnly
+              dark={dark}
+              onError={err => setContentError(err instanceof Error ? err.message : 'editor failed')}
+            />
+          </View>
+        ) : (
+          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+            {isMarkdown ? (
+              <DocumentMarkdown value={content} />
+            ) : (
+              <Text style={styles.plainText} selectable>
+                {content}
+              </Text>
+            )}
+          </ScrollView>
+        )
       ) : (
         <View style={styles.body}>
           {contentError ? (

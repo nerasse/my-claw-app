@@ -4,6 +4,7 @@ import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
 import { formatBytes, formatDate, viewerFor } from '../core/utils';
+import type { FileKind } from '../core/fileKind';
 import { TrashIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -81,6 +82,7 @@ export function FilesScreen({
   onOpenImage,
   onOpenText,
   onOpenVideo,
+  onOpenSvg,
   error,
 }: {
   mediaBase: string;
@@ -91,8 +93,9 @@ export function FilesScreen({
   /** Asks for the delete; the shell confirms before anything leaves. */
   onDelete: (file: SessionFileMeta) => void;
   onOpenImage: (images: MediaItem[], index: number) => void;
-  onOpenText: (file: { url: string; filename: string }) => void;
+  onOpenText: (file: { url: string; filename: string; kind?: FileKind }) => void;
   onOpenVideo: (file: { url: string; filename: string }) => void;
+  onOpenSvg: (file: { url: string; filename: string }) => void;
   /** Server-side refusal for this screen. Without it a failed delete just looks inert. */
   error?: string;
 }): React.JSX.Element {
@@ -110,13 +113,14 @@ export function FilesScreen({
         filename: item.filename,
         sizeBytes: item.sizeBytes,
       };
-      const kind = viewerFor(item.type, item.filename);
+      const kind = viewerFor(item.type, item.filename, item.kind);
       if (kind === 'image') onOpenImage([{ ...target }], 0);
-      else if (kind === 'text') onOpenText(target);
+      else if (kind === 'text' || kind === 'code') onOpenText({ ...target, kind: item.kind });
       else if (kind === 'video') onOpenVideo(target);
+      else if (kind === 'svg') onOpenSvg(target);
       else setViewer(item);
     },
-    [deviceInfo, mediaBase, onOpenImage, onOpenText, onOpenVideo],
+    [deviceInfo, mediaBase, onOpenImage, onOpenText, onOpenVideo, onOpenSvg],
   );
 
   const renderFile = useCallback(

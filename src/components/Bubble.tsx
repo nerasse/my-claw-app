@@ -2,6 +2,8 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { RunInfo, TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
+import type { FileKind } from '../core/fileKind';
+import type { ViewerKind } from '../core/utils';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentView } from './AttachmentView';
 import { MediaCarousel, isCarouselMedia, mediaItemsOf, type MediaItem } from './MediaCarousel';
@@ -52,8 +54,8 @@ export const Bubble = React.memo(function BubbleView({
   /** The owner's message never got its receipt: send it again, same id. */
   onResend?: (item: TextItem) => void;
   onOpenAttachment?: (
-    kind: 'image' | 'text' | 'video' | 'file',
-    target: { url: string; filename: string; sizeBytes?: number },
+    kind: ViewerKind,
+    target: { url: string; filename: string; sizeBytes?: number; kind?: FileKind },
   ) => void;
   /** A run of pictures opens as one gallery, at the index that was tapped. */
   onOpenMedia?: (items: MediaItem[], index: number) => void;

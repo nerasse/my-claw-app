@@ -1,4 +1,5 @@
 import { DEFAULT_HTTP_ORIGIN } from './serverUrl';
+import { kindForName, type FileKind } from './fileKind';
 export function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.floor(Math.random() * 16);
@@ -22,14 +23,52 @@ export function httpOrigin(wsUrl: string, fallback = DEFAULT_HTTP_ORIGIN): strin
 
 /**
  * Which full-screen viewer opens a file, in the explorer and in a chat bubble alike. Anything
- * else falls back to the download card: one rule, so both entry points agree.
+ * else falls back to the download card: one rule, so every entry point agrees.
+ *
+ * `kind` is the server's verdict when the file came over the wire (docs/file-preview.md); a file
+ * picked but not yet sent, and a turn replayed from a log older than `kind`, have only a name, and
+ * `kindForName` reads it. The coarse `type` is the last resort, which is all any caller had before.
  */
+export type ViewerKind = 'image' | 'svg' | 'text' | 'code' | 'video' | 'audio' | 'file';
+
 export function viewerFor(
   type: 'image' | 'audio' | 'video' | 'file',
   filename: string | undefined,
-): 'image' | 'text' | 'video' | null {
+  kind?: FileKind,
+): ViewerKind | null {
+  const resolved = kind ?? kindForName(filename);
+  switch (resolved) {
+    case 'image':
+      return 'image';
+    case 'svg':
+      return 'svg';
+    case 'video':
+      return 'video';
+    case 'audio':
+      return 'audio';
+    case 'markdown':
+    case 'text':
+      return 'text';
+    // Everything readable that is not prose or markdown opens in the code reader, coloured by
+    // its language. A CSV is read there too until it earns a table of its own.
+    case 'code':
+    case 'json':
+    case 'csv':
+    case 'html':
+      return 'code';
+    case 'archive':
+    case 'office':
+    case 'binary':
+      return null;
+    case 'pdf':
+      // Until the pdf.js page lands, a PDF keeps the download card it has always had.
+      return null;
+    default:
+      break;
+  }
   if (type === 'image') return 'image';
   if (type === 'video') return 'video';
+  if (type === 'audio') return 'audio';
   const name = (filename ?? '').toLowerCase();
   if (name.endsWith('.md') || name.endsWith('.txt')) return 'text';
   return null;

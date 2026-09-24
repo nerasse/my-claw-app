@@ -3,8 +3,9 @@ import { recordDiag } from '../core/diagnostics';
 import React, { useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import type { AttachmentMeta } from '../core/protocol';
+import type { FileKind } from '../core/fileKind';
 import type { DeviceInfo } from '../core/device';
-import { viewerFor } from '../core/utils';
+import { viewerFor, type ViewerKind } from '../core/utils';
 import { VoiceNote } from './VoiceNote';
 import { mediaHeight, useMediaRatio } from './MediaCarousel';
 import { PlayPauseIcon } from './icons';
@@ -23,8 +24,8 @@ export function AttachmentView({
   deviceInfo: DeviceInfo | null;
   /** Routed to the same full-screen viewers as the file explorer. */
   onOpen?: (
-    kind: 'image' | 'text' | 'video' | 'file',
-    target: { url: string; filename: string; sizeBytes?: number },
+    kind: ViewerKind,
+    target: { url: string; filename: string; sizeBytes?: number; kind?: FileKind },
   ) => void;
   /** What the server heard, shown under its own recording. */
   transcript?: string;
@@ -48,11 +49,11 @@ export function AttachmentView({
   const name = att.filename ?? att.type;
   // Everything reachable opens something: previews where there is one, a download card else.
   // A deleted attachment has nothing left to open.
-  const kind = att.deleted ? null : (viewerFor(att.type, att.filename) ?? 'file');
+  const kind = att.deleted ? null : (viewerFor(att.type, att.filename, att.kind) ?? 'file');
   // A local preview has no server copy yet, so the viewer would have nothing to fetch.
   const open =
     onOpen && kind && remote
-      ? () => onOpen(kind, { url: remote, filename: name, sizeBytes: att.sizeBytes })
+      ? () => onOpen(kind, { url: remote, filename: name, sizeBytes: att.sizeBytes, kind: att.kind })
       : undefined;
 
   // A voice note plays where it sits. Falling through to the chip would have named a file the

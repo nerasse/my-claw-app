@@ -70,6 +70,28 @@ describe('AttachmentView with a cookie session', () => {
     expect(opened).toEqual([{ kind: 'file', url: `${BASE}/media/doc` }]);
   });
 
+  it('sends a code file to the reader, carrying the server kind', () => {
+    const opened: Array<{ kind: string; fileKind?: string }> = [];
+    let tree!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      tree = ReactTestRenderer.create(
+        <AttachmentView
+          att={{ id: 'py', type: 'file', filename: 'main.py', kind: 'code' }}
+          mediaBase={BASE}
+          deviceInfo={{ deviceId: '', token: '' }}
+          onOpen={(kind, target) => opened.push({ kind, fileKind: target.kind })}
+        />,
+      );
+    });
+    const pressable = tree.root.findAll(node => typeof node.props?.onPress === 'function')[0];
+    if (!pressable) throw new Error('the file chip is not pressable');
+    ReactTestRenderer.act(() => {
+      pressable.props.onPress();
+    });
+    // The bubble opens the code reader, and the reader needs the fine kind to pick its rendering.
+    expect(opened).toEqual([{ kind: 'code', fileKind: 'code' }]);
+  });
+
   it('has nothing to show before the identity resolves', () => {
     const tree = render({ id: 'abc', type: 'image', filename: 'shot.png' }, null);
     expect(imageUris(tree)).toEqual([]);

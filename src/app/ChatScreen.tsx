@@ -29,7 +29,8 @@ import { mediaUrl } from '../core/mediaUrl';
 import { clearDraft, draftAttachmentsOf, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
-import { uuid, viewerFor } from '../core/utils';
+import { uuid, viewerFor, type ViewerKind } from '../core/utils';
+import type { FileKind } from '../core/fileKind';
 import { getCurrentLocation } from '../core/location';
 import { locationPreview } from '../core/locationPreview';
 import { LocationEditor } from '../components/LocationEditor';
@@ -104,6 +105,7 @@ export function ChatScreen({
   onOpenImage,
   onOpenText,
   onOpenVideo,
+  onOpenSvg,
   onOpenFile,
   onOpenMenu,
   onCommandEntered,
@@ -142,8 +144,9 @@ export function ChatScreen({
   /** A message of the owner's that never got its receipt is sent again, same id. */
   onResend: (item: TextItem) => void;
   onOpenImage: (images: MediaItem[], index: number) => void;
-  onOpenText: (target: { url: string; filename: string }) => void;
+  onOpenText: (target: { url: string; filename: string; kind?: FileKind }) => void;
   onOpenVideo: (target: { url: string; filename: string }) => void;
+  onOpenSvg: (target: { url: string; filename: string }) => void;
   onOpenFile: (target: { url: string; filename: string; sizeBytes?: number }) => void;
   /** The command menu of the app (model, stop, clear, ...). */
   onOpenMenu: () => void;
@@ -668,14 +671,16 @@ export function ChatScreen({
   // viewer setters come from AppShell as state setters, so this closure only changes when the
   // screen genuinely changes.
   const openAttachment = useCallback(
-    (kind: 'image' | 'text' | 'video' | 'file', target: { url: string; filename: string; sizeBytes?: number }) => {
+    (kind: ViewerKind, target: { url: string; filename: string; sizeBytes?: number; kind?: FileKind }) => {
       // One picture is a gallery of one: the same viewer, so nothing has two behaviours.
       if (kind === 'image') return onOpenImage([{ ...target }], 0);
-      if (kind === 'text') return onOpenText(target);
+      // Prose and code are the same reader, which picks its rendering from the file's kind.
+      if (kind === 'text' || kind === 'code') return onOpenText(target);
       if (kind === 'video') return onOpenVideo(target);
+      if (kind === 'svg') return onOpenSvg(target);
       return onOpenFile(target);
     },
-    [onOpenImage, onOpenText, onOpenVideo, onOpenFile],
+    [onOpenImage, onOpenText, onOpenVideo, onOpenSvg, onOpenFile],
   );
 
   /**

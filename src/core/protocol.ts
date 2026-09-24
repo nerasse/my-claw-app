@@ -1,3 +1,4 @@
+import type { FileKind } from './fileKind';
 export type LocationAddressLevel = 'building' | 'street' | 'locality' | 'city' | 'country';
 
 export interface LocationAddress {
@@ -36,6 +37,8 @@ export type LocationInput = Omit<LocationData, 'address'> & {
 
 export interface AttachmentMeta {
   id: string;
+  /** What the file is, finely, from the server -- docs/file-preview.md. Absent on old turns. */
+  kind?: FileKind;
   type: 'image' | 'audio' | 'video' | 'file';
   mimeType?: string;
   filename?: string;
@@ -554,6 +557,8 @@ export interface CommandsListResultFrame {
 export interface SessionFileMeta {
   id: string;
   filename: string;
+  /** What the file is, finely, from the server -- docs/file-preview.md. */
+  kind?: FileKind;
   type: 'image' | 'audio' | 'video' | 'file';
   mimeType: string;
   sizeBytes: number;
