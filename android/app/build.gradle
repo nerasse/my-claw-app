@@ -167,8 +167,27 @@ tasks.register('copyCodeditorAssets', Copy) {
     into file("$projectDir/src/main/assets/codeditor")
 }
 
+tasks.register('verifyPdfviewerAssets') {
+    description = 'Fails the build when the PDF page has not been built'
+    def page = file("$rootDir/../assets/pdfviewer/index.html")
+    doLast {
+        if (!page.exists() || page.length() == 0) {
+            throw new GradleException(
+                "missing ${page} -- run `node scripts/build-pdfviewer.js` at the repository root")
+        }
+    }
+}
+
+tasks.register('copyPdfviewerAssets', Copy) {
+    description = 'Copies the PDF WebView page into the app assets'
+    dependsOn('verifyPdfviewerAssets')
+    from file("$rootDir/../assets/pdfviewer")
+    into file("$projectDir/src/main/assets/pdfviewer")
+}
+
 tasks.configureEach { task ->
     if (task.name == 'preBuild') {
         task.dependsOn('copyCodeditorAssets')
+        task.dependsOn('copyPdfviewerAssets')
     }
 }

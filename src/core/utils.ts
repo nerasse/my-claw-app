@@ -29,7 +29,7 @@ export function httpOrigin(wsUrl: string, fallback = DEFAULT_HTTP_ORIGIN): strin
  * picked but not yet sent, and a turn replayed from a log older than `kind`, have only a name, and
  * `kindForName` reads it. The coarse `type` is the last resort, which is all any caller had before.
  */
-export type ViewerKind = 'image' | 'svg' | 'text' | 'code' | 'video' | 'audio' | 'file';
+export type ViewerKind = 'image' | 'svg' | 'text' | 'code' | 'video' | 'audio' | 'pdf' | 'file';
 
 export function viewerFor(
   type: 'image' | 'audio' | 'video' | 'file',
@@ -61,8 +61,7 @@ export function viewerFor(
     case 'binary':
       return null;
     case 'pdf':
-      // Until the pdf.js page lands, a PDF keeps the download card it has always had.
-      return null;
+      return 'pdf';
     default:
       break;
   }

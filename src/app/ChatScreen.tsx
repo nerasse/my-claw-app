@@ -106,6 +106,7 @@ export function ChatScreen({
   onOpenText,
   onOpenVideo,
   onOpenSvg,
+  onOpenPdf,
   onOpenFile,
   onOpenMenu,
   onCommandEntered,
@@ -147,6 +148,7 @@ export function ChatScreen({
   onOpenText: (target: { url: string; filename: string; kind?: FileKind }) => void;
   onOpenVideo: (target: { url: string; filename: string }) => void;
   onOpenSvg: (target: { url: string; filename: string }) => void;
+  onOpenPdf: (target: { url: string; filename: string }) => void;
   onOpenFile: (target: { url: string; filename: string; sizeBytes?: number }) => void;
   /** The command menu of the app (model, stop, clear, ...). */
   onOpenMenu: () => void;
@@ -678,9 +680,10 @@ export function ChatScreen({
       if (kind === 'text' || kind === 'code') return onOpenText(target);
       if (kind === 'video') return onOpenVideo(target);
       if (kind === 'svg') return onOpenSvg(target);
+      if (kind === 'pdf') return onOpenPdf(target);
       return onOpenFile(target);
     },
-    [onOpenImage, onOpenText, onOpenVideo, onOpenSvg, onOpenFile],
+    [onOpenImage, onOpenText, onOpenVideo, onOpenSvg, onOpenPdf, onOpenFile],
   );
 
   /**

@@ -49,6 +49,7 @@
     "expo-modules-core": "~57.0.10",
     "expo-unified-push": "^0.6.0",
     "expo-video": "~57.0.2",
+    "pdfjs-dist": "6.3.289",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-native": "0.86.2",

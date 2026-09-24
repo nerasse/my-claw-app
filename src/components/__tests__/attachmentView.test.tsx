@@ -55,7 +55,7 @@ describe('AttachmentView with a cookie session', () => {
     ReactTestRenderer.act(() => {
       tree = ReactTestRenderer.create(
         <AttachmentView
-          att={{ id: 'doc', type: 'file', filename: 'notes.pdf' }}
+          att={{ id: 'doc', type: 'file', filename: 'notes.zip' }}
           mediaBase={BASE}
           deviceInfo={{ deviceId: '', token: '' }}
           onOpen={(kind, target) => opened.push({ kind, url: target.url })}
@@ -90,6 +90,27 @@ describe('AttachmentView with a cookie session', () => {
     });
     // The bubble opens the code reader, and the reader needs the fine kind to pick its rendering.
     expect(opened).toEqual([{ kind: 'code', fileKind: 'code' }]);
+  });
+
+  it('sends a PDF to the PDF reader', () => {
+    const opened: Array<{ kind: string }> = [];
+    let tree!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      tree = ReactTestRenderer.create(
+        <AttachmentView
+          att={{ id: 'doc', type: 'file', filename: 'rapport.pdf' }}
+          mediaBase={BASE}
+          deviceInfo={{ deviceId: '', token: '' }}
+          onOpen={kind => opened.push({ kind })}
+        />,
+      );
+    });
+    const pressable = tree.root.findAll(node => typeof node.props?.onPress === 'function')[0];
+    if (!pressable) throw new Error('the file chip is not pressable');
+    ReactTestRenderer.act(() => {
+      pressable.props.onPress();
+    });
+    expect(opened).toEqual([{ kind: 'pdf' }]);
   });
 
   it('has nothing to show before the identity resolves', () => {

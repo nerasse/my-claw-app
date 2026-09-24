@@ -22,19 +22,20 @@ describe('viewerFor', () => {
     expect(viewerFor('file', 'query.sql')).toBe('code');
   });
 
-  it('draws a picture, a film, a sound and a drawing with their own viewers', () => {
+  it('draws a picture, a film, a sound, a drawing and a PDF with their own viewers', () => {
     expect(viewerFor('image', 'shot.png')).toBe('image');
     expect(viewerFor('video', 'clip.mp4')).toBe('video');
     expect(viewerFor('audio', 'voice.m4a')).toBe('audio');
     expect(viewerFor('file', 'logo.svg')).toBe('svg');
+    expect(viewerFor('file', 'report.pdf')).toBe('pdf');
+    expect(viewerFor('file', 'capture', 'pdf')).toBe('pdf');
   });
 
   it('leaves what cannot be shown to the download card', () => {
     expect(viewerFor('file', 'bundle.zip')).toBeNull();
     expect(viewerFor('file', 'report.docx')).toBeNull();
     expect(viewerFor('file', 'blob.bin')).toBeNull();
-    // A PDF keeps the download card until the pdf.js page lands.
-    expect(viewerFor('file', 'report.pdf')).toBeNull();
+    expect(viewerFor('file', 'bundle.tar.gz')).toBeNull();
   });
 
   it('trusts the server verdict over the name, both ways', () => {
