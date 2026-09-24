@@ -55,7 +55,7 @@ describe('AttachmentView with a cookie session', () => {
     ReactTestRenderer.act(() => {
       tree = ReactTestRenderer.create(
         <AttachmentView
-          att={{ id: 'doc', type: 'file', filename: 'notes.zip' }}
+          att={{ id: 'doc', type: 'file', filename: 'notes.bin' }}
           mediaBase={BASE}
           deviceInfo={{ deviceId: '', token: '' }}
           onOpen={(kind, target) => opened.push({ kind, url: target.url })}

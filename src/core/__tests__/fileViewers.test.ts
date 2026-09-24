@@ -5,7 +5,7 @@
  * a download card for the same bytes, because two lists answered "what is this file". `viewerFor`
  * now reads the server's `kind` when there is one, the name otherwise, and the coarse `type` last.
  */
-import { viewerFor } from '../utils';
+import { viewerFor, withView } from '../utils';
 import { kindForName } from '../fileKind';
 
 describe('viewerFor', () => {
@@ -32,11 +32,16 @@ describe('viewerFor', () => {
     expect(viewerFor('file', 'index.html')).toBe('html');
   });
 
+  it('reads a document as its text and an archive as its entry list', () => {
+    expect(viewerFor('file', 'report.docx')).toBe('office');
+    expect(viewerFor('file', 'budget.xlsx')).toBe('office');
+    expect(viewerFor('file', 'bundle.zip')).toBe('archive');
+    expect(viewerFor('file', 'bundle.tar.gz')).toBe('archive');
+  });
+
   it('leaves what cannot be shown to the download card', () => {
-    expect(viewerFor('file', 'bundle.zip')).toBeNull();
-    expect(viewerFor('file', 'report.docx')).toBeNull();
     expect(viewerFor('file', 'blob.bin')).toBeNull();
-    expect(viewerFor('file', 'bundle.tar.gz')).toBeNull();
+    expect(viewerFor('file', 'weird.qqq')).toBeNull();
   });
 
   it('trusts the server verdict over the name, both ways', () => {
@@ -55,6 +60,15 @@ describe('viewerFor', () => {
     // A name with no extension but a known type is what the old rule already answered.
     expect(viewerFor('file', 'x.txt')).toBe('text');
     expect(viewerFor('file', 'x.md')).toBe('text');
+  });
+});
+
+describe('withView', () => {
+  it('asks a media url for a rendering of it, keeping whatever query it already carries', () => {
+    expect(withView('http://host:8080/media/abc', 'text')).toBe('http://host:8080/media/abc?view=text');
+    expect(withView('http://host:8080/media/abc?device=p&token=t', 'list')).toBe(
+      'http://host:8080/media/abc?device=p&token=t&view=list',
+    );
   });
 });
 

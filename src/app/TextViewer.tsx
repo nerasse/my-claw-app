@@ -29,11 +29,14 @@ export function TextViewer({
   url,
   filename,
   kind,
+  downloadUrl,
   onClose,
 }: {
   url: string;
   filename: string;
   kind?: FileKind;
+  /** What Download hands over, when `url` is a rendering of the file and not the file. */
+  downloadUrl?: string;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -88,7 +91,7 @@ export function TextViewer({
   const save = () => {
     setSaving(true);
     deviceBridge
-      .saveFile(url, filename, saveId)
+      .saveFile(downloadUrl ?? url, filename, saveId)
       .then(path => {
         if (path) setSavedTo('saved');
       })

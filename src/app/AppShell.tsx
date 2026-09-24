@@ -183,7 +183,7 @@ import { appUpdateAsks, appUpdateDecision, reduceAppUpdate, type AppUpdatePhase 
 import { appUpdateRuntime, appUpdateSupported } from '../core/appUpdateRuntime';
 import { playAlertSound } from '../core/alertSound';
 import { resetToolOutputAsks } from '../core/toolOutput';
-import { httpOrigin, uuid } from '../core/utils';
+import { httpOrigin, uuid, withView } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { GeneralSettingsScreen } from './GeneralSettingsScreen';
@@ -222,6 +222,7 @@ import { VideoViewer } from './VideoViewer';
 import { SvgViewer } from './SvgViewer';
 import { PdfViewer } from './PdfViewer';
 import { HtmlViewer } from './HtmlViewer';
+import { ArchiveViewer } from './ArchiveViewer';
 import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
@@ -615,6 +616,15 @@ export function AppShell(): React.JSX.Element {
     filename: string;
   } | null>(null);
   const [htmlViewer, setHtmlViewer] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
+  /** A document read as text, and an archive read as a list: both are the server's rendering. */
+  const [officeViewer, setOfficeViewer] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
+  const [archiveViewer, setArchiveViewer] = useState<{
     url: string;
     filename: string;
   } | null>(null);
@@ -3382,6 +3392,8 @@ export function AppShell(): React.JSX.Element {
             onOpenSvg={setSvgViewer}
             onOpenPdf={setPdfViewer}
             onOpenHtml={setHtmlViewer}
+            onOpenOffice={setOfficeViewer}
+            onOpenArchive={setArchiveViewer}
             onOpenFile={setFileViewer}
             onOpenMenu={() => setCommandMenuOpen(true)}
             onCommandEntered={dispatchCommand}
@@ -4043,6 +4055,8 @@ export function AppShell(): React.JSX.Element {
               onOpenSvg={setSvgViewer}
               onOpenPdf={setPdfViewer}
               onOpenHtml={setHtmlViewer}
+              onOpenOffice={setOfficeViewer}
+              onOpenArchive={setArchiveViewer}
             />
           ) : statusOpen ? (
             <StatusScreen onClose={closeStatus} />
@@ -4234,6 +4248,24 @@ export function AppShell(): React.JSX.Element {
           url={htmlViewer.url}
           filename={htmlViewer.filename}
           onClose={() => setHtmlViewer(null)}
+        />
+      ) : null}
+
+      {officeViewer ? (
+        <TextViewer
+          url={withView(officeViewer.url, 'text')}
+          downloadUrl={officeViewer.url}
+          filename={officeViewer.filename}
+          kind="text"
+          onClose={() => setOfficeViewer(null)}
+        />
+      ) : null}
+
+      {archiveViewer ? (
+        <ArchiveViewer
+          url={withView(archiveViewer.url, 'list')}
+          filename={archiveViewer.filename}
+          onClose={() => setArchiveViewer(null)}
         />
       ) : null}
 

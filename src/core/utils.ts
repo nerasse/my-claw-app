@@ -22,6 +22,15 @@ export function httpOrigin(wsUrl: string, fallback = DEFAULT_HTTP_ORIGIN): strin
 }
 
 /**
+ * The same media URL, asked for a different rendering of it: `?view=text` for a document's words,
+ * `?view=list` for an archive's entries. The separator is decided here because a native client's
+ * URL already carries the device and its token, and the web's carries nothing.
+ */
+export function withView(url: string, view: 'text' | 'list'): string {
+  return `${url}${url.includes('?') ? '&' : '?'}view=${view}`;
+}
+
+/**
  * Which full-screen viewer opens a file, in the explorer and in a chat bubble alike. Anything
  * else falls back to the download card: one rule, so every entry point agrees.
  *
@@ -29,7 +38,7 @@ export function httpOrigin(wsUrl: string, fallback = DEFAULT_HTTP_ORIGIN): strin
  * picked but not yet sent, and a turn replayed from a log older than `kind`, have only a name, and
  * `kindForName` reads it. The coarse `type` is the last resort, which is all any caller had before.
  */
-export type ViewerKind = 'image' | 'svg' | 'text' | 'code' | 'video' | 'audio' | 'pdf' | 'html' | 'file';
+export type ViewerKind = 'image' | 'svg' | 'text' | 'code' | 'video' | 'audio' | 'pdf' | 'html' | 'office' | 'archive' | 'file';
 
 export function viewerFor(
   type: 'image' | 'audio' | 'video' | 'file',
@@ -59,8 +68,12 @@ export function viewerFor(
     // server's own CSP behind it (2026-09-23).
     case 'html':
       return 'html';
-    case 'archive':
+    // Both travel as something the app can read: the server extracts a document's text and lists
+    // an archive's entries (docs/file-preview.md).
     case 'office':
+      return 'office';
+    case 'archive':
+      return 'archive';
     case 'binary':
       return null;
     case 'pdf':

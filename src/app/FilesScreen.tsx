@@ -85,6 +85,8 @@ export function FilesScreen({
   onOpenSvg,
   onOpenPdf,
   onOpenHtml,
+  onOpenOffice,
+  onOpenArchive,
   error,
 }: {
   mediaBase: string;
@@ -100,6 +102,8 @@ export function FilesScreen({
   onOpenSvg: (file: { url: string; filename: string }) => void;
   onOpenPdf: (file: { url: string; filename: string }) => void;
   onOpenHtml: (file: { url: string; filename: string }) => void;
+  onOpenOffice: (file: { url: string; filename: string }) => void;
+  onOpenArchive: (file: { url: string; filename: string }) => void;
   /** Server-side refusal for this screen. Without it a failed delete just looks inert. */
   error?: string;
 }): React.JSX.Element {
@@ -124,9 +128,11 @@ export function FilesScreen({
       else if (kind === 'svg') onOpenSvg(target);
       else if (kind === 'pdf') onOpenPdf(target);
       else if (kind === 'html') onOpenHtml(target);
+      else if (kind === 'office') onOpenOffice(target);
+      else if (kind === 'archive') onOpenArchive(target);
       else setViewer(item);
     },
-    [deviceInfo, mediaBase, onOpenImage, onOpenText, onOpenVideo, onOpenSvg, onOpenPdf, onOpenHtml],
+    [deviceInfo, mediaBase, onOpenImage, onOpenText, onOpenVideo, onOpenSvg, onOpenPdf, onOpenHtml, onOpenOffice, onOpenArchive],
   );
 
   const renderFile = useCallback(
