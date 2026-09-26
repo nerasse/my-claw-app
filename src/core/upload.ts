@@ -121,6 +121,16 @@ export async function uploadToFs(
 }
 
 /**
+ * Where a file of the machine can be fetched from, credentials and all. Exported because the
+ * explorer hands this URL to the same download control as every other surface, so a file has one
+ * arrow and one sheet wherever it is tapped (2026-09-26).
+ */
+export function fsDownloadUrl(mediaBase: string, deviceInfo: DeviceInfo | null, path: string): string {
+  const query = deviceInfo ? authQuery(deviceInfo) : '';
+  return `${mediaBase}/fs/download?path=${encodeURIComponent(path)}${query ? `&${query}` : ''}`;
+}
+
+/**
  * Saves one file from the machine into the phone's Downloads (`GET /fs/download`), through the
  * same relay and the same credential as the APK download. Resolves the stored location.
  */
@@ -130,9 +140,7 @@ export async function downloadFsFile(
   path: string,
   filename: string,
 ): Promise<string> {
-  const query = deviceInfo ? authQuery(deviceInfo) : '';
-  const url = `${mediaBase}/fs/download?path=${encodeURIComponent(path)}${query ? `&${query}` : ''}`;
-  const result = await deviceBridge.downloadFile(url, filename, false, `fs-${Date.now()}`);
+  const result = await deviceBridge.downloadFile(fsDownloadUrl(mediaBase, deviceInfo, path), filename, false, `fs-${Date.now()}`);
   return result.path;
 }
 

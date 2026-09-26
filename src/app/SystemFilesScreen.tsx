@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, FlatList, Platform, Pressable, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
+import { DownloadControl } from '../components/DownloadControl';
 import { PromptSheet } from '../components/PromptSheet';
 import { CodeEditor } from '../components/CodeEditor';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
@@ -14,7 +15,7 @@ import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import { fsStore, sortEntries, useFsStore, type FsOpenFile } from '../core/fsStore';
 import { prefs } from '../core/prefs';
 import { formatBytes, formatDate, httpOrigin } from '../core/utils';
-import { downloadFsFile, uploadToFs, type FsLocalFile } from '../core/upload';
+import { downloadFsFile, fsDownloadUrl, uploadToFs, type FsLocalFile } from '../core/upload';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { FsEntry } from '../core/protocol';
 
@@ -137,10 +138,13 @@ function metaOf(file: FsOpenFile, cursor: number, rendered: boolean): string {
  */
 const FileRow = React.memo(function FileRowView({
   entry,
+  downloadUrl,
   onOpen,
   onActions,
 }: {
   entry: FsEntry;
+  /** Where this file can be fetched from, or nothing when the identity is not ready yet. */
+  downloadUrl?: string;
   onOpen: (entry: FsEntry) => void;
   onActions: (entry: FsEntry) => void;
 }): React.JSX.Element {
@@ -150,33 +154,46 @@ const FileRow = React.memo(function FileRowView({
   const stamp =
     entry.mtimeMs > 0 ? formatDate(new Date(entry.mtimeMs).toISOString()) : '';
   return (
-    <Pressable
-      style={styles.row}
-      onPress={() => onOpen(entry)}
-      onLongPress={() => onActions(entry)}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${entry.path}`}>
-      {dir ? (
-        <View style={styles.rowIcon}>
-          <FolderIcon size={18} color={palette.textMuted} />
+    <View style={styles.row}>
+      <Pressable
+        style={styles.rowMain}
+        onPress={() => onOpen(entry)}
+        onLongPress={() => onActions(entry)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${entry.path}`}>
+        {dir ? (
+          <View style={styles.rowIcon}>
+            <FolderIcon size={18} color={palette.textMuted} />
+          </View>
+        ) : (
+          <View style={styles.rowBadge}>
+            <Text style={styles.rowBadgeText}>{badgeFor(entry)}</Text>
+          </View>
+        )}
+        <View style={styles.rowText}>
+          <Text style={styles.rowName} numberOfLines={1}>
+            {entry.name}
+          </Text>
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {entry.kind === 'dir' ? 'folder' : formatBytes(entry.size)}
+            {entry.kind === 'symlink' ? ' · symlink' : ''}
+            {stamp ? ` · ${stamp}` : ''}
+          </Text>
         </View>
-      ) : (
-        <View style={styles.rowBadge}>
-          <Text style={styles.rowBadgeText}>{badgeFor(entry)}</Text>
-        </View>
-      )}
-      <View style={styles.rowMain}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {entry.name}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {entry.kind === 'dir' ? 'folder' : formatBytes(entry.size)}
-          {entry.kind === 'symlink' ? ' · symlink' : ''}
-          {stamp ? ` · ${stamp}` : ''}
-        </Text>
-      </View>
-      {dir ? <Text style={styles.chevron}>›</Text> : null}
-    </Pressable>
+        {dir ? <Text style={styles.chevron}>›</Text> : null}
+      </Pressable>
+      {downloadUrl ? (
+        <DownloadControl targets={[{ url: downloadUrl, filename: entry.name }]} variant="row" />
+      ) : null}
+      <Pressable
+        onPress={() => onActions(entry)}
+        hitSlop={8}
+        style={styles.more}
+        accessibilityRole="button"
+        accessibilityLabel={`Actions for ${entry.name}`}>
+        <Text style={styles.moreGlyph}>⋯</Text>
+      </Pressable>
+    </View>
   );
 });
 
@@ -348,77 +365,85 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
 
   useHardwareBack(goBack);
 
+  /**
+   * Picking a row acts and closes the sheet in the same gesture. The sheet used to stay up over
+   * the notice that said what had just happened -- a download reported behind its own menu
+   * (owner, 2026-09-26).
+   */
+  const fromSheet = useCallback(
+    (act: () => void) => () => {
+      setSheetEntry(null);
+      act();
+    },
+    [],
+  );
+
   const sheetOptions = useMemo((): SheetEntry[] => {
     const entry = sheetEntry;
     if (!entry) return [];
     const dir = isDirEntry(entry);
+    // Grouped, and in the order a hand reaches for them: what the row is, then what it produces,
+    // then how it is filed, then the one that destroys it -- last, and alone.
     const options: SheetEntry[] = [
       {
         label: 'Open',
         hint: dir ? 'walk into this folder' : 'read this file',
-        onPress: () => openEntry(entry),
+        onPress: fromSheet(() => openEntry(entry)),
       },
     ];
     if (dir) {
       options.push(
+        { type: 'separator', key: 'create' },
         {
           label: 'New file…',
           hint: `created empty in ${entry.name}`,
-          onPress: () => setPrompt({ kind: 'new-file', dir: entry.path }),
+          onPress: fromSheet(() => setPrompt({ kind: 'new-file', dir: entry.path })),
         },
         {
           label: 'New folder…',
           hint: `created in ${entry.name}`,
-          onPress: () => setPrompt({ kind: 'new-dir', dir: entry.path }),
+          onPress: fromSheet(() => setPrompt({ kind: 'new-dir', dir: entry.path })),
         },
         {
           label: 'Send files here…',
           hint: 'upload from this device into that folder',
-          onPress: () => {
+          onPress: fromSheet(() => {
             sendFiles(entry.path);
-          },
+          }),
         },
       );
     } else {
-      options.push({
-        label: 'Edit',
-        hint: 'binary and oversized files open read-only',
-        onPress: () => fsStore.openFile(entry.path, { edit: true }),
-      });
+      options.push(
+        {
+          label: 'Edit',
+          hint: 'binary and oversized files open read-only',
+          onPress: fromSheet(() => fsStore.openFile(entry.path, { edit: true })),
+        },
+        {
+          label: 'Download',
+          hint: 'save it on this device',
+          onPress: fromSheet(() => {
+            download(entry);
+          }),
+        },
+      );
     }
     options.push(
-      {
-        label: 'Rename…',
-        onPress: () => setPrompt({ kind: 'rename', entry }),
-      },
-      {
-        label: 'Move…',
-        onPress: () => setPrompt({ kind: 'move', entry }),
-      },
+      { type: 'separator', key: 'arrange' },
+      { label: 'Rename…', onPress: fromSheet(() => setPrompt({ kind: 'rename', entry })) },
+      { label: 'Move…', onPress: fromSheet(() => setPrompt({ kind: 'move', entry })) },
       {
         label: 'Copy path',
-        onPress: () => {
+        onPress: fromSheet(() => {
           Clipboard.setString(entry.path);
           fsStore.setNotice(`path copied: ${entry.path}`);
-        },
+        }),
       },
+      { type: 'separator', key: 'danger' },
+      { label: dir ? 'Delete folder…' : 'Delete…', danger: true, onPress: fromSheet(() => askDelete(entry)) },
     );
-    if (!dir) {
-      options.push({
-        label: 'Download',
-        hint: 'save it on this device',
-        onPress: () => {
-          download(entry);
-        },
-      });
-    }
-    options.push({
-      label: dir ? 'Delete folder…' : 'Delete…',
-      danger: true,
-      onPress: () => askDelete(entry),
-    });
     return options;
-  }, [askDelete, download, openEntry, sendFiles, sheetEntry]);
+  }, [askDelete, download, fromSheet, openEntry, sendFiles, sheetEntry]);
 
   const listing = state.listing;
   const entries = useMemo(() => (listing ? sortEntries(listing.entries) : []), [listing]);
@@ -623,7 +648,16 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
               contentContainerStyle={entries.length === 0 ? styles.emptyContent : styles.listContent}
               ListEmptyComponent={<Text style={styles.empty}>empty folder</Text>}
               renderItem={({ item }) => (
-                <FileRow entry={item} onOpen={openEntry} onActions={setSheetEntry} />
+                <FileRow
+                  entry={item}
+                  downloadUrl={
+                    !isDirEntry(item) && deviceInfo
+                      ? fsDownloadUrl(mediaBase, deviceInfo, item.path)
+                      : undefined
+                  }
+                  onOpen={openEntry}
+                  onActions={setSheetEntry}
+                />
               )}
               initialNumToRender={16}
               maxToRenderPerBatch={12}
@@ -858,7 +892,16 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   rowBadgeText: { fontSize: font.micro, color: palette.textFaint, fontWeight: '700' as const },
-  rowMain: { flex: 1, gap: 1 },
+  rowMain: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md },
+  rowText: { flex: 1, gap: 1 },
+  more: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  moreGlyph: { fontSize: font.title, color: palette.textMuted, lineHeight: 22 },
   rowName: { fontSize: font.body, color: palette.text },
   rowMeta: { fontSize: font.small, color: palette.textFaint },
   chevron: { fontSize: font.title, color: palette.textFaint },

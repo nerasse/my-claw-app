@@ -476,6 +476,48 @@ describe('SystemFilesScreen', () => {
     expect(shown).not.toContain('Send files here…');
   });
 
+  /** Opens a row's sheet; the visible button and the long press are the same door. */
+  function openSheet(tree: Tree, path: string): void {
+    const row = tree.root.findAll(
+      node => node.props.accessibilityLabel === `Open ${path}` && typeof node.props.onLongPress === 'function',
+      { deep: true },
+    )[0];
+    ReactTestRenderer.act(() => {
+      row.props.onLongPress();
+    });
+  }
+
+  test('picking a row acts once, and the sheet is gone by the time it did', async () => {
+    const tree = await render();
+    receive(HOME);
+    // The device identity lands in an effect: the row's arrow needs it.
+    await ReactTestRenderer.act(async () => {});
+
+    openSheet(tree, '/home/neras/notes.md');
+    expect(labels(tree)).toContain('Copy path');
+
+    press(tree, 'Copy path');
+
+    // The sheet used to stay up over the notice it had just raised: a download was reported
+    // behind its own menu (owner, 2026-09-26).
+    expect(labels(tree)).not.toContain('Copy path');
+    expect(labels(tree)).toContain('Dismiss notice');
+  });
+
+  test('a file row carries its own download arrow and a visible actions button', async () => {
+    const tree = await render();
+    receive(HOME);
+    await ReactTestRenderer.act(async () => {});
+
+    // One tap to save, and one visible button to reach everything else: the menu is no longer
+    // hidden behind a long press nobody discovers.
+    expect(labels(tree)).toContain('Download');
+    expect(labels(tree)).toContain('Actions for notes.md');
+
+    press(tree, 'Actions for notes.md');
+    expect(labels(tree)).toContain('Rename…');
+  });
+
   test('the row sheet on a directory offers creating and sending inside it', async () => {
     const tree = await render();
     receive(HOME);
