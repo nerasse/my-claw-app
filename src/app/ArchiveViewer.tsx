@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatBytes } from '../core/utils';
+import { DownloadControl } from '../components/DownloadControl';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -18,10 +19,14 @@ type ArchiveEntry = { name: string; size: number };
 export function ArchiveViewer({
   url,
   filename,
+  rawUrl,
   onClose,
 }: {
+  /** The listing URL (`?view=list`). */
   url: string;
   filename: string;
+  /** The file itself, so Download hands over the archive and not its entry list. */
+  rawUrl?: string;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -62,6 +67,7 @@ export function ArchiveViewer({
             {entries.length} entr{entries.length > 1 ? 'ies' : 'y'}
           </Text>
         ) : null}
+        <DownloadControl targets={[{ url: rawUrl ?? url, filename }]} />
         <Pressable
           onPress={onClose}
           hitSlop={12}

@@ -6,6 +6,7 @@ import type { DeviceInfo } from '../core/device';
 import { formatBytes, formatDate, viewerFor } from '../core/utils';
 import type { FileKind } from '../core/fileKind';
 import { TrashIcon } from '../components/icons';
+import { DownloadControl } from '../components/DownloadControl';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import type { MediaItem } from '../components/MediaCarousel';
@@ -60,6 +61,9 @@ const FileRow = React.memo(function FileRowView({
           </Text>
         </View>
       </Pressable>
+      {uri ? (
+        <DownloadControl targets={[{ url: uri, filename: item.filename }]} variant="row" />
+      ) : null}
       <Pressable
         onPress={() => onDelete(item)}
         hitSlop={10}

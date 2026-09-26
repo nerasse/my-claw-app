@@ -2,9 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
-import { DownloadIcon } from '../components/icons';
-import { formatBytes } from '../core/utils';
+import { DownloadControl } from '../components/DownloadControl';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -30,28 +28,13 @@ export function VideoViewer({
   const player = useVideoPlayer(url, p => {
     p.play();
   });
-  const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
-  const downloadId = `video-download-${filename}`;
-  const downloadProgress = useTransferProgress(downloadId);
 
   useEffect(() => {
     if (!savedTo) return;
     const timer = setTimeout(() => setSavedTo(null), 4000);
     return () => clearTimeout(timer);
   }, [savedTo]);
-
-  const save = () => {
-    if (!url) return;
-    setSaving(true);
-    deviceBridge
-      .downloadFile(url, filename, false, downloadId)
-      .then(() => setSavedTo('saved to Downloads'))
-      .catch(() => setSavedTo('download failed'))
-      .finally(() => setSaving(false));
-  };
-
-  const busy = saving && downloadProgress && downloadProgress.total > 0;
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
@@ -68,21 +51,7 @@ export function VideoViewer({
           {filename}
         </Text>
         {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : null}
-        {busy ? (
-          <Text style={styles.saved}>
-            {formatBytes(downloadProgress!.bytes)} of {formatBytes(downloadProgress!.total)}
-          </Text>
-        ) : null}
-        <Pressable
-          onPress={save}
-          disabled={saving}
-          hitSlop={8}
-          style={[styles.iconButton, saving && styles.saveOff]}
-          accessibilityRole="button"
-          accessibilityLabel="Save video to downloads"
-        >
-          <DownloadIcon size={18} color="#fff" />
-        </Pressable>
+        <DownloadControl targets={[{ url, filename }]} gallery tone="light" onMessage={setSavedTo} />
         <Pressable
           onPress={onClose}
           hitSlop={12}

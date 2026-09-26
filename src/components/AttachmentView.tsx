@@ -6,6 +6,7 @@ import type { AttachmentMeta } from '../core/protocol';
 import type { FileKind } from '../core/fileKind';
 import type { DeviceInfo } from '../core/device';
 import { viewerFor, type ViewerKind } from '../core/utils';
+import { DownloadControl } from './DownloadControl';
 import { VoiceNote } from './VoiceNote';
 import { mediaHeight, useMediaRatio } from './MediaCarousel';
 import { PlayPauseIcon } from './icons';
@@ -139,14 +140,24 @@ export function AttachmentView({
       </View>
     );
   }
+  // The chip opens on a tap and downloads on the arrow beside it: one control, the same sheet as
+  // every other surface, without a second tap to reach the file (2026-09-26).
   return (
-    <Pressable
-      style={[styles.chip, onAccent && styles.chipOnAccent]}
-      onPress={open}
-      accessibilityRole="button"
-      accessibilityLabel={`Open attachment ${name}`}>
-      <Text style={[styles.chipText, onAccent && styles.chipTextOnAccent]}>{label}</Text>
-    </Pressable>
+    <View style={[styles.chip, onAccent && styles.chipOnAccent]}>
+      <Pressable
+        onPress={open}
+        accessibilityRole="button"
+        accessibilityLabel={`Open attachment ${name}`}>
+        <Text style={[styles.chipText, onAccent && styles.chipTextOnAccent]}>{label}</Text>
+      </Pressable>
+      {remote ? (
+        <DownloadControl
+          targets={[{ url: remote, filename: name }]}
+          variant="row"
+          tone={onAccent ? 'light' : 'default'}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -181,10 +192,14 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   captionOnAccent: { color: palette.onAccentMuted },
   chip: {
     alignSelf: 'flex-start' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.xs,
     backgroundColor: palette.accentSoft,
     borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    paddingVertical: 8,
+    paddingLeft: space.md,
+    paddingRight: space.xs,
+    paddingVertical: 4,
     marginBottom: space.sm,
   },
   chipGone: { opacity: 0.6 },

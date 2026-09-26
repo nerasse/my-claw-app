@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
-import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
-import { formatBytes } from '../core/utils';
+import { DownloadControl } from '../components/DownloadControl';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -27,10 +26,6 @@ export function SvgViewer({
   const insets = useSafeAreaInsets();
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [savedTo, setSavedTo] = useState<string | null>(null);
-  const saveId = `svg-save-${filename}`;
-  const saveProgress = useTransferProgress(saveId);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,29 +53,13 @@ export function SvgViewer({
     };
   }, [url]);
 
-  useEffect(() => {
-    if (!savedTo) return;
-    const timer = setTimeout(() => setSavedTo(null), 4000);
-    return () => clearTimeout(timer);
-  }, [savedTo]);
-
-  const save = () => {
-    setSaving(true);
-    deviceBridge
-      .saveFile(url, filename, saveId)
-      .then(path => {
-        if (path) setSavedTo('saved');
-      })
-      .catch(() => setSavedTo('save failed'))
-      .finally(() => setSaving(false));
-  };
-
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}>
       <View style={styles.topBar}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
+        <DownloadControl targets={[{ url, filename }]} />
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -108,22 +87,6 @@ export function SvgViewer({
         </View>
       )}
 
-      <View style={[styles.bottomBar, { paddingBottom: space.sm + Math.max(insets.bottom - space.sm, 0) }]}>
-        {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : saveProgress && saveProgress.total > 0 ? (
-          <Text style={styles.saved}>
-            {formatBytes(saveProgress.bytes)} of {formatBytes(saveProgress.total)}
-          </Text>
-        ) : null}
-        <Pressable
-          onPress={save}
-          disabled={saving}
-          style={[styles.button, saving && styles.buttonOff]}
-          accessibilityRole="button"
-          accessibilityLabel="Save file to downloads"
-        >
-          <Text style={styles.buttonText}>{saving ? 'saving…' : 'Download'}</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }

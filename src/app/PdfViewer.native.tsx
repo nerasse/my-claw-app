@@ -13,6 +13,7 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { DownloadControl } from '../components/DownloadControl';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -73,6 +74,7 @@ export function PdfViewer({
             {drawn > 0 && drawn < pages ? `${drawn}/${pages}` : `${pages} page${pages > 1 ? 's' : ''}`}
           </Text>
         ) : null}
+        <DownloadControl targets={[{ url, filename }]} />
         <Pressable
           onPress={onClose}
           hitSlop={12}

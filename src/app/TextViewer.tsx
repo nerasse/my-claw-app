@@ -8,10 +8,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { formatBytes } from '../core/utils';
 import type { FileKind } from '../core/fileKind';
 import { CsvTable } from '../components/CsvTable';
+import { DownloadControl } from '../components/DownloadControl';
 import { CodeEditor } from '../components/CodeEditor';
 import { languageForFile } from '../components/codeeditor/document';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
@@ -49,10 +49,6 @@ export function TextViewer({
   const [contentError, setContentError] = useState<string | null>(null);
   /** Announced size from the response headers, so a big file shows what it is loading. */
   const [contentSize, setContentSize] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [savedTo, setSavedTo] = useState<string | null>(null);
-  const saveId = `text-save-${filename}`;
-  const saveProgress = useTransferProgress(saveId);
 
   const isMarkdown = kind ? kind === 'markdown' : filename.toLowerCase().endsWith('.md');
   // A delimited file is read as a table: its columns are the point, and the code reader makes them
@@ -86,23 +82,6 @@ export function TextViewer({
     };
   }, [url]);
 
-  useEffect(() => {
-    if (!savedTo) return;
-    const timer = setTimeout(() => setSavedTo(null), 4000);
-    return () => clearTimeout(timer);
-  }, [savedTo]);
-
-  const save = () => {
-    setSaving(true);
-    deviceBridge
-      .saveFile(downloadUrl ?? url, filename, saveId)
-      .then(path => {
-        if (path) setSavedTo('saved');
-      })
-      .catch(() => setSavedTo('save failed'))
-      .finally(() => setSaving(false));
-  };
-
   return (
     <View
       style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}
@@ -111,6 +90,7 @@ export function TextViewer({
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
+        <DownloadControl targets={[{ url: downloadUrl ?? url, filename }]} />
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -163,27 +143,6 @@ export function TextViewer({
         </View>
       )}
 
-      <View
-        style={[
-          styles.bottomBar,
-          { paddingBottom: space.sm + Math.max(insets.bottom - space.sm, 0) },
-        ]}
-      >
-        {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : saveProgress && saveProgress.total > 0 ? (
-          <Text style={styles.saved}>
-            {formatBytes(saveProgress.bytes)} of {formatBytes(saveProgress.total)}
-          </Text>
-        ) : null}
-        <Pressable
-          onPress={save}
-          disabled={saving}
-          style={[styles.button, saving && styles.buttonOff]}
-          accessibilityRole="button"
-          accessibilityLabel="Save file to downloads"
-        >
-          <Text style={styles.buttonText}>{saving ? 'saving…' : 'Download'}</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }

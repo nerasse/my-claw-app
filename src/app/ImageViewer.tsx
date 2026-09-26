@@ -15,8 +15,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageZoom } from '@likashefqet/react-native-image-zoom';
 import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { pointerActivityProps, pointerHoverProps } from '../core/webProps';
+import { DownloadControl } from '../components/DownloadControl';
 import type { MediaItem } from '../components/MediaCarousel';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { viewerControlsVisible, VIEWER_TICK_MS } from './viewerControls';
 
@@ -62,7 +63,6 @@ export function ImageViewer({
   const [at, setAt] = useState(Math.max(0, Math.min(index, images.length - 1)));
   const [controlsVisible, setControlsVisible] = useState(true);
   const [hovering, setHovering] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
   // null = not cached yet (or not needed); a string = local copy to render.
   const [cacheUri, setCacheUri] = useState<string | null>(null);
@@ -78,10 +78,6 @@ export function ImageViewer({
   const needsCache = !!sizeBytes && sizeBytes >= CACHE_THRESHOLD;
   const cacheId = needsCache ? `image-cache-${filename}` : null;
   const cacheProgress = useTransferProgress(cacheId);
-  const downloadId = `image-download-${filename}`;
-  const downloadProgress = useTransferProgress(downloadId);
-  const galleryId = `image-gallery-${filename}`;
-  const galleryProgress = useTransferProgress(galleryId);
 
   useEffect(() => {
     if (!needsCache) return;
@@ -131,16 +127,6 @@ export function ImageViewer({
     const timer = setTimeout(() => setSavedTo(null), 4000);
     return () => clearTimeout(timer);
   }, [savedTo]);
-
-  const save = (toGallery: boolean) => {
-    if (!url) return;
-    setSaving(true);
-    deviceBridge
-      .downloadFile(url, filename, toGallery, toGallery ? galleryId : downloadId)
-      .then(() => setSavedTo(toGallery ? 'saved to the gallery' : 'saved to Downloads'))
-      .catch(() => setSavedTo('save failed'))
-      .finally(() => setSaving(false));
-  };
 
   const goTo = useCallback(
     (next: number): void => {
@@ -254,9 +240,17 @@ export function ImageViewer({
             <Text style={styles.title} numberOfLines={1}>
               {filename}
             </Text>
+            {savedTo ? <Text style={styles.savedInBar}>{savedTo}</Text> : null}
             {images.length > 1 ? (
               <Text style={styles.counter}>{`${at + 1}/${images.length}`}</Text>
             ) : null}
+            <DownloadControl
+              targets={[{ url, filename }]}
+              all={images.map(item => ({ url: item.url, filename: item.filename }))}
+              gallery
+              tone="light"
+              onMessage={setSavedTo}
+            />
             <Pressable
               onPress={onClose}
               hitSlop={12}
@@ -268,56 +262,13 @@ export function ImageViewer({
             </Pressable>
           </View>
 
-          <View
-            style={[
-              styles.bottomBar,
-              { paddingBottom: insets.bottom + space.md },
-            ]}
-            {...pointerHoverProps(hover)}
-          >
-            {savedTo ? (
-              <Text style={styles.saved}>{savedTo}</Text>
-            ) : (
-              <View style={styles.spacer} />
-            )}
-            <Pressable
-              onPress={() => save(false)}
-              disabled={saving}
-              style={[styles.save, saving && styles.saveOff]}
-              accessibilityRole="button"
-              accessibilityLabel="Save image to downloads"
-            >
-              <Text style={styles.saveText}>
-                {saving && downloadProgress && downloadProgress.total > 0
-                  ? `${Math.round((downloadProgress.bytes / downloadProgress.total) * 100)}%`
-                  : saving
-                    ? 'saving…'
-                    : 'Download'}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => save(true)}
-              disabled={saving}
-              style={[styles.save, saving && styles.saveOff]}
-              accessibilityRole="button"
-              accessibilityLabel="Save image to gallery"
-            >
-              <Text style={styles.saveText}>
-                {saving && galleryProgress && galleryProgress.total > 0
-                  ? `${Math.round((galleryProgress.bytes / galleryProgress.total) * 100)}%`
-                  : saving
-                    ? 'saving…'
-                    : 'Save to gallery'}
-              </Text>
-            </Pressable>
-          </View>
         </>
       ) : null}
     </View>
   );
 }
 
-const createStyles = (palette: Palette) => ({
+const createStyles = (_palette: Palette) => ({
   stage: { backgroundColor: '#000' },
   page: { height: '100%' as const },
   image: { width: '100%' as const, height: '100%' as const },
@@ -370,25 +321,5 @@ const createStyles = (palette: Palette) => ({
     gap: space.md,
   },
   cacheText: { color: '#cfd6e4', fontSize: font.body },
-  bottomBar: {
-    position: 'absolute' as const,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.md,
-    padding: space.md,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  spacer: { flex: 1 },
-  saved: { flex: 1, color: '#cfd6e4', fontSize: font.small },
-  save: {
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    borderRadius: radius.sm,
-    backgroundColor: palette.accent,
-  },
-  saveOff: { opacity: 0.5 },
-  saveText: { color: '#fff', fontSize: font.body, fontWeight: '600' as const },
+  savedInBar: { color: '#cfd6e4', fontSize: font.small },
 });

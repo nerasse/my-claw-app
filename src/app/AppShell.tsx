@@ -4264,6 +4264,7 @@ export function AppShell(): React.JSX.Element {
       {archiveViewer ? (
         <ArchiveViewer
           url={withView(archiveViewer.url, 'list')}
+          rawUrl={archiveViewer.url}
           filename={archiveViewer.filename}
           onClose={() => setArchiveViewer(null)}
         />

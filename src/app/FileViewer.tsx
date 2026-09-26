@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { formatBytes } from '../core/utils';
+import { DownloadControl } from '../components/DownloadControl';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -23,29 +23,6 @@ export function FileViewer({
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [saving, setSaving] = useState(false);
-  const [savedTo, setSavedTo] = useState<string | null>(null);
-  const saveId = `file-save-${filename}`;
-  const saveProgress = useTransferProgress(saveId);
-
-  useEffect(() => {
-    if (!savedTo) return;
-    const timer = setTimeout(() => setSavedTo(null), 4000);
-    return () => clearTimeout(timer);
-  }, [savedTo]);
-
-  const save = () => {
-    if (!url) return;
-    setSaving(true);
-    deviceBridge
-      .saveFile(url, filename, saveId)
-      .then(path => {
-        if (path) setSavedTo('saved');
-      })
-      .catch(() => setSavedTo('save failed'))
-      .finally(() => setSaving(false));
-  };
-
   return (
     <View style={StyleSheet.absoluteFill}>
       <Pressable
@@ -59,6 +36,7 @@ export function FileViewer({
             <Text style={styles.modalTitle} numberOfLines={1}>
               {filename}
             </Text>
+            <DownloadControl targets={[{ url, filename }]} />
             <Pressable
               onPress={onClose}
               style={styles.closeButton}
@@ -76,26 +54,6 @@ export function FileViewer({
             ) : null}
           </View>
 
-          <View style={styles.modalActions}>
-            {savedTo ? (
-              <Text style={styles.saveFeedback}>{savedTo}</Text>
-            ) : saveProgress && saveProgress.total > 0 ? (
-              <Text style={styles.saveFeedback}>
-                {formatBytes(saveProgress.bytes)} of {formatBytes(saveProgress.total)}
-              </Text>
-            ) : null}
-            <Pressable
-              style={[styles.button, saving && styles.buttonOff]}
-              onPress={save}
-              disabled={saving || !url}
-              accessibilityRole="button"
-              accessibilityLabel="Save file to downloads"
-            >
-              <Text style={styles.buttonText}>
-                {saving ? 'saving…' : 'Download'}
-              </Text>
-            </Pressable>
-          </View>
         </View>
       </View>
     </View>

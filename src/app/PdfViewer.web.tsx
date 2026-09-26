@@ -9,6 +9,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DownloadControl } from '../components/DownloadControl';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -34,6 +35,7 @@ export function PdfViewer({
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
+        <DownloadControl targets={[{ url, filename }]} />
         <Pressable
           onPress={onClose}
           hitSlop={12}

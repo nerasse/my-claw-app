@@ -3,6 +3,7 @@ import { Image, Pressable, Text, View, type LayoutChangeEvent } from 'react-nati
 import type { DeviceInfo } from '../core/device';
 import { mediaUrl } from '../core/mediaUrl';
 import type { AttachmentMeta } from '../core/protocol';
+import { DownloadControl } from './DownloadControl';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -173,6 +174,16 @@ export function MediaCarousel({
             </View>
           </>
         ) : null}
+        {/* The arrow saves what is on screen -- or, through the same sheet, the whole run. */}
+        <View style={styles.download}>
+          <DownloadControl
+            targets={[{ url: current.url, filename: current.filename }]}
+            all={items.map(item => ({ url: item.url, filename: item.filename }))}
+            gallery
+            variant="row"
+            tone="light"
+          />
+        </View>
       </Pressable>
       <Text style={styles.caption} numberOfLines={1}>
         {current.filename}
@@ -227,6 +238,13 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   counterText: { color: '#fff', fontSize: scaleFont(font.small, scale) },
+  download: {
+    position: 'absolute' as const,
+    right: space.sm,
+    bottom: space.sm,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
   caption: {
     fontSize: scaleFont(font.small, scale),
     color: palette.textFaint,

@@ -64,6 +64,23 @@ function pressText(tree: Tree, text: string): Promise<void> {
   });
 }
 
+/**
+ * Presses the last node carrying a label. The download arrow exists on every row and again inside
+ * every viewer, so "the one on top" is the one that is mounted last.
+ */
+async function pressLast(tree: Tree, label: string): Promise<void> {
+  await waitFor(() => labelsOf(tree).includes(label));
+  const targets = tree.root.findAll(
+    (node: { props: { accessibilityLabel?: string; onPress?: unknown } }) =>
+      node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
+  );
+  const target = targets[targets.length - 1];
+  if (!target) throw new Error(`no pressable for ${label}`);
+  await ReactTestRenderer.act(async () => {
+    target.props.onPress();
+  });
+}
+
 function sentFrames(): string[] {
   return bridge.sendMessage.mock.calls.map(([frame]) => String(frame));
 }
@@ -126,10 +143,12 @@ test('tapping a markdown file shows its rendered content and offers a download',
   await openFiles(tree, [file({})]);
 
   await press(tree, 'Open file notes.md');
-  await waitFor(() => labelsOf(tree).includes('Save file to downloads'));
+  await waitFor(() => labelsOf(tree).includes('Download'));
   await waitFor(() => textsOf(tree).some(t => t.includes('# Hello')));
 
-  await press(tree, 'Save file to downloads');
+  // One arrow, then the sheet: the three destinations are named where they are chosen.
+  await press(tree, 'Download');
+  await press(tree, 'Save as…');
   await waitFor(() => bridge.saveFile.mock.calls.length > 0);
   expect(bridge.saveFile).toHaveBeenCalledWith(
     `${MEDIA_URL}/f1?device=dev-test&token=token-test`,
@@ -152,7 +171,9 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
   ]);
 
   await press(tree, 'Open file photo.png');
-  await waitFor(() => labelsOf(tree).includes('Save image to gallery'));
+  await waitFor(() => labelsOf(tree).includes('Download'));
+  // The row behind carries the same arrow; the viewer's is the one on top.
+  expect(labelsOf(tree).filter(label => label === 'Download').length).toBeGreaterThan(1);
   // The viewer reads nothing over the network: the image was already fetched by the media URL's
   // own progress flow. (The app self-update check may have fired its one /app-update fetch, so
   // the assertion is on media fetches only.)
@@ -161,7 +182,7 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
   // No download card underneath: that second layer stole the taps and its own cross was
   // unreachable behind the image.
   expect(labelsOf(tree)).not.toContain('Close file view');
-  expect(labelsOf(tree)).not.toContain('Save file to downloads');
+  expect(labelsOf(tree)).not.toContain('no preview for this file type');
 
   // And no Modal around the zoomable image: on Android a Modal is a separate window, outside
   // the gesture root view, where pinch and tap are never recognised.
@@ -172,7 +193,8 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
   );
   expect(modals).toHaveLength(0);
 
-  await press(tree, 'Save image to gallery');
+  await pressLast(tree, 'Download');
+  await press(tree, 'Save to the gallery');
   await waitFor(() => bridge.downloadFile.mock.calls.length > 0);
   expect(bridge.downloadFile).toHaveBeenCalledWith(
     `${MEDIA_URL}/img1?device=dev-test&token=token-test`,
@@ -197,12 +219,21 @@ test('tapping the image pops the controls, the cross closes the viewer', async (
 
   await press(tree, 'Open file shot.png');
   await waitFor(() => labelsOf(tree).includes('Close image'));
-  expect(labelsOf(tree)).toContain('Save image to gallery');
+  // The arrow exists on the row behind and inside the viewer; both are pressable, and the count
+  // is what proves the viewer's goes with the bars.
+  const downloadArrows = (): number =>
+    tree.root.findAll(
+      (node: { props: { accessibilityLabel?: string; onPress?: unknown } }) =>
+        node.props.accessibilityLabel === 'Download' && typeof node.props.onPress === 'function',
+    ).length;
+  const withBars = downloadArrows();
+  expect(withBars).toBeGreaterThan(1);
 
-  // Tap on the photo: the bars disappear so nothing covers the image.
+  // Tap on the photo: the bars disappear so nothing covers the image. The row's own arrow stays:
+  // what goes is the viewer's, which is the point of the bars.
   await press(tree, 'Zoomable image');
   await waitFor(() => !labelsOf(tree).includes('Close image'));
-  expect(labelsOf(tree)).not.toContain('Save image to gallery');
+  expect(downloadArrows()).toBe(withBars - 1);
 
   // Tap again: they pop back.
   await press(tree, 'Zoomable image');
@@ -392,13 +423,14 @@ test('a file without a preview still offers a download', async () => {
   ]);
 
   await press(tree, 'Open file clip.mp3');
-  await waitFor(() => labelsOf(tree).includes('Save file to downloads'));
+  await waitFor(() => labelsOf(tree).includes('Download'));
   await waitFor(() => textsOf(tree).includes('no preview for this file type'));
   // The viewer reads nothing over the network (apart from the app self-update check at boot).
   expect(fetchCalls().filter(u => u.includes('/media/'))).toEqual([]);
 
-  // The download button of the card also opens the system save-as dialog.
-  await press(tree, 'Save file to downloads');
+  // The card's own download control opens the same sheet, and save-as is one of its rows.
+  await press(tree, 'Download');
+  await press(tree, 'Save as…');
   await waitFor(() => bridge.saveFile.mock.calls.length > 0);
   expect(bridge.saveFile).toHaveBeenCalledWith(
     `${MEDIA_URL}/a1?device=dev-test&token=token-test`,
