@@ -3379,6 +3379,14 @@ export function encodeChatStop(threadId: string): string {
 }
 
 /**
+ * Picks the thread's last run back up where it stopped, adding no message. `parentThreadId` only
+ * when the thread is a sub-agent's chat, as on `chat.send`.
+ */
+export function encodeChatContinue(threadId: string, parentThreadId?: string): string {
+  return JSON.stringify({ type: 'chat.continue', threadId, ...(parentThreadId ? { parentThreadId } : {}) });
+}
+
+/**
  * Opens the status page of a conversation on the server: the report comes now, then again each
  * time it moves, until `encodeStatusUnwatch` or the socket closes. One page per socket.
  */

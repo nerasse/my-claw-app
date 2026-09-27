@@ -38,6 +38,7 @@ import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useLayout } from '../core/layout';
+import { RunContinueContext, type RunContinueOffer } from '../components/runContinue';
 import { watchFileDrop } from '../core/fileDrop';
 import { selectableProps } from '../core/webProps';
 import { RowBoundary } from './RowBoundary';
@@ -116,6 +117,7 @@ export function ChatScreen({
   onTagCommand,
   streaming,
   onStop,
+  onContinue,
   onQuestionReply,
   onNewThread,
   subagentCount,
@@ -165,6 +167,8 @@ export function ChatScreen({
   /** A run is answering on this thread (streaming or between tools): the composer offers Stop. */
   streaming: boolean;
   onStop: () => void;
+  /** Picks the thread's last run back up where it stopped (error, Stop, lost), with no message. */
+  onContinue?: () => void;
   /** The owner answered the questions of one ask: sent as one batch. */
   onQuestionReply: (id: string, answers: string[][]) => void;
   /** Wire /new: starts a fresh conversation, like the + button. */
@@ -669,6 +673,29 @@ export function ChatScreen({
   }, [changeDraft, items]);
 
   const empty = items.length === 0;
+
+  // Continue is offered under the thread's last run, while nothing runs. One press, then nothing
+  // until the run it starts comes back through `streaming` or the thread moves on.
+  const lastRunId = useMemo(() => {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const run = (items[index] as { run?: RunInfo } | undefined)?.run;
+      if (run) return run.id;
+    }
+    return undefined;
+  }, [items]);
+  const [continuePressed, setContinuePressed] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (streaming) setContinuePressed(undefined);
+  }, [streaming]);
+  const continueOffer = useMemo<RunContinueOffer>(() => ({
+    lastRunId,
+    onContinue: onContinue && !streaming && continuePressed !== lastRunId
+      ? () => {
+          setContinuePressed(lastRunId);
+          onContinue();
+        }
+      : undefined,
+  }), [continuePressed, lastRunId, onContinue, streaming]);
 
   // `grouped[i]` says row i continues the previous author's block. Computed once per items change
   // rather than twice per row on every render: the whole list re-renders on each streaming delta,
@@ -1181,6 +1208,7 @@ export function ChatScreen({
   });
 
   return (
+    <RunContinueContext.Provider value={continueOffer}>
     <View style={styles.screen}>
       {subagent ? (
         <View style={column}>
@@ -1479,6 +1507,7 @@ export function ChatScreen({
         </ActionSheet>
       ) : null}
     </View>
+    </RunContinueContext.Provider>
   );
 }
 

@@ -1,8 +1,9 @@
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, { useContext } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import type { RunInfo } from '../core/chat';
 import { formatSpan } from '../core/utils';
 import { font, scaleFont, useThemedStyles, type Palette } from '../theme';
+import { RunContinueContext } from './runContinue';
 
 /**
  * Where a finished run signs its work: one faint line at the run's very end.
@@ -22,6 +23,11 @@ export function RunFoot({ run }: { run: RunInfo }): React.JSX.Element {
   const span = run.endTs !== undefined ? formatSpan(run.endTs - run.startTs) : '';
   const failed = run.status === 'error';
   const stopped = run.status === 'aborted';
+  // A run still marked running while the thread is at rest is one the server lost when it went
+  // down: it never ended, and it can be picked up like a stopped one.
+  const lost = run.status === 'running';
+  const offer = useContext(RunContinueContext);
+  const continuable = offer.onContinue !== undefined && offer.lastRunId === run.id && (failed || stopped || lost);
   return (
     <View style={styles.wrap}>
       <Text style={styles.span}>{span === '' ? 'run' : `run · ${span}`}</Text>
@@ -29,6 +35,17 @@ export function RunFoot({ run }: { run: RunInfo }): React.JSX.Element {
           so it rides its signature instead of repeating on every fold header it passed. */}
       {failed ? <Text style={styles.statusError}> · error</Text> : null}
       {stopped ? <Text style={styles.statusAborted}> · Stopped</Text> : null}
+      {/* On the thread's last run only, and only at rest: picks it back up where it was, with no
+          new message. A word in the signature line rather than a button, like the rest of it. */}
+      {continuable ? (
+        <Pressable
+          onPress={offer.onContinue}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Continue this run where it stopped">
+          <Text style={styles.continue}> · ↻ Continue</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -46,4 +63,5 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   span: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
   statusError: { fontSize: scaleFont(font.micro, scale), color: palette.danger },
   statusAborted: { fontSize: scaleFont(font.micro, scale), color: palette.textMuted },
+  continue: { fontSize: scaleFont(font.micro, scale), color: palette.accent, fontWeight: '600' as const },
 });

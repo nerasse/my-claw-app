@@ -246,7 +246,7 @@ function isQueuedFrame(entry: unknown): entry is QueuedFrame {
  * Frames that name a run, a sheet or a prompt that was live when they were typed. Replayed later
  * they act on whatever holds that place now, which is worse than not sending them at all.
  */
-const PERISHABLE = ['chat.stop', 'approval.response', 'undo.choose', 'undo.cancel'];
+const PERISHABLE = ['chat.stop', 'chat.continue', 'approval.response', 'undo.choose', 'undo.cancel'];
 const PERISHABLE_MS = 60_000;
 
 function isPerishable(text: string): boolean {

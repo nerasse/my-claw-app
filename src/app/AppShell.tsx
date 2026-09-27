@@ -56,6 +56,7 @@ import {
   encodeAgentFileDelete,
   encodeChatSend,
   encodeChatStop,
+  encodeChatContinue,
   encodeSessionInstructionsGet,
   encodeSessionInstructionsSet,
   encodeInstructionsSetNested,
@@ -3407,6 +3408,12 @@ export function AppShell(): React.JSX.Element {
               // The composer's own stop follows the same one-per-cycle rule as the menu entry:
               // while one is in flight the press sends nothing.
               if (activeThread && chatStore.claimStop(activeThread)) connection.send(encodeChatStop(activeThread));
+            }}
+            onContinue={() => {
+              // A sub-agent's chat names the conversation it is driven from, as a send does.
+              if (!activeThread) return;
+              const parent = subagentRef.current?.threadId === activeThread ? subagentRef.current.parentThreadId : undefined;
+              connection.send(encodeChatContinue(activeThread, parent)).catch(() => {});
             }}
             onNewThread={newThread}
             onLoadOlder={loadOlderHistory}
