@@ -1,11 +1,23 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useBrowserInfo } from '../core/browser';
 import { connection } from '../core/connection';
-import { encodeBrowserInfo, encodeBrowserUnblock, type BrowserUnblockResultFrame } from '../core/protocol';
+import {
+  encodeBrowserControl,
+  encodeBrowserInfo,
+  encodeBrowserInput,
+  encodeBrowserUnblock,
+  encodeBrowserWatch,
+  type BrowserControlAction,
+  type BrowserInput,
+  type BrowserUnblockResultFrame,
+} from '../core/protocol';
+import { browserLiveStore, shownTab, useLiveNotice, useLiveWindows } from '../core/browserLive';
+import { BrowserWall } from './browser/BrowserWall';
+import { LiveWindowView } from './browser/LiveWindowView';
 
 /** How long a "copied" mark stays up. Long enough to be read, short enough not to look stuck. */
 const COPIED_MS = 1500;
@@ -26,6 +38,145 @@ function useCopy(): { copied: string | null; copy: (key: string, value: string) 
   };
 }
 
+let controlSeq = 0;
+
+/**
+ * What the page watches, as the server takes it: the listing always, and the pictures of what is
+ * on screen -- every window's shown tab as a tile, or one window's at full size.
+ */
+export function watchFor(
+  windows: ReturnType<typeof useLiveWindows>['windows'],
+  open: number | null,
+): Array<{ pageId: string; quality: 'tile' | 'focus' }> {
+  if (!windows) return [];
+  if (open !== null) {
+    const window = windows.find(w => w.windowId === open);
+    const tab = window ? shownTab(window) : undefined;
+    return tab ? [{ pageId: tab.pageId, quality: 'focus' }] : [];
+  }
+  return windows.flatMap(w => {
+    const tab = shownTab(w);
+    return tab ? [{ pageId: tab.pageId, quality: 'tile' as const }] : [];
+  });
+}
+
+/**
+ * The live view: every window of the browser as it is now, what the agents do in it, and the
+ * owner's hand in any of them -- docs/browser-live.md in the server repo. Watching and acting hold
+ * nothing: an agent keeps its window while the owner looks, or helps.
+ */
+function LivePane({
+  connected,
+  initialWindow,
+  vnc,
+}: {
+  connected: boolean;
+  initialWindow: number | null;
+  vnc: { host: string; port: number } | null;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const { windows, error } = useLiveWindows();
+  const notice = useLiveNotice();
+  const [open, setOpen] = useState<number | null>(initialWindow);
+  const [active, setActive] = useState(AppState.currentState !== 'background');
+  const [newUrl, setNewUrl] = useState('');
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => setActive(state === 'active'));
+    return () => sub.remove();
+  }, []);
+
+  const streams = useMemo(() => watchFor(windows, open), [windows, open]);
+  const key = JSON.stringify(streams);
+  const lastSent = useRef<string | null>(null);
+  // Sent again on every change of what is shown, and on every reconnect: the server forgets a
+  // device's watch with its socket. A phone in the background watches nothing.
+  useEffect(() => {
+    const message = active && connected ? encodeBrowserWatch(true, streams) : encodeBrowserWatch(false, []);
+    if (!connected) {
+      lastSent.current = null;
+      return;
+    }
+    if (message === lastSent.current) return;
+    lastSent.current = message;
+    connection.send(message).catch(() => {});
+    browserLiveStore.keepFrames(streams.map(s => s.pageId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, active, connected]);
+  useEffect(
+    () => () => {
+      connection.send(encodeBrowserWatch(false, [])).catch(() => {});
+    },
+    [],
+  );
+
+  const control = useCallback(
+    (action: BrowserControlAction, target: { windowId?: number; pageId?: string; url?: string } = {}) => {
+      browserLiveStore.setNotice(null);
+      controlSeq += 1;
+      connection.send(encodeBrowserControl(`c${controlSeq}`, action, target)).catch(() => {});
+    },
+    [],
+  );
+  const input = useCallback(
+    (pageId: string, i: BrowserInput) => {
+      // Never queued: the outbox would replay a tap long after the page moved under it.
+      if (connected) connection.send(encodeBrowserInput(pageId, i)).catch(() => {});
+    },
+    [connected],
+  );
+
+  const focused = open === null ? undefined : windows?.find(w => w.windowId === open);
+  // The window closed while it was open: back to the wall.
+  useEffect(() => {
+    if (open !== null && windows && !windows.some(w => w.windowId === open)) setOpen(null);
+  }, [open, windows]);
+
+  const notices = (
+    <>
+      {notice ? (
+        <Text style={styles.error} accessibilityLabel={`Browser notice ${notice}`}>
+          {notice}
+        </Text>
+      ) : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </>
+  );
+
+  // A window at full size is not in a scroll view: a finger dragged on the page scrolls the page,
+  // and a scroll view around it would take the drag for itself.
+  if (focused) {
+    return (
+      <View style={[styles.body, styles.live, styles.fill]}>
+        {notices}
+        <LiveWindowView window={focused} vnc={vnc} connected={connected} onBack={() => setOpen(null)} control={control} input={input} />
+      </View>
+    );
+  }
+  return (
+    <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      {notices}
+      {windows === null ? (
+        <Text style={styles.empty}>{connected ? 'asking the browser…' : 'offline'}</Text>
+      ) : (
+        <>
+          <View style={styles.row}>
+            <TextInputRow
+              value={newUrl}
+              onChange={setNewUrl}
+              onSubmit={() => {
+                control('new_window', newUrl.trim() ? { url: newUrl.trim() } : {});
+                setNewUrl('');
+              }}
+            />
+          </View>
+          <BrowserWall windows={windows} onOpen={setOpen} onStage={windowId => control('stage', { windowId })} />
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
 /**
  * How to drive the browser by hand: the noVNC link, the address a native VNC client dials, the
  * password, and enough state to know whether connecting is worth it.
@@ -38,17 +189,24 @@ export function BrowserScreen({
   error,
   unblock,
   onClose,
+  connected = true,
+  initialWindow = null,
 }: {
   error: string | null;
   /** What the last unlock did, handed down by the shell: a result is a moment, not a state. */
   unblock?: BrowserUnblockResultFrame | null;
   onClose: () => void;
+  /** The socket is up: a tap sent without it would be replayed by the outbox long after. */
+  connected?: boolean;
+  /** Opened on one window (a web tab popped out for another screen). */
+  initialWindow?: number | null;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const info = useBrowserInfo();
   const { copied, copy } = useCopy();
   const [revealed, setRevealed] = useState(false);
   const [unsent, setUnsent] = useState(false);
+  const [pane, setPane] = useState<'live' | 'connect'>('live');
   useDismissKeyboard();
 
   const unlock = useCallback(() => {
@@ -82,9 +240,20 @@ export function BrowserScreen({
         <View style={styles.headerMain}>
           <Text style={styles.title}>Browser</Text>
           <Text style={styles.headerSub} numberOfLines={1}>
-            {info === null ? 'loading' : info.enabled ? 'take the session over' : 'browser disabled on the server'}
+            {info === null ? 'loading' : info.enabled ? 'watch the agents, lend a hand' : 'browser disabled on the server'}
           </Text>
         </View>
+        {(['live', 'connect'] as const).map(p => (
+          <Pressable
+            key={p}
+            onPress={() => setPane(p)}
+            style={[styles.refreshButton, pane === p && styles.paneOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: pane === p }}
+            accessibilityLabel={p === 'live' ? 'Live view' : 'Connect with VNC'}>
+            <Text style={pane === p ? styles.paneOnText : styles.refreshText}>{p === 'live' ? 'Live' : 'VNC'}</Text>
+          </Pressable>
+        ))}
         <Pressable
           onPress={refresh}
           style={styles.refreshButton}
@@ -100,7 +269,13 @@ export function BrowserScreen({
         </Text>
       ) : null}
 
-      {info === null ? (
+      {pane === 'live' ? (
+        <LivePane
+          connected={connected}
+          initialWindow={initialWindow}
+          vnc={info?.vncHost ? { host: info.vncHost, port: info.vncPort } : null}
+        />
+      ) : info === null ? (
         <Text style={styles.empty}>asking the server…</Text>
       ) : (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -233,25 +408,6 @@ export function BrowserScreen({
             )}
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Open tabs</Text>
-            {info.tabsError ? (
-              <Text style={styles.hint}>{info.tabsError}</Text>
-            ) : info.tabs.length === 0 ? (
-              <Text style={styles.hint}>no tab open</Text>
-            ) : (
-              info.tabs.map(tab => (
-                <View key={tab.id} style={styles.tab}>
-                  <Text style={styles.tabTitle} numberOfLines={1}>
-                    {tab.title || 'untitled'}
-                  </Text>
-                  <Text style={styles.tabUrl} numberOfLines={1}>
-                    {tab.url}
-                  </Text>
-                </View>
-              ))
-            )}
-          </View>
         </ScrollView>
       )}
     </View>
@@ -289,6 +445,10 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surfaceAlt,
   },
   refreshText: { fontSize: font.body, color: palette.text },
+  paneOn: { backgroundColor: palette.accent },
+  paneOnText: { fontSize: font.body, color: palette.surface, fontWeight: '600' as const },
+  live: { gap: space.md },
+  fill: { flex: 1 },
   error: {
     marginTop: space.md,
     color: palette.danger,
@@ -338,7 +498,37 @@ const createStyles = (palette: Palette) => ({
   serviceName: { flex: 1, fontSize: font.small, color: palette.text },
   up: { fontSize: font.small, color: palette.accent },
   down: { fontSize: font.small, color: palette.danger },
-  tab: { gap: 1 },
-  tabTitle: { fontSize: font.small, color: palette.text },
-  tabUrl: { fontSize: font.small, color: palette.textFaint },
+  newWindow: {
+    flex: 1,
+    fontSize: font.body,
+    color: palette.text,
+    backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
 });
+
+/** A window of the owner's own, on the VNC screen: to log in to a site once, or look something up. */
+function TextInputRow({ value, onChange, onSubmit }: { value: string; onChange: (v: string) => void; onSubmit: () => void }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  return (
+    <>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        onSubmitEditing={onSubmit}
+        placeholder="New window: an address, or empty"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        returnKeyType="go"
+        style={styles.newWindow}
+        accessibilityLabel="New window address"
+      />
+      <Pressable onPress={onSubmit} style={styles.primaryButton} accessibilityRole="button" accessibilityLabel="Open a new window">
+        <Text style={styles.primaryText}>New window</Text>
+      </Pressable>
+    </>
+  );
+}

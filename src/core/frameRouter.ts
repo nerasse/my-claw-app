@@ -11,6 +11,7 @@ import { devicesStore } from './devices';
 import { modelStore } from './model';
 import { jobsStore } from './jobs';
 import { browserStore } from './browser';
+import { browserLiveStore } from './browserLive';
 import { agentsStore } from './agents';
 import { tagsStore } from './tags';
 import { agentsFileStore } from './agentsFile';
@@ -699,6 +700,18 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'browser.info.result':
       browserStore.replace(frame);
+      break;
+    case 'browser.windows.result':
+      browserLiveStore.receiveWindows(frame);
+      break;
+    case 'browser.frame':
+      browserLiveStore.receiveFrame(frame);
+      break;
+    case 'browser.frame.gone':
+      browserLiveStore.receiveGone(frame.pageId);
+      break;
+    case 'browser.control.result':
+      browserLiveStore.receiveControl(frame);
       break;
     case 'browser.unblock.result':
       setBrowserUnblock(frame);

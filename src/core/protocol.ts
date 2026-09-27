@@ -1904,6 +1904,76 @@ export interface BrowserInfoResultFrame {
   tabsError?: string;
 }
 
+/**
+ * The live view of the browser: the windows, what agents do in them, and which one the VNC screen
+ * shows. See docs/browser-live.md in the server repo.
+ */
+export interface BrowserLiveTab {
+  pageId: string;
+  title: string;
+  url: string;
+  /** The tab its window shows. */
+  active: boolean;
+}
+
+export interface BrowserLiveWindow {
+  /** The number agents use for it ("window 3"). */
+  alias: number;
+  windowId: number;
+  onStage: boolean;
+  state: 'working' | 'waiting' | 'free';
+  task?: string;
+  tabs: BrowserLiveTab[];
+}
+
+export interface BrowserWindowsResultFrame {
+  type: 'browser.windows.result';
+  windows: BrowserLiveWindow[];
+  error?: string;
+}
+
+export interface BrowserFrameFrame {
+  type: 'browser.frame';
+  pageId: string;
+  seq: number;
+  /** A JPEG, base64. */
+  data: string;
+  /** The page's viewport, in CSS pixels. */
+  width: number;
+  height: number;
+}
+
+export interface BrowserFrameGoneFrame {
+  type: 'browser.frame.gone';
+  pageId: string;
+}
+
+export interface BrowserControlResultFrame {
+  type: 'browser.control.result';
+  id?: string;
+  ok: boolean;
+  error?: string;
+}
+
+/** The owner's hand on a tab, placed as fractions (0..1) of the picture they saw. */
+export type BrowserInput =
+  | { kind: 'tap'; x: number; y: number; button?: 'left' | 'right' | 'middle'; double?: boolean }
+  | { kind: 'down' | 'up' | 'move'; x: number; y: number; button?: 'left' | 'right' | 'middle' }
+  | { kind: 'wheel'; x: number; y: number; dx: number; dy: number }
+  | { kind: 'text'; text: string }
+  | { kind: 'key'; key: string; modifiers?: Array<'Alt' | 'Control' | 'Meta' | 'Shift'> };
+
+export type BrowserControlAction =
+  | 'stage'
+  | 'new_window'
+  | 'focus_tab'
+  | 'close_tab'
+  | 'close_window'
+  | 'back'
+  | 'forward'
+  | 'reload'
+  | 'goto';
+
 /** One run of a job, listed as a thread the app can reopen and chat on. */
 export interface JobRunEntry {
   threadId: string;
@@ -2379,6 +2449,10 @@ export interface HelloFrame {
 
 export type ServerFrame =
   | BrowserInfoResultFrame
+  | BrowserWindowsResultFrame
+  | BrowserFrameFrame
+  | BrowserFrameGoneFrame
+  | BrowserControlResultFrame
   | BrowserUnblockResultFrame
   | ChatMessageFrame
   | ChatUserFrame
@@ -2561,6 +2635,10 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'jobs.list.result',
   'browser.info.result',
   'browser.unblock.result',
+  'browser.windows.result',
+  'browser.frame',
+  'browser.frame.gone',
+  'browser.control.result',
   'jobs.runs.result',
   'subagents.list.result',
   'subagents.callers.result',
@@ -3420,6 +3498,27 @@ export function encodeJobsList(): string {
 /** Asks for the browser's connection details and current state. Read-only, no arguments. */
 export function encodeBrowserInfo(): string {
   return JSON.stringify({ type: 'browser.info' });
+}
+
+/**
+ * What this device watches: the window listing, and the tabs whose pictures it shows. Replaces the
+ * previous watch; `encodeBrowserWatch(false, [])` stops everything. Watching holds no window.
+ */
+export function encodeBrowserWatch(windows: boolean, streams: Array<{ pageId: string; quality: 'tile' | 'focus' }>): string {
+  return JSON.stringify({ type: 'browser.watch', windows, streams });
+}
+
+/** Stamped with the time it was made: the server drops one the outbox replays long after. */
+export function encodeBrowserInput(pageId: string, input: BrowserInput, now: number = Date.now()): string {
+  return JSON.stringify({ type: 'browser.input', pageId, ts: now, input });
+}
+
+export function encodeBrowserControl(
+  id: string,
+  action: BrowserControlAction,
+  target: { windowId?: number; pageId?: string; url?: string } = {},
+): string {
+  return JSON.stringify({ type: 'browser.control', id, action, ...target });
 }
 
 /** Asks the server to unstick the browser session; the answer comes back as its own frame. */

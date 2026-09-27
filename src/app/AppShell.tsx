@@ -227,6 +227,7 @@ import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
 import { BrowserScreen } from './BrowserScreen';
+import { windowFromLocation } from '../core/browserLive';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { StatsScreen } from './StatsScreen';
@@ -637,7 +638,9 @@ export function AppShell(): React.JSX.Element {
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
-  const [browserOpen, setBrowserOpen] = useState(false);
+  // A web tab popped out for one browser window opens on it, and on nothing else.
+  const [browserWindow] = useState(windowFromLocation);
+  const [browserOpen, setBrowserOpen] = useState(browserWindow !== null);
   const [browserError, setBrowserError] = useState<string | null>(null);
   const [browserUnblock, setBrowserUnblock] = useState<BrowserUnblockResultFrame | null>(null);
   /** The More sheet in the drawer footer: Archived, Agents, Jobs, Browser, Statistics, Settings. */
@@ -4026,6 +4029,8 @@ export function AppShell(): React.JSX.Element {
             <BrowserScreen
               error={browserError}
               unblock={browserUnblock}
+              connected={status.state === 'connected'}
+              initialWindow={browserWindow}
               onClose={() => {
                 setBrowserOpen(false);
                 // A result is a moment, not a state: reopening the page shows where to connect,
