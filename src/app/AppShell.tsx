@@ -29,6 +29,7 @@ import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPrompts, undoStore } from '../core/undoStore';
 import { resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
+import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn } from '../core/subagentStack';
 import { sessionStore, useArchivedSessions, useFolders, useSessions } from '../core/sessions';
 import { workspaceOptions } from '../core/workspaceFilter';
 import { isStopCommand, parseTagCommand } from '../core/commands';
@@ -309,6 +310,8 @@ type SubAgentView = {
   parentThreadId: string;
   /** Where its tools work. Absent on an agent spawned before the server carried the field. */
   workspaceDir?: string;
+  /** The sub-agent chat this one was opened from, when it was one: back returns there. */
+  parent?: SubAgentView;
 };
 
 /** The config scope shape ("["*"]" for all, absent for inherit) as the editor's mode union. */
@@ -821,9 +824,12 @@ export function AppShell(): React.JSX.Element {
       // The run that raised a notification is the one now on screen: clear it, whichever way the
       // owner arrived. A tap cancels its own notification, the drawer and the deep link did not.
       dismissThreadNotification(threadId);
-      // The roster on screen is always the parent's: a sub-agent's siblings are what the door
-      // beside them lists, and a sub-agent has no roster of its own to show.
-      connection.send(encodeSubAgentsList(view ? view.parentThreadId : threadId)).catch(() => {});
+      // The parent's roster for the siblings the header offers, and the thread's own for what its
+      // cards open: a sub-agent's browser tasks are private to it, so they are in no other roster,
+      // and without it a card at level 2 or 3 opened nothing.
+      for (const roster of rostersFor(threadId, view?.parentThreadId)) {
+        connection.send(encodeSubAgentsList(roster)).catch(() => {});
+      }
       // Sync the thread: asks for delta since last known entry, or full page if fresh.
       const { since, leaf } = chatStore.getSyncState(threadId);
       connection.send(encodeSessionSync(threadId, since, leaf ?? undefined));
@@ -1048,15 +1054,21 @@ export function AppShell(): React.JSX.Element {
    */
   const openSubAgent = useCallback(
     (entry: SubAgentEntry, parentThreadId: string) => {
-      enterThread(entry.threadId, {
-        threadId: entry.threadId,
-        id: entry.id,
-        type: entry.type,
-        status: entry.status,
-        messageCount: entry.messageCount,
-        parentThreadId,
-        ...(entry.workspaceDir ? { workspaceDir: entry.workspaceDir } : {}),
-      });
+      // Stacked on the sub-agent on screen when that is where it was opened from: a cron run, its
+      // volet, the volet's browser task, and back one level at a time.
+      const view = stackedOn<SubAgentView>(
+        {
+          threadId: entry.threadId,
+          id: entry.id,
+          type: entry.type,
+          status: entry.status,
+          messageCount: entry.messageCount,
+          parentThreadId,
+          ...(entry.workspaceDir ? { workspaceDir: entry.workspaceDir } : {}),
+        },
+        subagentRef.current,
+      );
+      enterThread(entry.threadId, view);
     },
     [enterThread],
   );
@@ -1078,11 +1090,17 @@ export function AppShell(): React.JSX.Element {
   /** Back out of a sub-agent to the conversation that reached it. */
   const leaveSubAgent = useCallback(() => {
     const view = subagentRef.current;
+    if (!view) return;
+    const back = backFrom(view);
+    // One level up: the sub-agent this was opened from comes back as itself, header and all.
+    if ('view' in back) {
+      enterThread(back.view.threadId, back.view);
+      return;
+    }
     subagentRef.current = null;
     setSubagentView(null);
-    if (!view) return;
-    openThread(view.parentThreadId);
-  }, [openThread]);
+    openThread(back.threadId);
+  }, [enterThread, openThread]);
 
   const saveJob = useCallback(
     (fields: JobFieldsOut) => {
@@ -1569,6 +1587,9 @@ export function AppShell(): React.JSX.Element {
   // it is idle for every conversation that never opens it.
   const handoffCallers = useSubAgentCallers(subagentView?.threadId ?? null);
   const roster = useSubAgents(rosterThread);
+  // What the cards on screen can open: this thread's own sub-agents, then its parent's.
+  const ownRoster = useSubAgents(activeThread);
+  const cardAgents = useMemo(() => reachableFrom(ownRoster.agents, roster.agents), [ownRoster.agents, roster.agents]);
   const spawnCards = useSpawnCards(activeThread);
   const rosterGroups = useMemo(() => groupRoster(roster.agents), [roster.agents]);
   // The drawer page shows what this conversation shares with others: public agents, then the
@@ -1590,7 +1611,7 @@ export function AppShell(): React.JSX.Element {
   // Both derivations live in core/subagents.ts, both pure. Only the door needs the roster: the
   // lifecycle state is already on the card, put there by the server's replay or by
   // `reconcileSpawnRoster`, so re-deriving it here was a second copy of the same match.
-  const subagentDoors = useMemo(() => spawnDoorsOf(spawnCards, roster.agents), [spawnCards, roster.agents]);
+  const subagentDoors = useMemo(() => spawnDoorsOf(spawnCards, cardAgents), [spawnCards, cardAgents]);
   const spawnLive = useMemo(() => spawnLiveOf(spawnCards), [spawnCards]);
 
   const openSubAgentFromCard = useCallback(
@@ -1598,12 +1619,16 @@ export function AppShell(): React.JSX.Element {
       const card = spawnCards.find(entry => entry.id === toolItemId);
       const claimed = card && typeof card.args.name === 'string' ? card.args.name : '';
       const agent =
-        (card?.subagentId ? roster.agents.find(entry => entry.id === card.subagentId) : undefined) ??
-        roster.agents.find(entry => entry.displayName === claimed);
-      if (!agent || !activeThread) return;
+        (card?.subagentId ? cardAgents.find(entry => entry.id === card.subagentId) : undefined) ??
+        cardAgents.find(entry => entry.displayName === claimed);
+      if (!agent || !activeThread) {
+        // Not in a roster yet (a task started a moment ago): ask again, the next tap opens it.
+        if (activeThread) connection.send(encodeSubAgentsList(activeThread)).catch(() => {});
+        return;
+      }
       openSubAgent(agent, activeThread);
     },
-    [spawnCards, roster.agents, activeThread, openSubAgent],
+    [spawnCards, cardAgents, activeThread, openSubAgent],
   );
 
   /**
@@ -3380,7 +3405,7 @@ export function AppShell(): React.JSX.Element {
                     type: subagentView.type,
                     status: streaming ? ('running' as const) : subagentView.status,
                     messageCount: subagentView.messageCount,
-                    parentTitle: parentTitleOf(subagentView.parentThreadId),
+                    parentTitle: backLabel(subagentView, parentTitleOf),
                   },
                   // Its own prop, not the drawer's: the way back used to be the hamburger slot
                   // wearing a chevron, which is why it read as the odd one out of every header.

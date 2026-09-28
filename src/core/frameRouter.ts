@@ -1,6 +1,7 @@
 import { connection } from './connection';
 import { refusalText } from './refusal';
 import { chatStore } from './chat';
+import { rostersFor } from './subagentStack';
 import { subAgentCallersStore, subAgentStore } from './subagents';
 import { sessionStore } from './sessions';
 import { commandStore } from './commands';
@@ -306,8 +307,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       }
       // A run may have spawned sub-agents; the roster is refetched at its end rather than
       // pushed, which keeps the counter honest without a live push path.
-      const parent = subagentParent() ?? activeThreadId();
-      if (parent) connection.send(encodeSubAgentsList(parent)).catch(() => {});
+      const onScreen = activeThreadId();
+      if (onScreen) {
+        for (const roster of rostersFor(onScreen, subagentParent())) {
+          connection.send(encodeSubAgentsList(roster)).catch(() => {});
+        }
+      }
       // The turn that just landed is what filled the window: the header's share of context is
       // read back from the server here rather than guessed from the bubbles on screen. Same
       // frame as the one the picker uses, so a run that switched model refreshes that too.
@@ -399,6 +404,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       else chatStore.setRunHydration(frame.threadId, frame.fromId, 'failed');
       break;
     case 'chat.spawn.start':
+      // A sub-agent spawned mid-run on the thread on screen: its card opens it, so the roster is
+      // asked for now rather than at the run's end, which may be hours away.
+      if (frame.threadId === activeThreadId() && frame.subagentId) {
+        connection.send(encodeSubAgentsList(frame.threadId)).catch(() => {});
+      }
       // A sub-agent spawned mid-run: mark the spawn card (or open a standalone one) as running.
       chatStore.startSpawn(frame.threadId, frame.id, {
         subagentId: frame.subagentId,
