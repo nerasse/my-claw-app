@@ -31,15 +31,15 @@ const PLACEHOLDER = '/*__PDFVIEWER_BUNDLE__*/';
  */
 const textLoader = {
   name: 'text',
-  setup(build) {
-    build.onResolve({ filter: /\?text$/ }, args => ({
+  setup(builder) {
+    builder.onResolve({ filter: /\?text$/ }, args => ({
       // `require.resolve` from the project root, not `args.resolveDir`: the import names a package,
       // and resolving it against the importing file's directory looked for node_modules inside
       // src/components/pdfviewer/.
       path: require.resolve(args.path.replace(/\?text$/, ''), { paths: [root] }),
       namespace: 'text',
     }));
-    build.onLoad({ filter: /.*/, namespace: 'text' }, async args => ({
+    builder.onLoad({ filter: /.*/, namespace: 'text' }, async args => ({
       contents: await fs.promises.readFile(args.path, 'utf8'),
       loader: 'text',
     }));
