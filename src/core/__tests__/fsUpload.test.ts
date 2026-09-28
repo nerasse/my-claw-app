@@ -8,10 +8,8 @@
  * from `uploadMedia`: a refusal is sent once, a transport failure is retried once.
  */
 
-import { deviceBridge } from '../nativeBridge';
-import { downloadFsFile, uploadToFs } from '../upload';
+import { fsDownloadUrl, uploadToFs } from '../upload';
 
-const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 
 const device = { deviceId: 'dev-test', token: 'token-test' };
 const files = [
@@ -101,22 +99,14 @@ describe('uploadToFs', () => {
   });
 });
 
-describe('downloadFsFile', () => {
-  test('streams the file through the native downloader with the same credential', async () => {
-    const saved = await downloadFsFile('http://server:8080', device, '/var/log/app.log', 'app.log');
-
-    expect(bridge.downloadFile).toHaveBeenCalledTimes(1);
-    const [url, filename, toGallery, transferId] = bridge.downloadFile.mock.calls[0];
-    expect(url).toBe('http://server:8080/fs/download?path=%2Fvar%2Flog%2Fapp.log&device=dev-test&token=token-test');
-    expect(filename).toBe('app.log');
-    // Never the gallery: this page saves files, not photos.
-    expect(toGallery).toBe(false);
-    expect(String(transferId)).toMatch(/^fs-/);
-    expect(saved).toBe('/storage/Pictures/my-claw/file');
+describe('fsDownloadUrl', () => {
+  test('carries the same credential as the APK download', () => {
+    expect(fsDownloadUrl('http://server:8080', device, '/var/log/app.log')).toBe(
+      'http://server:8080/fs/download?path=%2Fvar%2Flog%2Fapp.log&device=dev-test&token=token-test',
+    );
   });
 
-  test('a browser trips the same route with no query at all', async () => {
-    await downloadFsFile('http://server:8080', null, '/etc/hosts', 'hosts');
-    expect(bridge.downloadFile.mock.calls[0][0]).toBe('http://server:8080/fs/download?path=%2Fetc%2Fhosts');
+  test('a browser trips the same route with no query at all', () => {
+    expect(fsDownloadUrl('http://server:8080', null, '/etc/hosts')).toBe('http://server:8080/fs/download?path=%2Fetc%2Fhosts');
   });
 });

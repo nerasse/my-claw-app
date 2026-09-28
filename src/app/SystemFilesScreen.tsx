@@ -15,7 +15,8 @@ import { getDeviceInfo, type DeviceInfo } from '../core/device';
 import { fsStore, sortEntries, useFsStore, type FsOpenFile } from '../core/fsStore';
 import { prefs } from '../core/prefs';
 import { formatBytes, formatDate, httpOrigin } from '../core/utils';
-import { downloadFsFile, fsDownloadUrl, uploadToFs, type FsLocalFile } from '../core/upload';
+import { fsDownloadUrl, uploadToFs, type FsLocalFile } from '../core/upload';
+import { requestDownload } from '../core/downloadFlow';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { FsEntry } from '../core/protocol';
 
@@ -270,18 +271,14 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
     [deviceInfo, mediaBase],
   );
 
+  // The same road as the row's arrow: the destinations on a phone, straight down in a browser.
   const download = useCallback(
-    async (entry: FsEntry) => {
+    (entry: FsEntry) => {
       if (!deviceInfo) {
         fsStore.setNotice('the device identity is not ready yet');
         return;
       }
-      try {
-        await downloadFsFile(mediaBase, deviceInfo, entry.path, entry.name);
-        fsStore.setNotice(`downloaded ${entry.name} to your Downloads`);
-      } catch (err) {
-        fsStore.setNotice(`download failed: ${messageOf(err)}`);
-      }
+      requestDownload({ targets: [{ url: fsDownloadUrl(mediaBase, deviceInfo, entry.path), filename: entry.name }] });
     },
     [deviceInfo, mediaBase],
   );
@@ -420,8 +417,8 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
           onPress: fromSheet(() => fsStore.openFile(entry.path, { edit: true })),
         },
         {
-          label: 'Download',
-          hint: 'save it on this device',
+          label: 'Download…',
+          hint: Platform.OS === 'web' ? 'save it with the browser' : 'choose where it goes on this device',
           onPress: fromSheet(() => {
             download(entry);
           }),

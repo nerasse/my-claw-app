@@ -44,7 +44,7 @@ added anywhere in the 28k lines above it.
 | voice recording plus levels | `MediaRecorder` and an `AnalyserNode`, RMS normalised to 0..1, pushed at the same ~16 Hz as the native recorder so the waveform animates identically |
 | voice playback | `HTMLAudioElement`, same `claw:voice:playback` events |
 | upload with progress | `XMLHttpRequest`: `fetch` has no upload progress event, and a composer that shows nothing while a 40 MB video crawls is what the native path exists to avoid |
-| download, cache, save | `fetch` plus a `ReadableStream` reader for real progress, then an anchor click; there is no gallery in a browser, everything lands where downloads land |
+| download, cache, save | `fetch` plus a `ReadableStream` reader for real progress, then an anchor click; there is no gallery in a browser, everything lands where downloads land. The download arrow goes straight to an anchor (`docs/downloads.md`) |
 | location | already handled, `browserLocation()` |
 | capabilities | `{ accessibility: false, notificationListener: false, wssConnection: true }` |
 | notifications | Web Push, see below |

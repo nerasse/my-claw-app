@@ -22,6 +22,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
+import { requestDownload } from '../src/core/downloadFlow';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 'thread-back';
@@ -163,6 +164,24 @@ test('back walks the layers innermost first: menu, drawer, conversation, then An
   expect(await hardwareBack()).toBe(false);
   expect(homeVisible(tree)).toBe(true);
   expect(backHandler().exitApp).not.toHaveBeenCalled();
+
+  await settleAndUnmount(tree);
+});
+
+// A download's destinations are drawn by the overlay host, over whatever opened them.
+test("back closes a download's destinations first, and only them", async () => {
+  const tree = await renderApp();
+  await listSessions();
+  await openThreadMenu(tree);
+  await ReactTestRenderer.act(async () => {
+    requestDownload({ targets: [{ url: 'http://host/media/x', filename: 'x.png' }] });
+  });
+  expect(labelsOf(tree)).toContain('Save to Downloads');
+
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => !labelsOf(tree).includes('Save to Downloads'));
+  // The menu under it is still up: that press was the overlay's alone.
+  expect(sheetShows(tree, 'Rename…')).toBe(true);
 
   await settleAndUnmount(tree);
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -28,14 +28,6 @@ export function VideoViewer({
   const player = useVideoPlayer(url, p => {
     p.play();
   });
-  const [savedTo, setSavedTo] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!savedTo) return;
-    const timer = setTimeout(() => setSavedTo(null), 4000);
-    return () => clearTimeout(timer);
-  }, [savedTo]);
-
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -50,8 +42,7 @@ export function VideoViewer({
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
-        {savedTo ? <Text style={styles.saved}>{savedTo}</Text> : null}
-        <DownloadControl targets={[{ url, filename }]} gallery tone="light" onMessage={setSavedTo} />
+        <DownloadControl targets={[{ url, filename }]} gallery tone="light" />
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -86,10 +77,6 @@ const createStyles = (_palette: Palette) => ({
     color: '#fff',
     fontSize: font.body,
     fontWeight: '600' as const,
-  },
-  saved: {
-    color: '#cfd6e4',
-    fontSize: font.small,
   },
   iconButton: {
     width: 36,

@@ -9,6 +9,10 @@
  *
  * The label and the hint live here rather than in the sheet, because the same three rows are
  * drawn by every surface: a bubble, a session file, the explorer, every viewer, the carousel.
+ *
+ * A browser has none of the three: it has one destination and its own download bar. There the
+ * anchor and its `download` attribute do it, streamed by the browser rather than held in memory,
+ * and no destination is offered -- `components/downloadFlow.ts`.
  */
 
 import { Platform } from 'react-native';
@@ -42,60 +46,74 @@ export function newTransferId(prefix = 'download'): string {
 }
 
 /**
- * Runs one transfer. Answers the message to show, or `''` when the owner dismissed the system
- * dialog -- a cancellation is not a failure and must not be reported as one.
+ * What a transfer ended as. `null` is the owner dismissing the system dialog: a cancellation is
+ * not a failure, and is not reported at all.
  */
-export async function saveOne(target: DownloadTarget, mode: DownloadMode, transferId: string): Promise<string> {
-  // A browser has one destination and its own dialog: the anchor does it, and asking for the
-  // gallery or for a folder picker there is a promise the platform cannot keep.
-  if (Platform.OS === 'web') {
-    try {
-      const anchor = document.createElement('a');
-      anchor.href = target.url;
-      anchor.download = target.filename;
-      anchor.rel = 'noopener';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      return 'Saved';
-    } catch {
-      return 'Save failed';
-    }
+export type SaveResult = { ok: boolean; message: string } | null;
+
+/** The browser takes it from here: its own bar shows the progress, and the failure if any. */
+function browserDownload(target: DownloadTarget): SaveResult {
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = target.url;
+    anchor.download = target.filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return { ok: true, message: `Downloading ${target.filename}` };
+  } catch {
+    return { ok: false, message: 'Download failed' };
   }
+}
+
+export async function saveOne(target: DownloadTarget, mode: DownloadMode, transferId: string): Promise<SaveResult> {
+  if (Platform.OS === 'web') return browserDownload(target);
   try {
     if (mode === 'saveAs') {
       const saved = await deviceBridge.saveFile(target.url, target.filename, transferId);
-      return saved ? 'Saved' : '';
+      return saved ? { ok: true, message: `Saved ${target.filename}` } : null;
     }
     await deviceBridge.downloadFile(target.url, target.filename, mode === 'gallery', transferId);
-    return mode === 'gallery' ? 'Saved to the gallery' : 'Saved to Downloads';
+    return { ok: true, message: mode === 'gallery' ? 'Saved to the gallery' : 'Saved to Downloads' };
   } catch {
-    return 'Save failed';
+    return { ok: false, message: 'Save failed' };
   }
 }
 
 /**
+ * A browser drops anchors clicked back to back (Chrome keeps the first and asks about the rest
+ * only if they are spaced out), so a series leaves it a moment between two.
+ */
+export const BROWSER_SERIES_GAP_MS = 400;
+
+const pause = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
  * The whole series, one file at a time. `onProgress` says where it is, because a gallery of twelve
  * deserves a count and not a spinner that never ends; a failure half-way stops the run and says
- * how far it got, rather than pretending the rest arrived.
+ * how far it got, rather than pretending the rest arrived. A dismissed "Save as" ends the series
+ * there, quietly: the owner said no.
  */
 export async function saveMany(
   targets: readonly DownloadTarget[],
   mode: DownloadMode,
   onProgress: (done: number, total: number) => void,
-): Promise<string> {
+): Promise<SaveResult> {
+  const total = targets.length;
   let saved = 0;
   for (const target of targets) {
-    const message = await saveOne(target, mode, newTransferId('series'));
-    if (message === 'Save failed') {
-      return saved === 0 ? 'Save failed' : `Saved ${saved} of ${targets.length}, then it failed`;
+    if (saved > 0 && Platform.OS === 'web') await pause(BROWSER_SERIES_GAP_MS);
+    const result = await saveOne(target, mode, newTransferId('series'));
+    if (result === null) return saved === 0 ? null : { ok: true, message: `Saved ${saved} of ${total}` };
+    if (!result.ok) {
+      return { ok: false, message: saved === 0 ? result.message : `Saved ${saved} of ${total}, then it failed` };
     }
     saved += 1;
-    onProgress(saved, targets.length);
+    onProgress(saved, total);
   }
-  return saved === targets.length
-    ? `${saved} file${saved > 1 ? 's' : ''} saved`
-    : `Saved ${saved} of ${targets.length}`;
+  if (Platform.OS === 'web') return { ok: true, message: `Downloading ${total} files` };
+  return { ok: true, message: `${total} file${total > 1 ? 's' : ''} saved` };
 }
 
 /** Past this many, a gallery download asks first: it is a lot of files and a lot of choosing. */

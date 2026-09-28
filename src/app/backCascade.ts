@@ -20,6 +20,7 @@ import { pickerBack, type PickerState } from '../components/ModelSheet';
 import { agentsFileStore } from '../core/agentsFile';
 import { instructionsStore } from '../core/instructions';
 import { sessionInstructionsStore } from '../core/sessionInstructions';
+import { overlayStore } from '../core/overlay';
 import type { ApprovalRequestFrame, JobRunEntry } from '../core/protocol';
 import type { ProviderSearch } from './ProviderScreen';
 import type { SettingsPage } from './settingsPages';
@@ -298,6 +299,8 @@ export function closeTopLayer(layers: BackLayers): boolean {
     selectThread,
   } = layers;
 
+  // A menu of the overlay host (a download's destinations) is drawn over everything.
+  if (overlayStore.close()) return true;
   // The selection viewer covers everything, including whatever opened it.
   if (selection) {
     setSelection(null);

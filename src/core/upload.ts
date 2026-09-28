@@ -131,20 +131,6 @@ export function fsDownloadUrl(mediaBase: string, deviceInfo: DeviceInfo | null, 
 }
 
 /**
- * Saves one file from the machine into the phone's Downloads (`GET /fs/download`), through the
- * same relay and the same credential as the APK download. Resolves the stored location.
- */
-export async function downloadFsFile(
-  mediaBase: string,
-  deviceInfo: DeviceInfo | null,
-  path: string,
-  filename: string,
-): Promise<string> {
-  const result = await deviceBridge.downloadFile(fsDownloadUrl(mediaBase, deviceInfo, path), filename, false, `fs-${Date.now()}`);
-  return result.path;
-}
-
-/**
  * Pushes a local file to the server as raw bytes (the endpoint reads the body as-is), then
  * returns the media id to reference in chat.send.
  *

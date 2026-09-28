@@ -13,8 +13,11 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Text } from 'react-native';
+import { Text, View as HostBox } from 'react-native';
 import { SystemFilesScreen } from '../SystemFilesScreen';
+import { OverlayHost } from '../../components/OverlayHost';
+import { DownloadControl } from '../../components/DownloadControl';
+import { overlayStore } from '../../core/overlay';
 import { fsStore } from '../../core/fsStore';
 import { connection } from '../../core/connection';
 import { deviceBridge } from '../../core/nativeBridge';
@@ -182,6 +185,7 @@ describe('SystemFilesScreen', () => {
     }
     mounted = null;
     fsStore.reset();
+    await ReactTestRenderer.act(async () => overlayStore.reset());
     jest.clearAllMocks();
   });
 
@@ -469,7 +473,7 @@ describe('SystemFilesScreen', () => {
     });
 
     const shown = labels(tree);
-    for (const label of ['Open', 'Edit', 'Rename…', 'Move…', 'Copy path', 'Download', 'Delete…']) {
+    for (const label of ['Open', 'Edit', 'Rename…', 'Move…', 'Copy path', 'Download…', 'Delete…']) {
       expect(shown).toContain(label);
     }
     // A file has no "send files here": that belongs to a directory.
@@ -516,6 +520,72 @@ describe('SystemFilesScreen', () => {
 
     press(tree, 'Actions for notes.md');
     expect(labels(tree)).toContain('Rename…');
+  });
+
+  describe('a download', () => {
+    /** The screen beside the host, as the shell mounts them: the host last, over everything. */
+    async function renderWithHost(): Promise<Tree> {
+      let tree!: Tree;
+      await ReactTestRenderer.act(async () => {
+        tree = ReactTestRenderer.create(
+          <HostBox>
+            <SystemFilesScreen onClose={() => {}} />
+            <OverlayHost />
+          </HostBox>,
+        );
+      });
+      await ReactTestRenderer.act(async () => {
+        await flush();
+      });
+      mounted = tree;
+      receive(HOME);
+      await ReactTestRenderer.act(async () => {});
+      return tree;
+    }
+
+    type Node = ReactTestRenderer.ReactTestInstance;
+    const ancestors = (node: Node): unknown[] => {
+      const types: unknown[] = [];
+      for (let at: Node | null = node.parent; at; at = at.parent) types.push(at.type);
+      return types;
+    };
+    const row = (tree: Tree, label: string): Node =>
+      tree.root.find(n => n.props?.accessibilityLabel === label && typeof n.props?.onPress === 'function');
+
+    // The bug of 2026-09-28: the sheet was rendered beside the arrow, and filled the row it sat in.
+    test("the arrow's destinations are drawn by the host over the page, not inside the row", async () => {
+      const tree = await renderWithHost();
+      const arrow = tree.root.find(n => n.type === DownloadControl && n.props.targets[0]?.filename === 'notes.md');
+      ReactTestRenderer.act(() => {
+        arrow.find(n => n.props?.accessibilityLabel === 'Download' && typeof n.props?.onPress === 'function').props.onPress();
+      });
+      const destination = row(tree, 'Save to Downloads');
+      expect(ancestors(destination)).toContain(OverlayHost);
+      expect(ancestors(destination)).not.toContain(DownloadControl);
+      expect(ancestors(destination)).not.toContain(SystemFilesScreen);
+
+      ReactTestRenderer.act(() => destination.props.onPress());
+      await ReactTestRenderer.act(async () => {
+        await flush();
+      });
+      expect(bridge.downloadFile).toHaveBeenCalledWith(
+        expect.stringContaining('/fs/download?path=%2Fhome%2Fneras%2Fnotes.md'),
+        'notes.md',
+        false,
+        expect.any(String),
+      );
+      expect(labels(tree)).not.toContain('Save to Downloads');
+      expect(labels(tree)).toContain('Notice Saved to Downloads');
+    });
+
+    test('"Download…" in the actions sheet takes the same road as the arrow', async () => {
+      const tree = await renderWithHost();
+      openSheet(tree, '/home/neras/notes.md');
+      press(tree, 'Download…');
+      expect(labels(tree)).not.toContain('Rename…');
+      expect(labels(tree)).toEqual(expect.arrayContaining(['Save to Downloads', 'Save as…']));
+      expect(ancestors(row(tree, 'Save as…'))).toContain(OverlayHost);
+    });
   });
 
   test('the row sheet on a directory offers creating and sending inside it', async () => {

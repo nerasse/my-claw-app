@@ -63,7 +63,6 @@ export function ImageViewer({
   const [at, setAt] = useState(Math.max(0, Math.min(index, images.length - 1)));
   const [controlsVisible, setControlsVisible] = useState(true);
   const [hovering, setHovering] = useState(false);
-  const [savedTo, setSavedTo] = useState<string | null>(null);
   // null = not cached yet (or not needed); a string = local copy to render.
   const [cacheUri, setCacheUri] = useState<string | null>(null);
   // Dense on web -- a mouse crossing the screen -- so it is a ref: no render per event.
@@ -121,12 +120,6 @@ export function ImageViewer({
     }, VIEWER_TICK_MS);
     return () => clearInterval(timer);
   }, [controlsVisible, hovering]);
-
-  useEffect(() => {
-    if (!savedTo) return;
-    const timer = setTimeout(() => setSavedTo(null), 4000);
-    return () => clearTimeout(timer);
-  }, [savedTo]);
 
   const goTo = useCallback(
     (next: number): void => {
@@ -240,7 +233,6 @@ export function ImageViewer({
             <Text style={styles.title} numberOfLines={1}>
               {filename}
             </Text>
-            {savedTo ? <Text style={styles.savedInBar}>{savedTo}</Text> : null}
             {images.length > 1 ? (
               <Text style={styles.counter}>{`${at + 1}/${images.length}`}</Text>
             ) : null}
@@ -249,7 +241,6 @@ export function ImageViewer({
               all={images.map(item => ({ url: item.url, filename: item.filename }))}
               gallery
               tone="light"
-              onMessage={setSavedTo}
             />
             <Pressable
               onPress={onClose}
@@ -321,5 +312,4 @@ const createStyles = (_palette: Palette) => ({
     gap: space.md,
   },
   cacheText: { color: '#cfd6e4', fontSize: font.body },
-  savedInBar: { color: '#cfd6e4', fontSize: font.small },
 });

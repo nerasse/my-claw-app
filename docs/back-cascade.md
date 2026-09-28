@@ -13,6 +13,9 @@ left to close": the only thing that lets Android leave the app or the browser le
 The cascade is a flat list of `if`s, innermost layer first, and a swap of two blocks is a change of
 what the back key does. In groups, top to bottom:
 
+0. **A menu of the overlay host** (`core/overlay.ts`): the destinations of a download, opened
+   from an arrow anywhere, drawn over everything. It is a store, not a shell state, so the cascade
+   reads it directly.
 1. **The selection viewer.** It covers everything, including whatever opened it.
 2. **Sub-agent confirmations**, then the sub-agent menu, then the hand-back sheet.
 3. **Absolute pages**: the agents roster (thread and global), the status page, the instructions

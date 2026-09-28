@@ -245,6 +245,7 @@ import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { KeyboardShell } from '../components/KeyboardShell';
 import { AppUpdateModal } from './AppUpdateModal';
+import { OverlayHost } from '../components/OverlayHost';
 import { ModelSheet, pickerStart, type PickerState } from '../components/ModelSheet';
 import { ModelTuneSheet } from '../components/ModelTuneSheet';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -5106,6 +5107,10 @@ export function AppShell(): React.JSX.Element {
 
       {/* Last, so it covers the sheets and the viewers that can open it. */}
       {selection ? <SelectionViewer target={selection} onClose={() => setSelection(null)} /> : null}
+
+      {/* The menus a small control opens (a download arrow in a row, a chip, a viewer's bar), and
+          the line that says what they did: over everything, the selection viewer included. */}
+      <OverlayHost />
     </SafeAreaView>
     </TextSelectionContext.Provider>
   );
