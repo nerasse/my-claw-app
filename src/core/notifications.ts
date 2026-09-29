@@ -159,7 +159,11 @@ export function subscribeToPushRegistration(
   });
 }
 
-/** A deep link carried by a notification tap: myclaw://thread/<id> or myclaw://job/<id>. */
+/**
+ * A deep link carried by a notification tap: myclaw://thread/<id> or myclaw://job/<id>. The same
+ * union as the server's `src/notifications/target.ts`, which builds every link from it: a cron run
+ * is a thread (`cron-<job>-<ts>`), opened as the chat it is.
+ */
 export type NotificationTarget =
   | { kind: 'thread'; threadId: string }
   | { kind: 'job'; jobId: string };

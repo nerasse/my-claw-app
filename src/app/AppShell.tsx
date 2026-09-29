@@ -1864,15 +1864,29 @@ export function AppShell(): React.JSX.Element {
     const handle = (link: string | null) => {
       const target = parseNotificationLink(link);
       if (!target) return;
-      if (target.kind === 'thread') openThread(target.threadId);
-      else openJobs();
+      switch (target.kind) {
+        case 'thread':
+          openThread(target.threadId);
+          return;
+        case 'job': {
+          // The job's own runs when the app knows it, the jobs page otherwise.
+          const job = jobsStore.getSnapshot().jobs.find(entry => entry.id === target.jobId);
+          openJobs();
+          if (job) openJobSessions(job);
+          return;
+        }
+        default: {
+          const unhandled: never = target;
+          return unhandled;
+        }
+      }
     };
     Linking.getInitialURL()
       .then(handle)
       .catch(() => {});
     const subscription = Linking.addEventListener('url', event => handle(event.url));
     return () => subscription.remove();
-  }, [openThread, openJobs]);
+  }, [openThread, openJobs, openJobSessions]);
 
   // Asked for when the screen opens rather than at boot: it is the only place that shows it,
   // and a stale answer from an hour ago would render a switch that no longer matches the server.
