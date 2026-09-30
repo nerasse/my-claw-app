@@ -10,6 +10,7 @@ import { MediaCarousel, isCarouselMedia, mediaItemsOf, type MediaItem } from './
 import { CollapsibleAside } from './CollapsibleAside';
 import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine } from './ReasoningLine';
+import { TurnThinking } from './TurnThinking';
 import { RunFoot } from './RunFoot';
 import { LocationView } from './LocationView';
 import { chatSelectable } from '../core/platform';
@@ -69,6 +70,9 @@ export const Bubble = React.memo(function BubbleView({
   // While the model is only thinking there is no text yet. The reasoning line already says so, so
   // the bare caret would be a second, redundant "working" indicator in the same bubble.
   const thinkingShown = Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
+  // A call opened this bubble and has produced nothing yet: the wait is drawn in place of the
+  // caret, which would say the same thing worse -- a bare bar beside a counter elsewhere.
+  const waiting = item.streaming && item.waitingSince !== undefined && !item.text && !thinkingShown;
   // Where the attachments sit: the owner's message reads as legend under its own capture (what the
   // photo is, said after it), the agent's answer reads as a reply, then the file it produced. The
   // live `addAgentMessage` merges the media bubble the router sends after the streamed text into
@@ -131,6 +135,8 @@ export const Bubble = React.memo(function BubbleView({
         {item.streaming ? item.command ? <CommandElapsed since={item.ts} /> : '▍' : ''}
       </Text>
     )
+  ) : waiting ? (
+    <TurnThinking since={item.waitingSince!} />
   ) : item.streaming && !thinkingShown ? (
     <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(bodySize) }]}>▍</Text>
   ) : null;

@@ -270,9 +270,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (frame.reasoning) chatStore.appendCompactionReasoning(frame.threadId, frame.reasoning);
       break;
     case 'chat.turn.thinking':
-      // A model call began and has produced nothing yet: one line with a counter at the bottom of
-      // the thread, taken down by the first thing the turn produces (below).
-      chatStore.setThinking(frame.threadId, Date.parse(frame.since));
+      // A model call opened this bubble and has produced nothing yet: the bubble draws the wait,
+      // and the first thing written into it takes the mark down (the store does that).
+      chatStore.markWaiting(frame.threadId, frame.id, Date.parse(frame.since));
       break;
     case 'chat.run.start':
       // A run opening on this thread means the compaction that held its trigger is over: the
@@ -285,7 +285,6 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       chatStore.startRun(frame.threadId, frame.run);
       break;
     case 'chat.run.end': {
-      chatStore.setThinking(frame.threadId, undefined);
       const ended = chatStore.endRun(frame.threadId, frame.reason);
       // The run died with the message still in its mailbox, and it will never look at it.
       chatStore.clearQueued(frame.threadId, undefined, ['compaction', 'injection']);
@@ -373,32 +372,26 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       noteActivity(frame.threadId, '');
       break;
     case 'chat.stream.delta':
-      chatStore.setThinking(frame.threadId, undefined);
       chatStore.appendDelta(frame.threadId, frame.id, frame.text, frame.replay);
       break;
     case 'chat.reasoning.delta':
-      chatStore.setThinking(frame.threadId, undefined);
       chatStore.appendReasoning(frame.threadId, frame.id, frame.text, frame.replay, frame.since);
       break;
     case 'chat.reasoning.tokens':
-      chatStore.setThinking(frame.threadId, undefined);
       chatStore.setReasoningTokens(frame.threadId, frame.id, frame.tokens, frame.since);
       break;
     case 'chat.stream.done':
       chatStore.endStream(frame.threadId, frame.id);
       break;
     case 'chat.stream.abort':
-      chatStore.setThinking(frame.threadId, undefined);
       chatStore.abortStream(frame.threadId, frame.id, frame.error);
       break;
     case 'chat.tool.start':
-      chatStore.setThinking(frame.threadId, undefined);
       // A tool began executing: open the card with a spinner. The `chat.tool` that follows reuses
       // the same id and fills the output, upserting in place.
       chatStore.startToolCall(frame.threadId, frame.id, frame.name, frame.args);
       break;
     case 'chat.tool.delta':
-      chatStore.setThinking(frame.threadId, undefined);
       // Live output from a running tool (bash): append to the card the start frame opened.
       chatStore.appendToolOutput(frame.threadId, frame.id, { stdout: frame.stdout, stderr: frame.stderr, clipped: frame.clipped, replay: frame.replay });
       break;

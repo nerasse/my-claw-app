@@ -1,9 +1,10 @@
 /**
- * The line at the bottom of the thread while a model call has produced nothing yet.
+ * The wait before a model call produces anything, as the thread draws it.
  *
- * It is the only thing on the screen through the wait -- the engines that think before they write
- * send nothing for twenty seconds or more -- and it has to leave the moment the turn produces
- * anything, or the thread would carry two stories at once.
+ * It lives in the bubble the call opened. The first version drew it at the foot of the thread,
+ * outside every bubble, and the bubble it had opened stood beside it empty, wearing a bare caret:
+ * a white bar at every turn (owner, 2026-09-30). So the test that matters is the one that looks at
+ * the bubble, not at the line.
  */
 import React from 'react';
 import { Text } from 'react-native';
@@ -48,6 +49,8 @@ function props() {
   } as unknown as React.ComponentProps<typeof ChatScreen>;
 }
 
+let mounted: TestRenderer.ReactTestRenderer | null = null;
+
 function render() {
   let tree!: TestRenderer.ReactTestRenderer;
   act(() => {
@@ -57,11 +60,19 @@ function render() {
       </ThemeContext.Provider>,
     );
   });
+  mounted = tree;
   return tree;
 }
 
 function textsOf(tree: TestRenderer.ReactTestRenderer): string[] {
   return tree.root.findAllByType(Text).flatMap(node => (typeof node.props.children === 'string' ? [node.props.children] : []));
+}
+
+const SINCE = Date.parse('2026-01-01T00:00:00.000Z');
+
+function startWaiting(): void {
+  chatStore.startStream(THREAD, 's1');
+  chatStore.markWaiting(THREAD, 's1', SINCE);
 }
 
 beforeEach(() => {
@@ -71,30 +82,71 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // The counter holds a one-second interval: left mounted it fires into the next test's console.
+  if (mounted) act(() => mounted?.unmount());
+  mounted = null;
   chatStore.clearAll();
 });
 
 describe('the wait before a call produces anything', () => {
-  it('is drawn at the bottom of the thread, with the wait it has been', () => {
+  it('is drawn in the bubble the call opened, where its words will land', () => {
     const tree = render();
-    expect(textsOf(tree)).not.toContain('Thinking');
-
     act(() => {
-      chatStore.setThinking(THREAD, Date.parse('2026-01-01T00:00:00.000Z'));
+      startWaiting();
     });
     expect(textsOf(tree)).toContain('Thinking');
   });
 
-  it('leaves the moment the turn produces anything', () => {
+  it('replaces the bare caret: no empty bar beside the line', () => {
     const tree = render();
     act(() => {
-      chatStore.setThinking(THREAD, Date.now());
+      startWaiting();
     });
-    expect(textsOf(tree)).toContain('Thinking');
+    // The regression: a bubble opened before it has anything to say drew its caret, one white bar
+    // per turn, and the line stood somewhere else.
+    expect(textsOf(tree)).not.toContain('▍');
+  });
 
+  it('is one line, however many turns went by', () => {
+    const tree = render();
     act(() => {
-      chatStore.setThinking(THREAD, undefined);
+      startWaiting();
+    });
+    expect(textsOf(tree).filter(text => text === 'Thinking')).toHaveLength(1);
+  });
+
+  it('leaves the moment the turn writes anything, and the words take its place', () => {
+    const tree = render();
+    act(() => {
+      startWaiting();
+    });
+    act(() => {
+      chatStore.appendDelta(THREAD, 's1', 'Bonjour');
     });
     expect(textsOf(tree)).not.toContain('Thinking');
+  });
+
+  it('gives way to the reasoning line when the engine sends any', () => {
+    const tree = render();
+    act(() => {
+      startWaiting();
+    });
+    act(() => {
+      chatStore.appendReasoning(THREAD, 's1', '**Weighing options**');
+    });
+    expect(textsOf(tree)).not.toContain('Thinking');
+    expect(textsOf(tree)).not.toContain('▍');
+  });
+
+  it('vanishes with its bubble when the call went straight to a tool', () => {
+    const tree = render();
+    act(() => {
+      startWaiting();
+    });
+    act(() => {
+      chatStore.endStream(THREAD, 's1');
+    });
+    expect(textsOf(tree)).not.toContain('Thinking');
+    expect(textsOf(tree)).not.toContain('▍');
   });
 });

@@ -50,6 +50,14 @@ export interface TextItem {
    */
   reasoningStartedAt?: number;
   reasoningMs?: number;
+  /**
+   * A model call opened this bubble and has produced nothing yet, since this instant (the
+   * server's). The bubble draws "Thinking" with a counter where its caret would be, and the first
+   * thing the turn writes into it takes the mark down. It lives on the bubble because the wait
+   * belongs to the reply that is about to land here: drawn at the foot of the thread it sat
+   * outside every bubble, beside an empty one wearing a bare caret (2026-09-30).
+   */
+  waitingSince?: number;
   /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
   command?: boolean;
   /**
@@ -387,12 +395,7 @@ class ChatStoreImpl {
    * ends -- see `claimStop` for the exact doors.
    */
   private stopping = new Set<string>();
-  /**
-   * When a model call began on a thread and has produced nothing yet, server-dated. One line with
-   * a counter, drawn at the bottom of the thread: the wait before the first token, which on the
-   * engines that think before they write is the whole screen for twenty seconds or more.
-   */
-  private thinking = new Map<string, number>();
+
   /**
    * Threads the server says a stop is in flight for (`chat.run.stopping`): a stop taken on
    * another surface, and the state a window that reloaded mid-stop is replayed. Kept apart from
@@ -823,26 +826,6 @@ class ChatStoreImpl {
    * the instant the finger lifts; the server's arrives on `chat.run.stopping`, which is what
    * shows a stop taken on the web over here and what a window that reloaded mid-stop is replayed.
    */
-  /**
-   * The model is working on this thread and nothing has come out of it yet. Set when a call
-   * begins, taken down by the first frame the turn produces -- `frameRouter` owns both, because
-   * that is where "something is on screen now" is decided.
-   */
-  setThinking(threadId: string, since: number | undefined): void {
-    if (since === undefined) {
-      if (this.thinking.delete(threadId)) this.emit();
-      return;
-    }
-    if (this.thinking.get(threadId) === since) return;
-    this.thinking.set(threadId, since);
-    this.emit();
-  }
-
-  /** When the call running on the thread began, or undefined when none is. */
-  getThinking(threadId: string): number | undefined {
-    return this.thinking.get(threadId);
-  }
-
   isStopping(threadId: string): boolean {
     return this.stopping.has(threadId) || this.serverStopping.has(threadId);
   }
@@ -1861,6 +1844,7 @@ class ChatStoreImpl {
     // The first token of the answer is what ends the thinking: past it the counter has to hold a
     // number instead of climbing, or it would keep counting the writing as thinking.
     this.sealReasoning(threadId, id);
+    this.endWaiting(threadId, id);
     const next = replay ? text : current + text;
     this.streams.set(id, next);
     this.patch(threadId, id, { text: next }, true);
@@ -1875,16 +1859,36 @@ class ChatStoreImpl {
     // Unthrottled, unlike the body below: this is what puts the counter on screen, and it must
     // not wait for the next batched delta to appear.
     this.openReasoningSpan(threadId, id, since);
+    this.endWaiting(threadId, id);
     const current = this.reasoning.get(id) ?? '';
     const next = replay ? text : current + text;
     this.reasoning.set(id, next);
     this.patch(threadId, id, { reasoning: next }, true);
   }
 
+  /**
+   * The bubble `id` was opened by a model call that has produced nothing yet: it draws the wait
+   * until the first thing the turn writes into it. A frame for a closed bubble is dropped, like
+   * every other frame of a stream, and the same instant twice does not redraw it.
+   */
+  markWaiting(threadId: string, id: string, since: number): void {
+    if (!this.streams.has(id) || !Number.isFinite(since)) return;
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    if (item?.kind !== 'text' || item.waitingSince === since) return;
+    this.patch(threadId, id, { waitingSince: since });
+  }
+
+  /** The turn wrote something into the bubble: the wait is over. Costs nothing once it is. */
+  private endWaiting(threadId: string, id: string): void {
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    if (item?.kind === 'text' && item.waitingSince !== undefined) this.patch(threadId, id, { waitingSince: undefined });
+  }
+
   /** Latest estimate from a redacted engine; the server sends a running total, so it replaces. */
   setReasoningTokens(threadId: string, id: string, tokens: number, since?: string): void {
     if (!this.streams.has(id)) return;
     this.openReasoningSpan(threadId, id, since);
+    this.endWaiting(threadId, id);
     this.patch(threadId, id, { reasoningTokens: tokens });
   }
 
@@ -1977,7 +1981,15 @@ class ChatStoreImpl {
     // or a stopped run loses the duration it had already earned.
     this.sealReasoning(threadId, id);
     this.reasoningStart.delete(id);
-    this.patch(threadId, id, { streaming: false, error });
+    // A bubble opened for a wait and stopped before it said anything is not a message: with no
+    // error to carry it would be left behind as an empty bubble.
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    const empty = item?.kind === 'text' && !item.text.trim() && !item.reasoning?.trim() && !(item.reasoningTokens ?? 0);
+    if (empty && !error) {
+      this.removeItem(threadId, id);
+      return;
+    }
+    this.patch(threadId, id, { streaming: false, error, waitingSince: undefined });
   }
 
   addAgentMessage(
@@ -2314,12 +2326,6 @@ export function useHistoryPage(threadId: string | null): HistoryPage {
 
 export function useActiveRun(threadId: string | null): boolean {
   const snapshot = useCallback(() => (threadId ? chatStore.hasActiveRun(threadId) : false), [threadId]);
-  return useSyncExternalStore(subscribeToChat, snapshot);
-}
-
-/** When the model call running on the thread began (server time), or undefined when none is. */
-export function useThinking(threadId: string | null): number | undefined {
-  const snapshot = useCallback(() => (threadId ? chatStore.getThinking(threadId) : undefined), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 

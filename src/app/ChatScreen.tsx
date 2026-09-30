@@ -3,7 +3,6 @@ import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, Platform, Pre
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
-import { TurnThinking } from '../components/TurnThinking';
 import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
 import { RunFoot } from '../components/RunFoot';
 import { ToolCard } from '../components/ToolCard';
@@ -12,7 +11,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
-import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, useThinking, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
@@ -227,7 +226,6 @@ export function ChatScreen({
   // A stop in flight on this conversation, whichever surface took it: the live rule drops its
   // counter for "Stopping…", and the composer's corner turns its ■ into a loader.
   const stopping = useStopping(threadId);
-  const thinking = useThinking(threadId);
   // The questions waiting on this conversation, from the store rather than a prop: the form is a
   // row of the list, so it must survive this screen being unmounted and remounted.
   const questions = useThreadQuestions(threadId);
@@ -1146,16 +1144,14 @@ export function ChatScreen({
 
   // The list is inverted, so its header is the bottom of the screen: the loose questions sit under
   // the newest message, where the thread actually stops, and so does the compaction rule as long as
-  // no send is parked behind it (a parked one takes the rule above itself, `renderRow`). The wait
-  // before a call's first token is drawn here too: it is the newest thing that has happened.
+  // no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
   const listHeader = useMemo(
     () =>
-      (compacting !== undefined && ruleBefore === undefined) || thinking !== undefined || questionsLoose.length > 0 ? (
+      (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
         <View style={styles.looseQuestions}>
           {compacting !== undefined && ruleBefore === undefined ? (
             <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} stopping={stopping} />
           ) : null}
-          {thinking !== undefined ? <TurnThinking since={thinking} /> : null}
           {questionsLoose.map(ask => (
             <QuestionCard
               key={ask.id}
@@ -1166,7 +1162,7 @@ export function ChatScreen({
           ))}
         </View>
       ) : null,
-    [compacting, thinking, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
+    [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
   );
 
   const listFooter = useMemo(
