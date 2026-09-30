@@ -388,6 +388,12 @@ class ChatStoreImpl {
    */
   private stopping = new Set<string>();
   /**
+   * When a model call began on a thread and has produced nothing yet, server-dated. One line with
+   * a counter, drawn at the bottom of the thread: the wait before the first token, which on the
+   * engines that think before they write is the whole screen for twenty seconds or more.
+   */
+  private thinking = new Map<string, number>();
+  /**
    * Threads the server says a stop is in flight for (`chat.run.stopping`): a stop taken on
    * another surface, and the state a window that reloaded mid-stop is replayed. Kept apart from
    * the local mark so a press can still arm instantly without claiming the server's state, and
@@ -817,6 +823,26 @@ class ChatStoreImpl {
    * the instant the finger lifts; the server's arrives on `chat.run.stopping`, which is what
    * shows a stop taken on the web over here and what a window that reloaded mid-stop is replayed.
    */
+  /**
+   * The model is working on this thread and nothing has come out of it yet. Set when a call
+   * begins, taken down by the first frame the turn produces -- `frameRouter` owns both, because
+   * that is where "something is on screen now" is decided.
+   */
+  setThinking(threadId: string, since: number | undefined): void {
+    if (since === undefined) {
+      if (this.thinking.delete(threadId)) this.emit();
+      return;
+    }
+    if (this.thinking.get(threadId) === since) return;
+    this.thinking.set(threadId, since);
+    this.emit();
+  }
+
+  /** When the call running on the thread began, or undefined when none is. */
+  getThinking(threadId: string): number | undefined {
+    return this.thinking.get(threadId);
+  }
+
   isStopping(threadId: string): boolean {
     return this.stopping.has(threadId) || this.serverStopping.has(threadId);
   }
@@ -2288,6 +2314,12 @@ export function useHistoryPage(threadId: string | null): HistoryPage {
 
 export function useActiveRun(threadId: string | null): boolean {
   const snapshot = useCallback(() => (threadId ? chatStore.hasActiveRun(threadId) : false), [threadId]);
+  return useSyncExternalStore(subscribeToChat, snapshot);
+}
+
+/** When the model call running on the thread began (server time), or undefined when none is. */
+export function useThinking(threadId: string | null): number | undefined {
+  const snapshot = useCallback(() => (threadId ? chatStore.getThinking(threadId) : undefined), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 

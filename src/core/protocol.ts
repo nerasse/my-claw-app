@@ -138,6 +138,23 @@ export interface RunStoppingFrame {
   run?: string;
 }
 
+/**
+ * The model is working on this thread and nothing has come out of the call yet: the run is
+ * between a call and its first token.
+ *
+ * Drawn as one muted line with a counter, because that wait is the whole screen on the engines
+ * that think before they write -- a Codex turn at effort max sends nothing for twenty seconds,
+ * a provider being retried for minutes, and the thread looked dead with the Stop button as its
+ * only sign (2026-09-30). The first thing the turn produces takes it down.
+ */
+export interface TurnThinkingFrame {
+  type: 'chat.turn.thinking';
+  id: string;
+  threadId: string;
+  /** Server instant the call began, so a window joining late counts from the same start. */
+  since: string;
+}
+
 export interface StreamStartFrame {
   type: 'chat.stream.start';
   id: string;
@@ -2465,6 +2482,7 @@ export type ServerFrame =
   | RunStartFrame
   | RunEndFrame
   | RunStoppingFrame
+  | TurnThinkingFrame
   | StreamStartFrame
   | StreamDeltaFrame
   | ReasoningDeltaFrame
@@ -2572,6 +2590,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.run.start',
   'chat.run.end',
   'chat.run.stopping',
+  'chat.turn.thinking',
   'chat.stream.start',
   'chat.stream.delta',
   'chat.reasoning.delta',
