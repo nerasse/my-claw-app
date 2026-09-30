@@ -12,6 +12,7 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { ChatScreen } from '../ChatScreen';
 import { chatStore } from '../../core/chat';
 import { questionStore } from '../../core/questionStore';
+import { WAIT_REVEAL_MS } from '../../components/TurnThinking';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
 
@@ -89,6 +90,61 @@ afterEach(() => {
 });
 
 describe('the wait before a call produces anything', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('says nothing while the wait is short: a model that thinks out loud answers in a second', () => {
+    const tree = render();
+    act(() => {
+      chatStore.startStream(THREAD, 's1');
+      chatStore.markWaiting(THREAD, 's1', Date.now());
+    });
+    // Neither the line nor the caret: a wait too short to be worth a line is a flicker, and the
+    // owner read it as "Thinking written before the model even thought" (2026-09-30).
+    expect(textsOf(tree)).not.toContain('Thinking');
+    expect(textsOf(tree)).not.toContain('▍');
+
+    act(() => {
+      jest.advanceTimersByTime(WAIT_REVEAL_MS - 200);
+    });
+    expect(textsOf(tree)).not.toContain('Thinking');
+  });
+
+  it('appears once the silence is real, counting from the call', () => {
+    const tree = render();
+    act(() => {
+      chatStore.startStream(THREAD, 's1');
+      chatStore.markWaiting(THREAD, 's1', Date.now() - WAIT_REVEAL_MS);
+    });
+    // The call began before the window drew it: the line is there at once, and its counter is the
+    // call's own age rather than zero.
+    expect(textsOf(tree)).toContain('Thinking');
+    expect(textsOf(tree)).toContain('3 s');
+  });
+
+  it('never appears for a wait that ends first, and leaves no bar behind', () => {
+    const tree = render();
+    act(() => {
+      chatStore.startStream(THREAD, 's1');
+      chatStore.markWaiting(THREAD, 's1', Date.now());
+    });
+    act(() => {
+      jest.advanceTimersByTime(WAIT_REVEAL_MS - 200);
+    });
+    act(() => {
+      chatStore.appendReasoning(THREAD, 's1', '**Weighing options**');
+    });
+    act(() => {
+      jest.advanceTimersByTime(WAIT_REVEAL_MS * 2);
+    });
+    expect(textsOf(tree)).not.toContain('Thinking');
+    expect(textsOf(tree)).not.toContain('▍');
+  });
+
   it('is drawn in the bubble the call opened, where its words will land', () => {
     const tree = render();
     act(() => {

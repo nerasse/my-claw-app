@@ -19,6 +19,23 @@ an empty streaming bubble: a white bar at every turn, beside a line that belonge
 The tests that let the first version through looked at the line and never at the bubble. The one
 that matters (`turnThinkingLine.test.tsx`) asserts the caret is *not* on the screen.
 
+## It waits before saying anything
+
+The line is shown only once the call has been silent for `WAIT_REVEAL_MS` (three seconds). The
+engines that stream their thinking put the first delta on screen in one to two seconds (measured:
+deepseek-v4.1-flash, 1658 ms), so without the threshold the line appeared and was replaced almost
+at once — a flicker the owner read as "Thinking written before the model even thought"
+(2026-09-30). What the line is for is the silence: Codex at effort max sends nothing for thirteen
+to twenty seconds, a provider being retried for minutes.
+
+A threshold rather than a list of engines: which model thinks silently is not a property of a
+provider, and a list would be wrong the day a new one arrives. Three seconds is three times the
+slowest first delta measured.
+
+The counter still counts from the call's own start, so the line appears already saying "3 s" and
+climbs from there. Under the threshold the bubble draws nothing at all — not even the caret, which
+is what the first version of this feature got wrong.
+
 ## Lifecycle
 
 `chat.turn.thinking` marks the bubble (`chatStore.markWaiting`). The store takes the mark down when
