@@ -13,7 +13,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { ScrollView } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 import { StatsScreen } from '../StatsScreen';
 import { statsStore } from '../../core/stats';
 import type { StatsPayload, StatsTotals } from '../../core/protocol';
@@ -31,11 +31,11 @@ const NOTHING: StatsTotals = {
   durationMs: 0,
 };
 
-function payload(): StatsPayload {
+function payload(over: Partial<StatsTotals> = {}): StatsPayload {
   return {
     period: '30d',
     rollupIncluded: false,
-    totals: NOTHING,
+    totals: { ...NOTHING, ...over },
     models: [],
     providers: [],
     sessions: [],
@@ -49,14 +49,18 @@ function payload(): StatsPayload {
   };
 }
 
-function render(): ReactTestRenderer.ReactTestRenderer {
-  ReactTestRenderer.act(() => statsStore.open('30d'));
-  ReactTestRenderer.act(() => {
-    statsStore.receive({ type: 'stats.result', stats: payload() });
-  });
+/**
+ * The screen asks the server on every opening, so the answer has to land after it mounted: a
+ * payload delivered first is thrown away by the `open()` of the mount, and the page stays on
+ * "asking the server…" -- which is what the first version of the hero test read.
+ */
+function render(over: Partial<StatsTotals> = {}): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(<StatsScreen onClose={() => {}} />);
+  });
+  ReactTestRenderer.act(() => {
+    statsStore.receive({ type: 'stats.result', stats: payload(over) });
   });
   return tree;
 }
@@ -73,4 +77,22 @@ test('the filter and tab rows take the height of their content, never the page\u
   for (const strip of strips) {
     expect(strip.props.style).toMatchObject({ flexGrow: 0, flexShrink: 0 });
   }
+});
+
+test('the hero draws the consumption beside the price, in the same type', () => {
+  const tree = render({ calls: 10, promptTokens: 900_000_000, completionTokens: 120_000_000, billedUsd: 12, referenceUsd: 3 });
+  const words = tree.root
+    .findAllByType(Text)
+    .map(node => [node.props.children].flat().join(''))
+    .join('|');
+
+  expect(words).toContain('$15.00');
+  expect(words).toContain('1.0B');
+  expect(words).toContain('tokens');
+  // The same size as the money: two figures of the page, not a figure and its note.
+  const sizes = tree.root
+    .findAllByType(Text)
+    .filter(node => [node.props.children].flat().join('').includes('15.00') || [node.props.children].flat().join('') === '1.0B')
+    .map(node => (Array.isArray(node.props.style) ? Object.assign({}, ...node.props.style) : node.props.style).fontSize);
+  expect(sizes).toEqual([28, 28]);
 });

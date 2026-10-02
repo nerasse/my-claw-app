@@ -1,8 +1,8 @@
 /**
  * @format
  *
- * The four statements the statistics page is not allowed to get wrong, each reachable without
- * drawing nine sections to read one string.
+ * The statements the statistics page is not allowed to get wrong, each reachable without drawing
+ * nine sections to read one string.
  *
  * Two of them are the reason the page exists at all. The install has two horizons -- the monthly
  * rollup survives the 90-day purge, the per-call rows do not -- so a per-session ranking silently
@@ -12,6 +12,10 @@
  *
  * The other two are about what a row actually is: a conversation that no longer exists still spent
  * money, and a label the server could only fill with a session id is an id, not a title.
+ *
+ * And the consumption is one of the page's two figures, not a footnote under the price: the hero
+ * draws it beside the money, and it is read in the units a human counts in -- a thousand million
+ * tokens is a billion, never `1000.0M` (owner, 2026-10-02).
  */
 
 import type {
@@ -28,6 +32,8 @@ import {
   sessionRowLabel,
   statsReconciliationLines,
   totalsMoneyLines,
+  tokenTotal,
+  shortTokens,
 } from '../StatsScreen';
 
 function totals(over: Partial<StatsTotals> = {}): StatsTotals {
@@ -181,4 +187,24 @@ test('a ledger nothing could read leaves our own sum standing, and says so rathe
 test('a gap the other way round keeps its sign: money we recorded that they never billed', () => {
   const [figures] = statsReconciliationLines(ledger({ providerUsd: 5, deltaUsd: -3 }));
   expect(figures).toContain('gap -$3.00');
+});
+
+test('the hero counts what went in and what came out, and nothing twice', () => {
+  // Cache reads and writes are subsets of the prompt (the cache fold says so): the consumption is
+  // the prompt plus the completion, or the page would bill the same tokens to two figures.
+  expect(tokenTotal(totals())).toBe(108_000);
+  expect(tokenTotal(totals({ promptTokens: 0, completionTokens: 0 }))).toBe(0);
+  expect(tokenTotal(totals({ promptTokens: 1_000, completionTokens: 2_000, cacheReadTokens: 900_000 }))).toBe(3_000);
+});
+
+test('a thousand million tokens read as a billion', () => {
+  expect(shortTokens(1_200_000_000)).toBe('1.2B');
+  expect(shortTokens(1_000_000_000)).toBe('1.0B');
+  // 999.96M is what rounds to the string this tier exists to kill.
+  expect(shortTokens(999_960_000)).toBe('1.0B');
+  expect(shortTokens(999_000_000)).toBe('999.0M');
+  expect(shortTokens(120_400_000)).toBe('120.4M');
+  expect(shortTokens(4_200_000)).toBe('4.2M');
+  expect(shortTokens(12_400)).toBe('12k');
+  expect(shortTokens(950)).toBe('950');
 });

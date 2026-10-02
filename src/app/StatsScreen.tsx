@@ -88,10 +88,29 @@ const CHART_HEIGHT = 44;
 /** An id is truncated to this before it is drawn, tail kept: the distinctive half is the last one. */
 const ID_MAX = 30;
 
-function short(n: number): string {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+/**
+ * Tokens, in the units a human counts in. A thousand million is a billion: `1000.0M` is the same
+ * number written in a unit nobody counts in, so the tier turns over at 1e9 -- and at 999.95M,
+ * which is what would round to it.
+ *
+ * Exported for its own test.
+ */
+export function shortTokens(n: number): string {
+  const millions = n / 1e6;
+  if (n >= 1e9 || millions >= 999.95) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${millions.toFixed(1)}M`;
   if (n >= 1e4) return `${Math.round(n / 1e3)}k`;
   return n.toLocaleString('en-US');
+}
+
+/**
+ * What the window consumed. Cache reads and writes are subsets of the prompt, already counted
+ * here: adding them would count the same tokens twice.
+ *
+ * Exported for its own test.
+ */
+export function tokenTotal(t: StatsTotals): number {
+  return t.promptTokens + t.completionTokens;
 }
 
 function money(usd: number): string {
@@ -266,9 +285,9 @@ export function statsReconciliationLines(r: StatsReconciliation): string[] {
 function volumeLine(t: StatsTotals): string {
   return [
     `${t.calls}x`,
-    `${short(t.promptTokens)} in`,
-    t.cacheReadTokens > 0 ? `${short(t.cacheReadTokens)} cached` : null,
-    `${short(t.completionTokens)} out`,
+    `${shortTokens(t.promptTokens)} in`,
+    t.cacheReadTokens > 0 ? `${shortTokens(t.cacheReadTokens)} cached` : null,
+    `${shortTokens(t.completionTokens)} out`,
     t.errors > 0 ? `${t.errors} err` : null,
     t.durationMs > 0 ? duration(t.durationMs) : null,
   ]
@@ -572,9 +591,17 @@ function Overview({ stats }: { stats: StatsPayload }): React.JSX.Element {
     <>
       <Card>
         <CardHead title={`total · ${periodLabel(stats.period)}`} trailing={`${t.calls} calls`} />
-        <View style={styles.heroRow}>
-          <Text style={styles.hero}>{money(listPrice(t))}</Text>
-          <Text style={styles.heroUnit}>at list price</Text>
+        <View style={styles.heroFigures}>
+          <View>
+            <Text style={styles.hero}>{money(listPrice(t))}</Text>
+            <Text style={styles.heroUnit}>at list price</Text>
+          </View>
+          {/* The consumption beside the price, in the same type: the page is about what the window
+              cost and what it burned, and neither is a footnote to the other (owner, 2026-10-02). */}
+          <View style={styles.heroSide}>
+            <Text style={styles.hero}>{shortTokens(tokenTotal(t))}</Text>
+            <Text style={styles.heroUnit}>tokens</Text>
+          </View>
         </View>
         {totalsMoneyLines(t).map(line => (
           <Text key={line} style={styles.cardNote}>
@@ -582,7 +609,7 @@ function Overview({ stats }: { stats: StatsPayload }): React.JSX.Element {
           </Text>
         ))}
         <Text style={[styles.cardNote, styles.spacer]}>
-          {`${short(t.promptTokens)} in · ${short(t.completionTokens)} out · ${short(t.cacheReadTokens)} cache read · ${short(
+          {`${shortTokens(t.promptTokens)} in · ${shortTokens(t.completionTokens)} out · ${shortTokens(t.cacheReadTokens)} cache read · ${shortTokens(
             t.cacheWriteTokens,
           )} cache written`}
         </Text>
@@ -803,10 +830,10 @@ function CacheFold({ cache }: { cache: StatsCache }): React.JSX.Element {
     <Card>
       <CardHead title="cache" trailing={`${cache.readSharePct.toFixed(1)}% read · ${cache.writeSharePct.toFixed(1)}% written`} />
       <View style={styles.cacheBody}>
-        <Text style={styles.cardNote}>{`${short(cache.promptTokens)} prompt tokens in total`}</Text>
-        <Text style={styles.cardNote}>{`${short(cache.cacheReadTokens)} served from cache · ${cache.readSharePct.toFixed(1)}%`}</Text>
+        <Text style={styles.cardNote}>{`${shortTokens(cache.promptTokens)} prompt tokens in total`}</Text>
+        <Text style={styles.cardNote}>{`${shortTokens(cache.cacheReadTokens)} served from cache · ${cache.readSharePct.toFixed(1)}%`}</Text>
         <Meter pct={cache.readSharePct} />
-        <Text style={styles.cardNote}>{`${short(cache.cacheWriteTokens)} written to cache · ${cache.writeSharePct.toFixed(1)}%`}</Text>
+        <Text style={styles.cardNote}>{`${shortTokens(cache.cacheWriteTokens)} written to cache · ${cache.writeSharePct.toFixed(1)}%`}</Text>
         <Meter pct={cache.writeSharePct} />
         <Text style={styles.codeNote}>both are subsets of the prompt tokens above, billed at their own rate.</Text>
       </View>
@@ -980,7 +1007,8 @@ const createStyles = (palette: Palette) => ({
     borderLeftColor: palette.warn,
     paddingLeft: space.sm,
   },
-  heroRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.sm },
+  heroFigures: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, justifyContent: 'space-between' as const, gap: space.md },
+  heroSide: { alignItems: 'flex-end' as const },
   hero: { fontSize: 28, lineHeight: 32, fontWeight: '700' as const, color: palette.text },
   heroUnit: { fontSize: font.body, color: palette.textFaint },
   chart: {
