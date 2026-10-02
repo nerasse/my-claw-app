@@ -2,6 +2,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import type { AttachmentMeta, HistoryEntry, LocationData, RunMeta, SpawnAction, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
 import { questionStore } from './questionStore';
 import { agentOfCard, indexRoster } from './subagents';
+import { hasNothingToShow, isOwnerMessage } from './runRows';
 
 export type RunStatus = 'running' | 'done' | 'aborted' | 'error';
 
@@ -936,10 +937,34 @@ class ChatStoreImpl {
     if (open) {
       // Everything the run painted closes at once: the header the renderer builds reads the
       // status off the items, so patching them is what folds the run under one collapsed row.
-      this.sealRun(threadId, open.info.id, reason, Date.now());
+      const endTs = Date.now();
+      this.sealRun(threadId, open.info.id, reason, endTs);
+      this.signTrigger(threadId, { ...open.info, status: reason, endTs });
     }
     this.emit();
     return true;
+  }
+
+  /**
+   * A run that drew nothing signs the message that triggered it, as the server's pages do
+   * (`runFold`). Stopped right after the send, or failed on its first call, it had no item to
+   * carry it: no signature, and no Continue to pick the message back up (2026-10-02).
+   *
+   * The trigger is the owner's newest message, provided no run claims it already (a message folded
+   * into a run belongs to that run) and it is not still waiting to be taken up.
+   */
+  private signTrigger(threadId: string, run: RunInfo): void {
+    const items = this.threads.get(threadId);
+    if (!items || items.some(item => item.run?.id === run.id && !hasNothingToShow(item))) return;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index]!;
+      if (!isOwnerMessage(item) || item.kind !== 'text') continue;
+      if (item.run || item.queuedSince !== undefined) return;
+      const next = [...items];
+      next[index] = { ...item, run };
+      this.threads.set(threadId, next);
+      return;
+    }
   }
 
   /**

@@ -12,7 +12,7 @@ import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
-import { buildRows, compactionRuleBefore, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
+import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
@@ -38,7 +38,7 @@ import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useLayout } from '../core/layout';
-import { RunContinueContext, type RunContinueOffer } from '../components/runContinue';
+import { ContinueButton } from '../components/ContinueButton';
 import { watchFileDrop } from '../core/fileDrop';
 import { selectableProps } from '../core/webProps';
 import { RowBoundary } from './RowBoundary';
@@ -676,26 +676,17 @@ export function ChatScreen({
 
   // Continue is offered under the thread's last run, while nothing runs. One press, then nothing
   // until the run it starts comes back through `streaming` or the thread moves on.
-  const lastRunId = useMemo(() => {
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      const run = (items[index] as { run?: RunInfo } | undefined)?.run;
-      if (run) return run.id;
-    }
-    return undefined;
-  }, [items]);
+  const continueRun = useMemo(() => continueTarget(items), [items]);
   const [continuePressed, setContinuePressed] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (streaming) setContinuePressed(undefined);
   }, [streaming]);
-  const continueOffer = useMemo<RunContinueOffer>(() => ({
-    lastRunId,
-    onContinue: onContinue && !streaming && continuePressed !== lastRunId
-      ? () => {
-          setContinuePressed(lastRunId);
-          onContinue();
-        }
-      : undefined,
-  }), [continuePressed, lastRunId, onContinue, streaming]);
+  const continueOffered = onContinue !== undefined && continueRun !== undefined && !streaming && continuePressed !== continueRun.id;
+  const pressContinue = useCallback(() => {
+    if (!continueRun || !onContinue) return;
+    setContinuePressed(continueRun.id);
+    onContinue();
+  }, [continueRun, onContinue]);
 
   // `grouped[i]` says row i continues the previous author's block. Computed once per items change
   // rather than twice per row on every render: the whole list re-renders on each streaming delta,
@@ -1147,8 +1138,9 @@ export function ChatScreen({
   // no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
   const listHeader = useMemo(
     () =>
-      (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 ? (
+      (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 || continueOffered ? (
         <View style={styles.looseQuestions}>
+          {continueOffered ? <ContinueButton onPress={pressContinue} /> : null}
           {compacting !== undefined && ruleBefore === undefined ? (
             <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} stopping={stopping} />
           ) : null}
@@ -1162,7 +1154,7 @@ export function ChatScreen({
           ))}
         </View>
       ) : null,
-    [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions],
+    [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions, continueOffered, pressContinue],
   );
 
   const listFooter = useMemo(
@@ -1208,7 +1200,6 @@ export function ChatScreen({
   });
 
   return (
-    <RunContinueContext.Provider value={continueOffer}>
     <View style={styles.screen}>
       {subagent ? (
         <View style={column}>
@@ -1507,7 +1498,6 @@ export function ChatScreen({
         </ActionSheet>
       ) : null}
     </View>
-    </RunContinueContext.Provider>
   );
 }
 

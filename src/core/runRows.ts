@@ -190,7 +190,7 @@ export function pinnedSends(rows: ChatRow[]): ChatRow[] {
  * so an empty one that arrives is a hole in the conversation, and since any row breaks the fold
  * it also cuts the group it landed in (2026-09-16).
  */
-function hasNothingToShow(item: ChatItem): boolean {
+export function hasNothingToShow(item: ChatItem): boolean {
   if (item.kind !== 'text') return false;
   const says = item.text.trim() !== '';
   const shows = (item.attachments?.length ?? 0) > 0;
@@ -210,6 +210,40 @@ function hasNothingToShow(item: ChatItem): boolean {
     item.compactionMs !== undefined ||
     item.compactionStopped === true;
   return !(says || shows || thought || heard || why || apart);
+}
+
+/**
+ * A message the owner sent, as opposed to what is stored under the same role: a command and its
+ * output, a notice, a compaction boundary (the summary is a `user` turn because the prompt needs
+ * it there).
+ */
+export function isOwnerMessage(item: ChatItem): boolean {
+  return (
+    item.kind === 'text' &&
+    item.role === 'user' &&
+    item.command !== true &&
+    item.notice !== true &&
+    item.summaryOf === undefined &&
+    item.compactionMs === undefined &&
+    item.compactionStopped !== true
+  );
+}
+
+/**
+ * The run Continue would pick back up: the thread's last run, when it stopped, failed, or was lost
+ * (still marked running while the thread is at rest -- the caller knows that part).
+ *
+ * Nothing when a newer message of the owner stands under it: that message is what comes next, sent
+ * or on its way. A command output or a notice after the run does not count, the owner's `/stop`
+ * included.
+ */
+export function continueTarget(items: readonly ChatItem[]): RunInfo | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]!;
+    if (item.run) return item.run.status === 'done' ? undefined : item.run;
+    if (isOwnerMessage(item)) return undefined;
+  }
+  return undefined;
 }
 
 export function buildRows(items: ChatItem[]): ChatRow[] {

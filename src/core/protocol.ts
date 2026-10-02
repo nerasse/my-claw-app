@@ -718,8 +718,11 @@ export interface UndoPromptFrame {
   id: string;
   threadId: string;
   turnPreview: string;
-  /** Precomputed file diff, per depot. Empty = nothing to restore. */
-  diff: Array<{ root: string; additions: number; deletions: number }>;
+  /**
+   * Precomputed file diff, per depot. Empty = nothing to restore. `files` counts what lines cannot
+   * (a binary, an emptied file); a server older than it sends none.
+   */
+  diff: Array<{ root: string; files?: number; additions: number; deletions: number }>;
   ts: string;
 }
 

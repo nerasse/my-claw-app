@@ -16,14 +16,23 @@ export interface UndoSheetProps {
   /** The prompt's id, from the store; the sheet shows the newest one of the open thread. */
   id: string;
   turnPreview: string;
-  diff: Array<{ root: string; additions: number; deletions: number }>;
+  diff: Array<{ root: string; files?: number; additions: number; deletions: number }>;
   onClose: () => void;
 }
 
-function diffText(diff: UndoSheetProps['diff']): string {
+/**
+ * The files first, then the lines: a binary or an emptied file is +0/-0 and a restore still
+ * rewrites it, so the line counts alone read as "nothing" on exactly the changes that matter.
+ */
+export function diffText(diff: UndoSheetProps['diff']): string {
   if (diff.length === 0) return 'Aucun changement de fichier dans la session.';
   return diff
-    .map(d => `${d.root.split('/').pop() || d.root}: +${d.additions}/-${d.deletions}`)
+    .map(d => {
+      const name = d.root.split('/').pop() || d.root;
+      const lines = `+${d.additions}/-${d.deletions}`;
+      if (d.files === undefined) return `${name}: ${lines}`;
+      return `${name}: ${d.files} fichier${d.files > 1 ? 's' : ''} (${lines})`;
+    })
     .join(', ');
 }
 
