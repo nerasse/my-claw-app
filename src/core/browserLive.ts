@@ -155,9 +155,21 @@ export function useLiveNotice(): string | null {
  * screens, one per screen. Nothing on native.
  */
 export function windowFromLocation(): number | null {
+  return browserFromLocation()?.window ?? null;
+}
+
+/** The hash of a tab opened on the browser page: every window (`#browser`), or one. */
+export const BROWSER_HASH = '#browser';
+
+/**
+ * A web tab opened on the browser page, full screen: on every window (`#browser`), or on one
+ * (`#browser-window=<id>`). Null for any other tab, which opens the app as usual.
+ */
+export function browserFromLocation(): { window: number | null } | null {
   const hash = (globalThis as { location?: { hash?: string } }).location?.hash ?? '';
+  if (hash === BROWSER_HASH) return { window: null };
   const match = /^#browser-window=(\d+)$/.exec(hash);
-  return match ? Number(match[1]) : null;
+  return match ? { window: Number(match[1]) } : null;
 }
 
 /** The tab a window shows, which is the one its tile and its full view draw. */

@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLayout } from '../core/layout';
-import { DRAWER_WIDTH, space, useThemedStyles, type Palette } from '../theme';
+import { useDrawerColumn } from '../core/layout';
+import { space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * A screen written for the shell's padded container, shown as a layer over another screen.
@@ -21,7 +21,7 @@ export function ScreenLayer({ children }: { children: React.ReactNode }): React.
   const insets = useSafeAreaInsets();
   // The conversation list is a column of the layout on a desktop, not something to be covered:
   // a layer starts where that column ends.
-  const { pinnedDrawer } = useLayout();
+  const drawerColumn = useDrawerColumn();
 
   return (
     <View
@@ -29,7 +29,7 @@ export function ScreenLayer({ children }: { children: React.ReactNode }): React.
         StyleSheet.absoluteFill,
         styles.stage,
         { paddingTop: insets.top + space.sm },
-        pinnedDrawer && { left: DRAWER_WIDTH },
+        drawerColumn > 0 && { left: drawerColumn },
       ]}>
       {children}
     </View>

@@ -17,7 +17,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { FilterIcon, FolderIcon, GearIcon, NewFolderIcon, PlusIcon } from '../components/icons';
+import { FilterIcon, FolderIcon, GearIcon, NewFolderIcon, PlusIcon, SidebarIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
@@ -146,11 +146,14 @@ export function Drawer({
   onOpenMore,
   onOpenSettings,
   home,
+  onCollapse,
   onHome,
 }: {
   open: boolean;
   /** Standing column instead of a slide-over. `open` and `onClose` are then meaningless. */
   pinned?: boolean;
+  /** Pinned only: folds the list into the rail, to give its width to the conversation. */
+  onCollapse?: () => void;
   /** Bumped by the Ctrl+K shortcut: the search field takes the caret. */
   focusSearch?: number;
   sessions: SessionSummary[];
@@ -681,6 +684,16 @@ export function Drawer({
             <Text style={styles.brand}>MyClaw</Text>
           </Pressable>
           <View style={styles.headActions}>
+            {pinned && onCollapse ? (
+              <Pressable
+                onPress={onCollapse}
+                hitSlop={8}
+                style={styles.folderButton}
+                accessibilityRole="button"
+                accessibilityLabel="Hide the conversation list">
+                <SidebarIcon size={20} color={palette.textFaint} />
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={onNewFolder}
               hitSlop={8}
@@ -878,7 +891,8 @@ const createStyles = (palette: Palette) => ({
     bottom: 0,
     left: 0,
   },
-  panelPinned: { paddingTop: space.sm },
+  // The column it sits in decides the width: the owner drags it (DesktopColumns).
+  panelPinned: { paddingTop: space.sm, width: '100%' as const, flex: 1 },
   homePanel: {
     flex: 1,
     backgroundColor: palette.surface,

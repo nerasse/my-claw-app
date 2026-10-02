@@ -89,3 +89,41 @@ export function GearIcon(props: IconProps): React.JSX.Element {
     />
   );
 }
+
+/**
+ * A window with its left column: the conversation list, folded or unfolded. Drawn as a frame with
+ * two holes (each traced against the frame's direction, so the nonzero fill leaves them empty).
+ */
+export function SidebarIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M3 3H21V21H3Z M5 5V19H9V5Z M11 5V19H19V5Z" />;
+}
+
+/** Four corners pointing out: the page takes the whole window. */
+export function ExpandIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M5 5h5v2H7v3H5zm9 0h5v5h-2V7h-3zM5 14h2v3h3v2H5zm12 0h2v5h-5v-2h3z" />;
+}
+
+/** Four corners pointing in: back to the columns. */
+export function CollapseIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M8 5h2v5H5V8h3zm6 0h2v3h3v2h-5zM5 14h5v5H8v-3H5zm9 0h5v2h-3v3h-2z" />;
+}
+
+/** A box with an arrow leaving it: opens in a tab of its own. */
+export function OpenInNewIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14zM5 5h6v2H5v12h12v-6h2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"
+    />
+  );
+}
+
+/** The circular arrow: ask again. */
+export function RefreshIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"
+    />
+  );
+}

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -15,7 +15,9 @@ import {
   type BrowserInput,
   type BrowserUnblockResultFrame,
 } from '../core/protocol';
-import { browserLiveStore, shownTab, useLiveNotice, useLiveWindows } from '../core/browserLive';
+import { BROWSER_HASH, browserLiveStore, shownTab, useLiveNotice, useLiveWindows } from '../core/browserLive';
+import { CollapseIcon, ExpandIcon, OpenInNewIcon, RefreshIcon } from '../components/icons';
+import { useTheme } from '../theme';
 import { BrowserWall } from './browser/BrowserWall';
 import { LiveWindowView } from './browser/LiveWindowView';
 
@@ -191,6 +193,8 @@ export function BrowserScreen({
   onClose,
   connected = true,
   initialWindow = null,
+  fullScreen = false,
+  onToggleFullScreen,
 }: {
   error: string | null;
   /** What the last unlock did, handed down by the shell: a result is a moment, not a state. */
@@ -200,8 +204,13 @@ export function BrowserScreen({
   connected?: boolean;
   /** Opened on one window (a web tab popped out for another screen). */
   initialWindow?: number | null;
+  /** The page has the whole window to itself, the conversation list and the conversation hidden. */
+  fullScreen?: boolean;
+  /** Given where there is something to take the window from (a desktop): a phone is full screen already. */
+  onToggleFullScreen?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   const info = useBrowserInfo();
   const { copied, copy } = useCopy();
   const [revealed, setRevealed] = useState(false);
@@ -226,6 +235,12 @@ export function BrowserScreen({
 
   const vncAddress = info?.vncHost ? `${info.vncHost}:${info.vncPort}` : null;
 
+  // Every window, full screen, in a tab of its own: one to leave on a screen of its own.
+  const openInTab = useCallback(() => {
+    const w = globalThis as unknown as { open?: (url: string, target: string) => void; location?: { origin: string; pathname: string } };
+    if (w.open && w.location) w.open(`${w.location.origin}${w.location.pathname}${BROWSER_HASH}`, '_blank');
+  }, []);
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -238,7 +253,7 @@ export function BrowserScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerMain}>
-          <Text style={styles.title}>Browser</Text>
+          <Text style={styles.title} numberOfLines={1}>Browser</Text>
           <Text style={styles.headerSub} numberOfLines={1}>
             {info === null ? 'loading' : info.enabled ? 'watch the agents, lend a hand' : 'browser disabled on the server'}
           </Text>
@@ -254,13 +269,29 @@ export function BrowserScreen({
             <Text style={pane === p ? styles.paneOnText : styles.refreshText}>{p === 'live' ? 'Live' : 'VNC'}</Text>
           </Pressable>
         ))}
+        {/* Icons past the two panes: in a 460pt pane beside the conversation, words here took the
+            title's room. */}
         <Pressable
           onPress={refresh}
-          style={styles.refreshButton}
+          style={styles.iconButton}
           accessibilityRole="button"
           accessibilityLabel="Refresh browser state">
-          <Text style={styles.refreshText}>Refresh</Text>
+          <RefreshIcon size={20} color={palette.text} />
         </Pressable>
+        {onToggleFullScreen ? (
+          <Pressable
+            onPress={onToggleFullScreen}
+            style={styles.iconButton}
+            accessibilityRole="button"
+            accessibilityLabel={fullScreen ? 'Exit full screen' : 'Full screen'}>
+            {fullScreen ? <CollapseIcon size={20} color={palette.text} /> : <ExpandIcon size={20} color={palette.text} />}
+          </Pressable>
+        ) : null}
+        {Platform.OS === 'web' ? (
+          <Pressable onPress={openInTab} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Open the browser in a new tab">
+            <OpenInNewIcon size={20} color={palette.text} />
+          </Pressable>
+        ) : null}
       </View>
 
       {error ? (
@@ -421,7 +452,7 @@ const createStyles = (palette: Palette) => ({
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: space.md,
+    gap: space.sm,
     paddingBottom: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
@@ -445,6 +476,14 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surfaceAlt,
   },
   refreshText: { fontSize: font.body, color: palette.text },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   paneOn: { backgroundColor: palette.accent },
   paneOnText: { fontSize: font.body, color: palette.surface, fontWeight: '600' as const },
   live: { gap: space.md },

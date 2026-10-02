@@ -229,7 +229,9 @@ import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
 import { BrowserScreen } from './BrowserScreen';
-import { windowFromLocation } from '../core/browserLive';
+import { browserFromLocation } from '../core/browserLive';
+import { panes } from '../core/panes';
+import { PagePane, PinnedColumn } from './DesktopColumns';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { StatsScreen } from './StatsScreen';
@@ -643,9 +645,12 @@ export function AppShell(): React.JSX.Element {
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
-  // A web tab popped out for one browser window opens on it, and on nothing else.
-  const [browserWindow] = useState(windowFromLocation);
-  const [browserOpen, setBrowserOpen] = useState(browserWindow !== null);
+  // A web tab opened on the browser (every window, or one popped out) opens on it, full screen.
+  const [browserLaunch] = useState(browserFromLocation);
+  const browserWindow = browserLaunch?.window ?? null;
+  const [browserOpen, setBrowserOpen] = useState(browserLaunch !== null);
+  // The browser page with the whole window to itself (owner, 2026-09-29: a tab with every screen).
+  const [browserFull, setBrowserFull] = useState(browserLaunch !== null);
   const [browserError, setBrowserError] = useState<string | null>(null);
   const [browserUnblock, setBrowserUnblock] = useState<BrowserUnblockResultFrame | null>(null);
   /** The More sheet in the drawer footer: Archived, Agents, Jobs, Browser, Statistics, Settings. */
@@ -1567,14 +1572,24 @@ export function AppShell(): React.JSX.Element {
     [handleBack, openThread, selectThread],
   );
 
+  // Only where there are columns to take the window from, and only while the browser is the page
+  // shown (settings come before it in the page chain).
+  const browserFullNow = browserFull && browserOpen && !settingsOpen && layout.pinnedDrawer;
   useHotkeys({
     escape: () => {
-      handleBack();
+      // Out of full screen first: the page stays open, back in its pane.
+      if (browserFullNow) setBrowserFull(false);
+      else handleBack();
     },
-    // The conversation list is the palette: it searches, and on a desktop it is already there.
+    // The conversation list is the palette: it searches, and on a desktop it is already there
+    // (unfolded, if the owner had folded it away).
     'mod+k': () => {
       if (!layout.pinnedDrawer) setDrawerOpen(true);
+      else panes.setDrawerCollapsed(false);
       setSearchFocus(count => count + 1);
+    },
+    'mod+b': () => {
+      if (layout.pinnedDrawer) panes.toggleDrawer();
     },
     'mod+n': () => newThread(),
     'mod+,': () => openSettings(),
@@ -3465,6 +3480,7 @@ export function AppShell(): React.JSX.Element {
   /** Something other than the conversation is showing: settings, the archives, the files. */
   const pageOpen =
     settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
+  const split = layout.sidePane && !browserFullNow;
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -3483,10 +3499,15 @@ export function AppShell(): React.JSX.Element {
         {/* A row with one child on a phone, two on a desktop: the conversation list stops being
             an overlay and becomes a column, and the pages beside it lose nothing. */}
         <View style={styles.shell}>
-        {layout.pinnedDrawer ? (
+        {layout.pinnedDrawer && !browserFullNow ? (
+          <PinnedColumn
+            onNewThread={newThread}
+            onOpenSettings={openSettingsFromDrawer}
+            drawer={
           <Drawer
             pinned
             open
+            onCollapse={() => panes.setDrawerCollapsed(true)}
             focusSearch={searchFocus}
             sessions={sessions}
             folders={folders}
@@ -3512,6 +3533,8 @@ export function AppShell(): React.JSX.Element {
             onOpenMore={() => setMoreOpen(true)}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
+          />
+            }
           />
         ) : null}
         {/* The home list is a full-bleed panel: the container's md padding would paint a band
@@ -3547,18 +3570,18 @@ export function AppShell(): React.JSX.Element {
             onHome={handleHome}
           />
         ) : (
-        <View style={[styles.container, layout.sidePane && styles.containerSplit]}>
+        <View style={[styles.container, split && styles.containerSplit]}>
         {/* Wide enough for both: a page opens beside the conversation instead of over it, which
             is the difference between reading the two and remembering one. */}
-        {layout.sidePane ? <View style={styles.chatPane}>{activeThread === null ? <View style={styles.pageFull} testID="home-placeholder" /> : chatScreen}</View> : null}
-        {layout.sidePane && !pageOpen ? null : (
-        <View
-          testID={layout.sidePane ? 'page-pane' : undefined}
-          style={
-            layout.sidePane
-              ? styles.pagePane
-              : [styles.pageFull, layout.pinnedDrawer && { maxWidth: layout.pageWidth, alignSelf: 'center' as const, width: '100%' as const }]
-          }>
+        {split ? <View style={styles.chatPane}>{activeThread === null ? <View style={styles.pageFull} testID="home-placeholder" /> : chatScreen}</View> : null}
+        {split && !pageOpen ? null : (
+        <PagePane
+          split={split}
+          style={[
+            styles.pageFull,
+            // Full screen is the whole window: the cap of a page of controls would undo it.
+            layout.pinnedDrawer && !browserFullNow && { maxWidth: layout.pageWidth, alignSelf: 'center' as const, width: '100%' as const },
+          ]}>
           {settingsOpen ? (
             settingsPage === 'index' ? (
               <SettingsScreen
@@ -4078,8 +4101,11 @@ export function AppShell(): React.JSX.Element {
               unblock={browserUnblock}
               connected={status.state === 'connected'}
               initialWindow={browserWindow}
+              fullScreen={browserFullNow}
+              onToggleFullScreen={layout.pinnedDrawer ? () => setBrowserFull(full => !full) : undefined}
               onClose={() => {
                 setBrowserOpen(false);
+                setBrowserFull(false);
                 // A result is a moment, not a state: reopening the page shows where to connect,
                 // not what a button did last time.
                 setBrowserUnblock(null);
@@ -4216,7 +4242,7 @@ export function AppShell(): React.JSX.Element {
                     )
             )
           )}
-        </View>
+        </PagePane>
         )}
         </View>
         )}
@@ -5145,11 +5171,4 @@ const createStyles = (palette: Palette) => ({
   chatPane: { flex: 1, minWidth: 0 },
   chatWrap: { flex: 1, minWidth: 0 },
   pageFull: { flex: 1 },
-  pagePane: {
-    width: 460,
-    marginLeft: space.md,
-    paddingLeft: space.md,
-    borderLeftWidth: 1,
-    borderLeftColor: palette.border,
-  },
 });

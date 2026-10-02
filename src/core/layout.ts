@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { pointerFine } from './platform';
-import { DRAWER_WIDTH } from '../theme/palettes';
+import { drawerColumnOf, usePanes } from './panes';
 
 /**
  * How much room the window gives, expressed as decisions rather than pixels.
@@ -81,8 +81,15 @@ export interface Layout {
  * letter per line.
  */
 export function useLayerFrame(): { left: number } {
+  const left = useDrawerColumn();
+  return useMemo(() => ({ left }), [left]);
+}
+
+/** The width the pinned conversation list takes right now (dragged, or folded), 0 when it is not pinned. */
+export function useDrawerColumn(): number {
   const { pinnedDrawer } = useLayout();
-  return useMemo(() => ({ left: pinnedDrawer ? DRAWER_WIDTH : 0 }), [pinnedDrawer]);
+  const column = usePanes(drawerColumnOf);
+  return pinnedDrawer ? column : 0;
 }
 
 export function useLayout(): Layout {
