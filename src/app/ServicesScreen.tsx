@@ -59,8 +59,8 @@ export function ServicesScreen({ onBack }: { onBack: () => void }): React.JSX.El
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8}>
-          <Text style={styles.back}>‹</Text>
+        <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to settings">
+          <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.title}>Services</Text>
       </View>
@@ -215,19 +215,26 @@ function ServiceCard({
 }
 
 const createStyles = (palette: Palette) => ({
-  root: { flex: 1, backgroundColor: palette.bg },
+  root: { flex: 1 },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: space.sm,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    gap: space.md,
+    paddingBottom: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
-  back: { fontSize: font.screen, color: palette.textFaint, paddingHorizontal: 4 },
-  title: { fontSize: font.screen, fontWeight: '600' as const, color: palette.text },
-  content: { padding: space.md, gap: space.sm, paddingBottom: space.xl },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
+  content: { paddingVertical: space.md, gap: space.sm, paddingBottom: space.xl },
   card: {
     backgroundColor: palette.surface,
     borderWidth: 1,

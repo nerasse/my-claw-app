@@ -2362,6 +2362,8 @@ export interface InstructionEntry {
    *  and owns no file. The row cannot work the last case out on its own, and without it would
    *  promise a shipped template that is never read. */
   empty?: boolean;
+  /** Still the shipped template, word for word. Absent on an older server. */
+  template?: boolean;
 }
 
 /** A nested AGENTS.md found under a workspace. Read-only: it reaches tool results, not the prompt. */

@@ -159,6 +159,8 @@ export interface BackLayers {
   setScopeEditor: (value: null) => void;
   tagContextEditor: unknown;
   workspaceFrom: 'workspaces' | 'agent';
+  /** Where the prompt-file editor returns: its workspace page, or the setup assistant. */
+  instructionBack: 'workspace' | 'setup';
   setLayerTarget: (value: null) => void;
   archivesOpen: boolean;
   setArchivesOpen: (value: boolean) => void;
@@ -280,6 +282,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setScopeEditor,
     tagContextEditor,
     workspaceFrom,
+    instructionBack,
     setLayerTarget,
     archivesOpen,
     setArchivesOpen,
@@ -582,7 +585,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     }
     if (settingsPage === 'instruction') {
       instructionsStore.closeEditor();
-      setSettingsPage('workspace');
+      setSettingsPage(instructionBack);
       return true;
     }
     // The workspace page is reached from the list, or straight from an agent pinned to it.

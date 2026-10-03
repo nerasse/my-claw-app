@@ -484,6 +484,8 @@ export function AppShell(): React.JSX.Element {
   /** The workspace page is a page of the workspaces list, but the agent page links straight into
    *  the workspace it is pinned to: back has to return where the user came from. */
   const [workspaceFrom, setWorkspaceFrom] = useState<'workspaces' | 'agent'>('workspaces');
+  // Where the prompt-file editor goes back to: its workspace page, or the assistant that opened it.
+  const [instructionBack, setInstructionBack] = useState<'workspace' | 'setup'>('workspace');
   /** The layer screen is reached from the workspace page only; one entry path, one back. */
   const [layerTarget, setLayerTarget] = useState<{ workspace: string; file: string } | null>(null);
   /** The model picker is open for "global" or an agent key: its group stack, walked by back. */
@@ -1474,6 +1476,7 @@ export function AppShell(): React.JSX.Element {
         setScopeEditor,
         tagContextEditor,
         workspaceFrom,
+        instructionBack,
         setLayerTarget,
         archivesOpen,
         setArchivesOpen,
@@ -1513,6 +1516,7 @@ export function AppShell(): React.JSX.Element {
       instructionsPageEditing,
       instructionsPageOpen,
       workspaceFrom,
+      instructionBack,
       workspacePicker,
       jobSessions,
       jobsEditor,
@@ -2978,7 +2982,9 @@ export function AppShell(): React.JSX.Element {
     return off;
   }, [agentsFile.editor?.frame?.workspace, instructions.entries]);
 
-  const openInstruction = (workspace: string, file: string): void => {
+  const openInstruction = (workspace: string, file: string, back: 'workspace' | 'setup' = 'workspace'): void => {
+    setInstructionBack(back);
+    if (back === 'setup') setSelectedWorkspace(workspace);
     instructionsStore.openEditor(workspace, file);
     setSettingsPage('instruction');
     connection.send(encodeInstructionsGet(workspace, file)).catch(() => {});
@@ -3743,7 +3749,7 @@ export function AppShell(): React.JSX.Element {
                   maxBytes={instructions.maxBytes}
                   onBack={() => {
                     instructionsStore.closeEditor();
-                    setSettingsPage('workspace');
+                    setSettingsPage(instructionBack);
                   }}
                   onChange={draft => instructionsStore.edit(draft)}
                   onSave={() => {
@@ -4040,7 +4046,10 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'services' ? (
               <ServicesScreen onBack={() => setSettingsPage('index')} />
             ) : settingsPage === 'setup' ? (
-              <SetupScreen onBack={() => setSettingsPage('index')} onOpen={page => setSettingsPage(page)} />
+              <SetupScreen
+                onBack={() => setSettingsPage('index')}
+                onOpen={step => (step.key === 'profile' ? openInstruction('default', 'USER.md', 'setup') : setSettingsPage(step.page))}
+              />
             ) : settingsPage === 'skills' ? (
               <SkillsScreen
                 skills={skills}

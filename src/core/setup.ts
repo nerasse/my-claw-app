@@ -1,4 +1,4 @@
-import type { ServicesResultFrame } from './protocol';
+import type { InstructionEntry, ServicesResultFrame } from './protocol';
 import type { SettingsPage } from '../app/settingsPages';
 
 /**
@@ -17,7 +17,22 @@ export interface SetupStep {
   essential: boolean;
 }
 
-export function setupSteps(input: { defaultModel: string; services: ServicesResultFrame | null }): SetupStep[] {
+/**
+ * The profile is the default workspace's USER.md, the one every workspace inherits unless it owns
+ * one: written once it is no longer the shipped template. Other workspaces do not count, whatever
+ * they hold. Unknown (older server, list not in yet): no verdict.
+ */
+function profileDone(entries: InstructionEntry[]): boolean | undefined {
+  const user = entries.find(e => e.workspace === 'default' && e.file === 'USER.md');
+  return user?.template === undefined ? undefined : !user.template;
+}
+
+export function setupSteps(input: {
+  defaultModel: string;
+  services: ServicesResultFrame | null;
+  instructions: InstructionEntry[];
+}): SetupStep[] {
+  const profile = profileDone(input.instructions);
   const servicesMissing = input.services?.services.filter(s => s.missing.length > 0).length;
   return [
     {
@@ -41,7 +56,15 @@ export function setupSteps(input: { defaultModel: string; services: ServicesResu
       ...(servicesMissing === undefined ? {} : { done: servicesMissing === 0 }),
       essential: false,
     },
-    { key: 'profile', title: 'Tell the agent who you are', hint: 'USER.md: your name, time zone, language', page: 'workspaces', essential: false },
+    {
+      key: 'profile',
+      title: 'Tell the agent who you are',
+      hint: profile ? 'USER.md of the default workspace is written' : 'USER.md of the default workspace: your name, time zone, language',
+      // Opens the file itself: the workspace list showed every workspace and read as unfinished.
+      page: 'instruction',
+      ...(profile === undefined ? {} : { done: profile }),
+      essential: false,
+    },
     { key: 'notifications', title: 'Notifications', hint: 'when a run ends while the app is closed', page: 'notifications', essential: false },
     { key: 'devices', title: 'Your other devices', hint: 'pair a browser or another phone from here', page: 'devices', essential: false },
   ];
