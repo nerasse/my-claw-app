@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { appUpdateSupported } from '../core/appUpdateRuntime';
 import type { ThemeMode } from '../core/prefs';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -74,6 +75,8 @@ export function OtherSettingsScreen({
           </View>
         </View>
 
+        {/* A browser updates with the server: there is no app to download. */}
+        {appUpdateSupported ? (
         <View style={styles.categoryItem}>
           <Text style={styles.section}>updates</Text>
           <View style={styles.card}>
@@ -88,6 +91,7 @@ export function OtherSettingsScreen({
             <Text style={styles.hint}>off = wifi only · the update downloads on its own when newer</Text>
           </View>
         </View>
+        ) : null}
 
         <View style={styles.categoryItem}>
           <Text style={styles.section}>troubleshooting</Text>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { devicesStore, useDevices } from '../core/devices';
 import type { DeviceRecord } from '../core/protocol';
+import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { ActionSheet } from '../components/ActionSheet';
@@ -49,9 +50,7 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8}>
-          <Text style={styles.back}>‹</Text>
-        </Pressable>
+        <BackButton onPress={onBack} label="Back to settings" />
         <Text style={styles.title}>Devices</Text>
       </View>
 
@@ -229,18 +228,10 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
 
 const createStyles = (palette: Palette) => ({
   root: { flex: 1, backgroundColor: palette.bg },
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
-  },
-  back: { fontSize: font.screen, color: palette.textFaint, paddingHorizontal: 4 },
-  title: { fontSize: font.screen, fontWeight: '600' as const, color: palette.text },
-  content: { padding: space.md, gap: space.sm, paddingBottom: space.xl },
+  header: headerStyle(palette),
+
+  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
+  content: { paddingVertical: space.md, gap: space.sm, paddingBottom: space.xl },
   card: {
     backgroundColor: palette.surface,
     borderWidth: 1,

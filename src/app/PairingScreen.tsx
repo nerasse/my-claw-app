@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
 import { pairingStatus, startPairing, cancelPairing, onPairingStatus, type PairingStatus } from '../core/pairingClient';
+import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -28,7 +29,7 @@ function statusText(status: PairingStatus): string {
 /**
  * Pairs this device with a server-minted credential.
  *
- * The flow: `sudo myclaw device add --kind app --name "Phone"` prints a code (and a QR). The
+ * The flow: `myclaw setup` (or `myclaw device add --kind app`) prints a code and a QR. The
  * owner scans it (or types it), the server hands this app the minted token, and the app
  * reconnects with it. No copy-paste of credentials, no manual config edit.
  */
@@ -66,16 +67,14 @@ export function PairingScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={onClose} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to settings">
-          <Text style={styles.backGlyph}>‹</Text>
-        </Pressable>
+        <BackButton onPress={onClose} label="Back to settings" />
         <Text style={styles.title}>Pair device</Text>
       </View>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Pair this device</Text>
           <Text style={styles.hint}>
-            On the server, run: sudo myclaw device add --kind app --name &quot;Phone&quot;
+            On the server, run: myclaw setup (the first device), or myclaw device add --kind app --name &quot;Phone&quot;
           </Text>
           <Text style={styles.hint}>
             Then scan the QR it prints, or type the eight-character code.
@@ -165,11 +164,9 @@ export function usePairing(): PairingStatus {
 
 const createStyles = (palette: Palette) => ({
   screen: { flex: 1 },
-  header: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: space.md, paddingVertical: space.sm },
-  backButton: { padding: space.sm },
-  backGlyph: { color: palette.text, fontSize: font.screen, lineHeight: 22 },
-  title: { color: palette.text, fontSize: font.screen, fontWeight: '600' as const, marginLeft: space.sm },
-  body: { padding: space.md, gap: space.sm },
+  header: headerStyle(palette),
+  title: { color: palette.text, fontSize: font.title, fontWeight: '600' as const },
+  body: { paddingVertical: space.md, gap: space.sm },
   card: { marginBottom: space.xs },
   serverCard: { marginTop: space.lg },
   cardTitle: { color: palette.text, fontSize: font.body, fontWeight: '600' as const, marginBottom: space.xs },

@@ -33,6 +33,17 @@ export interface SetupInput {
   /** Push exists on this device at all (not in a browser). */
   pushSupported: boolean;
   skipped: string[];
+  /** Configured providers; unknown (null) until the agents config answered. */
+  providers: number | null;
+  /** The default model is known but cannot run (its key is missing, its provider gone). */
+  defaultUnavailable: boolean;
+}
+
+/**
+ * Whether the agent can answer: a default model that runs. What the first-run gate waits for.
+ */
+export function modelReady(defaultModel: string, unavailable: Array<{ id: string }> | undefined): boolean {
+  return defaultModel !== '' && !(unavailable ?? []).some(m => m.id === defaultModel);
 }
 
 const SERVICE_STEPS: Array<{ id: ServiceId; title: string; hint: string }> = [
@@ -106,10 +117,17 @@ export function setupSteps(input: SetupInput): SetupStep[] {
       key: 'model',
       title: 'Pick a model',
       hint:
-        input.defaultModel ||
-        'add a provider and its key, then choose the default model',
-      state: stateOf(input.defaultModel !== '', 'model', skipped),
-      page: 'providers',
+        input.defaultModel && !input.defaultUnavailable
+          ? input.defaultModel
+          : input.defaultModel
+            ? `${input.defaultModel} cannot run (its key is missing?): pick another`
+            : input.providers === 0
+              ? 'add a provider (OpenRouter, OpenAI, Groq…) and paste its API key'
+              : 'choose the model the agent answers with',
+      state: stateOf(input.defaultModel !== '' && !input.defaultUnavailable, 'model', skipped),
+      // No provider yet: the provider form first. One there: straight to the default-model picker,
+      // the step a newcomer could not find from the providers page.
+      page: input.providers ? 'model-picker' : 'providers',
     },
     ...SERVICE_STEPS.flatMap(({ id, title, hint }) => {
       const view = services?.services.find(s => s.id === id);

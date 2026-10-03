@@ -62,6 +62,11 @@ describe('pairingClient', () => {
     expect(FakeWebSocket.instances).toHaveLength(0);
   });
 
+  test('the app\'s own server setting (the socket URL) pairs on the same origin', () => {
+    startPairing('ws://10.0.0.5:8080/my-claw-app', 'gw6e-73pk');
+    expect(FakeWebSocket.instances[0]!.url).toBe('ws://10.0.0.5:8080/my-claw-app/pair');
+  });
+
   test('the claim is sent after the hello, on the pairing path', () => {
     startPairing('http://10.0.0.5:8080', 'gw6e-73pk');
     const ws = FakeWebSocket.instances[0]!;

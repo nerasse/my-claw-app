@@ -62,6 +62,8 @@ export function judgesCatalogNames(page: string): boolean {
  */
 export const AGENTS_CONFIG_PAGES: readonly string[] = [
   'index',
+  // The assistant: its model step opens the providers form or the picker, by the provider count.
+  'setup',
   'agents',
   'agent',
   'providers',

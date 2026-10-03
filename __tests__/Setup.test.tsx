@@ -10,6 +10,7 @@ import { DeviceEventEmitter, useWindowDimensions } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
 import { servicesStore } from '../src/core/services';
+import { modelStore } from '../src/core/model';
 import {
   setupSettled,
   setupSteps,
@@ -44,6 +45,9 @@ beforeEach(() => {
   });
   chatStore.clearAll();
   servicesStore.reset();
+  // The catalogue is module state: a test that left the server without a model would put the
+  // next one behind the first-run gate before it even boots.
+  modelStore.replaceCatalog({ type: 'model.list.result', models: [], defaultModel: 'test-default' });
   bridge.prefsGetAll.mockResolvedValue({
     themeMode: 'dark',
     lastThreadId: 't-default',
@@ -88,6 +92,8 @@ describe('the steps', () => {
     deviceId: 'app-1',
     pushSupported: true,
     skipped: [],
+    providers: 1,
+    defaultUnavailable: false,
     ...over,
   });
   const state = (steps: SetupStep[], key: string) =>
@@ -211,20 +217,58 @@ describe('the steps', () => {
   });
 });
 
-test('a server with no model opens the assistant once, and its first step opens Providers', async () => {
+const PROVIDER = { key: 'openrouter', type: 'openai', baseUrl: 'https://openrouter.ai/api/v1', discover: true, models: 3, keyEnv: 'OPENROUTER_API_KEY', keyPresent: true };
+function agentsConfig(providers: unknown[]): Record<string, unknown> {
+  return { type: 'agents.config.result', defaultModel: '', defaultEffort: '', fallback: '', effortLevels: [], providers, agents: [] };
+}
+
+test('a server with no model: the assistant takes the whole app, Back cannot leave it, Skip can', async () => {
+  (useWindowDimensions as unknown as jest.Mock).mockReturnValue({ width: 1600, height: 900, scale: 2, fontScale: 1 });
   const tree = await renderApp();
   await emit({ type: 'model.list.result', models: [], defaultModel: '' });
   await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
+  // The whole window: no conversation list, no conversation beside it, no Back.
+  expect(tree.root.findAll(n => n.props.testID === 'pinned-column')).toHaveLength(0);
+  expect(labelsOf(tree)).not.toContain('Message to send');
+  expect(labelsOf(tree)).not.toContain('Back to settings');
 
+  // Escape (or the hardware back) walks back through settings: the assistant stays.
+  await press(tree, 'Setup step Your other devices');
   await press(tree, 'Back to settings');
-  await waitFor(() => !labelsOf(tree).includes('Setup step Pick a model'));
-  // A second answer with no model does not reopen it: closing it was the owner's choice.
+  await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
+
+  bridge.prefsSet.mockClear();
+  await press(tree, 'Skip setup for now');
+  await waitFor(() => labelsOf(tree).includes('Message to send'));
+  expect(bridge.prefsSet).toHaveBeenCalledWith('setupSkipped', 'model');
+  expect(tree.root.findAll(n => n.props.testID === 'pinned-column').length).toBeGreaterThan(0);
+  // Skipped on this device: another answer with no model does not take the app again.
   await emit({ type: 'model.list.result', models: [], defaultModel: '' });
   expect(labelsOf(tree)).not.toContain('Setup step Pick a model');
+  await unmount(tree);
+});
 
-  await press(tree, 'Open get started');
+test('the model step: no provider opens the provider form; one there opens the default-model picker and comes back', async () => {
+  const tree = await renderApp();
+  await emit({ type: 'model.list.result', models: [], defaultModel: '' });
+  await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
+  // A fresh server lists only its `tags` pseudo-entry: that is no provider.
+  await emit(agentsConfig([{ key: 'tags', type: 'tags', discover: false, models: 1, keyPresent: true }]));
   await press(tree, 'Setup step Pick a model');
-  await waitFor(() => !labelsOf(tree).includes('Setup step Pick a model'));
+  await waitFor(() => labelsOf(tree).includes('Add your first provider'));
+  await press(tree, 'Back to settings');
+  await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
+
+  await emit(agentsConfig([PROVIDER]));
+  await press(tree, 'Setup step Pick a model');
+  await waitFor(() => labelsOf(tree).includes('Back to the agents list'));
+  await press(tree, 'Back to the agents list');
+  await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
+
+  // A model that runs: the way out is Start, and it leaves for the conversation.
+  await emit({ type: 'model.list.result', models: [{ id: 'openrouter/m', label: 'M', provider: 'openrouter' }], defaultModel: 'openrouter/m' });
+  await press(tree, 'Start using MyClaw');
+  await waitFor(() => labelsOf(tree).includes('Message to send'));
   await unmount(tree);
 });
 
@@ -281,6 +325,15 @@ test('a service step unfolds its card on the assistant, its key pasted there; Sk
   expect(bridge.prefsSet).toHaveBeenCalledWith('setupSkipped', 'location');
   await press(tree, 'Unskip Location');
   await waitFor(() => labelsOf(tree).includes('Setup step Location'));
+  await unmount(tree);
+});
+
+test('a skip is kept on the device: the next launch on a server still without a model is not blocked', async () => {
+  bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 't-default', setupSkipped: 'model' });
+  const tree = await renderApp();
+  await emit({ type: 'model.list.result', models: [], defaultModel: '' });
+  expect(labelsOf(tree)).not.toContain('Skip setup for now');
+  expect(labelsOf(tree)).toContain('Message to send');
   await unmount(tree);
 });
 

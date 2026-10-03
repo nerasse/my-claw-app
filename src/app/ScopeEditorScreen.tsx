@@ -151,7 +151,7 @@ export function ScopeEditorScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back from scope editor"
+          accessibilityLabel="Back to the agent"
         >
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>

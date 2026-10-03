@@ -162,10 +162,10 @@ export function TagEditorPage({
               </View>
             </View>
             <View style={styles.actions}>
-              <Pressable disabled={index === 0} onPress={() => { setDraft(previous => previous.map((item, i) => i === index - 1 ? previous[index]! : i === index ? previous[index - 1]! : item)); markDirty(); }}><Text style={index === 0 ? styles.disabledAction : styles.action}>↑</Text></Pressable>
-              <Pressable disabled={index === draft.length - 1} onPress={() => { setDraft(previous => previous.map((item, i) => i === index ? previous[index + 1]! : i === index + 1 ? previous[index]! : item)); markDirty(); }}><Text style={index === draft.length - 1 ? styles.disabledAction : styles.action}>↓</Text></Pressable>
-              <Pressable onPress={() => onStartPicker(index)}><Text style={styles.action}>edit</Text></Pressable>
-              <Pressable onPress={() => { setDraft(previous => previous.filter((_, i) => i !== index)); markDirty(); }}><Text style={styles.delete}>delete</Text></Pressable>
+              <Pressable hitSlop={10} disabled={index === 0} onPress={() => { setDraft(previous => previous.map((item, i) => i === index - 1 ? previous[index]! : i === index ? previous[index - 1]! : item)); markDirty(); }}><Text style={index === 0 ? styles.disabledAction : styles.action}>↑</Text></Pressable>
+              <Pressable hitSlop={10} disabled={index === draft.length - 1} onPress={() => { setDraft(previous => previous.map((item, i) => i === index ? previous[index + 1]! : i === index + 1 ? previous[index]! : item)); markDirty(); }}><Text style={index === draft.length - 1 ? styles.disabledAction : styles.action}>↓</Text></Pressable>
+              <Pressable hitSlop={10} onPress={() => onStartPicker(index)}><Text style={styles.action}>edit</Text></Pressable>
+              <Pressable hitSlop={10} onPress={() => { setDraft(previous => previous.filter((_, i) => i !== index)); markDirty(); }}><Text style={styles.delete}>delete</Text></Pressable>
             </View>
           </View>
         ))}

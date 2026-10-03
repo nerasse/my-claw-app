@@ -1,4 +1,5 @@
 import { deviceBridge } from './nativeBridge';
+import { httpOrigin } from './utils';
 import { connection } from './connection';
 import { isValidServerUrl } from './serverUrl';
 
@@ -61,7 +62,9 @@ export function startPairing(baseUrl: string, code: string): void {
       // already gone
     }
   }
-  currentUrl = baseUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/my-claw-app/pair';
+  // The origin only: the app's own address setting is the socket URL (`ws://host:8080/my-claw-app`),
+  // and appending the pairing path to it asked for `/my-claw-app/my-claw-app/pair`.
+  currentUrl = httpOrigin(baseUrl).replace(/^http/, 'ws') + '/my-claw-app/pair';
   claimed = false;
   set({ phase: 'connecting', url: currentUrl });
 

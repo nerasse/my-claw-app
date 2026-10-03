@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { connection } from '../core/connection';
 import { encodeInstructionsList, encodeServicesGet } from '../core/protocol';
 import { instructionsStore, useInstructions } from '../core/instructions';
 import { useServices } from '../core/services';
-import { setupSettled, setupSteps, type SetupStep } from '../core/setup';
+import { modelReady, setupSettled, setupSteps, type SetupStep } from '../core/setup';
 import { useModelCatalog } from '../core/model';
 import { pushSupported } from '../core/notifications';
 import { prefs } from '../core/prefs';
@@ -24,7 +24,14 @@ function useSkipped(): string[] {
   return skipped;
 }
 
-function toggleSkip(key: string): void {
+/** A page served over plain HTTP: the browser refuses the microphone, push and location there. */
+function insecureWeb(): boolean {
+  if (Platform.OS !== 'web') return false;
+  const w = globalThis as { isSecureContext?: boolean };
+  return w.isSecureContext === false;
+}
+
+export function toggleSkip(key: string): void {
   const current = prefs.get().setupSkipped;
   prefs.set(
     'setupSkipped',
@@ -39,10 +46,19 @@ function toggleSkip(key: string): void {
  */
 export function SetupScreen({
   deviceId,
+  providers,
+  gate,
   onBack,
   onOpen,
 }: {
   deviceId: string | null;
+  /** Configured providers, null until the agents config answered. */
+  providers: number | null;
+  /**
+   * The first run: the page is the whole app until it is finished or skipped, so it has no Back,
+   * only its own way out at the bottom.
+   */
+  gate?: { onFinish: () => void; onSkip: () => void };
   onBack: () => void;
   onOpen: (step: SetupStep) => void;
 }): React.JSX.Element {
@@ -64,21 +80,21 @@ export function SetupScreen({
     deviceId,
     pushSupported,
     skipped,
+    providers,
+    defaultUnavailable: catalog.defaultModel !== '' && !modelReady(catalog.defaultModel, catalog.unavailable),
   });
+  const ready = modelReady(catalog.defaultModel, catalog.unavailable);
 
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Pressable
-          onPress={onBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Back to settings"
-        >
-          <Text style={styles.backGlyph}>‹</Text>
-        </Pressable>
+        {gate ? null : (
+          <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to settings">
+            <Text style={styles.backGlyph}>‹</Text>
+          </Pressable>
+        )}
         <View style={styles.headerText}>
-          <Text style={styles.title}>Get started</Text>
+          <Text style={styles.title}>{gate ? 'Welcome to MyClaw' : 'Get started'}</Text>
           <Text style={styles.subtitle}>
             {setupSettled(steps)} of {steps.length} done or skipped
           </Text>
@@ -92,6 +108,13 @@ export function SetupScreen({
           A model is all the agent needs to answer. Everything else starts in
           the cloud, and every step can be skipped.
         </Text>
+        {insecureWeb() ? (
+          <Text style={styles.warning} accessibilityLabel="Not served over HTTPS">
+            This page is not served over HTTPS: voice notes, notifications and location do not work
+            in this browser, and your access travels unencrypted. Put MyClaw behind HTTPS (a reverse
+            proxy) or reach it over a VPN.
+          </Text>
+        ) : null}
         <View style={styles.card}>
           {steps.map((step, index) => {
             const view = step.service
@@ -147,7 +170,10 @@ export function SetupScreen({
                       {step.service ? (unfolded ? '⌄' : '›') : '›'}
                     </Text>
                   </Pressable>
-                  {step.state === 'done' ? null : (
+                  {/* The same slot on every row, button or not: the chevrons stay in one column. */}
+                  {step.state === 'done' ? (
+                    <View style={styles.skipSlot} />
+                  ) : (
                     <Pressable
                       onPress={() => toggleSkip(step.key)}
                       style={styles.skip}
@@ -174,6 +200,22 @@ export function SetupScreen({
           })}
         </View>
       </ScrollView>
+      {gate ? (
+        <View style={styles.footer}>
+          {ready ? (
+            <Pressable onPress={gate.onFinish} style={styles.primary} accessibilityRole="button" accessibilityLabel="Start using MyClaw">
+              <Text style={styles.primaryText}>Start using MyClaw</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Text style={styles.footerNote}>Without a model the agent cannot answer.</Text>
+              <Pressable onPress={gate.onSkip} style={styles.secondary} accessibilityRole="button" accessibilityLabel="Skip setup for now">
+                <Text style={styles.secondaryText}>Skip for now</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -181,7 +223,8 @@ export function SetupScreen({
 const createStyles = (palette: Palette) => ({
   // The settings pages' header (Providers, Settings): the shell pads the page, the header only
   // draws its rule, and Back is the same 40pt square everywhere.
-  root: { flex: 1 },
+  // On a wide window a list of steps reads best at a column's width, not the page's.
+  root: { flex: 1, width: '100%' as const, maxWidth: 760, alignSelf: 'center' as const, paddingTop: space.sm },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -258,12 +301,45 @@ const createStyles = (palette: Palette) => ({
     width: 16,
     textAlign: 'center' as const,
   },
+  // A real button, not a word: 36pt tall, the row's other target being the whole row.
+  skipSlot: { width: 64 },
   skip: {
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    width: 64,
+    alignItems: 'center' as const,
+    minHeight: 36,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.md,
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: palette.border,
   },
+  warning: { fontSize: font.small, color: palette.danger },
+  footer: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'flex-end' as const,
+    gap: space.md,
+    paddingTop: space.md,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+  },
+  footerNote: { flex: 1, fontSize: font.small, color: palette.textMuted },
+  primary: {
+    minHeight: 44,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
+    backgroundColor: palette.accent,
+  },
+  primaryText: { fontSize: font.body, fontWeight: '600' as const, color: palette.accentText },
+  secondary: {
+    minHeight: 44,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  secondaryText: { fontSize: font.body, color: palette.text },
   skipText: { fontSize: font.small, color: palette.textMuted },
 });

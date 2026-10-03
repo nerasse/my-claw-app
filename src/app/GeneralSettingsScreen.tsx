@@ -279,13 +279,16 @@ export function GeneralSettingsScreen({
                 accessibilityLabel={elsewhere ? 'Reconnect to the new server' : 'Connect'}>
                 <Text style={styles.buttonText}>{elsewhere ? 'Reconnect' : 'Connect'}</Text>
               </Pressable>
-              <Pressable
-                style={[styles.button, styles.buttonGhost]}
-                onPress={onOpenPairing}
-                accessibilityRole="button"
-                accessibilityLabel="Pair this device with a server-minted code">
-                <Text style={[styles.buttonText, styles.buttonGhostText]}>Pair</Text>
-              </Pressable>
+              {/* A browser pairs on the server's own /pair page: it cannot store a token. */}
+              {appUpdateSupported ? (
+                <Pressable
+                  style={[styles.button, styles.buttonGhost]}
+                  onPress={onOpenPairing}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pair this device with a server-minted code">
+                  <Text style={[styles.buttonText, styles.buttonGhostText]}>Pair</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 style={[styles.button, styles.buttonGhost, !connected && status.state !== 'connecting' && styles.buttonOff]}
                 onPress={onDisconnect}

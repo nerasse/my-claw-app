@@ -291,7 +291,7 @@ export function JobsEditorScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back from jobs editor">
+          accessibilityLabel="Back to jobs">
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>

@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AppState, Linking, StatusBar, View } from 'react-native';
+import { AppState, Linking, Platform, StatusBar, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { connection } from '../core/connection';
@@ -213,7 +213,8 @@ import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
 import { ServicesScreen } from './ServicesScreen';
-import { SetupScreen } from './SetupScreen';
+import { SetupScreen, toggleSkip } from './SetupScreen';
+import { modelReady } from '../core/setup';
 import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
@@ -387,6 +388,8 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     // First launch, or a server that never saw this device: the socket answered 401. Offer the
     // pairing screen once; if the owner closes it, the switch back happens through the button.
+    // A browser does not pair here: its pairing is the server's /pair page.
+    if (Platform.OS === 'web') return;
     if (status.state === 'disconnected' && status.reason === 'unauthorized' && !unauthorizedHandled.current) {
       unauthorizedHandled.current = true;
       setPairingOpen(true);
@@ -448,7 +451,13 @@ export function AppShell(): React.JSX.Element {
     sessionStore.setFolderOrder(order);
     connection.send(encodeFolderOrder(order)).catch(() => {});
   }, []);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpenState, setSettingsOpen] = useState(false);
+  // The first run (docs: setup assistant): until it is finished or skipped, the setup page is the
+  // whole app. Derived into settingsOpen, so nothing that closes settings can leave it.
+  const [setupGate, setSetupGate] = useState(false);
+  const settingsOpen = settingsOpenState || setupGate;
+  // Where the default-model picker returns: the agents list, or the assistant that opened it.
+  const [modelPickerFrom, setModelPickerFrom] = useState<'setup' | null>(null);
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
   const [settingsPage, setSettingsPage] = useState<SettingsPage>('index');
@@ -1477,6 +1486,7 @@ export function AppShell(): React.JSX.Element {
         tagContextEditor,
         workspaceFrom,
         instructionBack,
+        modelPickerFrom,
         setLayerTarget,
         archivesOpen,
         setArchivesOpen,
@@ -1517,6 +1527,7 @@ export function AppShell(): React.JSX.Element {
       instructionsPageOpen,
       workspaceFrom,
       instructionBack,
+      modelPickerFrom,
       workspacePicker,
       jobSessions,
       jobsEditor,
@@ -1653,15 +1664,23 @@ export function AppShell(): React.JSX.Element {
     [spawnCards, cardAgents, activeThread, openSubAgent],
   );
 
-  // A fresh install: the server answered and has no model. The assistant opens once per launch,
-  // on the steps that make the agent answer; closing it is the owner's choice, not asked again.
+  // A fresh install: the server answered and has no model that runs. The assistant takes the whole
+  // app, once per launch, until it is finished or skipped; a skip is kept on this device. A second
+  // device of a configured server never sees it: its server has a model.
   const setupShown = useRef(false);
   useEffect(() => {
-    if (setupShown.current || !catalogAnswered(catalog) || catalog.defaultModel !== '') return;
+    if (setupShown.current || !catalogAnswered(catalog) || modelReady(catalog.defaultModel, catalog.unavailable)) return;
+    if (prefs.get().setupSkipped.includes('model')) return;
     setupShown.current = true;
     setSettingsPage('setup');
-    setSettingsOpen(true);
+    setSetupGate(true);
   }, [catalog]);
+  const leaveSetup = useCallback((skip: boolean) => {
+    if (skip && !prefs.get().setupSkipped.includes('model')) toggleSkip('model');
+    setSetupGate(false);
+    setSettingsOpen(false);
+    setSettingsPage('index');
+  }, []);
 
   /**
    * Sends into a named conversation. Explicit rather than always the active one, because handing a
@@ -1669,11 +1688,10 @@ export function AppShell(): React.JSX.Element {
    */
   const sendChatTo = useCallback(
     async (threadId: string, text: string, attachments?: OutgoingAttachment[], location?: LocationInput, again?: string) => {
-      // No default model configured: a send would resolve to an empty provider and fail with
-      // "Provider \"\" not found in config". Open the provider setup instead of posting into
-      // a conversation nobody can answer.
-      if (catalog.defaultModel === '') {
-        setSettingsPage('providers');
+      // No model that runs: a send would fail on an empty provider or a missing key. The setup
+      // assistant opens on its model step instead of posting into a conversation nobody answers.
+      if (!modelReady(catalog.defaultModel, catalog.unavailable)) {
+        setSettingsPage('setup');
         setSettingsOpen(true);
         return;
       }
@@ -1727,7 +1745,7 @@ export function AppShell(): React.JSX.Element {
       // bubble waits instead of claiming the message is lost.
       if (!delivered) chatStore.markUndelivered(threadId, id);
     },
-    [catalog.defaultModel],
+    [catalog.defaultModel, catalog.unavailable],
   );
 
   const sendChat = useCallback(
@@ -3123,11 +3141,13 @@ export function AppShell(): React.JSX.Element {
       onBack={() => setSettingsPage('index')}
       onOpenDefaultModel={() => {
         setAgentPicker(pickerStart);
+        setModelPickerFrom(null);
         setAgentModelFor('global');
         setSettingsPage('model-picker');
       }}
       onOpenFallback={() => {
         setAgentPicker(pickerStart);
+        setModelPickerFrom(null);
         setAgentModelFor('fallback');
         setSettingsPage('model-picker');
       }}
@@ -3495,10 +3515,31 @@ export function AppShell(): React.JSX.Element {
           />
   );
 
+  const setupPage = (
+    <SetupScreen
+      deviceId={deviceInfo?.deviceId ?? null}
+      // `tags` is listed with the providers (its row opens the tags page) and runs nothing.
+      providers={agentsConfig ? agentsConfig.providers.filter(p => p.type !== 'tags').length : null}
+      gate={setupGate ? { onFinish: () => leaveSetup(false), onSkip: () => leaveSetup(true) } : undefined}
+      onBack={() => setSettingsPage('index')}
+      onOpen={step => {
+        if (step.key === 'profile') openInstruction('default', 'USER.md', 'setup');
+        else if (step.page === 'model-picker') {
+          setAgentPicker(pickerStart);
+          setAgentModelFor('global');
+          setModelPickerFrom('setup');
+          setSettingsPage('model-picker');
+        } else if (step.page) setSettingsPage(step.page);
+      }}
+    />
+  );
+
   /** Something other than the conversation is showing: settings, the archives, the files. */
   const pageOpen =
     settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
-  const split = layout.sidePane && !browserFullNow;
+  // The browser in full screen, or the first-run setup: the page has the window to itself.
+  const fullPage = browserFullNow || setupGate;
+  const split = layout.sidePane && !fullPage;
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -3517,7 +3558,7 @@ export function AppShell(): React.JSX.Element {
         {/* A row with one child on a phone, two on a desktop: the conversation list stops being
             an overlay and becomes a column, and the pages beside it lose nothing. */}
         <View style={styles.shell}>
-        {layout.pinnedDrawer && !browserFullNow ? (
+        {layout.pinnedDrawer && !fullPage ? (
           <PinnedColumn
             onNewThread={newThread}
             onOpenSettings={openSettingsFromDrawer}
@@ -3601,7 +3642,9 @@ export function AppShell(): React.JSX.Element {
             layout.pinnedDrawer && !browserFullNow && { maxWidth: layout.pageWidth, alignSelf: 'center' as const, width: '100%' as const },
           ]}>
           {settingsOpen ? (
-            settingsPage === 'index' ? (
+            settingsPage === 'index' && setupGate ? (
+              setupPage
+            ) : settingsPage === 'index' ? (
               <SettingsScreen
                 skillsCount={skills.length}
                 toolsCount={tools.length}
@@ -3675,7 +3718,7 @@ export function AppShell(): React.JSX.Element {
                   onBack={() => {
                     // The picker returns where it was opened from: the agents list for the
                     // global default and the fallback, the agent page for an agent key.
-                    const from = agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent';
+                    const from = modelPickerFrom ?? (agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent');
                     setAgentModelFor(null);
                     setSettingsPage(from);
                   }}
@@ -3897,6 +3940,7 @@ export function AppShell(): React.JSX.Element {
                   onOpenModel={() => {
                     if (!selectedAgent) return;
                     setAgentPicker(pickerStart);
+                    setModelPickerFrom(null);
                     setAgentModelFor(selectedAgent);
                     setSettingsPage('model-picker');
                   }}
@@ -3982,6 +4026,7 @@ export function AppShell(): React.JSX.Element {
                 />
               ) : tagContextEditor ? (
                 <NumberEditorScreen
+                  backLabel="Back to tags"
                   title={`Tag ${tagContextEditor} · context cap`}
                   hint="ceiling for runs through this tag · 0 lifts it"
                   value={tagsState.tags?.find(tag => tag.name === tagContextEditor)?.contextCap ?? null}
@@ -4046,14 +4091,7 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'services' ? (
               <ServicesScreen onBack={() => setSettingsPage('index')} />
             ) : settingsPage === 'setup' ? (
-              <SetupScreen
-                deviceId={deviceInfo?.deviceId ?? null}
-                onBack={() => setSettingsPage('index')}
-                onOpen={step => {
-                  if (step.key === 'profile') openInstruction('default', 'USER.md', 'setup');
-                  else if (step.page) setSettingsPage(step.page);
-                }}
-              />
+              setupPage
             ) : settingsPage === 'skills' ? (
               <SkillsScreen
                 skills={skills}

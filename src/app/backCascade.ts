@@ -161,6 +161,8 @@ export interface BackLayers {
   workspaceFrom: 'workspaces' | 'agent';
   /** Where the prompt-file editor returns: its workspace page, or the setup assistant. */
   instructionBack: 'workspace' | 'setup';
+  /** Where the model picker returns when the assistant opened it; null: from the agent pages. */
+  modelPickerFrom: 'setup' | null;
   setLayerTarget: (value: null) => void;
   archivesOpen: boolean;
   setArchivesOpen: (value: boolean) => void;
@@ -283,6 +285,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     tagContextEditor,
     workspaceFrom,
     instructionBack,
+    modelPickerFrom,
     setLayerTarget,
     archivesOpen,
     setArchivesOpen,
@@ -485,7 +488,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
         setAgentPicker(previous);
         return true;
       }
-      const from = agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent';
+      const from = modelPickerFrom ?? (agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent');
       setAgentModelFor(null);
       setSettingsPage(from);
       return true;

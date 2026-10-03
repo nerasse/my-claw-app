@@ -69,6 +69,20 @@ export function ProvidersScreen({
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
+          {providers.every(provider => provider.type === 'tags') ? (
+            <Pressable
+              style={[styles.row, styles.link]}
+              onPress={onNewProvider}
+              accessibilityRole="button"
+              accessibilityLabel="Add your first provider">
+              <View style={styles.linkMain}>
+                <Text style={styles.linkTitle}>Add your first provider</Text>
+                <Text style={styles.hint}>OpenRouter, OpenAI, Groq… then paste its API key</Text>
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
+          ) : null}
+          {providers.length > 0 && providers.every(provider => provider.type === 'tags') ? <View style={styles.separator} /> : null}
           {providers.map((provider, index) => (
             <View key={provider.key}>
               {index > 0 ? <View style={styles.separator} /> : null}

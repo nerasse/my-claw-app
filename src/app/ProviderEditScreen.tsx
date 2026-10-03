@@ -11,6 +11,18 @@ const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
 /** Env names cannot carry dashes: the suggestion turns the key into one. */
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/**
+ * OpenAI-compatible endpoints a newcomer is likely to hold a key for: one tap fills the form, the
+ * key is all that is left to paste. Discovery is on, so the models appear without typing them.
+ */
+export const PROVIDER_PRESETS: Array<{ label: string; key: string; baseUrl: string; apiKeyEnv: string }> = [
+  { label: 'OpenRouter', key: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKeyEnv: 'OPENROUTER_API_KEY' },
+  { label: 'OpenAI', key: 'openai', baseUrl: 'https://api.openai.com/v1', apiKeyEnv: 'OPENAI_API_KEY' },
+  { label: 'Groq', key: 'groq', baseUrl: 'https://api.groq.com/openai/v1', apiKeyEnv: 'GROQ_API_KEY' },
+  { label: 'Mistral', key: 'mistral', baseUrl: 'https://api.mistral.ai/v1', apiKeyEnv: 'MISTRAL_API_KEY' },
+  { label: 'DeepSeek', key: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', apiKeyEnv: 'DEEPSEEK_API_KEY' },
+];
+
 /** The suggestion for a fresh provider: `<KEY>_API_KEY`, dashes folded to underscores. */
 export function suggestEnvName(key: string): string {
   const cleaned = key.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
@@ -69,7 +81,9 @@ export function ProviderEditScreen({
   );
   const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? '');
   const [group, setGroup] = useState(provider?.group ?? '');
-  const [discover, setDiscover] = useState(provider?.discover ?? false);
+  // On for a new provider: without discovery a fresh entry lists no model, and the default model
+  // picker is empty with nothing saying why.
+  const [discover, setDiscover] = useState(provider?.discover ?? mode === 'create');
   const [promptCache, setPromptCache] = useState(provider?.promptCache ?? false);
   // `?? true`, not `?? false`: this one is on unless the owner turns it off. The providers that
   // document reasoning replay require it, and an endpoint that returns no reasoning gets none back.
@@ -107,7 +121,7 @@ export function ProviderEditScreen({
         <View style={styles.headerText}>
           <Text style={styles.title}>{mode === 'create' ? 'New provider' : 'Provider settings'}</Text>
           <Text style={styles.subtitle}>
-            {mode === 'create' ? 'a new entry under llm.providers' : provider?.key ?? ''}
+            {mode === 'create' ? 'the service the agent thinks with: pick one, paste its key' : provider?.key ?? ''}
           </Text>
         </View>
       </View>
@@ -119,6 +133,30 @@ export function ProviderEditScreen({
       ) : null}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {mode === 'create' ? (
+          <View style={styles.category}>
+            <Text style={styles.section}>start from</Text>
+            <View style={styles.presets}>
+              {PROVIDER_PRESETS.map(preset => (
+                <Pressable
+                  key={preset.key}
+                  onPress={() => {
+                    setKey(preset.key);
+                    setProviderType('openai');
+                    setBaseUrl(preset.baseUrl);
+                    setApiKeyEnv(preset.apiKeyEnv);
+                    setDiscover(true);
+                  }}
+                  style={[styles.preset, key === preset.key && baseUrl === preset.baseUrl && styles.presetOn]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Preset ${preset.label}`}>
+                  <Text style={styles.presetText}>{preset.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.note}>fills the form below: paste the API key and save</Text>
+          </View>
+        ) : null}
         <View style={styles.category}>
           <Text style={styles.section}>key</Text>
           <TextInput
@@ -459,6 +497,17 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
   },
   segmentActive: { backgroundColor: palette.surfaceAlt },
+  presets: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.sm },
+  preset: {
+    minHeight: 40,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  presetOn: { borderColor: palette.accent, backgroundColor: palette.accentSoft },
+  presetText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   segmentText: { fontSize: font.meta, color: palette.textMuted },
   segmentTextActive: { fontSize: font.meta, color: palette.text, fontWeight: '600' as const },
   switchRow: {

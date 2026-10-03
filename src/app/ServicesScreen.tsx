@@ -80,6 +80,7 @@ export function ServicesScreen({
     <View style={styles.root}>
       <View style={styles.header}>
         <Pressable
+              hitSlop={8}
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
@@ -194,6 +195,7 @@ export function ServiceCard({
           const on = editingUrl ? source === 'url' : source === service.source;
           return (
             <Pressable
+              hitSlop={8}
               key={source}
               onPress={() => choose(source)}
               disabled={busy}
@@ -223,6 +225,7 @@ export function ServiceCard({
             accessibilityLabel={`${label.title} URL`}
           />
           <Pressable
+              hitSlop={8}
             onPress={saveUrl}
             style={styles.save}
             accessibilityRole="button"
@@ -261,6 +264,7 @@ export function ServiceCard({
       service.source !== 'self-hosted' &&
       (service.id === 'stt' || service.id === 'embeddings') ? (
         <Pressable
+              hitSlop={8}
           onPress={() => {
             const id = service.id === 'stt' ? 'stt' : 'embeddings';
             servicesStore.sending();
@@ -294,6 +298,7 @@ export function ServiceCard({
                 accessibilityLabel={`Key ${name}`}
               />
               <Pressable
+              hitSlop={8}
                 onPress={() => saveKey(name)}
                 style={styles.save}
                 accessibilityRole="button"

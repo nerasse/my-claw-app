@@ -15,6 +15,7 @@ export function NumberEditorScreen({
   error,
   saving,
   onBack,
+  backLabel = 'Back to agent',
   onSave,
 }: {
   title: string;
@@ -27,6 +28,8 @@ export function NumberEditorScreen({
   error: string | null;
   saving: boolean;
   onBack: () => void;
+  /** The page it returns to: an agent, or the tags list. */
+  backLabel?: string;
   onSave: (value: number | null) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -48,7 +51,7 @@ export function NumberEditorScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Back to agent">
+          accessibilityLabel={backLabel}>
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
