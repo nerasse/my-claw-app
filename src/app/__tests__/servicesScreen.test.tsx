@@ -104,3 +104,33 @@ test('a compose engine that does not answer says how to start it; a refusal is s
   ReactTestRenderer.act(() => servicesStore.fail('an http(s) URL is needed'));
   expect(texts(tree)).toContain('an http(s) URL is needed');
 });
+
+test('an engine downloading says so and the page asks again until it is done; one not in use can be freed', () => {
+  jest.useFakeTimers();
+  try {
+    const tree = render();
+    ReactTestRenderer.act(() =>
+      servicesStore.replace(frame([view({ id: 'stt', source: 'self-hosted', local: { state: 'installing', bytes: 120_000_000 } })])),
+    );
+    expect(texts(tree).some(t => t.includes('Downloading the local engine'))).toBe(true);
+    (connection.send as jest.Mock).mockClear();
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+    expect(sent()).toEqual([{ type: 'services.get' }]);
+    // In use: its files are not offered for removal.
+    expect(tree.root.findAllByProps({ accessibilityLabel: 'Free Speech-to-text files' })).toHaveLength(0);
+
+    ReactTestRenderer.act(() => servicesStore.replace(frame([view({ id: 'stt', source: 'cloud', local: { state: 'idle', bytes: 3_600_000_000 } })])));
+    (connection.send as jest.Mock).mockClear();
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(9000);
+    });
+    expect(sent()).toEqual([]);
+    expect(texts(tree)).toContain('Free 3.6 GB on the server');
+    press(tree, 'Free Speech-to-text files');
+    expect(sent()).toEqual([{ type: 'services.free', id: 'stt' }]);
+  } finally {
+    jest.useRealTimers();
+  }
+});

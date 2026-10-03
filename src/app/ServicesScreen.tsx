@@ -1,13 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { connection } from '../core/connection';
-import { encodeProvidersEnvSet, encodeServicesGet, encodeServicesSet, type ServiceSource, type ServiceView } from '../core/protocol';
+import {
+  encodeProvidersEnvSet,
+  encodeServicesFree,
+  encodeServicesGet,
+  encodeServicesSet,
+  type ServiceSource,
+  type ServiceView,
+} from '../core/protocol';
 import { useProvidersEnv } from '../core/providers';
 import { SERVICE_LABELS, SOURCE_LABELS, servicesStore, useServices } from '../core/services';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /** A compose install runs a local engine as a profile the owner starts on the host. */
 const COMPOSE_PROFILE: Partial<Record<ServiceView['id'], string>> = { stt: 'whisper', tts: 'piper', search: 'searxng' };
+
+/** How often the page asks again while an engine downloads: progress is the server's to tell. */
+const INSTALL_POLL_MS = 3000;
+
+function sizeOf(bytes: number): string {
+  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
+}
 
 /** An env name (`GROQ_API_KEY`) is a key to paste; anything else is a setting to fill. */
 const isEnvName = (name: string): boolean => /^[A-Z][A-Z0-9_]*$/.test(name);
@@ -35,6 +49,12 @@ export function ServicesScreen({ onBack }: { onBack: () => void }): React.JSX.El
     }
     connection.send(encodeServicesGet()).catch(() => {});
   }, [envSnapshot]);
+  const installing = frame?.services.some(s => s.local?.state === 'installing') ?? false;
+  useEffect(() => {
+    if (!installing) return;
+    const timer = setInterval(() => connection.send(encodeServicesGet()).catch(() => {}), INSTALL_POLL_MS);
+    return () => clearInterval(timer);
+  }, [installing]);
 
   return (
     <View style={styles.root}>
@@ -148,6 +168,24 @@ function ServiceCard({
           Start it on the host: docker compose -f packaging/compose/compose.yml --profile {profile} up -d
         </Text>
       ) : null}
+      {service.local?.state === 'installing' ? (
+        <Text style={styles.notice}>Downloading the local engine on the server… this takes a few minutes, it starts by itself.</Text>
+      ) : null}
+      {service.local?.state === 'failed' ? <Text style={styles.error}>Install failed: {service.local.error}</Text> : null}
+      {service.local && service.local.bytes > 0 && service.source !== 'self-hosted' && (service.id === 'stt' || service.id === 'embeddings') ? (
+        <Pressable
+          onPress={() => {
+            const id = service.id === 'stt' ? 'stt' : 'embeddings';
+            servicesStore.sending();
+            connection.send(encodeServicesFree(id)).catch(() => {});
+          }}
+          disabled={busy}
+          style={[styles.free, busy && styles.busy]}
+          accessibilityRole="button"
+          accessibilityLabel={`Free ${label.title} files`}>
+          <Text style={styles.freeText}>Free {sizeOf(service.local.bytes)} on the server</Text>
+        </Pressable>
+      ) : null}
       {service.missing.map(name =>
         isEnvName(name) ? (
           <View key={name} style={styles.row}>
@@ -202,6 +240,16 @@ const createStyles = (palette: Palette) => ({
   hint: { fontSize: font.small, color: palette.textMuted },
   detail: { fontSize: font.small, color: palette.textFaint },
   error: { fontSize: font.small, color: palette.danger },
+  notice: { fontSize: font.small, color: palette.accent },
+  free: {
+    alignSelf: 'flex-start' as const,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  freeText: { fontSize: font.small, color: palette.textMuted },
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   grow: { flex: 1 },
   dot: { width: 8, height: 8, borderRadius: 4 },

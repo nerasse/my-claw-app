@@ -807,6 +807,8 @@ export interface ServiceView {
   /** What the current source still needs: .env names (set with providers.env.set) or config keys. */
   missing: string[];
   health: 'up' | 'down' | 'no-endpoint';
+  /** A local engine this server downloads once switched on, and frees on demand (bare metal). */
+  local?: { state: 'idle' | 'installing' | 'ready' | 'failed'; error?: string; bytes: number };
 }
 
 export interface ServicesResultFrame {
@@ -2814,6 +2816,10 @@ export function encodeSessionWorkspaceSet(threadId: string, workspace: string): 
 
 export function encodeServicesGet(): string {
   return JSON.stringify({ type: 'services.get' });
+}
+
+export function encodeServicesFree(id: 'stt' | 'embeddings'): string {
+  return JSON.stringify({ type: 'services.free', id });
 }
 
 export function encodeServicesSet(choice: { id: ServiceId; source: ServiceSource; url?: string }): string {
