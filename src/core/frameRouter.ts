@@ -21,6 +21,7 @@ import { sessionInstructionsStore } from './sessionInstructions';
 import { providersEnvStore } from './providers';
 import { statusStore } from './status';
 import { statsStore } from './stats';
+import { servicesStore } from './services';
 import { fsStore } from './fsStore';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
@@ -554,6 +555,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'voice.mode.result':
       setVoice(frame);
       break;
+    case 'services.result':
+      servicesStore.replace(frame);
+      break;
     case 'uiPrefs.result':
       setUiPrefs(frame);
       break;
@@ -867,6 +871,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         setJobsError(refusal);
       } else if (frame.scope === 'browser') {
         setBrowserError(refusal);
+      } else if (frame.scope === 'services') {
+        servicesStore.fail(refusal);
       } else if (frame.scope === 'status') {
         statusStore.fail(refusal);
       } else if (frame.scope === 'stats') {

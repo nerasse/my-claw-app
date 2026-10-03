@@ -23,6 +23,8 @@ export type SettingsPage =
   | 'tags'
   | 'skills'
   | 'devices'
+  | 'services'
+  | 'setup'
   | 'approvals'
   | 'workspaces'
   | 'workspace'

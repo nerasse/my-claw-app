@@ -22,6 +22,11 @@ type Listener = () => void;
 const EMPTY: ModelListResultFrame = { type: 'model.list.result', models: [], defaultModel: '' };
 Object.freeze(EMPTY);
 
+/** The catalogue before the server answered: an empty default there means "not asked yet", not "none". */
+export function catalogAnswered(catalog: ModelListResultFrame): boolean {
+  return catalog !== EMPTY;
+}
+
 const NO_EFFORT: EffortState = { level: '', levels: [], supported: false };
 
 /** Separates an endpoint pin from the model it routes. The grammar is the server's:

@@ -794,6 +794,27 @@ export interface TranscriptFrame {
   items: Array<{ id: string; text: string }>;
 }
 
+export type ServiceId = 'stt' | 'tts' | 'embeddings' | 'search' | 'browser';
+export type ServiceSource = 'off' | 'cloud' | 'self-hosted' | 'url';
+
+/** One optional service as the server derives it (docs/services.md in the server repo). */
+export interface ServiceView {
+  id: ServiceId;
+  source: ServiceSource;
+  /** What this install can switch it to. */
+  choices: ServiceSource[];
+  endpoint?: string;
+  /** What the current source still needs: .env names (set with providers.env.set) or config keys. */
+  missing: string[];
+  health: 'up' | 'down' | 'no-endpoint';
+}
+
+export interface ServicesResultFrame {
+  type: 'services.result';
+  install: 'native' | 'compose' | 'dev';
+  services: ServiceView[];
+}
+
 export interface VoiceModeResultFrame {
   type: 'voice.mode.result';
   mode: 'cloud' | 'local' | 'auto';
@@ -2135,6 +2156,8 @@ export type ErrorScope =
   | 'diag'
   | 'logs'
   | 'voice'
+  // services.get / services.set: an unusable choice (a URL missing), said on the Services page.
+  | 'services'
   | 'model'
   | 'skills'
   | 'agents'
@@ -2510,6 +2533,7 @@ export type ServerFrame =
   | DiagReportResultFrame
   | LogsTailResultFrame
   | VoiceModeResultFrame
+  | ServicesResultFrame
   | UiPrefsResultFrame
   | ModelListResultFrame
   | ModelRefreshResultFrame
@@ -2624,6 +2648,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'diag.report.result',
   'logs.tail.result',
   'voice.mode.result',
+  'services.result',
   'uiPrefs.result',
   'update.result',
   'model.list.result',
@@ -2785,6 +2810,14 @@ export function encodeSessionRename(threadId: string, title: string): string {
 
 export function encodeSessionWorkspaceSet(threadId: string, workspace: string): string {
   return JSON.stringify({ type: 'session.workspace.set', threadId, workspace });
+}
+
+export function encodeServicesGet(): string {
+  return JSON.stringify({ type: 'services.get' });
+}
+
+export function encodeServicesSet(choice: { id: ServiceId; source: ServiceSource; url?: string }): string {
+  return JSON.stringify({ type: 'services.set', ...choice });
 }
 
 export function encodeVoiceModeGet(): string {

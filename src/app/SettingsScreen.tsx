@@ -7,8 +7,15 @@ const CATEGORIES: Array<{
   title: string;
   hint: string;
   accessibilityLabel: string;
-  key: 'general' | 'notifications' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other';
+  key: 'setup' | 'general' | 'notifications' | 'providers' | 'services' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other';
 }> = [
+  {
+    // The first-run assistant, kept here afterwards: what the install still needs, each step a page.
+    title: 'Get started',
+    hint: 'model, services, profile, devices',
+    accessibilityLabel: 'Open get started',
+    key: 'setup',
+  },
   {
     title: 'General',
     hint: 'appearance, voice, server',
@@ -35,6 +42,13 @@ const CATEGORIES: Array<{
     hint: 'model providers, API keys, models',
     accessibilityLabel: 'Open providers',
     key: 'providers',
+  },
+  {
+    // Voice, embeddings, search, browser: the cloud by default, this server, or the owner's URL.
+    title: 'Services',
+    hint: 'voice, memory, search, browser: cloud, this server or a URL',
+    accessibilityLabel: 'Open services',
+    key: 'services',
   },
   {
     title: 'Agents',
@@ -102,7 +116,7 @@ export function SettingsScreen({
   providersCount: number;
   onBack: () => void;
   onOpenCategory: (
-    category: 'general' | 'notifications' | 'providers' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other',
+    category: 'setup' | 'general' | 'notifications' | 'providers' | 'services' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other',
   ) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

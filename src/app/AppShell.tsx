@@ -162,7 +162,7 @@ import {
   subscribeToPushRegistration,
 } from '../core/notifications';
 import { contextPercent } from '../core/context';
-import { declareModel, modelStore, undeclareModel, useModelCatalog, useThreadModel } from '../core/model';
+import { catalogAnswered, declareModel, modelStore, undeclareModel, useModelCatalog, useThreadModel } from '../core/model';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
@@ -212,6 +212,8 @@ import { providersEnvStore, useProvidersEnv } from '../core/providers';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
+import { ServicesScreen } from './ServicesScreen';
+import { SetupScreen } from './SetupScreen';
 import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
@@ -1646,6 +1648,16 @@ export function AppShell(): React.JSX.Element {
     },
     [spawnCards, cardAgents, activeThread, openSubAgent],
   );
+
+  // A fresh install: the server answered and has no model. The assistant opens once per launch,
+  // on the steps that make the agent answer; closing it is the owner's choice, not asked again.
+  const setupShown = useRef(false);
+  useEffect(() => {
+    if (setupShown.current || !catalogAnswered(catalog) || catalog.defaultModel !== '') return;
+    setupShown.current = true;
+    setSettingsPage('setup');
+    setSettingsOpen(true);
+  }, [catalog]);
 
   /**
    * Sends into a named conversation. Explicit rather than always the active one, because handing a
@@ -4025,6 +4037,10 @@ export function AppShell(): React.JSX.Element {
               />
             ) : settingsPage === 'devices' ? (
               <DevicesScreen onBack={() => setSettingsPage('index')} />
+            ) : settingsPage === 'services' ? (
+              <ServicesScreen onBack={() => setSettingsPage('index')} />
+            ) : settingsPage === 'setup' ? (
+              <SetupScreen onBack={() => setSettingsPage('index')} onOpen={page => setSettingsPage(page)} />
             ) : settingsPage === 'skills' ? (
               <SkillsScreen
                 skills={skills}
