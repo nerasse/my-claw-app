@@ -65,6 +65,7 @@ export function useServices(): ServicesState {
 export const SERVICE_LABELS: Record<ServicesResultFrame['services'][number]['id'], { title: string; hint: string }> = {
   stt: { title: 'Speech-to-text', hint: 'your voice notes, as text' },
   tts: { title: 'Text-to-speech', hint: 'the agent answering out loud' },
+  location: { title: 'Location', hint: 'a shared GPS position, read as an address' },
   embeddings: { title: 'Embeddings', hint: 'memory recall by meaning, not only by words' },
   search: { title: 'Web search', hint: 'a SearXNG instance' },
   browser: { title: 'Browser', hint: 'the agent opening pages and filling forms' },
@@ -75,4 +76,11 @@ export const SOURCE_LABELS: Record<ServicesResultFrame['services'][number]['sour
   cloud: 'Cloud',
   'self-hosted': 'This server',
   url: 'My URL',
+};
+
+/** Where a key the page asks for is obtained: one line under its field. */
+export const KEY_HELP: Record<string, string> = {
+  GROQ_API_KEY: 'free key at console.groq.com > API Keys',
+  GEOAPIFY_API_KEY: 'free key at myprojects.geoapify.com',
+  OPENAI_API_KEY: 'platform.openai.com > API keys',
 };

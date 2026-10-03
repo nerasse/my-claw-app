@@ -794,7 +794,7 @@ export interface TranscriptFrame {
   items: Array<{ id: string; text: string }>;
 }
 
-export type ServiceId = 'stt' | 'tts' | 'embeddings' | 'search' | 'browser';
+export type ServiceId = 'stt' | 'tts' | 'location' | 'embeddings' | 'search' | 'browser';
 export type ServiceSource = 'off' | 'cloud' | 'self-hosted' | 'url';
 
 /** One optional service as the server derives it (docs/services.md in the server repo). */
@@ -815,6 +815,10 @@ export interface ServicesResultFrame {
   type: 'services.result';
   install: 'native' | 'compose' | 'dev';
   services: ServiceView[];
+  /** Devices registered for push (server 0.7.79+): this window checks its own id. */
+  pushDevices?: string[];
+  /** Paired devices (server 0.7.79+). */
+  pairedDevices?: number;
 }
 
 export interface VoiceModeResultFrame {

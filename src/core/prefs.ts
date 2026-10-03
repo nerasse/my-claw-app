@@ -21,6 +21,8 @@ export interface Prefs {
    * contradiction to be resolved but two rooms arranged differently.
    */
   collapsedFolders: string[];
+  /** Setup steps the owner skipped on this device, by key: the assistant stops asking about them. */
+  setupSkipped: string[];
 }
 
 export { DEFAULT_SERVER_URL };
@@ -32,6 +34,7 @@ const DEFAULTS: Prefs = {
   updateOnMobileData: false,
   chatFontScale: 1,
   collapsedFolders: [],
+  setupSkipped: [],
 };
 
 const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
@@ -88,6 +91,7 @@ class PrefsStore {
         updateOnMobileData: raw.updateOnMobileData === 'true',
         chatFontScale: clampChatScale(Number(raw.chatFontScale)),
         collapsedFolders: parseCollapsedFolders(raw.collapsedFolders),
+        setupSkipped: parseCollapsedFolders(raw.setupSkipped),
       };
     } catch {
       this.current = DEFAULTS;

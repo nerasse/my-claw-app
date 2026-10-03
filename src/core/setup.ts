@@ -1,71 +1,166 @@
-import type { InstructionEntry, ServicesResultFrame } from './protocol';
+import type {
+  InstructionEntry,
+  ServiceId,
+  ServicesResultFrame,
+  ServiceView,
+} from './protocol';
 import type { SettingsPage } from '../app/settingsPages';
 
 /**
- * The first-run assistant: what a fresh install still needs, in order, each step opening the page
- * that sets it. Derived from what the server already answers, never stored: a step is done when
- * the thing it asks for exists, whichever page it was set from.
+ * The first-run assistant: everything an install can be set up with, in order. Derived from what
+ * the server already answers, never stored, except the steps the owner skipped on this device: a
+ * step is done when the thing it asks for exists, whichever page set it.
  */
+export type SetupState = 'done' | 'todo' | 'skipped' | 'unknown';
+
 export interface SetupStep {
-  key: 'model' | 'services' | 'profile' | 'notifications' | 'devices';
+  key: string;
   title: string;
   hint: string;
-  page: SettingsPage;
-  /** undefined: nothing to check, the step is a suggestion. */
-  done?: boolean;
-  /** Without it the agent cannot answer: the assistant opens until it is done. */
-  essential: boolean;
+  state: SetupState;
+  /** A service set right on the assistant, its card unfolded under the row. */
+  service?: ServiceId;
+  /** Otherwise the page the row opens. */
+  page?: SettingsPage;
 }
 
-/**
- * The profile is the default workspace's USER.md, the one every workspace inherits unless it owns
- * one: written once it is no longer the shipped template. Other workspaces do not count, whatever
- * they hold. Unknown (older server, list not in yet): no verdict.
- */
-function profileDone(entries: InstructionEntry[]): boolean | undefined {
-  const user = entries.find(e => e.workspace === 'default' && e.file === 'USER.md');
-  return user?.template === undefined ? undefined : !user.template;
-}
-
-export function setupSteps(input: {
+export interface SetupInput {
   defaultModel: string;
   services: ServicesResultFrame | null;
   instructions: InstructionEntry[];
-}): SetupStep[] {
-  const profile = profileDone(input.instructions);
-  const servicesMissing = input.services?.services.filter(s => s.missing.length > 0).length;
-  return [
+  /** This device, to find it among the ones registered for push. */
+  deviceId: string | null;
+  /** Push exists on this device at all (not in a browser). */
+  pushSupported: boolean;
+  skipped: string[];
+}
+
+const SERVICE_STEPS: Array<{ id: ServiceId; title: string; hint: string }> = [
+  {
+    id: 'stt',
+    title: 'Voice notes to text',
+    hint: 'a Groq key, or Whisper on this server',
+  },
+  {
+    id: 'tts',
+    title: 'Spoken answers',
+    hint: 'Edge in the cloud, no key, or Piper',
+  },
+  {
+    id: 'location',
+    title: 'Location',
+    hint: 'a Geoapify key turns a shared GPS position into an address',
+  },
+  { id: 'search', title: 'Web search', hint: 'the URL of a SearXNG instance' },
+  {
+    id: 'embeddings',
+    title: 'Memory by meaning',
+    hint: 'embeddings: cloud, this server or a URL',
+  },
+  {
+    id: 'browser',
+    title: 'Browser',
+    hint: 'the agent opening pages and filling forms',
+  },
+];
+
+/** On, with nothing missing and nothing broken: an engine that does not answer is not set up. */
+function serviceDone(view: ServiceView): boolean {
+  return (
+    view.source !== 'off' &&
+    view.missing.length === 0 &&
+    view.health !== 'down' &&
+    view.local?.state !== 'failed'
+  );
+}
+
+function stateOf(
+  done: boolean | undefined,
+  key: string,
+  skipped: string[],
+): SetupState {
+  if (done) return 'done';
+  if (skipped.includes(key)) return 'skipped';
+  return done === undefined ? 'unknown' : 'todo';
+}
+
+export function setupSteps(input: SetupInput): SetupStep[] {
+  const { services, skipped } = input;
+  const user = input.instructions.find(
+    e => e.workspace === 'default' && e.file === 'USER.md',
+  );
+  // The default workspace's USER.md, the one every workspace inherits: written once it is no longer
+  // the shipped template. An older server sends no verdict, and none is drawn.
+  const profileDone = user?.template === undefined ? undefined : !user.template;
+  const pushDone =
+    services?.pushDevices === undefined || !input.deviceId
+      ? undefined
+      : services.pushDevices.includes(input.deviceId);
+  const devicesDone =
+    services?.pairedDevices === undefined
+      ? undefined
+      : services.pairedDevices > 1;
+
+  const steps: SetupStep[] = [
     {
       key: 'model',
       title: 'Pick a model',
-      hint: input.defaultModel ? input.defaultModel : 'add a provider and its key, then choose the default model',
-      page: 'providers',
-      done: input.defaultModel !== '',
-      essential: true,
-    },
-    {
-      key: 'services',
-      title: 'Voice, memory, search, browser',
       hint:
-        servicesMissing === undefined
-          ? 'cloud by default; this server or your own URL'
-          : servicesMissing === 0
-            ? 'every service has what it needs'
-            : servicesMissing > 1 ? `${servicesMissing} services still need a key or a URL` : 'one service still needs a key or a URL',
-      page: 'services',
-      ...(servicesMissing === undefined ? {} : { done: servicesMissing === 0 }),
-      essential: false,
+        input.defaultModel ||
+        'add a provider and its key, then choose the default model',
+      state: stateOf(input.defaultModel !== '', 'model', skipped),
+      page: 'providers',
     },
+    ...SERVICE_STEPS.flatMap(({ id, title, hint }) => {
+      const view = services?.services.find(s => s.id === id);
+      // A server that does not know the service (older than location) leaves it out.
+      if (services && !view) return [];
+      return [
+        {
+          key: id,
+          title,
+          hint,
+          state: stateOf(view ? serviceDone(view) : undefined, id, skipped),
+          service: id,
+        },
+      ];
+    }),
     {
       key: 'profile',
       title: 'Tell the agent who you are',
-      hint: profile ? 'USER.md of the default workspace is written' : 'USER.md of the default workspace: your name, time zone, language',
-      // Opens the file itself: the workspace list showed every workspace and read as unfinished.
+      hint: profileDone
+        ? 'USER.md of the default workspace is written'
+        : 'USER.md of the default workspace: your name, time zone, language',
+      state: stateOf(profileDone, 'profile', skipped),
       page: 'instruction',
-      ...(profile === undefined ? {} : { done: profile }),
-      essential: false,
     },
-    { key: 'notifications', title: 'Notifications', hint: 'when a run ends while the app is closed', page: 'notifications', essential: false },
-    { key: 'devices', title: 'Your other devices', hint: 'pair a browser or another phone from here', page: 'devices', essential: false },
+    ...(input.pushSupported
+      ? [
+          {
+            key: 'notifications',
+            title: 'Notifications',
+            hint: pushDone
+              ? 'this phone receives them'
+              : 'when a run ends while the app is closed: allow them here',
+            state: stateOf(pushDone, 'notifications', skipped),
+            page: 'notifications' as const,
+          },
+        ]
+      : []),
+    {
+      key: 'devices',
+      title: 'Your other devices',
+      hint: devicesDone
+        ? `${services?.pairedDevices} devices paired`
+        : 'pair a browser or another phone from here',
+      state: stateOf(devicesDone, 'devices', skipped),
+      page: 'devices',
+    },
   ];
+  return steps;
+}
+
+/** Done or skipped: what the owner no longer has to look at. */
+export function setupSettled(steps: SetupStep[]): number {
+  return steps.filter(s => s.state === 'done' || s.state === 'skipped').length;
 }

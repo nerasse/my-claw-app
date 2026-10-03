@@ -4047,8 +4047,12 @@ export function AppShell(): React.JSX.Element {
               <ServicesScreen onBack={() => setSettingsPage('index')} />
             ) : settingsPage === 'setup' ? (
               <SetupScreen
+                deviceId={deviceInfo?.deviceId ?? null}
                 onBack={() => setSettingsPage('index')}
-                onOpen={step => (step.key === 'profile' ? openInstruction('default', 'USER.md', 'setup') : setSettingsPage(step.page))}
+                onOpen={step => {
+                  if (step.key === 'profile') openInstruction('default', 'USER.md', 'setup');
+                  else if (step.page) setSettingsPage(step.page);
+                }}
               />
             ) : settingsPage === 'skills' ? (
               <SkillsScreen

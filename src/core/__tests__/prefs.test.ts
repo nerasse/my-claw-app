@@ -11,7 +11,7 @@ beforeEach(() => {
 describe('prefs.hydrate', () => {
   test('falls back to defaults when nothing is stored', async () => {
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [] });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [] });
     expect(prefs.isHydrated()).toBe(true);
   });
 
@@ -22,13 +22,13 @@ describe('prefs.hydrate', () => {
       lastThreadId: 'thread-9',
     });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9', updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [] });
+    expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9', updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [] });
   });
 
   test('ignores a corrupted theme mode and an empty url', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ themeMode: 'neon', serverUrl: '   ', lastThreadId: '' });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [] });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [] });
   });
 
   test('reads back the folders that were folded away', async () => {
@@ -40,7 +40,7 @@ describe('prefs.hydrate', () => {
   test('an empty or absent folded list is no folders folded', async () => {
     expect(parseCollapsedFolders(undefined)).toEqual([]);
     expect(parseCollapsedFolders('')).toEqual([]);
-    await expect(prefs.hydrate()).resolves.toMatchObject({ collapsedFolders: [] });
+    await expect(prefs.hydrate()).resolves.toMatchObject({ collapsedFolders: [], setupSkipped: [] });
   });
 
   test('a broken bridge leaves the app on defaults instead of throwing', async () => {
