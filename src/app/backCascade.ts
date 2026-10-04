@@ -162,7 +162,7 @@ export interface BackLayers {
   /** Where the prompt-file editor returns: its workspace page, or the setup assistant. */
   instructionBack: 'workspace' | 'setup';
   /** Where the model picker returns when the assistant opened it; null: from the agent pages. */
-  modelPickerFrom: 'setup' | null;
+  modelPickerFrom: 'setup' | 'account' | null;
   setLayerTarget: (value: null) => void;
   archivesOpen: boolean;
   setArchivesOpen: (value: boolean) => void;
@@ -550,7 +550,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
       setSettingsPage('index');
       return true;
     }
-    if (settingsPage === 'tags') {
+    if (settingsPage === 'tags' || settingsPage === 'account') {
       setSettingsPage('providers');
       return true;
     }

@@ -821,6 +821,27 @@ export interface ServicesResultFrame {
   pairedDevices?: number;
 }
 
+/** A ChatGPT or Claude plan, signed in from the app (server docs/subscription-accounts.md). */
+export type AccountKind = 'codex' | 'claude';
+
+export interface AccountView {
+  connected: boolean;
+  email?: string;
+  plan?: string;
+  /** Claude: a sign-in that renews itself, a long-lived token, or one in the server's .env. */
+  source?: 'oauth' | 'token' | 'env';
+  /** A sign-in in flight: the page to open and, for ChatGPT, the code to enter there. */
+  login?: { url: string; code?: string; expiresAt: number };
+}
+
+export interface AccountsResultFrame {
+  type: 'accounts.result';
+  codex: AccountView;
+  claude: AccountView;
+  /** A ChatGPT sign-in that failed after its code was shown. */
+  error?: string;
+}
+
 export interface VoiceModeResultFrame {
   type: 'voice.mode.result';
   mode: 'cloud' | 'local' | 'auto';
@@ -2164,6 +2185,8 @@ export type ErrorScope =
   | 'voice'
   // services.get / services.set: an unusable choice (a URL missing), said on the Services page.
   | 'services'
+  // accounts.*: a sign-in refused or failed, said on the account page.
+  | 'accounts'
   | 'model'
   | 'skills'
   | 'agents'
@@ -2542,6 +2565,7 @@ export type ServerFrame =
   | LogsTailResultFrame
   | VoiceModeResultFrame
   | ServicesResultFrame
+  | AccountsResultFrame
   | UiPrefsResultFrame
   | ModelListResultFrame
   | ModelRefreshResultFrame
@@ -2657,6 +2681,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'logs.tail.result',
   'voice.mode.result',
   'services.result',
+  'accounts.result',
   'uiPrefs.result',
   'update.result',
   'model.list.result',
@@ -2830,6 +2855,16 @@ export function encodeServicesFree(id: 'stt' | 'embeddings'): string {
 
 export function encodeServicesSet(choice: { id: ServiceId; source: ServiceSource; url?: string }): string {
   return JSON.stringify({ type: 'services.set', ...choice });
+}
+
+export type AccountsRequest =
+  | { type: 'accounts.get' }
+  | { type: 'accounts.login' | 'accounts.cancel' | 'accounts.logout'; provider: AccountKind }
+  | { type: 'accounts.code'; code: string }
+  | { type: 'accounts.token'; token: string };
+
+export function encodeAccounts(request: AccountsRequest): string {
+  return JSON.stringify(request);
 }
 
 export function encodeVoiceModeGet(): string {

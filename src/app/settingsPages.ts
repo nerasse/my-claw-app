@@ -19,6 +19,7 @@ export type SettingsPage =
   | 'provider'
   | 'provider-edit'
   | 'provider-env'
+  | 'account'
   | 'model-edit'
   | 'tags'
   | 'skills'

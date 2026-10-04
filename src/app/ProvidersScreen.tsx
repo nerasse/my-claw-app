@@ -4,6 +4,9 @@ import type { ProviderInfo } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
+import { useAccounts } from '../core/accounts';
+import type { AccountKind } from '../core/protocol';
+import { ACCOUNT_LABELS, accountSummary } from './AccountScreen';
 
 /**
  * The configured providers. Each row names the config key, the backend type, the model count
@@ -16,6 +19,7 @@ export function ProvidersScreen({
   onBack,
   onNewProvider,
   onOpenProvider,
+  onOpenAccount,
 }: {
   providers: ProviderInfo[];
   /**
@@ -27,8 +31,11 @@ export function ProvidersScreen({
   onBack: () => void;
   onNewProvider: () => void;
   onOpenProvider: (key: string) => void;
+  onOpenAccount: (kind: AccountKind) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // Null on a server older than the accounts frames: no section, rather than rows that do nothing.
+  const accounts = useAccounts().frame;
   useDismissKeyboard();
 
   return (
@@ -68,6 +75,36 @@ export function ProvidersScreen({
       ) : null}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {accounts ? (
+          <>
+            <Text style={styles.section}>Subscriptions</Text>
+            <View style={styles.card}>
+              {(['codex', 'claude'] as const).map((kind, index) => (
+                <View key={kind}>
+                  {index > 0 ? <View style={styles.separator} /> : null}
+                  <Pressable
+                    style={[styles.row, styles.link]}
+                    onPress={() => onOpenAccount(kind)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open account ${ACCOUNT_LABELS[kind].title}`}>
+                    <View style={styles.linkMain}>
+                      <View style={styles.linkTitleLine}>
+                        <Text style={styles.linkTitle}>{ACCOUNT_LABELS[kind].title}</Text>
+                        <Text style={styles.badge}>{ACCOUNT_LABELS[kind].plan}</Text>
+                      </View>
+                      <Text style={[styles.hint, accounts[kind].connected && styles.connected]} numberOfLines={1}>
+                        {accountSummary(kind, accounts[kind])}
+                      </Text>
+                    </View>
+                    <Text style={styles.linkGlyph}>›</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            {/* Every provider, the subscriptions once signed in included: their models live there. */}
+            <Text style={styles.section}>All providers</Text>
+          </>
+        ) : null}
         <View style={styles.card}>
           {providers.every(provider => provider.type === 'tags') ? (
             <Pressable
@@ -119,6 +156,15 @@ export function ProvidersScreen({
 
 const createStyles = (palette: Palette) => ({
   screen: { flex: 1 },
+  section: {
+    fontSize: font.small,
+    fontWeight: '600' as const,
+    color: palette.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+    marginTop: space.sm,
+  },
+  connected: { color: palette.ok },
   error: {
     color: palette.danger,
     fontSize: font.small,
@@ -146,7 +192,7 @@ const createStyles = (palette: Palette) => ({
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  body: { padding: space.md, paddingBottom: space.xl },
+  body: { padding: space.md, paddingBottom: space.xl, gap: space.sm },
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

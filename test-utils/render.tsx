@@ -52,7 +52,11 @@ export async function waitFor(check: () => boolean, timeoutMs = 10000): Promise<
  * opened through the list, exactly as the owner would, so the frames it costs are the ones the
  * old boot sent too.
  */
-export async function renderApp(): Promise<Tree> {
+/**
+ * `seedCatalog: false` leaves the launch's first catalogue to the test: the first-run setup is
+ * decided on it, so a suite about a server with no model must be the one to send it.
+ */
+export async function renderApp({ seedCatalog = true }: { seedCatalog?: boolean } = {}): Promise<Tree> {
   await prefs.hydrate();
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {
@@ -80,6 +84,7 @@ export async function renderApp(): Promise<Tree> {
     await pressLabel(tree, `Conversation ${last}`);
   }
   await waitFor(() => labelsOf(tree).includes('Message to send'));
+  if (!seedCatalog) return tree;
   // A real server answers resume with a model.list.result: without one, defaultModel stays '' and
   // the new "no LLM configured" gate swallows sends. Seed one so suites that drive the composer
   // exercise sending, not the gate. Suites that emit their own catalog still win, theirs lands

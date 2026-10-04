@@ -22,6 +22,7 @@ import { providersEnvStore } from './providers';
 import { statusStore } from './status';
 import { statsStore } from './stats';
 import { servicesStore } from './services';
+import { accountsStore } from './accounts';
 import { fsStore } from './fsStore';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
@@ -558,6 +559,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'services.result':
       servicesStore.replace(frame);
       break;
+    case 'accounts.result':
+      accountsStore.replace(frame);
+      break;
     case 'uiPrefs.result':
       setUiPrefs(frame);
       break;
@@ -873,6 +877,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         setBrowserError(refusal);
       } else if (frame.scope === 'services') {
         servicesStore.fail(refusal);
+      } else if (frame.scope === 'accounts') {
+        accountsStore.fail(refusal);
       } else if (frame.scope === 'status') {
         statusStore.fail(refusal);
       } else if (frame.scope === 'stats') {

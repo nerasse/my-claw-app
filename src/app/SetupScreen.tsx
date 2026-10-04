@@ -24,6 +24,9 @@ function useSkipped(): string[] {
   return skipped;
 }
 
+/** On a wide window a list of steps reads best at a column's width, not the page's. */
+export const SETUP_WIDTH = 760;
+
 /** A page served over plain HTTP: the browser refuses the microphone, push and location there. */
 function insecureWeb(): boolean {
   if (Platform.OS !== 'web') return false;
@@ -223,8 +226,7 @@ export function SetupScreen({
 const createStyles = (palette: Palette) => ({
   // The settings pages' header (Providers, Settings): the shell pads the page, the header only
   // draws its rule, and Back is the same 40pt square everywhere.
-  // On a wide window a list of steps reads best at a column's width, not the page's.
-  root: { flex: 1, width: '100%' as const, maxWidth: 760, alignSelf: 'center' as const, paddingTop: space.sm },
+  root: { flex: 1, width: '100%' as const, maxWidth: SETUP_WIDTH, alignSelf: 'center' as const, paddingTop: space.sm },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

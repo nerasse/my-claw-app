@@ -36,6 +36,8 @@ import { isStopCommand, parseTagCommand } from '../core/commands';
 import { prefs } from '../core/prefs';
 import { flushDiagnostics, loadDiagnostics, recordDiag } from '../core/diagnostics';
 import {
+  encodeAccounts,
+  type AccountKind,
   encodeApprovalResponse,
   encodeQuestionReply,
   encodeUndoCancel,
@@ -213,7 +215,8 @@ import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
 import { ServicesScreen } from './ServicesScreen';
-import { SetupScreen, toggleSkip } from './SetupScreen';
+import { SETUP_WIDTH, SetupScreen, toggleSkip } from './SetupScreen';
+import { AccountScreen } from './AccountScreen';
 import { modelReady } from '../core/setup';
 import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
@@ -457,7 +460,9 @@ export function AppShell(): React.JSX.Element {
   const [setupGate, setSetupGate] = useState(false);
   const settingsOpen = settingsOpenState || setupGate;
   // Where the default-model picker returns: the agents list, or the assistant that opened it.
-  const [modelPickerFrom, setModelPickerFrom] = useState<'setup' | null>(null);
+  const [modelPickerFrom, setModelPickerFrom] = useState<'setup' | 'account' | null>(null);
+  // The subscription the account page shows (docs: subscription-accounts in the server repo).
+  const [selectedAccount, setSelectedAccount] = useState<AccountKind>('codex');
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
   const [settingsPage, setSettingsPage] = useState<SettingsPage>('index');
@@ -1668,10 +1673,13 @@ export function AppShell(): React.JSX.Element {
   // app, once per launch, until it is finished or skipped; a skip is kept on this device. A second
   // device of a configured server never sees it: its server has a model.
   const setupShown = useRef(false);
+  // Decided on the launch's first answer only: a model lost mid-session (a sign-out, a key removed)
+  // must not pull the owner off the page they are on.
   useEffect(() => {
-    if (setupShown.current || !catalogAnswered(catalog) || modelReady(catalog.defaultModel, catalog.unavailable)) return;
-    if (prefs.get().setupSkipped.includes('model')) return;
+    if (setupShown.current || !catalogAnswered(catalog)) return;
     setupShown.current = true;
+    if (modelReady(catalog.defaultModel, catalog.unavailable)) return;
+    if (prefs.get().setupSkipped.includes('model')) return;
     setSettingsPage('setup');
     setSetupGate(true);
   }, [catalog]);
@@ -2016,6 +2024,8 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     if (!settingsOpen || (settingsPage !== 'providers' && settingsPage !== 'provider')) return;
     connection.send(encodeModelList()).catch(() => {});
+    // The subscriptions section reads where each sign-in stands.
+    if (settingsPage === 'providers') connection.send(encodeAccounts({ type: 'accounts.get' })).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   useEffect(() => {
@@ -3171,6 +3181,10 @@ export function AppShell(): React.JSX.Element {
         setProviderEdit({ mode: 'create', key: null });
         setSettingsPage('provider-edit');
       }}
+      onOpenAccount={kind => {
+        setSelectedAccount(kind);
+        setSettingsPage('account');
+      }}
       onOpenProvider={key => {
         if (key === 'tags') {
           setSettingsPage('tags');
@@ -3640,6 +3654,8 @@ export function AppShell(): React.JSX.Element {
             styles.pageFull,
             // Full screen is the whole window: the cap of a page of controls would undo it.
             layout.pinnedDrawer && !browserFullNow && { maxWidth: layout.pageWidth, alignSelf: 'center' as const, width: '100%' as const },
+            // The setup alone in the window reads as one column, whatever page it opened.
+            setupGate && { maxWidth: SETUP_WIDTH, alignSelf: 'center' as const, width: '100%' as const },
           ]}>
           {settingsOpen ? (
             settingsPage === 'index' && setupGate ? (
@@ -3815,6 +3831,18 @@ export function AppShell(): React.JSX.Element {
               )
             ) : settingsPage === 'providers' ? (
               providersPage
+            ) : settingsPage === 'account' ? (
+              <AccountScreen
+                kind={selectedAccount}
+                needsModel={!modelReady(catalog.defaultModel, catalog.unavailable)}
+                onBack={() => setSettingsPage('providers')}
+                onPickModel={() => {
+                  setAgentPicker(pickerStart);
+                  setAgentModelFor('global');
+                  setModelPickerFrom('account');
+                  setSettingsPage('model-picker');
+                }}
+              />
             ) : settingsPage === 'tags' ? (
               tagsPage
             ) : settingsPage === 'provider' ? (

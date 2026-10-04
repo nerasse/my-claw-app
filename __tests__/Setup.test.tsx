@@ -45,9 +45,8 @@ beforeEach(() => {
   });
   chatStore.clearAll();
   servicesStore.reset();
-  // The catalogue is module state: a test that left the server without a model would put the
-  // next one behind the first-run gate before it even boots.
-  modelStore.replaceCatalog({ type: 'model.list.result', models: [], defaultModel: 'test-default' });
+  // The catalogue is module state: each test launches before the server answers, as the app does.
+  modelStore.reset();
   bridge.prefsGetAll.mockResolvedValue({
     themeMode: 'dark',
     lastThreadId: 't-default',
@@ -224,7 +223,7 @@ function agentsConfig(providers: unknown[]): Record<string, unknown> {
 
 test('a server with no model: the assistant takes the whole app, Back cannot leave it, Skip can', async () => {
   (useWindowDimensions as unknown as jest.Mock).mockReturnValue({ width: 1600, height: 900, scale: 2, fontScale: 1 });
-  const tree = await renderApp();
+  const tree = await renderApp({ seedCatalog: false });
   await emit({ type: 'model.list.result', models: [], defaultModel: '' });
   await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
   // The whole window: no conversation list, no conversation beside it, no Back.
@@ -249,7 +248,7 @@ test('a server with no model: the assistant takes the whole app, Back cannot lea
 });
 
 test('the model step: no provider opens the provider form; one there opens the default-model picker and comes back', async () => {
-  const tree = await renderApp();
+  const tree = await renderApp({ seedCatalog: false });
   await emit({ type: 'model.list.result', models: [], defaultModel: '' });
   await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
   // A fresh server lists only its `tags` pseudo-entry: that is no provider.
@@ -330,7 +329,7 @@ test('a service step unfolds its card on the assistant, its key pasted there; Sk
 
 test('a skip is kept on the device: the next launch on a server still without a model is not blocked', async () => {
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: 't-default', setupSkipped: 'model' });
-  const tree = await renderApp();
+  const tree = await renderApp({ seedCatalog: false });
   await emit({ type: 'model.list.result', models: [], defaultModel: '' });
   expect(labelsOf(tree)).not.toContain('Skip setup for now');
   expect(labelsOf(tree)).toContain('Message to send');

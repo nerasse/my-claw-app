@@ -207,6 +207,11 @@ class ModelStoreImpl {
     this.discoveryTimer = undefined;
   }
 
+  /** Test seam: back to "the server has not answered", as at launch. */
+  reset(): void {
+    this.replaceCatalog(EMPTY);
+  }
+
   replaceCatalog(frame: ModelListResultFrame): void {
     this.catalog = frame;
     this.index = new Map(frame.models.map(model => [model.id, model]));
