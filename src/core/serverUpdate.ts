@@ -9,19 +9,16 @@ import type { UpdateResultFrame } from './protocol';
  * press became five requests and five systemd jobs. Asking is a fact of its own, so it is stored
  * as one.
  *
- * The other thing this owns is the verdict, which is genuinely not obvious. The server answers
- * *before* the unit runs, so `started` only means "asked". What happened afterwards is read from
- * two observations:
+ * The server answers *before* the unit runs, so `started` only means "asked", not that the
+ * update succeeded. A socket that stays connected cannot tell a no-op apart from a slow job
+ * or a failure before the restart. After the observation window, the outcome is unconfirmed;
+ * the journal is the source of truth until the server announces a different version.
  *
- *   - the socket dropped, or not: the updater only stops the service when it has something to
- *     install, so no drop within the settle window means the registry had nothing
- *   - the version that comes back: different means the swap happened, identical after a drop
- *     means nothing was installed (or it was rolled back, which the journal can tell apart)
- *
- * Three outcomes, three sentences, none of them a disjunction the reader has to resolve.
+ * A late restart is still observed. A different version confirms the swap; the same version
+ * after a drop means nothing changed (or it was rolled back, which the journal can tell apart).
  */
 
-/** No restart within this window means the updater found nothing and never touched the service. */
+/** No restart within this window leaves the outcome unconfirmed, not "up to date". */
 export const SETTLE_MS = 20_000;
 /** A restart that never comes back. Long enough for a slow swap plus the health check. */
 export const STALLED_MS = 5 * 60_000;
@@ -30,10 +27,10 @@ export type UpdatePhase =
   | { kind: 'idle' }
   | { kind: 'asking' }
   | { kind: 'refused'; reason: 'busy' | 'denied' | 'failed'; detail?: string }
-  /** Started. `sawDrop` is what tells "installing" apart from "nothing to install". */
+  /** Acknowledged. `sawDrop` records a possible restart, not the updater's job status. */
   | { kind: 'running'; since: number; version: string; sawDrop: boolean }
   | { kind: 'done'; from: string; to: string }
-  | { kind: 'unchanged'; version: string }
+  | { kind: 'unconfirmed'; since: number; version: string }
   | { kind: 'rolledBack'; version: string }
   | { kind: 'stalled'; version: string };
 
@@ -61,25 +58,27 @@ export function reduceUpdate(phase: UpdatePhase, event: UpdateEvent): UpdatePhas
     case 'socket':
       // Only a drop is recorded here. The reconnection is not the end of the story: the version
       // it comes back with is, and that arrives in the `hello` right after.
-      if (phase.kind !== 'running' || event.connected || phase.sawDrop) return phase;
+      if (event.connected) return phase;
+      if (phase.kind === 'unconfirmed') return { ...phase, kind: 'running', sawDrop: true };
+      if (phase.kind !== 'running' || phase.sawDrop) return phase;
       return { ...phase, sawDrop: true };
     case 'hello': {
-      if (phase.kind !== 'running') return phase;
+      if (phase.kind !== 'running' && phase.kind !== 'unconfirmed') return phase;
       if (event.version !== phase.version) return { kind: 'done', from: phase.version, to: event.version };
-      if (phase.sawDrop) return { kind: 'rolledBack', version: event.version };
+      if (phase.kind === 'running' && phase.sawDrop) return { kind: 'rolledBack', version: event.version };
       return phase;
     }
     case 'tick': {
       if (phase.kind !== 'running') return phase;
       const waited = event.now - phase.since;
-      if (!phase.sawDrop && waited >= SETTLE_MS) return { kind: 'unchanged', version: phase.version };
+      if (!phase.sawDrop && waited >= SETTLE_MS) return { kind: 'unconfirmed', since: phase.since, version: phase.version };
       if (phase.sawDrop && waited >= STALLED_MS) return { kind: 'stalled', version: phase.version };
       return phase;
     }
   }
 }
 
-/** The button is out of reach exactly while something is pending; nothing else disables it. */
+/** Lock while asking or observing a restart. An unconfirmed outcome is not a job-status lock. */
 export function updateBusy(phase: UpdatePhase): boolean {
   return phase.kind === 'asking' || phase.kind === 'running';
 }
@@ -115,11 +114,11 @@ export function updateHint(phase: UpdatePhase, connected: boolean): string {
         : `started on ${phase.version} · waiting to see whether it restarts`;
     case 'done':
       return `updated ${phase.from} → ${phase.to}`;
-    case 'unchanged':
-      return `already up to date (${phase.version}) · the updater found nothing to install`;
+    case 'unconfirmed':
+      return `update outcome unconfirmed (${phase.version}) · no restart observed · the job may still be running or may have failed · check my-claw-auto-update.service in the journal`;
     case 'rolledBack':
-      return `back on ${phase.version} · nothing was installed, see my-claw-update in the journal`;
+      return `back on ${phase.version} · nothing was installed, see my-claw-auto-update.service in the journal`;
     case 'stalled':
-      return `the server has not come back · check my-claw-update in the journal`;
+      return `the server has not come back · check my-claw-auto-update.service in the journal`;
   }
 }

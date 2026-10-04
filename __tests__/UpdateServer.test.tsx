@@ -12,6 +12,7 @@
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
+import { SETTLE_MS } from '../src/core/serverUpdate';
 import { renderApp, labelsOf, textsOf, press, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -93,6 +94,42 @@ test('a started update walks from asking to restarting to the version it landed 
   expect(updateButton(tree).props.disabled).toBe(false);
 
   await unmount(tree);
+});
+
+test('no restart leaves an honest unconfirmed status, and a slow restart can still confirm the update', async () => {
+  const tree = await renderApp();
+  await announce('connected');
+  await deliver({ type: 'hello', version: '0.4.2' });
+  await openGeneral(tree);
+
+  // Fake only the update observation window, after the app's real boot and navigation.
+  jest.useFakeTimers();
+  try {
+    await press(tree, 'Update the server now');
+    await deliver({ type: 'update.result', started: true, version: '0.4.2' });
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(SETTLE_MS);
+    });
+
+    const hint = hints(tree).find(t => t.includes('update outcome unconfirmed'));
+    expect(hint).toContain('no restart observed');
+    expect(hint).toContain('may still be running or may have failed');
+    expect(hint).toContain('my-claw-auto-update.service in the journal');
+    expect(hints(tree).join(' ')).not.toMatch(/already up to date|nothing to install/);
+    expect(updateButton(tree).props.disabled).toBe(false);
+
+    // A slow check/download is not forgotten when the 20-second window elapses.
+    await announce('disconnected');
+    expect(hints(tree).some(t => t.includes('the server is restarting'))).toBe(true);
+    await announce('connected');
+    await deliver({ type: 'hello', version: '0.4.3' });
+    expect(hints(tree)).toContain('updated 0.4.2 → 0.4.3');
+    expect(updateButton(tree).props.disabled).toBe(false);
+    expect(sentTypes().filter(type => type === 'update.run')).toHaveLength(1);
+  } finally {
+    await unmount(tree);
+    jest.useRealTimers();
+  }
 });
 
 test('mashing the button sends one request, even with no version ever announced', async () => {

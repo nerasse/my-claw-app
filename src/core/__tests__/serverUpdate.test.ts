@@ -84,19 +84,50 @@ describe('the update phase', () => {
     expect(updateHint(phase, true)).toContain('nothing was installed');
   });
 
-  it('reads a socket that never dropped as "there was nothing to install"', () => {
-    // The updater only stops the service when it has something to swap, so silence is an answer.
+  it.each([
+    'a registry check that found no update',
+    'a download that failed before stopping the server',
+    'a job still checking or downloading after 20 seconds',
+  ])('leaves the outcome unconfirmed for %s', () => {
+    // These jobs produce the same frames: an acknowledgement, then no restart or job result.
+    // The client cannot infer which happened from silence, even after five minutes.
     const phase = run([{ type: 'asked' }, started('0.4.5'), { type: 'tick', now: T0 + SETTLE_MS }]);
-    expect(phase).toEqual({ kind: 'unchanged', version: '0.4.5' });
-    expect(updateHint(phase, true)).toContain('already up to date (0.4.5)');
+    expect(phase).toEqual({ kind: 'unconfirmed', since: T0, version: '0.4.5' });
+    expect(run([{ type: 'tick', now: T0 + STALLED_MS }], phase)).toEqual(phase);
+    expect(updateHint(phase, true)).toBe(
+      'update outcome unconfirmed (0.4.5) · no restart observed · the job may still be running or may have failed · check my-claw-auto-update.service in the journal',
+    );
+    expect(updateHint(phase, true)).not.toMatch(/already up to date|nothing to install|^updated/);
+    // Preserve the existing timeout's button behavior without pretending the job finished.
+    expect(updateBusy(phase)).toBe(false);
+    expect(updateLabel(phase, T0 + SETTLE_MS)).toBe('Update server');
   });
 
-  it('does not call it up to date before the settle window is over', () => {
+  it('keeps observing a slow job that restarts after the outcome became unconfirmed', () => {
+    const uncertain = run([{ type: 'asked' }, started('0.4.5'), { type: 'tick', now: T0 + SETTLE_MS }]);
+    const restarting = run([{ type: 'socket', connected: false }], uncertain);
+    expect(restarting).toEqual({ kind: 'running', since: T0, version: '0.4.5', sawDrop: true });
+    expect(updateBusy(restarting)).toBe(true);
+    const phase = run([
+      { type: 'tick', now: T0 + SETTLE_MS + 30_000 },
+      { type: 'socket', connected: true },
+      { type: 'hello', version: '0.4.6' },
+    ], restarting);
+    expect(phase).toEqual({ kind: 'done', from: '0.4.5', to: '0.4.6' });
+  });
+
+  it('needs a changed version, not a repeated hello, to confirm an unobserved restart', () => {
+    const uncertain = run([{ type: 'asked' }, started('0.4.5'), { type: 'tick', now: T0 + SETTLE_MS }]);
+    expect(run([{ type: 'socket', connected: true }, { type: 'hello', version: '0.4.5' }], uncertain)).toEqual(uncertain);
+    expect(run([{ type: 'hello', version: '0.4.6' }], uncertain)).toEqual({ kind: 'done', from: '0.4.5', to: '0.4.6' });
+  });
+
+  it('keeps waiting before the observation window is over', () => {
     const phase = run([{ type: 'asked' }, started('0.4.5'), { type: 'tick', now: T0 + SETTLE_MS - 1 }]);
     expect(phase.kind).toBe('running');
   });
 
-  it('a drop inside the window cancels the up-to-date reading', () => {
+  it('keeps observing a restart that begins inside the window', () => {
     const phase = run([
       { type: 'asked' },
       started('0.4.5'),
@@ -115,7 +146,7 @@ describe('the update phase', () => {
       { type: 'tick', now: T0 + STALLED_MS },
     ]);
     expect(phase).toEqual({ kind: 'stalled', version: '0.4.5' });
-    expect(updateHint(phase, false)).toContain('journal');
+    expect(updateHint(phase, false)).toContain('my-claw-auto-update.service in the journal');
   });
 
   it('ignores a hello that belongs to no request', () => {
