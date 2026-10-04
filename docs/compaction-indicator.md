@@ -135,6 +135,16 @@ seeing the operation with none of its words.
 A fragment for a thread with no known compaction is dropped: building the rule out of a partial
 state would leave a counter with no start instant to count from.
 
+## The archive
+
+Since server 0.7.87 a compaction keeps only the open work in its summary and moves what finished
+into an archive written on the boundary (server `docs/compaction.md`). `chat.compaction` and the
+replayed history carry it as `archive`; `CompactionBoundary` folds it under the rule as a second
+aside, "Archive", shut by default, with its own persisted fold state (`compaction-archive:<id>`) so
+opening one never opens the other. A boundary that archived nothing (or one written before the
+archive existed) draws no second fold. The agent reaches the same text with
+`conversation_search` and `source: "archive"`.
+
 ## Tests
 
 - `src/core/__tests__/compactionRule.test.ts`: where the rule attaches when a send is parked.

@@ -66,6 +66,16 @@ the ranking stays readable and no money that left a card is lost inside a sum.
 Calls nothing could price are counted and stated (`385 calls nothing could price · counted above,
 absent from the money`), never priced at a guess.
 
+## The compaction card
+
+Under the Overview's total, a card says what the window's compactions cost: blocking and background
+passes folded together (`caller` `compaction` and `compaction-*`), money at list price and tokens
+side by side like the hero, tokens read and written, time, and their share of the window's cost and
+tokens (`compactionTotals`, `compactionShareLine`). It is read off the per-source rows the server
+already sends, so no new field. A window that did not compact draws no card. The row stays in
+Advanced > Source too; the card exists because a pass reads the whole conversation and two of them
+cost $6 on 2026-10-04 while hiding there.
+
 ## Where the numbers come from, and what an answer has to agree with
 
 One `stats.get` per opening, per period, per filter. The answer lands once (`stats.result`) and
