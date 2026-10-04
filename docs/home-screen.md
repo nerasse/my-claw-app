@@ -19,6 +19,13 @@ tail. A header carries the count of what is under it; while a search narrows the
 it is narrowing, `3 / 9`, because a heading that says "three" while seven conversations are hidden
 is making a claim it cannot back.
 
+Inside a section, the conversation last written in comes first: the server sorts its listing on
+`lastMessageAt`, the time of the last message sent into it, and an answer landing does not count.
+The drawer does not wait for the next listing to agree: a message sent from this window, or mirrored
+from another (`chat.user`), lifts its row to the top of its section on the spot (`sessionStore.touch`).
+Until that, the drawer only moved when something else asked for the listing, and read as frozen
+(owner, 2026-10-04).
+
 Tapping a folder folds it. Folded is not hidden: the header stays with its count, which is the
 whole reason to fold one. The fold lives in the shell, next to the workspace filter and for the same
 reason -- three mounts, one list -- and is remembered on the device, unlike the filter: a fold makes

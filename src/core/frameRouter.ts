@@ -243,6 +243,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Same treatment as an incoming answer: a conversation started on the phone has to appear
       // in the drawer here before its bubbles can be read.
       noteActivity(frame.threadId, frame.text);
+      // A message sent is what orders the list, wherever it was typed.
+      if (!isSubAgentThread(frame.threadId)) sessionStore.touch(frame.threadId, frame.text);
       break;
     case 'chat.compaction':
       // No ring, no unread mark, and deliberately no `noteActivity`: a compaction is not a

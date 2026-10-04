@@ -11,7 +11,7 @@ Settings                                   search: "voix", "clé", "thème"...
 │  ├─ Notifications    permission (browser) · sounds (phone)
 │  └─ Updates          server · app · download on mobile data
 ├─ THE AGENT
-│  ├─ Models           default · fallback · retry · providers and plans (+) · tags
+│  ├─ Models           default · fallback · context cap · retry · providers and plans (+) · tags
 │  ├─ Agents           the orchestrator and every agent
 │  └─ Services         speech-to-text · text-to-speech · location · search · embeddings · browser
 ├─ WHAT THE AGENT CAN USE
@@ -51,6 +51,10 @@ nobody can reach.
   longer asks for `voice.mode`.
 - The defaults (default model, fallback, retry) left Agents for Models, and the tags left their
   hidden row among the providers for a section of their own.
+- The global context cap (`context.cap`) is a row of the Models defaults: it is the ceiling every
+  agent, tag and conversation without its own falls back to, so it sits with the other fallbacks.
+  Blank restores the server default (512k), 0 lifts it. The row says an agent or tag cap outranks
+  it, because that is what made the value look ignored.
 - MCP servers sit under Tools, the raw config under Advanced.
 - The drawer's "Agents" (the shared workers) is "Sub-agents": the orchestrator is the conversation
   itself, and the Agents settings page is where every agent, the orchestrator included, is set.

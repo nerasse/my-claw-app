@@ -558,6 +558,8 @@ export interface SessionSummary {
   messageCount: number;
   createdAt: string;
   lastActiveAt: string;
+  /** When a message was last sent into it: what the listing is sorted on. Absent from an older server. */
+  lastMessageAt?: string;
   /** Filed away by the owner: shown in the archived list instead of the drawer, never deleted. */
   archived?: boolean;
   /** The folder it is filed in, absent when it is not filed. One place, and it is the server's. */
@@ -2326,6 +2328,11 @@ export interface AgentsConfigResultFrame {
    * page renders the schedule instead of holding a copy of the default (docs/provider-failures.md
    * on the server). */
   retry?: { enabled: boolean; delaysMs: number[] };
+  /**
+   * The global context ceiling (`context.cap`): `value` is what the config says, absent when it
+   * says nothing and `default` applies; 0 means no ceiling. Absent from an older server.
+   */
+  contextCap?: { value?: number; default: number };
   providers: ProviderInfo[];
   agents: AgentInfo[];
 }
@@ -3412,6 +3419,11 @@ export function encodeAgentsIterationsSet(agent: string, value: number | null): 
 
 export function encodeAgentsContextCapSet(agent: string, value: number | null): string {
   return JSON.stringify({ type: 'agents.contextcap.set', agent, value });
+}
+
+/** The global context ceiling: null hands it back to the server's default, 0 lifts it. */
+export function encodeAgentsDefaultCapSet(value: number | null): string {
+  return JSON.stringify({ type: 'agents.defaultcap.set', value });
 }
 
 /**

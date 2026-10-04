@@ -1,4 +1,5 @@
 import {
+  encodeAgentsDefaultCapSet,
   encodeAgentsConfigGet,
   encodeAgentsModelClear,
   encodeAgentsModelSet,
@@ -194,5 +195,13 @@ describe('encoders', () => {
       sha: 'abc123abc123',
       threadId: 't9',
     });
+  });
+});
+
+describe('encodeAgentsDefaultCapSet', () => {
+  test('a value, 0 and null all travel as written: 0 lifts the ceiling, null restores the default', () => {
+    expect(JSON.parse(encodeAgentsDefaultCapSet(256_000))).toEqual({ type: 'agents.defaultcap.set', value: 256_000 });
+    expect(JSON.parse(encodeAgentsDefaultCapSet(0))).toEqual({ type: 'agents.defaultcap.set', value: 0 });
+    expect(JSON.parse(encodeAgentsDefaultCapSet(null))).toEqual({ type: 'agents.defaultcap.set', value: null });
   });
 });

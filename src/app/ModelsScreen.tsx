@@ -9,6 +9,7 @@ import { useAccounts } from '../core/accounts';
 import type { AccountKind, AccountView } from '../core/protocol';
 import { ACCOUNT_LABELS, accountSummary } from './AccountScreen';
 import { CloseButton } from '../components/CloseButton';
+import { shortTokens } from '../core/context';
 
 /** A plan in the providers list: its name, its kind, and whether it is signed in. */
 function PlanRow({
@@ -52,6 +53,16 @@ export function retryScheduleText(delaysMs: readonly number[]): string {
 }
 
 /**
+ * What the global ceiling row says. An agent's own cap and a tag candidate's pin outrank it, which
+ * is the one thing that makes the value look ignored, so the row says so.
+ */
+export function contextCapText(cap: { value?: number; default: number }): string {
+  const value = cap.value ?? cap.default;
+  const head = value === 0 ? 'no ceiling: every model gets its full window' : `${shortTokens(value)} tokens`;
+  return `${head}${cap.value === undefined ? ' · server default' : ''} · an agent or tag cap outranks it`;
+}
+
+/**
  * Everything about which model answers, on one page (owner, 2026-10-04): the defaults every agent
  * falls back to (they were on Agents), the subscriptions, the providers and their keys, and the
  * tags (a row hidden among the providers until then). Each provider row names the config key, the
@@ -68,6 +79,7 @@ export function ModelsScreen({
   onOpenDefaultModel,
   onOpenFallback,
   onSetRetry,
+  onOpenContextCap,
   onOpenTags,
 }: {
   /** The agents snapshot the defaults are read from; null until the server answers. */
@@ -86,6 +98,7 @@ export function ModelsScreen({
   onOpenDefaultModel: () => void;
   onOpenFallback: () => void;
   onSetRetry: (enabled: boolean) => void;
+  onOpenContextCap: () => void;
   onOpenTags: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -176,6 +189,22 @@ export function ModelsScreen({
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
               </Pressable>
+              {config.contextCap ? (
+                <>
+                  <View style={styles.separator} />
+                  <Pressable
+                    style={[styles.row, styles.link]}
+                    onPress={onOpenContextCap}
+                    accessibilityRole="button"
+                    accessibilityLabel="Context cap">
+                    <View style={styles.linkMain}>
+                      <Text style={styles.linkTitle}>Context cap</Text>
+                      <Text style={styles.hint}>{contextCapText(config.contextCap)}</Text>
+                    </View>
+                    <Text style={styles.linkGlyph}>›</Text>
+                  </Pressable>
+                </>
+              ) : null}
               {/* Absent on a server that predates it: not drawn, rather than drawn lying. */}
               {config.retry ? (
                 <>

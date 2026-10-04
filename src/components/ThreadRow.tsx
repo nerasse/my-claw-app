@@ -72,7 +72,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
           {/* A blocked run is not "activity", it is a run waiting on this person: it earns a
               mark of its own, or the only place the question exists is the thread it is in. */}
           {question ? <Text style={styles.question}>?</Text> : null}
-          <Text style={styles.date}>{formatDate(item.lastActiveAt)}</Text>
+          <Text style={styles.date}>{formatDate(item.lastMessageAt ?? item.lastActiveAt)}</Text>
         </View>
         {item.messageCount > 0 ? <Text style={styles.meta}>{item.messageCount} messages</Text> : null}
         {/* Server-side, so a message begun on another device is findable from this one. */}

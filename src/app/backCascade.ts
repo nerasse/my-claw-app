@@ -158,6 +158,8 @@ export interface BackLayers {
   scopeEditor: { target: 'config' | 'file' } | null;
   setScopeEditor: (value: null) => void;
   tagContextEditor: unknown;
+  /** The number page is editing the global context cap, opened from the models page. */
+  defaultCapEditor: boolean;
   workspaceFrom: 'workspaces' | 'agent';
   /** Where the prompt-file editor returns: its workspace page, or the setup assistant. */
   instructionBack: 'workspace' | 'setup';
@@ -285,6 +287,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     scopeEditor,
     setScopeEditor,
     tagContextEditor,
+    defaultCapEditor,
     workspaceFrom,
     instructionBack,
     modelPickerFrom,
@@ -552,7 +555,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
       return true;
     }
     if (settingsPage === 'workspace-picker' || settingsPage === 'number') {
-      setSettingsPage(tagContextEditor ? 'tags' : 'agent');
+      setSettingsPage(defaultCapEditor ? 'models' : tagContextEditor ? 'tags' : 'agent');
       return true;
     }
     if (settingsPage === 'file') {

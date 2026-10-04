@@ -77,6 +77,20 @@ class SessionStoreImpl {
     this.emit();
   }
 
+  /**
+   * A message was just sent into this thread, from here or mirrored from another window: it goes to
+   * the top of the list, which is the order the server sorts on. Listed if it was not yet.
+   */
+  touch(threadId: string, sampleText: string): void {
+    const now = new Date().toISOString();
+    const existing = this.list.find(summary => summary.threadId === threadId);
+    const touched: SessionSummary = existing
+      ? { ...existing, lastMessageAt: now }
+      : { threadId, title: titleFromText(sampleText), messageCount: 0, createdAt: now, lastActiveAt: now, lastMessageAt: now };
+    this.list = [touched, ...this.list.filter(summary => summary.threadId !== threadId)];
+    this.emit();
+  }
+
   remove(threadId: string): void {
     const next = this.list.filter(summary => summary.threadId !== threadId);
     if (next.length === this.list.length) return;

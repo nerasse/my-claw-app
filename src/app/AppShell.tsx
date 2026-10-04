@@ -53,6 +53,7 @@ import {
   encodeAgentsIterationsSet,
   encodeAgentsContextCapSet,
   encodeAgentsRetrySet,
+  encodeAgentsDefaultCapSet,
   encodeAgentFileGet,
   encodeAgentFileSet,
   encodeAgentFileCreate,
@@ -556,7 +557,8 @@ export function AppShell(): React.JSX.Element {
   } | null>(null);
   const [scopeSaving, setScopeSaving] = useState(false);
   const [workspacePickerAgent, setWorkspacePickerAgent] = useState<string | null>(null);
-  const [numberEditor, setNumberEditor] = useState<{ field: 'iterations' | 'contextcap'; agent: string } | null>(null);
+  const [numberEditor, setNumberEditor] = useState<{ field: 'iterations' | 'contextcap'; agent: string } | { field: 'defaultcap' } | null>(null);
+  const defaultCapEditor = numberEditor?.field === 'defaultcap';
   /** The tag editor sheet: its group stack is walked by back, and the row to rename over it. */
   const [tagEditor, setTagEditor] = useState<{ name: string; picker: PickerState | null; pickerIndex: number | null } | null>(null);
   const [tagEditorDirty, setTagEditorDirty] = useState(false);
@@ -1519,6 +1521,7 @@ export function AppShell(): React.JSX.Element {
         scopeEditor,
         setScopeEditor,
         tagContextEditor,
+        defaultCapEditor,
         workspaceFrom,
         instructionBack,
         modelPickerFrom,
@@ -1596,6 +1599,7 @@ export function AppShell(): React.JSX.Element {
       subagentMenuOpen,
       leaveSubAgent,
       tagContextEditor,
+      defaultCapEditor,
       tagEditor,
       tagEditorDirty,
       tagEditorDiscard,
@@ -1865,7 +1869,7 @@ export function AppShell(): React.JSX.Element {
           location,
         );
         const isVoiceNote = attachments?.some(attachment => attachment.audioAsVoice) ?? false;
-        if (!isSubAgentThread(threadId)) sessionStore.ensure(threadId, text || (isVoiceNote ? '(voice message)' : location ? '(location)' : '(attachment)'));
+        if (!isSubAgentThread(threadId)) sessionStore.touch(threadId, text || (isVoiceNote ? '(voice message)' : location ? '(location)' : '(attachment)'));
       }
       // Armed before the send, never after: a fast receipt would otherwise land on a bubble not yet
       // waiting and the wait would run out on a message that did arrive. Only on a link that calls
@@ -3208,7 +3212,10 @@ export function AppShell(): React.JSX.Element {
   );
   // Both pages double as the fallback when a detail page has no subject yet (config not loaded,
   // or a key that no longer exists), so they are built once here.
+  // Each opener clears the others: the number page draws whichever editor is set, and one left over
+  // from a page closed with Back would be the one drawn.
   const openTagContextEditor = (name: string): void => {
+    setNumberEditor(null);
     setTagContextEditor(name);
     setSettingsPage('number');
   };
@@ -3317,6 +3324,7 @@ export function AppShell(): React.JSX.Element {
       // One tap, no confirmation: the switch is its own feedback, and the server answers with the
       // whole snapshot so the row can never disagree with what was stored.
       onSetRetry={enabled => connection.send(encodeAgentsRetrySet(enabled)).catch(() => {})}
+      onOpenContextCap={() => openDefaultCapEditor()}
       onOpenTags={() => setSettingsPage('tags')}
       onNewProvider={() => setProviderAddMenu(true)}
       onOpenAccount={(provider, kind) => {
@@ -3383,11 +3391,22 @@ export function AppShell(): React.JSX.Element {
   };
   const openNumberEditor = (field: 'iterations' | 'contextcap'): void => {
     if (!selectedAgent) return;
+    setTagContextEditor(null);
     setNumberEditor({ field, agent: selectedAgent });
     setSettingsPage('number');
   };
+  const openDefaultCapEditor = (): void => {
+    setTagContextEditor(null);
+    setNumberEditor({ field: 'defaultcap' });
+    setSettingsPage('number');
+  };
+  const saveDefaultCap = (value: number | null): void => {
+    connection.send(encodeAgentsDefaultCapSet(value)).catch(() => {});
+    setSettingsPage('models');
+    setNumberEditor(null);
+  };
   const saveNumber = (value: number | null): void => {
-    if (!numberEditor) return;
+    if (!numberEditor || numberEditor.field === 'defaultcap') return;
     connection
       .send(
         numberEditor.field === 'iterations'
@@ -4183,7 +4202,21 @@ export function AppShell(): React.JSX.Element {
                 agentsPage
               )
             ) : settingsPage === 'number' ? (
-              numberEditor && selectedAgentInfo ? (
+              numberEditor?.field === 'defaultcap' ? (
+                <NumberEditorScreen
+                  backLabel="Back to models"
+                  title="Context cap"
+                  hint={`ceiling for every agent, tag and conversation without its own · 0 lifts it · default ${agentsConfig?.contextCap?.default ?? 512000}`}
+                  value={agentsConfig?.contextCap?.value ?? null}
+                  placeholder="0 lifts the ceiling, blank = server default"
+                  min={1}
+                  allowZero
+                  error={agentsState.error}
+                  saving={false}
+                  onBack={() => setSettingsPage('models')}
+                  onSave={saveDefaultCap}
+                />
+              ) : numberEditor && selectedAgentInfo ? (
                 <NumberEditorScreen
                   title={numberEditor.field === 'iterations' ? 'Iterations' : 'Context cap'}
                   hint={numberEditor.field === 'iterations' ? 'per-agent budget · default when unset' : 'ceiling · 0 lifts it'}
@@ -4204,11 +4237,11 @@ export function AppShell(): React.JSX.Element {
                 <NumberEditorScreen
                   backLabel="Back to tags"
                   title={`Tag ${tagContextEditor} · context cap`}
-                  hint="ceiling for runs through this tag · 0 lifts it"
+                  hint="ceiling for runs through this tag"
                   value={tagsState.tags?.find(tag => tag.name === tagContextEditor)?.contextCap ?? null}
-                  placeholder="0 lifts the ceiling, blank = agent/global setting"
+                  placeholder="blank = agent/global setting"
                   min={1}
-                  allowZero
+                  allowZero={false}
                   error={tagsState.error}
                   saving={false}
                   onBack={() => setSettingsPage('tags')}
