@@ -102,8 +102,10 @@ test('no restart leaves an honest unconfirmed status, and a slow restart can sti
   await deliver({ type: 'hello', version: '0.4.2' });
   await openGeneral(tree);
 
-  // Fake only the update observation window, after the app's real boot and navigation.
-  jest.useFakeTimers();
+  // Fake only the update observation window, after the app's real boot and navigation. The
+  // clock and the intervals only: faking setImmediate as well left the next test of the file
+  // hung for good (React's act flushes through it), which is what CI 2476 and 2477 ran into.
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
   try {
     await press(tree, 'Update the server now');
     await deliver({ type: 'update.result', started: true, version: '0.4.2' });
