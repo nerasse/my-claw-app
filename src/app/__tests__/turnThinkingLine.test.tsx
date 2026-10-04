@@ -69,6 +69,11 @@ function textsOf(tree: TestRenderer.ReactTestRenderer): string[] {
   return tree.root.findAllByType(Text).flatMap(node => (typeof node.props.children === 'string' ? [node.props.children] : []));
 }
 
+/** Bubbles drawn: each carries one ⋯ button. */
+function actions(tree: TestRenderer.ReactTestRenderer): number {
+  return tree.root.findAll(node => node.props.accessibilityLabel === 'Message actions' && typeof node.props.onPress === 'function').length;
+}
+
 const SINCE = Date.parse('2026-01-01T00:00:00.000Z');
 
 function startWaiting(): void {
@@ -107,11 +112,35 @@ describe('the wait before a call produces anything', () => {
     // owner read it as "Thinking written before the model even thought" (2026-09-30).
     expect(textsOf(tree)).not.toContain('Thinking');
     expect(textsOf(tree)).not.toContain('▍');
+    // Nor the bubble itself: an empty frame with its clock and its ⋯ is what was left once the
+    // caret had gone (2026-10-04). Only the owner's message is drawn.
+    expect(actions(tree)).toBe(1);
 
     act(() => {
       jest.advanceTimersByTime(WAIT_REVEAL_MS - 200);
     });
     expect(textsOf(tree)).not.toContain('Thinking');
+    expect(actions(tree)).toBe(1);
+
+    // Once the line is due, the bubble comes with it.
+    act(() => {
+      jest.advanceTimersByTime(400);
+    });
+    expect(textsOf(tree)).toContain('Thinking');
+    expect(actions(tree)).toBe(2);
+  });
+
+  it('the first token draws the bubble at once, without waiting for the line', () => {
+    const tree = render();
+    act(() => {
+      chatStore.startStream(THREAD, 's1');
+      chatStore.markWaiting(THREAD, 's1', Date.now());
+    });
+    expect(actions(tree)).toBe(1);
+    act(() => {
+      chatStore.appendDelta(THREAD, 's1', 'Bonjour');
+    });
+    expect(actions(tree)).toBe(2);
   });
 
   it('appears once the silence is real, counting from the call', () => {

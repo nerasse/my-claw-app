@@ -62,7 +62,7 @@ export const Bubble = React.memo(function BubbleView({
   onOpenMedia?: (items: MediaItem[], index: number) => void;
   /** Server-owned pref: reasoning blocks start expanded instead of folded. */
   expandReasoning?: boolean;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   const scale = useChatFontScale();
   const agent = item.role === 'agent';
@@ -142,6 +142,19 @@ export const Bubble = React.memo(function BubbleView({
   ) : item.streaming && !thinkingShown ? (
     <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(bodySize) }]}>▍</Text>
   ) : null;
+  // Under the threshold a waiting bubble has nothing to say, so it is not drawn at all: an empty
+  // frame with its clock and its ⋯ is the "bubble that starts too early" the owner saw after the
+  // caret was taken out of it (2026-10-04). It appears with its line, or with the first token.
+  if (
+    waiting &&
+    !revealed &&
+    item.attachments.length === 0 &&
+    !item.location &&
+    !item.error &&
+    item.reasoningStartedAt === undefined
+  ) {
+    return null;
+  }
   // A user bubble is filled with the accent, which is also what a browser paints the selection
   // highlight in: unmarked, a drag over one's own message selects text that looks untouched.
   // webTheme.web.ts flips the pair on the marked subtree. Nothing on Android.

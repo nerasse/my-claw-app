@@ -33,8 +33,10 @@ provider, and a list would be wrong the day a new one arrives. Three seconds is 
 slowest first delta measured.
 
 The counter still counts from the call's own start, so the line appears already saying "3 s" and
-climbs from there. Under the threshold the bubble draws nothing at all — not even the caret, which
-is what the first version of this feature got wrong.
+climbs from there. Under the threshold the bubble is not drawn at all: no caret (what the first
+version got wrong), and no frame either. With the caret gone, the bubble still stood there empty,
+its clock and its ⋯ under a tool card, before the model had written anything (owner, 2026-10-04).
+It appears with the line, or with the first token, thought or count, whichever comes first.
 
 ## Lifecycle
 
