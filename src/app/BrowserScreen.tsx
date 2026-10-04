@@ -16,7 +16,7 @@ import {
   type BrowserUnblockResultFrame,
 } from '../core/protocol';
 import { BROWSER_HASH, browserLiveStore, shownTab, useLiveNotice, useLiveWindows } from '../core/browserLive';
-import { CollapseIcon, ExpandIcon, OpenInNewIcon, RefreshIcon } from '../components/icons';
+import { CollapseIcon, ExpandIcon, OpenInNewIcon, PlusIcon, RefreshIcon } from '../components/icons';
 import { useTheme } from '../theme';
 import { BrowserWall } from './browser/BrowserWall';
 import { LiveWindowView } from './browser/LiveWindowView';
@@ -162,7 +162,7 @@ function LivePane({
         <Text style={styles.empty}>{connected ? 'asking the browser…' : 'offline'}</Text>
       ) : (
         <>
-          <View style={styles.row}>
+          <View style={styles.newRow}>
             <TextInputRow
               value={newUrl}
               onChange={setNewUrl}
@@ -177,6 +177,32 @@ function LivePane({
       )}
     </ScrollView>
   );
+}
+
+/** The installer's units, in words; another name shows as itself. */
+const UNIT_LABELS: Record<string, string> = {
+  'my-claw-xvfb': 'Virtual display',
+  'my-claw-chromium': 'Chromium',
+  'my-claw-browser-sidecar': 'Agent control',
+  'my-claw-vnc': 'VNC server',
+  'my-claw-novnc': 'Web client (noVNC)',
+};
+
+/** One line under the title: what needs the owner, else what is open. */
+export function headerSummary(
+  info: ReturnType<typeof useBrowserInfo>,
+  windows: ReturnType<typeof useLiveWindows>['windows'],
+): { text: string; alert: boolean } {
+  if (info && !info.enabled) return { text: 'disabled on the server', alert: true };
+  const down = info?.services.filter(service => !service.active).length ?? 0;
+  if (down) return { text: `${down} service${down > 1 ? 's' : ''} down`, alert: true };
+  if (!windows) return { text: 'loading', alert: false };
+  const waiting = windows.filter(w => w.state === 'waiting').length;
+  const working = windows.filter(w => w.state === 'working').length;
+  const parts = [`${windows.length} window${windows.length === 1 ? '' : 's'}`];
+  if (working) parts.push(`${working} at work`);
+  if (waiting) parts.push(`${waiting} waiting for you`);
+  return { text: parts.join(' · '), alert: waiting > 0 };
 }
 
 /**
@@ -234,6 +260,9 @@ export function BrowserScreen({
   useEffect(refresh, [refresh]);
 
   const vncAddress = info?.vncHost ? `${info.vncHost}:${info.vncPort}` : null;
+  const { windows } = useLiveWindows();
+  const summary = headerSummary(info, windows);
+  const down = info?.services.filter(service => !service.active) ?? [];
 
   // Every window, full screen, in a tab of its own: one to leave on a screen of its own.
   const openInTab = useCallback(() => {
@@ -247,49 +276,43 @@ export function BrowserScreen({
         <Pressable
           onPress={onClose}
           hitSlop={8}
-          style={styles.backButton}
+          style={styles.iconButton}
           accessibilityRole="button"
           accessibilityLabel="Close browser">
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title} numberOfLines={1}>Browser</Text>
-          <Text style={styles.headerSub} numberOfLines={1}>
-            {info === null ? 'loading' : info.enabled ? 'watch the agents, lend a hand' : 'browser disabled on the server'}
+          <Text style={[styles.headerSub, summary.alert && styles.headerAlert]} numberOfLines={1}>
+            {summary.text}
           </Text>
         </View>
-        {(['live', 'connect'] as const).map(p => (
-          <Pressable
-            key={p}
-            onPress={() => setPane(p)}
-            style={[styles.refreshButton, pane === p && styles.paneOn]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: pane === p }}
-            accessibilityLabel={p === 'live' ? 'Live view' : 'Connect with VNC'}>
-            <Text style={pane === p ? styles.paneOnText : styles.refreshText}>{p === 'live' ? 'Live' : 'VNC'}</Text>
-          </Pressable>
-        ))}
-        {/* Icons past the two panes: in a 460pt pane beside the conversation, words here took the
-            title's room. */}
-        <Pressable
-          onPress={refresh}
-          style={styles.iconButton}
-          accessibilityRole="button"
-          accessibilityLabel="Refresh browser state">
-          <RefreshIcon size={20} color={palette.text} />
-        </Pressable>
+        {/* One control with two halves: which pane is showing reads at a glance. */}
+        <View style={styles.segment}>
+          {(['live', 'connect'] as const).map(p => (
+            <Pressable
+              key={p}
+              onPress={() => setPane(p)}
+              style={[styles.segmentItem, pane === p && styles.segmentOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: pane === p }}
+              accessibilityLabel={p === 'live' ? 'Live view' : 'Connect with VNC'}>
+              <Text style={pane === p ? styles.segmentOnText : styles.segmentText}>{p === 'live' ? 'Live' : 'VNC'}</Text>
+            </Pressable>
+          ))}
+        </View>
         {onToggleFullScreen ? (
           <Pressable
             onPress={onToggleFullScreen}
             style={styles.iconButton}
             accessibilityRole="button"
             accessibilityLabel={fullScreen ? 'Exit full screen' : 'Full screen'}>
-            {fullScreen ? <CollapseIcon size={20} color={palette.text} /> : <ExpandIcon size={20} color={palette.text} />}
+            {fullScreen ? <CollapseIcon size={18} color={palette.text} /> : <ExpandIcon size={18} color={palette.text} />}
           </Pressable>
         ) : null}
         {Platform.OS === 'web' ? (
           <Pressable onPress={openInTab} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Open the browser in a new tab">
-            <OpenInNewIcon size={20} color={palette.text} />
+            <OpenInNewIcon size={18} color={palette.text} />
           </Pressable>
         ) : null}
       </View>
@@ -311,89 +334,55 @@ export function BrowserScreen({
       ) : (
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Unlock</Text>
-            {/*
-              The way out of the one failure this page cannot be diagnosed from: a native file
-              picker opens behind the browser window (nothing on that display raises it, there is
-              no window manager), its modal grab eats every click, and the screen looks normal.
-            */}
-            <Text style={styles.hint}>
-              Nothing clickable, browser looking normal? A file picker or a dialog is probably
-              open behind the window. This raises what is hiding, closes a file picker nobody
-              asked for, and puts the browser back in front.
-            </Text>
-            <View style={styles.row}>
-              <Pressable
-                onPress={unlock}
-                style={styles.primaryButton}
-                accessibilityRole="button"
-                accessibilityLabel="Unlock the browser">
-                <Text style={styles.primaryText}>Unlock</Text>
-              </Pressable>
-            </View>
-            {unblock ? (
-              <Text
-                style={unblock.ok ? styles.hint : styles.error}
-                accessibilityLabel="Browser unlock result">
-                {unblock.message}
-              </Text>
-            ) : null}
-            {unsent ? <Text style={styles.error}>could not reach the server</Text> : null}
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Connect</Text>
+            <Text style={styles.cardTitle}>Take the screen by VNC</Text>
             {info.webUrl ? (
-              <>
-                <Text style={styles.value} numberOfLines={2}>
-                  {info.webUrl}
-                </Text>
-                <View style={styles.row}>
-                  <Pressable
-                    onPress={() => Linking.openURL(info.webUrl ?? '').catch(() => {})}
-                    style={styles.primaryButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open noVNC">
-                    <Text style={styles.primaryText}>Open web client</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => copy('web', info.webUrl ?? '')}
-                    style={styles.button}
-                    accessibilityRole="button"
-                    accessibilityLabel="Copy noVNC link">
-                    <Text style={styles.buttonText}>{copied === 'web' ? 'Copied' : 'Copy link'}</Text>
-                  </Pressable>
+              <View style={styles.line}>
+                <View style={styles.lineMain}>
+                  <Text style={styles.label}>Web client</Text>
+                  <Text style={styles.value} numberOfLines={1}>{info.webUrl.replace(/^https?:\/\//, '')}</Text>
                 </View>
-              </>
+                <Pressable
+                  onPress={() => copy('web', info.webUrl ?? '')}
+                  style={styles.button}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy noVNC link">
+                  <Text style={styles.buttonText}>{copied === 'web' ? 'Copied' : 'Copy'}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => Linking.openURL(info.webUrl ?? '').catch(() => {})}
+                  style={styles.primaryButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open noVNC">
+                  <Text style={styles.primaryText}>Open</Text>
+                </Pressable>
+              </View>
             ) : (
-              <Text style={styles.hint}>no noVNC URL configured on the server (browser.novncUrl)</Text>
+              <Text style={styles.hint}>No web client configured on the server (browser.novncUrl).</Text>
             )}
 
             {vncAddress ? (
-              <>
-                <Text style={styles.label}>VNC app</Text>
-                <Text style={styles.value}>{vncAddress}</Text>
-                <View style={styles.row}>
-                  <Pressable
-                    onPress={() => copy('vnc', vncAddress)}
-                    style={styles.button}
-                    accessibilityRole="button"
-                    accessibilityLabel="Copy VNC address">
-                    <Text style={styles.buttonText}>{copied === 'vnc' ? 'Copied' : 'Copy address'}</Text>
-                  </Pressable>
+              <View style={styles.line}>
+                <View style={styles.lineMain}>
+                  <Text style={styles.label}>VNC app</Text>
+                  <Text style={styles.value} numberOfLines={1}>{vncAddress}</Text>
                 </View>
-              </>
+                <Pressable
+                  onPress={() => copy('vnc', vncAddress)}
+                  style={styles.button}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy VNC address">
+                  <Text style={styles.buttonText}>{copied === 'vnc' ? 'Copied' : 'Copy'}</Text>
+                </Pressable>
+              </View>
             ) : null}
-          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Password</Text>
             {info.password ? (
               <>
-                <Text style={revealed ? styles.password : styles.value}>
-                  {revealed ? info.password : '········'}
-                </Text>
-                <View style={styles.row}>
+                <View style={styles.line}>
+                  <View style={styles.lineMain}>
+                    <Text style={styles.label}>Password</Text>
+                    <Text style={revealed ? styles.password : styles.value}>{revealed ? info.password : '········'}</Text>
+                  </View>
                   <Pressable
                     onPress={() => setRevealed(current => !current)}
                     style={styles.button}
@@ -410,35 +399,71 @@ export function BrowserScreen({
                   </Pressable>
                 </View>
                 <Text style={styles.hint}>
-                  VNC keeps 8 characters and sends the screen unencrypted: this stops a stranger on
-                  the network, it is not a lock. Reach it over the LAN or the VPN only.
+                  VNC sends the screen unencrypted: reach it over the LAN or a VPN only.
                 </Text>
               </>
             ) : (
-              <Text style={styles.hint}>
-                no password set: anyone who reaches the port takes the screen
-              </Text>
+              <Text style={styles.warn}>No password set: anyone who reaches the port takes the screen.</Text>
             )}
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Services</Text>
+            <View style={styles.cardHead}>
+              <Text style={styles.cardTitle}>Services</Text>
+              <Text style={down.length ? styles.down : styles.up}>
+                {info.services.length === 0 ? '' : down.length ? `${down.length} down` : 'all running'}
+              </Text>
+              <Pressable
+                onPress={refresh}
+                style={styles.iconButtonSmall}
+                accessibilityRole="button"
+                accessibilityLabel="Refresh browser state">
+                <RefreshIcon size={16} color={palette.text} />
+              </Pressable>
+            </View>
             {info.services.length === 0 ? (
-              <Text style={styles.hint}>none configured</Text>
+              <Text style={styles.hint}>
+                No unit to check here: a compose install runs the browser in its own container.
+              </Text>
             ) : (
               info.services.map(service => (
                 <View key={service.unit} style={styles.serviceRow}>
-                  <Text style={styles.serviceName} numberOfLines={1}>
-                    {service.unit}
-                  </Text>
-                  <Text style={service.active ? styles.up : styles.down}>
-                    {service.active ? 'up' : 'down'}
-                  </Text>
+                  <View style={[styles.dot, service.active ? styles.dotUp : styles.dotDown]} />
+                  <View style={styles.lineMain}>
+                    <Text style={styles.value}>{UNIT_LABELS[service.unit] ?? service.unit}</Text>
+                    <Text style={styles.unit}>{service.unit}</Text>
+                  </View>
+                  <Text style={service.active ? styles.up : styles.down}>{service.active ? 'up' : 'down'}</Text>
                 </View>
               ))
             )}
           </View>
 
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Clicks do nothing?</Text>
+            {/*
+              The way out of the one failure this page cannot be diagnosed from: a native file
+              picker opens behind the browser window (nothing on that display raises it, there is
+              no window manager), its modal grab eats every click, and the screen looks normal.
+            */}
+            <Text style={styles.hint}>
+              A file picker or a dialog is probably open behind the window. Unlock raises it, closes
+              a file picker nobody asked for, and puts the browser back in front.
+            </Text>
+            <Pressable
+              onPress={unlock}
+              style={[styles.button, styles.alignStart]}
+              accessibilityRole="button"
+              accessibilityLabel="Unlock the browser">
+              <Text style={styles.buttonText}>Unlock</Text>
+            </Pressable>
+            {unblock ? (
+              <Text style={unblock.ok ? styles.hint : styles.error} accessibilityLabel="Browser unlock result">
+                {unblock.message}
+              </Text>
+            ) : null}
+            {unsent ? <Text style={styles.error}>could not reach the server</Text> : null}
+          </View>
         </ScrollView>
       )}
     </View>
@@ -457,25 +482,6 @@ const createStyles = (palette: Palette) => ({
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: palette.surfaceAlt,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
-  headerMain: { flex: 1, gap: 1 },
-  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
-  headerSub: { fontSize: font.small, color: palette.textFaint },
-  refreshButton: {
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderRadius: radius.sm,
-    backgroundColor: palette.surfaceAlt,
-  },
-  refreshText: { fontSize: font.body, color: palette.text },
   iconButton: {
     width: 40,
     height: 40,
@@ -484,8 +490,29 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  paneOn: { backgroundColor: palette.accent },
-  paneOnText: { fontSize: font.body, color: palette.surface, fontWeight: '600' as const },
+  iconButtonSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
+  headerMain: { flex: 1, minWidth: 0, gap: 1 },
+  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
+  headerSub: { fontSize: font.small, color: palette.textFaint },
+  headerAlert: { color: palette.danger },
+  segment: {
+    flexDirection: 'row' as const,
+    padding: 2,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceAlt,
+  },
+  segmentItem: { height: 36, justifyContent: 'center' as const, paddingHorizontal: space.md, borderRadius: radius.sm },
+  segmentOn: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.border },
+  segmentText: { fontSize: font.small, color: palette.textMuted },
+  segmentOnText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   live: { gap: space.md },
   fill: { flex: 1 },
   error: {
@@ -503,8 +530,8 @@ const createStyles = (palette: Palette) => ({
     padding: space.md,
     gap: space.sm,
   },
-  cardTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  label: { fontSize: font.small, color: palette.textFaint, marginTop: space.sm },
+  cardTitle: { flex: 1, fontSize: font.body, fontWeight: '600' as const, color: palette.text },
+  label: { fontSize: font.small, color: palette.textFaint },
   value: { fontSize: font.body, color: palette.text },
   password: {
     fontSize: font.body,
@@ -514,50 +541,71 @@ const createStyles = (palette: Palette) => ({
   },
   hint: { fontSize: font.small, color: palette.textFaint },
   row: { flexDirection: 'row' as const, gap: space.sm, flexWrap: 'wrap' as const },
+  newRow: { flexDirection: 'row' as const, gap: space.sm, alignItems: 'center' as const },
+  line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  lineMain: { flex: 1, minWidth: 0 },
+  cardHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  alignStart: { alignSelf: 'flex-start' as const },
+  warn: { fontSize: font.small, color: palette.danger },
+  unit: { fontSize: font.micro, color: palette.textFaint },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotUp: { backgroundColor: palette.ok },
+  dotDown: { backgroundColor: palette.danger },
   primaryButton: {
+    height: 36,
+    justifyContent: 'center' as const,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
     borderRadius: radius.sm,
     backgroundColor: palette.accent,
   },
-  primaryText: { fontSize: font.body, fontWeight: '600' as const, color: palette.surface },
+  primaryText: { fontSize: font.small, fontWeight: '600' as const, color: palette.accentText },
   button: {
+    height: 36,
+    justifyContent: 'center' as const,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
     borderRadius: radius.sm,
     backgroundColor: palette.surfaceAlt,
   },
-  buttonText: { fontSize: font.body, color: palette.text },
+  buttonText: { fontSize: font.small, color: palette.text },
   serviceRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     gap: space.sm,
   },
-  serviceName: { flex: 1, fontSize: font.small, color: palette.text },
-  up: { fontSize: font.small, color: palette.accent },
+  up: { fontSize: font.small, color: palette.ok },
   down: { fontSize: font.small, color: palette.danger },
   newWindow: {
     flex: 1,
+    height: 40,
     fontSize: font.body,
     color: palette.text,
     backgroundColor: palette.surfaceAlt,
     borderRadius: radius.sm,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.accent,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
 });
 
 /** A window of the owner's own, on the VNC screen: to log in to a site once, or look something up. */
 function TextInputRow({ value, onChange, onSubmit }: { value: string; onChange: (v: string) => void; onSubmit: () => void }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   return (
     <>
       <TextInput
         value={value}
         onChangeText={onChange}
         onSubmitEditing={onSubmit}
-        placeholder="New window: an address, or empty"
+        placeholder="Open a page in a new window"
+        placeholderTextColor={palette.textFaint}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
@@ -565,8 +613,8 @@ function TextInputRow({ value, onChange, onSubmit }: { value: string; onChange: 
         style={styles.newWindow}
         accessibilityLabel="New window address"
       />
-      <Pressable onPress={onSubmit} style={styles.primaryButton} accessibilityRole="button" accessibilityLabel="Open a new window">
-        <Text style={styles.primaryText}>New window</Text>
+      <Pressable onPress={onSubmit} style={styles.addButton} accessibilityRole="button" accessibilityLabel="Open a new window">
+        <PlusIcon size={20} color={palette.accentText} />
       </Pressable>
     </>
   );

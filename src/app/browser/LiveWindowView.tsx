@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../../theme';
 import { shownTab, useLiveFrame } from '../../core/browserLive';
 import type { BrowserControlAction, BrowserInput, BrowserLiveWindow } from '../../core/protocol';
 import { LiveSurface } from './LiveSurface';
-import { stateLabel } from './BrowserWall';
+import { hostOf, stateLabel } from './BrowserWall';
+import { OpenInNewIcon } from '../../components/icons';
+import { useTheme } from '../../theme';
 import { textEdit } from './surfaceMath';
 
 /** Keys a phone keyboard does not have, or does not send to a field. */
@@ -18,6 +20,9 @@ const KEYS: Array<{ key: string; label: string }> = [
   { key: 'ArrowDown', label: '↓' },
   { key: 'ArrowRight', label: '→' },
 ];
+
+/** Below this width the page has no keyboard of its own worth trusting: the extra keys are shown. */
+const KEYS_BELOW = 720;
 
 /** A second press within this closes a window an agent works in: one press alone would be a slip. */
 const CONFIRM_MS = 3000;
@@ -51,8 +56,15 @@ export function LiveWindowView({
   const [vncNote, setVncNote] = useState<string | null>(null);
   // The picture takes the room the controls leave, which shrinks when the keyboard comes up: the
   // field typed in and the page it types into stay on screen together.
+  // The picture is fitted in what the controls under it leave, and they follow it right below
+  // instead of sinking to the bottom of the pane with a gap between.
   const [room, setRoom] = useState(0);
+  const [below, setBelow] = useState(0);
   const onRoom = useCallback((e: LayoutChangeEvent) => setRoom(e.nativeEvent.layout.height), []);
+  const onBelow = useCallback((e: LayoutChangeEvent) => setBelow(e.nativeEvent.layout.height), []);
+  const { palette } = useTheme();
+  const { width } = useWindowDimensions();
+  const showKeys = Platform.OS !== 'web' || width < KEYS_BELOW;
   const typedRef = useRef(typed);
   typedRef.current = typed;
 
@@ -102,14 +114,18 @@ export function LiveWindowView({
   return (
     <View style={styles.view}>
       <View style={styles.bar}>
+        {/* Words, not a second chevron under the page's own: this one goes back to the windows. */}
         <Pressable onPress={onBack} style={styles.button} accessibilityRole="button" accessibilityLabel="Back to all windows">
-          <Text style={styles.buttonText}>‹ All</Text>
+          <Text style={styles.buttonText}>‹ Windows</Text>
         </Pressable>
         <View style={styles.titleBox}>
-          <Text style={styles.title}>Window {window.alias}</Text>
-          <Text style={styles.sub} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={1}>
+            Window {window.alias}
+          </Text>
+          <Text style={[styles.sub, window.state === 'waiting' && styles.subWaiting, window.state === 'working' && styles.subWorking]} numberOfLines={1}>
             {stateLabel(window)}
-            {window.onStage ? ' · on the VNC screen' : ''}
+            {window.onStage ? ' · on VNC' : ''}
+            {tab?.url ? ` · ${hostOf(tab.url)}` : ''}
           </Text>
         </View>
         {window.onStage ? null : (
@@ -127,11 +143,15 @@ export function LiveWindowView({
           </Pressable>
         ) : null}
         {Platform.OS === 'web' ? (
-          <Pressable onPress={popOut} style={styles.button} accessibilityRole="button" accessibilityLabel="Open in a new browser window">
-            <Text style={styles.buttonText}>Pop out</Text>
+          <Pressable onPress={popOut} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Open in a new browser window">
+            <OpenInNewIcon size={18} color={palette.text} />
           </Pressable>
         ) : null}
-        <Pressable onPress={closeWindow} style={styles.button} accessibilityRole="button" accessibilityLabel="Close window">
+        <Pressable
+          onPress={closeWindow}
+          style={[styles.button, confirmClose && styles.dangerOutline]}
+          accessibilityRole="button"
+          accessibilityLabel="Close window">
           <Text style={confirmClose ? styles.danger : styles.buttonText}>{confirmClose ? 'Agent at work: close?' : 'Close'}</Text>
         </Pressable>
       </View>
@@ -171,7 +191,7 @@ export function LiveWindowView({
           <Pressable
             key={action}
             onPress={() => tab && control(action, { pageId: tab.pageId })}
-            style={styles.navButton}
+            style={styles.iconButtonSmall}
             accessibilityRole="button"
             accessibilityLabel={action === 'back' ? 'Back' : action === 'forward' ? 'Forward' : 'Reload'}>
             <Text style={styles.buttonText}>{action === 'back' ? '←' : action === 'forward' ? '→' : '↻'}</Text>
@@ -192,42 +212,51 @@ export function LiveWindowView({
       </View>
 
       <View style={styles.room} onLayout={onRoom}>
-        <LiveSurface frame={picture} interactive={interactive} onInput={send} maxHeight={room || undefined} />
-      </View>
-      {frame === 'gone' ? <Text style={styles.note}>this tab is gone</Text> : null}
-      {connected ? null : <Text style={styles.note}>offline: the page takes no tap or key until the connection is back</Text>}
-
-      {Platform.OS === 'web' ? null : (
-        <TextInput
-          value={typed}
-          onChangeText={onType}
-          onKeyPress={e => {
-            // An empty field sends no change for a backspace: the page still has to get it.
-            if (e.nativeEvent.key === 'Backspace' && typedRef.current === '') send({ kind: 'key', key: 'Backspace' });
-          }}
-          onSubmitEditing={() => {
-            send({ kind: 'key', key: 'Enter' });
-            setTyped('');
-          }}
-          submitBehavior="submit"
-          editable={interactive}
-          placeholder="Type into the page (tap a field first)"
-          style={styles.typing}
-          accessibilityLabel="Type into the page"
+        <LiveSurface
+          frame={picture}
+          interactive={interactive}
+          onInput={send}
+          maxHeight={room ? Math.max(120, room - below - space.sm) : undefined}
         />
-      )}
-      <View style={styles.keys}>
-        {KEYS.map(k => (
-          <Pressable
-            key={k.key}
-            onPress={() => send({ kind: 'key', key: k.key })}
-            disabled={!interactive}
-            style={styles.key}
-            accessibilityRole="button"
-            accessibilityLabel={`Key ${k.key}`}>
-            <Text style={styles.buttonText}>{k.label}</Text>
-          </Pressable>
-        ))}
+        <View style={styles.below} onLayout={onBelow}>
+          {frame === 'gone' ? <Text style={styles.note}>this tab is gone</Text> : null}
+          {connected ? null : <Text style={styles.note}>offline: the page takes no tap or key until the connection is back</Text>}
+          {Platform.OS === 'web' ? null : (
+            <TextInput
+              value={typed}
+              onChangeText={onType}
+              onKeyPress={e => {
+                // An empty field sends no change for a backspace: the page still has to get it.
+                if (e.nativeEvent.key === 'Backspace' && typedRef.current === '') send({ kind: 'key', key: 'Backspace' });
+              }}
+              onSubmitEditing={() => {
+                send({ kind: 'key', key: 'Enter' });
+                setTyped('');
+              }}
+              submitBehavior="submit"
+              editable={interactive}
+              placeholder="Type into the page (tap a field first)"
+              placeholderTextColor={palette.textFaint}
+              style={styles.typing}
+              accessibilityLabel="Type into the page"
+            />
+          )}
+          {showKeys ? (
+            <View style={styles.keys}>
+              {KEYS.map(k => (
+                <Pressable
+                  key={k.key}
+                  onPress={() => send({ kind: 'key', key: k.key })}
+                  disabled={!interactive}
+                  style={styles.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Key ${k.key}`}>
+                  <Text style={styles.buttonText}>{k.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -235,18 +264,50 @@ export function LiveWindowView({
 
 const createStyles = (palette: Palette) => ({
   view: { flex: 1, gap: space.sm },
-  room: { flex: 1, minHeight: 120, overflow: 'hidden' as const },
-  bar: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
-  titleBox: { flex: 1, minWidth: 120 },
+  room: { flex: 1, minHeight: 120, gap: space.sm },
+  below: { gap: space.sm },
+  bar: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  titleBox: { flex: 1, minWidth: 0 },
   title: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   sub: { fontSize: font.small, color: palette.textFaint },
-  task: { fontSize: font.small, color: palette.text },
+  subWorking: { color: palette.accent },
+  subWaiting: { color: palette.danger },
+  task: { fontSize: font.small, color: palette.accent },
   note: { fontSize: font.small, color: palette.textFaint },
-  danger: { fontSize: font.body, color: palette.danger },
-  button: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.sm, backgroundColor: palette.surfaceAlt },
-  buttonText: { fontSize: font.body, color: palette.text },
-  primary: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.sm, backgroundColor: palette.accent },
-  primaryText: { fontSize: font.body, fontWeight: '600' as const, color: palette.surface },
+  danger: { fontSize: font.small, color: palette.danger, fontWeight: '600' as const },
+  dangerOutline: { borderWidth: 1, borderColor: palette.danger },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  iconButtonSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  button: {
+    height: 36,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.md,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+  },
+  buttonText: { fontSize: font.small, color: palette.text },
+  primary: {
+    height: 36,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.md,
+    borderRadius: radius.sm,
+    backgroundColor: palette.accent,
+  },
+  primaryText: { fontSize: font.small, fontWeight: '600' as const, color: palette.accentText },
   tabs: { flexGrow: 0 },
   tabsRow: { gap: space.sm },
   tab: {
@@ -262,25 +323,32 @@ const createStyles = (palette: Palette) => ({
   tabActive: { borderWidth: 1, borderColor: palette.accent },
   tabText: { fontSize: font.small, color: palette.text, maxWidth: 170 },
   tabClose: { fontSize: font.body, color: palette.textFaint },
-  nav: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
-  navButton: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.sm, backgroundColor: palette.surfaceAlt },
+  nav: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
   address: {
     flex: 1,
+    height: 32,
     fontSize: font.small,
     color: palette.text,
     backgroundColor: palette.surfaceAlt,
     borderRadius: radius.sm,
     paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
   },
   typing: {
+    minHeight: 40,
     fontSize: font.body,
     color: palette.text,
     backgroundColor: palette.surfaceAlt,
     borderRadius: radius.sm,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
   },
-  keys: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.sm },
-  key: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.sm, backgroundColor: palette.surfaceAlt },
+  keys: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.xs },
+  key: {
+    minWidth: 40,
+    height: 36,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+  },
 });

@@ -142,7 +142,7 @@ describe('BrowserScreen', () => {
     // The dots are the mask of a password that exists; without one they would claim a lock that
     // is not there.
     expect(texts(tree)).not.toContain('········');
-    expect(texts(tree).join(' ')).toContain('no password set');
+    expect(texts(tree).join(' ')).toContain('No password set');
     expect(tree.root.findAllByProps({ accessibilityLabel: 'Show password' })).toHaveLength(0);
   });
 
@@ -168,9 +168,24 @@ describe('BrowserScreen', () => {
     ReactTestRenderer.act(() => browserStore.replace(info()));
 
     const shown = texts(tree);
-    expect(shown).toContain('my-claw-chromium');
-    expect(shown).toContain('up');
-    expect(shown).toContain('down');
+    // In words, with the unit beside it for whoever reaches for systemctl.
+    expect(shown).toEqual(expect.arrayContaining(['Chromium', 'my-claw-chromium', 'up', 'Web client (noVNC)', 'down', '1 down']));
+    // The header says it too, from either pane: a service down is why the browser misbehaves.
+    expect(shown).toContain('1 service down');
+  });
+
+  it('all running reads as such, and the header falls back to what is open', () => {
+    const tree = renderVnc();
+    ReactTestRenderer.act(() =>
+      browserStore.replace(info({ services: [{ unit: 'my-claw-chromium', active: true }, { unit: 'my-claw-vnc', active: true }] })),
+    );
+    ReactTestRenderer.act(() =>
+      browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1, { state: 'working' }), live(2, { state: 'waiting' }), live(3)] }),
+    );
+    const shown = texts(tree);
+    expect(shown).toContain('all running');
+    expect(shown).not.toContain('down');
+    expect(shown).toContain('3 windows · 1 at work · 1 waiting for you');
   });
 
   // The shell opens this page inside its own column, which on a wide window is a 460pt pane beside
@@ -234,6 +249,21 @@ describe('BrowserScreen', () => {
   });
 
   describe('the live view', () => {
+    it('puts what needs the owner first: waiting, then at work, then the rest', () => {
+      const tree = render();
+      ReactTestRenderer.act(() =>
+        browserLiveStore.receiveWindows({
+          type: 'browser.windows.result',
+          windows: [live(1), live(2, { state: 'working' }), live(3), live(4, { state: 'waiting' })],
+        }),
+      );
+      const order = tree.root
+        .findAll(n => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel.startsWith('Open window ') && typeof n.props.onPress === 'function')
+        .map(n => n.props.accessibilityLabel as string)
+        .filter((label, i, all) => all.indexOf(label) === i);
+      expect(order).toEqual(['Open window 4', 'Open window 2', 'Open window 1', 'Open window 3']);
+    });
+
     it('opens on it, watches the listing and a tile of every window', () => {
       const tree = render();
       expect(sent()).toContainEqual({ type: 'browser.watch', windows: true, streams: [] });

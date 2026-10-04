@@ -5,11 +5,33 @@ import { shownTab, useLiveFrame } from '../../core/browserLive';
 import type { BrowserLiveWindow } from '../../core/protocol';
 import { LiveImage } from './LiveImage';
 
-/** A tile needs this much room to be read; the wall takes as many columns as fit. */
-const TILE_MIN_WIDTH = 320;
+/**
+ * Narrow enough for two tiles side by side in the 460pt pane beside a conversation, wide enough
+ * for a title to be read: a phone gets one column, a full-screen desktop as many as fit.
+ */
+const TILE_MIN_WIDTH = 210;
+/** Every tile the same shape, whatever its page: the browser's own viewport. */
+const PICTURE_RATIO = 16 / 9;
 
 export function stateLabel(window: BrowserLiveWindow): string {
   return window.state === 'working' ? 'agent at work' : window.state === 'waiting' ? 'waiting for you' : 'free';
+}
+
+const RANK: Record<BrowserLiveWindow['state'], number> = { waiting: 0, working: 1, free: 2 };
+
+/** What needs the owner first, then what an agent is doing, then the rest, each in its own order. */
+export function wallOrder(windows: BrowserLiveWindow[]): BrowserLiveWindow[] {
+  return windows
+    .map((w, i) => ({ w, i }))
+    .sort((a, b) => RANK[a.w.state] - RANK[b.w.state] || a.i - b.i)
+    .map(e => e.w);
+}
+
+/** The site, not the whole address: a tile has room for one short line. */
+export function hostOf(url: string | undefined): string {
+  if (!url) return '';
+  const match = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(url);
+  return (match ? match[1]! : url).replace(/^www\./, '');
 }
 
 /**
@@ -28,14 +50,15 @@ export function BrowserWall({
   const styles = useThemedStyles(createStyles);
   const [width, setWidth] = useState(0);
   const onLayout = useCallback((e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width), []);
-  const columns = Math.max(1, Math.floor((width + space.md) / (TILE_MIN_WIDTH + space.md)));
+  const fit = Math.floor((width + space.md) / (TILE_MIN_WIDTH + space.md));
+  const columns = Math.max(1, Math.min(windows.length, fit));
   // Before the wall is measured, one tile per row: a tile never waits on a layout to exist.
   const tileWidth: number | '100%' = width > 0 ? (width - space.md * (columns - 1)) / columns : '100%';
 
   return (
     <View style={styles.wall} onLayout={onLayout}>
-      {windows.length === 0 ? <Text style={styles.empty}>no window open</Text> : null}
-      {windows.map(w => (
+      {windows.length === 0 ? <Text style={styles.empty}>No window open. Open one above, or ask the agent.</Text> : null}
+      {wallOrder(windows).map(w => (
         <WindowTile key={w.windowId} window={w} width={tileWidth} onOpen={onOpen} onStage={onStage} />
       ))}
     </View>
@@ -57,46 +80,53 @@ function WindowTile({
   const tab = shownTab(window);
   const frame = useLiveFrame(tab?.pageId);
   const picture = frame === 'gone' ? undefined : frame;
-  const ratio = picture ? picture.width / Math.max(1, picture.height) : 16 / 9;
+  const extraTabs = window.tabs.length - 1;
   return (
-    <View style={[styles.tile, { width }, window.state === 'waiting' && styles.waitingTile]}>
-      <Pressable
-        onPress={() => onOpen(window.windowId)}
-        accessibilityRole="button"
-        accessibilityLabel={`Open window ${window.alias}`}>
-        <View style={styles.tileHead}>
-          <Text style={styles.tileTitle}>Window {window.alias}</Text>
-          <Text style={[styles.badge, window.state === 'working' && styles.badgeWorking, window.state === 'waiting' && styles.badgeWaiting]}>
-            {stateLabel(window)}
-          </Text>
-          {window.onStage ? <Text style={[styles.badge, styles.badgeStage]}>on VNC</Text> : null}
-        </View>
-        {window.task ? (
-          <Text style={styles.task} numberOfLines={2}>
-            {window.task}
-          </Text>
-        ) : null}
-        <View style={[styles.picture, { aspectRatio: ratio }]}>
+    <View
+      style={[
+        styles.tile,
+        { width },
+        window.state === 'working' && styles.tileWorking,
+        window.state === 'waiting' && styles.tileWaiting,
+      ]}>
+      <Pressable onPress={() => onOpen(window.windowId)} accessibilityRole="button" accessibilityLabel={`Open window ${window.alias}`}>
+        <View style={styles.picture}>
           <LiveImage frame={picture} style={StyleSheet.absoluteFill} label={`Live picture of window ${window.alias}`} />
-          {picture ? null : <Text style={styles.waitingText}>{frame === 'gone' ? 'no picture' : 'waiting for a picture…'}</Text>}
+          {picture ? null : <Text style={styles.noPicture}>{frame === 'gone' ? 'no picture' : 'loading…'}</Text>}
+          {window.state === 'free' ? null : (
+            <Text style={[styles.chip, styles.chipLeft, window.state === 'waiting' ? styles.chipWaiting : styles.chipWorking]}>
+              {stateLabel(window)}
+            </Text>
+          )}
+          {extraTabs > 0 ? (
+            <Text style={[styles.chip, styles.chipRight]}>{`+${extraTabs} tab${extraTabs > 1 ? 's' : ''}`}</Text>
+          ) : null}
         </View>
-        <Text style={styles.tabTitle} numberOfLines={1}>
-          {tab?.title || 'untitled'}
-          {window.tabs.length > 1 ? `  +${window.tabs.length - 1}` : ''}
-        </Text>
-        <Text style={styles.tabUrl} numberOfLines={1}>
-          {tab?.url ?? ''}
-        </Text>
+        {/* Room on the right for the VNC action, laid over the tile's corner: one row, not two. */}
+        <View style={styles.caption}>
+          <Text style={styles.title} numberOfLines={1}>
+            <Text style={styles.alias}>{`Window ${window.alias}`}</Text>
+            {`  ${tab?.title || hostOf(tab?.url) || 'blank'}`}
+          </Text>
+          <Text style={window.task ? styles.task : styles.host} numberOfLines={1}>
+            {window.task ?? hostOf(tab?.url)}
+          </Text>
+        </View>
       </Pressable>
-      {window.onStage ? null : (
-        <Pressable
-          onPress={() => onStage(window.windowId)}
-          style={styles.stageButton}
-          accessibilityRole="button"
-          accessibilityLabel={`Show window ${window.alias} in VNC`}>
-          <Text style={styles.stageText}>Show in VNC</Text>
-        </Pressable>
-      )}
+      <View style={styles.footer}>
+        {window.onStage ? (
+          <Text style={styles.onStage}>on VNC</Text>
+        ) : (
+          <Pressable
+            onPress={() => onStage(window.windowId)}
+            hitSlop={8}
+            style={styles.stageButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Show window ${window.alias} in VNC`}>
+            <Text style={styles.stageText}>Show in VNC</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -109,38 +139,41 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: palette.border,
-    padding: 0,
-    gap: space.xs,
     overflow: 'hidden' as const,
-    paddingBottom: space.sm,
   },
-  waitingTile: { borderColor: palette.danger },
-  tileHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, padding: space.sm, flexWrap: 'wrap' as const },
-  tileTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  badge: {
-    fontSize: font.small,
-    color: palette.textFaint,
-    backgroundColor: palette.surfaceAlt,
-    borderRadius: radius.sm,
+  tileWorking: { borderColor: palette.accent },
+  tileWaiting: { borderColor: palette.danger, borderWidth: 2 },
+  picture: { width: '100%' as const, aspectRatio: PICTURE_RATIO, backgroundColor: palette.surfaceAlt },
+  noPicture: { position: 'absolute' as const, top: space.sm, left: space.sm, color: palette.textFaint, fontSize: font.small },
+  chip: {
+    position: 'absolute' as const,
+    top: space.xs,
+    fontSize: font.micro,
+    fontWeight: '600' as const,
     paddingHorizontal: space.sm,
-    paddingVertical: 1,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
     overflow: 'hidden' as const,
+    color: palette.text,
+    backgroundColor: palette.surface,
   },
-  badgeWorking: { color: palette.accent },
-  badgeWaiting: { color: palette.danger },
-  badgeStage: { color: palette.text },
-  task: { fontSize: font.small, color: palette.text, paddingHorizontal: space.sm },
-  picture: { width: '100%' as const, backgroundColor: palette.surfaceAlt },
-  waitingText: { position: 'absolute' as const, top: space.sm, left: space.sm, color: palette.textFaint, fontSize: font.small },
-  tabTitle: { fontSize: font.small, color: palette.text, paddingHorizontal: space.sm },
-  tabUrl: { fontSize: font.small, color: palette.textFaint, paddingHorizontal: space.sm },
+  chipLeft: { left: space.xs },
+  chipRight: { right: space.xs },
+  chipWorking: { color: palette.accentText, backgroundColor: palette.accent },
+  chipWaiting: { color: palette.accentText, backgroundColor: palette.danger },
+  caption: { paddingLeft: space.sm, paddingRight: 104, paddingVertical: space.sm, gap: 2 },
+  title: { fontSize: font.small, color: palette.text },
+  alias: { fontWeight: '700' as const },
+  task: { fontSize: font.small, color: palette.accent },
+  host: { fontSize: font.small, color: palette.textFaint },
+  footer: { position: 'absolute' as const, right: space.sm, bottom: space.sm + 2 },
+  onStage: { fontSize: font.small, color: palette.textFaint },
   stageButton: {
-    alignSelf: 'flex-start' as const,
-    marginHorizontal: space.sm,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
-    borderRadius: radius.sm,
-    backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   stageText: { fontSize: font.small, color: palette.text },
 });
