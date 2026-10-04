@@ -162,7 +162,7 @@ beforeEach(() => {
 test('the model picker opened from settings comes back to settings, not to the exit', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open agents');
+  await pressLabel(tree, 'Open models');
   await emit(agentsConfig());
   await emit({
     type: 'model.list.result',
@@ -180,9 +180,9 @@ test('the model picker opened from settings comes back to settings, not to the e
   await waitFor(() => labelsOf(tree).includes('Default model'));
   expect(labelsOf(tree)).not.toContain('Fast');
 
-  // Then back walks Agents to the index, and the index to the conversation, never the launcher.
+  // Then back walks Models to the index, and the index to the conversation, never the launcher.
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await waitFor(() => labelsOf(tree).includes('Open appearance'));
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open conversations'));
   expect(backHandler().exitApp).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ test('the model picker opened from settings comes back to settings, not to the e
 test('back walks out of a model group before it closes the picker', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open agents');
+  await pressLabel(tree, 'Open models');
   await emit(agentsConfig());
   await emit({
     type: 'model.list.result',
@@ -225,7 +225,7 @@ test('back walks out of a model group before it closes the picker', async () => 
 test('the picker reopens at its root after a group was browsed', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open agents');
+  await pressLabel(tree, 'Open models');
   await emit(agentsConfig());
   await emit({
     type: 'model.list.result',
@@ -252,19 +252,19 @@ test('the picker reopens at its root after a group was browsed', async () => {
   await settleAndUnmount(tree);
 });
 
-test('diagnostics is a page under Other: back walks diagnostics, Other, index', async () => {
+test('diagnostics is a page under Advanced: back walks diagnostics, Advanced, index', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open other');
+  await pressLabel(tree, 'Open advanced');
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
   await pressLabel(tree, 'Open diagnostics');
-  await waitFor(() => labelsOf(tree).includes('Back to other'));
+  await waitFor(() => labelsOf(tree).includes('Back to advanced'));
 
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
 
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await waitFor(() => labelsOf(tree).includes('Open appearance'));
 
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open conversations'));
@@ -273,29 +273,33 @@ test('diagnostics is a page under Other: back walks diagnostics, Other, index', 
   await settleAndUnmount(tree);
 });
 
-test('empty categories open their page and back out to the index', async () => {
+// Rewritten 2026-10-04 with the grouped index: MCP servers sit under Tools, the raw config under
+// Advanced, the theme on Appearance. Same intention: every page opens and Back walks it home.
+test('empty categories open their page and back out the way they came', async () => {
   const tree = await boot();
   await openSettings(tree);
 
   await pressLabel(tree, 'Open tools');
   await waitFor(() => textsOf(tree).includes('no tools found'));
-  expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open general'));
-
   await pressLabel(tree, 'Open MCPs');
   await waitFor(() => textsOf(tree).includes('no servers declared'));
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await waitFor(() => textsOf(tree).includes('no tools found'));
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open appearance'));
 
+  await pressLabel(tree, 'Open advanced');
   await pressLabel(tree, 'Open config');
   await waitFor(() => textsOf(tree).includes('loading...'));
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open appearance'));
 
-  await pressLabel(tree, 'Open other');
+  await pressLabel(tree, 'Open appearance');
   await waitFor(() => labelsOf(tree).includes('Theme System'));
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await waitFor(() => labelsOf(tree).includes('Open updates'));
 
   await settleAndUnmount(tree);
 });
@@ -317,10 +321,10 @@ test('only the conversation screen lets a back press fall through to Android', a
   await settleAndUnmount(tree);
 });
 
-test('the general page labels a connected server with its announced version', async () => {
+test('the devices page labels a connected server with its announced version', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Open devices');
   await waitFor(() => labelsOf(tree).includes('Server address'));
 
   await ReactTestRenderer.act(async () => {
@@ -328,7 +332,7 @@ test('the general page labels a connected server with its announced version', as
   });
   await emit({ type: 'hello', version: '0.1.204' });
 
-  await waitFor(() => textsOf(tree).includes('connected · v0.1.204'));
+  await waitFor(() => textsOf(tree).includes('connected · my-claw 0.1.204'));
   // The device card names the running build alongside the announced server version.
   await waitFor(() => textsOf(tree).includes('0.0.1-test'));
   await settleAndUnmount(tree);
@@ -340,7 +344,7 @@ test('Pair can be opened again after a completed pairing attempt', async () => {
   await waitFor(() => pairingStatus().phase === 'granted');
 
   await openSettings(tree);
-  await pressLabel(tree, 'Open general');
+  await pressLabel(tree, 'Open devices');
   await pressLabel(tree, 'Pair this device with a server-minted code');
 
   await waitFor(() => textsOf(tree).includes('Pair this device'));

@@ -1029,7 +1029,7 @@ test('a draft belongs to its conversation, not to the screen that shows it', asy
   // it: opening Files to check one thing emptied the field.
   await pressLabel(tree, 'Open conversations');
   await pressLabel(tree, 'Open settings');
-  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await waitFor(() => labelsOf(tree).includes('Open appearance'));
   await pressLabel(tree, 'Back to chat');
   await waitFor(() => labelsOf(tree).includes('Message to send'));
   expect(inputOf(tree).props.value).toBe('half a thought');

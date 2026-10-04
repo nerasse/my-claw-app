@@ -151,7 +151,7 @@ donc une question posée par l'agent atteignait le tray du téléphone et rien d
 Depuis : `notifications.info` ne (ré)enregistre que si la permission est déjà accordée
 (`notificationPermission() === 'granted'`) ou si la plateforme n'en a pas la notion
 (`'unavailable'`, l'Android, dont le distributeur possède l'enregistrement). Sinon, le navigateur
-est laissé tranquille et la demande passe par une **ligne de Réglages → General → notifications**,
+est laissé tranquille et la demande passe par une **ligne de Réglages → Notifications → permission**,
 au doigt : `tray: allowed | blocked by the browser | not allowed yet`. Un navigateur qui a refusé
 le dit, au lieu de rester muet. Témoin : `src/core/__tests__/notificationPermission.test.ts`.
 
@@ -224,7 +224,7 @@ conversation ne s'empilent plus, le second remplace le premier.
 | `src/core/notifications.ts` | permissions, distributeur, enregistrement, parsing des deep links. Tout est no-op hors Android. |
 | `src/core/notifications.web.ts` | le pendant navigateur : `pushSupported`, `notificationPermission`, subscription Web Push |
 | `web/sw.js` | affichage et tap côté navigateur (l'app peut être fermée) |
-| `src/app/GeneralSettingsScreen.tsx` | la ligne « notifications » : l'état de la permission et le geste qui la demande |
+| `src/app/NotificationsScreen.tsx` (`PermissionSection`) | la section « permission » : l'état de la permission et le geste qui la demande |
 | `src/app/NotificationsScreen.tsx` | les deux sons (choix, écoute, retour au défaut) et les fichiers importés |
 | `android/.../NotificationSounds.kt` | les choix, les noms dérivés (recette + choix), la vérification, la création/suppression des canaux |
 | `android/.../DeviceBridgeModule.kt` | les méthodes `*NotificationSound*`, `getNotificationChannelState`, `playAlertSound(uri)`, `cancelNotification(id)` |

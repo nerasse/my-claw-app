@@ -37,9 +37,11 @@ body { overscroll-behavior: none; }
   transition: opacity 120ms ease, background-color 120ms ease;
 }
 @media (hover: hover) and (pointer: fine) {
-  [role="button"]:hover, [role="link"]:hover, [role="tab"]:hover, [role="menuitem"]:hover { opacity: 0.75; }
+  [role="button"]:not([aria-disabled="true"]):hover, [role="link"]:hover, [role="tab"]:hover, [role="menuitem"]:hover { opacity: 0.75; }
 }
-[role="button"][aria-disabled="true"] { cursor: default; opacity: 1; }
+/* A cursor rule only: an opacity here outranks the one-class style react-native-web compiles, and
+   every disabled button looked enabled (Connect while connected, 2026-10-04). */
+[role="button"][aria-disabled="true"] { cursor: default; }
 
 /* Keyboard focus has to be visible, and only for the keyboard: :focus-visible is exactly that. */
 :focus-visible { outline: 2px solid ${palette.accent}; outline-offset: 2px; border-radius: 6px; }

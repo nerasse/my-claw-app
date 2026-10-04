@@ -5,6 +5,7 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
+import { LinkRow, Section } from './settingsParts';
 
 /** Display names of the three sources, with the server-side location as the honest hint. */
 const SOURCE_SECTIONS: Array<{
@@ -90,6 +91,7 @@ export function ToolsScreen({
   saving,
   onBack,
   onToggle,
+  onOpenMcps,
 }: {
   tools: ToolEntry[];
   /** Denylist names no tool carries anymore: rendered red so they can be toggled off and away. */
@@ -99,6 +101,8 @@ export function ToolsScreen({
   saving: boolean;
   onBack: () => void;
   onToggle: (name: string, disabled: boolean) => void;
+  /** The servers that bring the MCP tools: their own page, under this one. */
+  onOpenMcps?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // nothing to type into on this page.
@@ -248,6 +252,13 @@ export function ToolsScreen({
           maxToRenderPerBatch={12}
           updateCellsBatchingPeriod={50}
           windowSize={9}
+          ListHeaderComponent={
+            onOpenMcps ? (
+              <Section title="external servers">
+                <LinkRow title="MCP servers" hint="add, remove, enable" onPress={onOpenMcps} label="Open MCPs" />
+              </Section>
+            ) : null
+          }
           ListEmptyComponent={
             <Text style={styles.empty}>
               {error ? undefined : 'no tools found'}

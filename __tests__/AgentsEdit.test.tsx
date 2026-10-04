@@ -351,7 +351,9 @@ test('the tools page request goes out when it opens', async () => {
 test('the MCPs page declares, disables and removes servers', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Back to settings');
-  await waitFor(() => labelsOf(tree).includes('Open MCPs'));
+  // The MCP servers are a page under Tools.
+  await waitFor(() => labelsOf(tree).includes('Open tools'));
+  await pressLabel(tree, 'Open tools');
   await pressLabel(tree, 'Open MCPs');
   await emit({
     type: 'mcp.list.result',
@@ -391,7 +393,9 @@ test('the MCPs page declares, disables and removes servers', async () => {
 test('the config editor saves the raw text with the loaded sha', async () => {
   const tree = await boot();
   await pressLabel(tree, 'Back to settings');
-  await waitFor(() => labelsOf(tree).includes('Open config'));
+  // The raw config is a page under Advanced.
+  await waitFor(() => labelsOf(tree).includes('Open advanced'));
+  await pressLabel(tree, 'Open advanced');
   await pressLabel(tree, 'Open config');
   await emit({ type: 'config.result', content: '{ "llm": { "defaultModel": "fast-1" } }', sha: 'abcabc', maxBytes: 4096 });
   await waitFor(() => labelsOf(tree).includes('config.json content'));

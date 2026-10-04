@@ -116,7 +116,7 @@ export function ProviderEditScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel={mode === 'create' ? 'Back to providers' : 'Back to provider'}>
+          accessibilityLabel={mode === 'create' ? 'Back to models' : 'Back to provider'}>
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>

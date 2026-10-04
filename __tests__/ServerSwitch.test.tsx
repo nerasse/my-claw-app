@@ -26,7 +26,7 @@ async function openSettings(tree: Tree): Promise<void> {
   // Settings are reached from the drawer: connected shows no status control in the header.
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open general');
+  await press(tree, 'Open devices');
   await waitFor(() => labelsOf(tree).includes('Server address'));
 }
 

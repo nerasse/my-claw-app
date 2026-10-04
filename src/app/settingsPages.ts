@@ -1,5 +1,7 @@
 import {
+  encodeInstructionsList,
   encodeMcpList,
+  encodeServicesGet,
   encodeSkillsList,
   encodeToolsList,
   encodeWorkspacesList,
@@ -11,11 +13,12 @@ import {
  */
 export type SettingsPage =
   | 'index'
-  | 'general'
+  | 'appearance'
   | 'notifications'
+  | 'updates'
+  | 'models'
   | 'agents'
   | 'agent'
-  | 'providers'
   | 'provider'
   | 'provider-edit'
   | 'provider-env'
@@ -33,7 +36,7 @@ export type SettingsPage =
   | 'instruction-layer'
   | 'tools'
   | 'mcps'
-  | 'other'
+  | 'advanced'
   | 'diagnostics'
   | 'scope'
   | 'workspace-picker'
@@ -43,6 +46,37 @@ export type SettingsPage =
   | 'config'
   | 'model-picker'
   | 'tag-editor';
+
+/**
+ * Where Back goes from a page whose parent never changes: one table, read by the pages' own Back
+ * and by the back cascade, so the two cannot disagree. The pages reached from more than one place
+ * (the picker, a workspace, an instruction, the setup) are decided by the cascade.
+ */
+export const PARENT: Partial<Record<SettingsPage, SettingsPage>> = {
+  appearance: 'index',
+  notifications: 'index',
+  updates: 'index',
+  models: 'index',
+  agents: 'index',
+  services: 'index',
+  workspaces: 'index',
+  skills: 'index',
+  tools: 'index',
+  devices: 'index',
+  approvals: 'index',
+  advanced: 'index',
+  mcps: 'tools',
+  diagnostics: 'advanced',
+  config: 'advanced',
+  tags: 'models',
+  account: 'models',
+  agent: 'agents',
+  newagent: 'agents',
+};
+
+export function parentOf(page: SettingsPage): SettingsPage {
+  return PARENT[page] ?? 'index';
+}
 
 /**
  * The pages that call a configured name "removed" when it is missing from the skills or MCP
@@ -67,7 +101,8 @@ export const AGENTS_CONFIG_PAGES: readonly string[] = [
   'setup',
   'agents',
   'agent',
-  'providers',
+  // The models page opens on the defaults, from the same snapshot.
+  'models',
   'provider',
   'provider-edit',
   'provider-env',
@@ -104,7 +139,8 @@ export const PAGE_REQUESTS: ReadonlyArray<{
   // is what makes those numbers real without a first visit to either page. The pages still
   // refresh their own list on entry, so a hot-reload or an edit made elsewhere lands on the
   // next visit.
-  { match: page => page === 'index', requests: [encodeSkillsList, encodeToolsList] },
+  // The setup banner counts the steps: the services and the profile file are two of them.
+  { match: page => page === 'index', requests: [encodeSkillsList, encodeToolsList, encodeServicesGet, encodeInstructionsList] },
   // The workspaces list owns the CRUD: asked for on every visit, like the other lists, because
   // config.workspaces hot-reloads under it. The list also carries the per-row prompt summary,
   // which is the instruction listing, so it asks for both -- see the instructions effect below.

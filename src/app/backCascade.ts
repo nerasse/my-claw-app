@@ -23,7 +23,7 @@ import { sessionInstructionsStore } from '../core/sessionInstructions';
 import { overlayStore } from '../core/overlay';
 import type { ApprovalRequestFrame, JobRunEntry } from '../core/protocol';
 import type { ProviderSearch } from './ProviderScreen';
-import type { SettingsPage } from './settingsPages';
+import { parentOf, type SettingsPage } from './settingsPages';
 
 /** A ref of the shell, read here and in two cases cleared. */
 interface Cell<T> {
@@ -163,6 +163,7 @@ export interface BackLayers {
   instructionBack: 'workspace' | 'setup';
   /** Where the model picker returns when the assistant opened it; null: from the agent pages. */
   modelPickerFrom: 'setup' | 'account' | null;
+  setupFrom: SettingsPage;
   setLayerTarget: (value: null) => void;
   archivesOpen: boolean;
   setArchivesOpen: (value: boolean) => void;
@@ -286,6 +287,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     workspaceFrom,
     instructionBack,
     modelPickerFrom,
+    setupFrom,
     setLayerTarget,
     archivesOpen,
     setArchivesOpen,
@@ -480,7 +482,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     }
     // The picker pages are flows of their own: back walks out of a group, then one step
     // back through the model/effort/context screens, and only then leaves the page. The
-    // model picker returns where it was opened from: the agents list for "global" and
+    // model picker returns where it was opened from: the models page for "global" and
     // "fallback", the agent page for an agent key.
     if (settingsPage === 'model-picker') {
       const previous = pickerBack(agentPicker);
@@ -488,7 +490,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
         setAgentPicker(previous);
         return true;
       }
-      const from = modelPickerFrom ?? (agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent');
+      const from = modelPickerFrom ?? (agentModelFor === 'global' || agentModelFor === 'fallback' ? 'models' : 'agent');
       setAgentModelFor(null);
       setSettingsPage(from);
       return true;
@@ -516,11 +518,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     // comes back stale the next time the page opens.
     if (settingsPage === 'skills') {
       setSkillsNotice(null);
-      setSettingsPage('index');
-      return true;
-    }
-    if (settingsPage === 'agent') {
-      setSettingsPage('agents');
+      setSettingsPage(parentOf('skills'));
       return true;
     }
     if (settingsPage === 'provider') {
@@ -528,7 +526,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
         providerSearch.current.clear();
         return true;
       }
-      setSettingsPage('providers');
+      setSettingsPage('models');
       return true;
     }
     if (settingsPage === 'provider-env') {
@@ -541,21 +539,9 @@ export function closeTopLayer(layers: BackLayers): boolean {
       return true;
     }
     if (settingsPage === 'provider-edit') {
-      if (providerEdit?.mode === 'create') setSettingsPage('providers');
+      if (providerEdit?.mode === 'create') setSettingsPage('models');
       else setSettingsPage('provider');
       setProviderEdit(null);
-      return true;
-    }
-    if (settingsPage === 'providers') {
-      setSettingsPage('index');
-      return true;
-    }
-    if (settingsPage === 'tags' || settingsPage === 'account') {
-      setSettingsPage('providers');
-      return true;
-    }
-    if (settingsPage === 'agents') {
-      setSettingsPage('index');
       return true;
     }
     if (settingsPage === 'scope') {
@@ -570,14 +556,6 @@ export function closeTopLayer(layers: BackLayers): boolean {
     if (settingsPage === 'file') {
       agentsFileStore.close();
       setSettingsPage('agent');
-      return true;
-    }
-    if (settingsPage === 'newagent') {
-      setSettingsPage('agents');
-      return true;
-    }
-    if (settingsPage === 'mcps' || settingsPage === 'config') {
-      setSettingsPage('index');
       return true;
     }
     if (settingsPage === 'instruction-layer') {
@@ -596,17 +574,13 @@ export function closeTopLayer(layers: BackLayers): boolean {
       setSettingsPage(workspaceFrom === 'agent' ? 'agent' : 'workspaces');
       return true;
     }
-    // Workspaces is its own index entry; diagnostics lives under Other. Back lands where
-    // they came from.
-    if (settingsPage === 'workspaces') {
-      setSettingsPage('index');
+    // The setup is reached from the index banner while unfinished, from Advanced after.
+    if (settingsPage === 'setup') {
+      setSettingsPage(setupFrom);
       return true;
     }
-    if (settingsPage === 'diagnostics') {
-      setSettingsPage('other');
-      return true;
-    }
-    setSettingsPage('index');
+    // Every other page has one parent, written once in settingsPages.ts.
+    setSettingsPage(parentOf(settingsPage));
     return true;
   }
   if (archivesOpen) {

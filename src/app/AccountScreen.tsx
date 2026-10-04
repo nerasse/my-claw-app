@@ -89,7 +89,7 @@ export function AccountScreen({
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <BackButton onPress={onBack} label="Back to providers" />
+        <BackButton onPress={onBack} label="Back to models" />
         <View style={styles.grow}>
           <Text style={styles.title}>{labels.title}</Text>
           <Text style={styles.subtitle}>{labels.plan} · usage counts against your plan</Text>

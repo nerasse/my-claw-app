@@ -44,7 +44,7 @@ async function openProviders(): Promise<Tree> {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open providers');
+  await press(tree, 'Open models');
   return tree;
 }
 

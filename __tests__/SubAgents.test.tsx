@@ -539,9 +539,9 @@ describe('the drawer Sub-Agents entry', () => {
     await pressLabel(tree, 'More');
 
     const texts = textsOf(tree);
-    expect(texts).toContain('Agents');
+    expect(texts).toContain('Sub-agents');
     expect(texts).toContain('shared workers');
-    expect(labelsOf(tree)).toContain('Agents');
+    expect(labelsOf(tree)).toContain('Sub-agents');
     // The list lives on a page, not inside the panel.
     expect(texts).not.toContain('digger-a1b2');
     expect(texts).not.toContain('secret-e5f6');
@@ -555,7 +555,7 @@ describe('the drawer Sub-Agents entry', () => {
     ]);
     await pressLabel(tree, 'Open conversations');
     await pressLabel(tree, 'More');
-    await pressLabel(tree, 'Agents');
+    await pressLabel(tree, 'Sub-agents');
 
     // The page: globals listed, a conversation's private one absent.
     expect(textsOf(tree)).toContain('public and per-workspace');
@@ -577,7 +577,7 @@ describe('the drawer Sub-Agents entry', () => {
     ]);
     await pressLabel(tree, 'Open conversations');
     await pressLabel(tree, 'More');
-    await pressLabel(tree, 'Agents');
+    await pressLabel(tree, 'Sub-agents');
 
     const texts = textsOf(tree);
     expect(texts).toContain('public');
@@ -593,7 +593,7 @@ describe('the drawer Sub-Agents entry', () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
     await pressLabel(tree, 'Open conversations');
     await pressLabel(tree, 'More');
-    await pressLabel(tree, 'Agents');
+    await pressLabel(tree, 'Sub-agents');
     await pressLabel(tree, 'Back to conversations');
     await waitFor(() => labelsOf(tree).includes('More'));
     expect(textsOf(tree)).not.toContain('shared across conversations');

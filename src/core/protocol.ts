@@ -2832,8 +2832,6 @@ export function encodeSubAgentHandoff(
   });
 }
 
-export type VoiceMode = 'cloud' | 'local' | 'auto';
-
 /** Mirrors the server cap, so the field cannot accept a name that would come back truncated. */
 export const MAX_TITLE_LENGTH = 60;
 
@@ -2865,14 +2863,6 @@ export type AccountsRequest =
 
 export function encodeAccounts(request: AccountsRequest): string {
   return JSON.stringify(request);
-}
-
-export function encodeVoiceModeGet(): string {
-  return JSON.stringify({ type: 'voice.mode.get' });
-}
-
-export function encodeVoiceModeSet(mode: VoiceMode): string {
-  return JSON.stringify({ type: 'voice.mode.set', mode });
 }
 
 export function encodeUiPrefsGet(): string {

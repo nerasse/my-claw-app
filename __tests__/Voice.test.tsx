@@ -385,31 +385,29 @@ test('a voice bubble plays, pauses, and never lets two notes run at once', async
   await unmount(tree);
 });
 
-test('the settings expose the transcription engine and say where the audio goes', async () => {
+// Rewritten 2026-10-04: the engine was a second switch on General (Auto / Cloud / Local) writing
+// the same `voice.stt.mode` as the Services card. One control is left, on Services; the intention
+// is unchanged: from settings, the owner picks where the voice is transcribed.
+test('the settings expose the transcription engine, on the Services page', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open general');
+  await press(tree, 'Open services');
 
-  await waitFor(() =>
-    sentFrames().some(frame => frame.type === 'voice.mode.get'),
-  );
-
+  await waitFor(() => sentFrames().some(frame => frame.type === 'services.get'));
   await ReactTestRenderer.act(async () => {
     DeviceEventEmitter.emit('claw:ws:message', {
       text: JSON.stringify({
-        type: 'voice.mode.result',
-        mode: 'auto',
-        resolved: 'cloud',
-        cloudAvailable: true,
+        type: 'services.result',
+        install: 'native',
+        services: [{ id: 'stt', source: 'cloud', choices: ['cloud', 'self-hosted', 'url'], missing: [], health: 'up' }],
       }),
     });
   });
 
-  await waitFor(() => labelsOf(tree).includes('Transcription Local'));
-  await press(tree, 'Transcription Local');
-
-  expect(sentFrames()).toContainEqual({ type: 'voice.mode.set', mode: 'local' });
+  await waitFor(() => labelsOf(tree).includes('Speech-to-text: This server'));
+  await press(tree, 'Speech-to-text: This server');
+  expect(sentFrames()).toContainEqual(expect.objectContaining({ type: 'services.set', id: 'stt', source: 'self-hosted' }));
 
   await unmount(tree);
 });

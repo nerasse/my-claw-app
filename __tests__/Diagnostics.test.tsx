@@ -43,7 +43,7 @@ async function openDiagnostics(tree: Tree): Promise<void> {
   // Settings are reached from the drawer: connected shows no status control in the header.
   await pressLabel(tree, 'Open conversations');
   await pressLabel(tree, 'Open settings');
-  await pressLabel(tree, 'Open other');
+  await pressLabel(tree, 'Open advanced');
   await waitFor(() => labelsOf(tree).includes('Open diagnostics'));
   await pressLabel(tree, 'Open diagnostics');
   await waitFor(() => labelsOf(tree).includes('Refresh snapshot'));

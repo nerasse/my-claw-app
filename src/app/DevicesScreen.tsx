@@ -9,6 +9,7 @@ import { ActionSheet } from '../components/ActionSheet';
 import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
 import { CloseButton } from '../components/CloseButton';
+import { useDismissKeyboard } from '../core/keyboard';
 
 /** "3 hours ago" beats an ISO string on a phone: the question is always how stale a device is. */
 function since(iso: string | undefined): string {
@@ -27,8 +28,17 @@ function formatCode(code: string): string {
   return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 }
 
-export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Element {
+export function DevicesScreen({
+  onBack,
+  head,
+}: {
+  onBack: () => void;
+  /** This device and its server, above the devices it paired: one page for every device. */
+  head?: React.ReactNode;
+}): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  // The server field sits on top: the page must not open with the keyboard over it.
+  useDismissKeyboard();
   const { scrollProps, indicator } = useScrollIndicator();
   const state = useDevices();
   const [code, setCode] = useState('');
@@ -59,6 +69,7 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
       {/* Without this the first tap on Check only dismisses the keyboard: the scroll view eats
           it as a blur and the owner has to press twice. */}
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {head}
         {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
         {state.notice ? <Text style={styles.notice}>{state.notice}</Text> : null}
 
@@ -195,7 +206,7 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
             </View>
             {device.self ? null : (
               <Pressable
-                style={[styles.button, styles.revoke]}
+                style={styles.revoke}
                 onPress={() => setConfirming(device)}
                 accessibilityRole="button"
                 accessibilityLabel={`Revoke ${device.name}`}
@@ -290,7 +301,16 @@ const createStyles = (palette: Palette) => ({
   },
   approve: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
   busy: { opacity: 0.7 },
-  revoke: { flex: 0, paddingHorizontal: space.md },
+  // Not `button` with `flex: 0` on top: on the web that is a zero basis, and the word overflowed
+  // a sliver of a box.
+  revoke: {
+    alignItems: 'center' as const,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
   deny: { borderColor: palette.danger },
   buttonText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   sectionLabel: {

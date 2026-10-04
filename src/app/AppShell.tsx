@@ -104,11 +104,9 @@ import {
   encodeJobsSave,
   encodeJobsDelete,
   encodeJobsRuns,
-  encodeVoiceModeGet,
   encodeUiPrefsGet,
   encodeUiPrefsSet,
   encodeUpdateRun,
-  encodeVoiceModeSet,
   MAX_TITLE_LENGTH,
   type AgentFileFieldsOut,
   type ApprovalRequestFrame,
@@ -130,9 +128,7 @@ import {
   type StatusPayload,
   type SkillTarget,
   type ToolEntry,
-  type VoiceMode,
 
-  type VoiceModeResultFrame,
   type UiPrefsResultFrame,
   type LocationInput,
   type WorkspaceEntry,
@@ -190,11 +186,13 @@ import { resetToolOutputAsks } from '../core/toolOutput';
 import { httpOrigin, uuid, withView } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
-import { GeneralSettingsScreen } from './GeneralSettingsScreen';
+import { AppearanceScreen } from './AppearanceScreen';
+import { UpdatesScreen } from './UpdatesScreen';
+import { AdvancedScreen } from './AdvancedScreen';
+import { ServerSection, ThisDeviceSection } from './ConnectionSections';
 import { NotificationsScreen } from './NotificationsScreen';
 import { PairingScreen, usePairing } from './PairingScreen';
 import { cancelPairing } from '../core/pairingClient';
-import { OtherSettingsScreen } from './OtherSettingsScreen';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
 import { TagsScreen } from './TagsScreen';
 import { AgentDetailScreen } from './AgentDetailScreen';
@@ -205,7 +203,7 @@ import { NumberEditorScreen } from './NumberEditorScreen';
 import { NewAgentScreen } from './NewAgentScreen';
 import { McpsScreen } from './McpsScreen';
 import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
-import { ProvidersScreen } from './ProvidersScreen';
+import { ModelsScreen } from './ModelsScreen';
 import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ModelEditScreen } from './ModelEditScreen';
 import { ProviderEditScreen } from './ProviderEditScreen';
@@ -215,7 +213,7 @@ import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
 import { ServicesScreen } from './ServicesScreen';
-import { SETUP_WIDTH, SetupScreen, toggleSkip } from './SetupScreen';
+import { SETUP_WIDTH, SetupScreen, setupBanner, toggleSkip, useSetupSteps } from './SetupScreen';
 import { AccountScreen } from './AccountScreen';
 import { PageCloseContext } from '../components/CloseButton';
 import { overlayStore } from '../core/overlay';
@@ -272,6 +270,7 @@ import { useHotkeys } from '../core/hotkeys';
 import { initialRoute, showThread, watchBack } from '../core/route';
 import { isSubAgentThread, routeServerFrame, type ServerFrameHandlers } from '../core/frameRouter';
 import {
+  parentOf,
   readsAgentsConfig,
   PAGE_REQUESTS,
   READS_INSTRUCTIONS_PAGES,
@@ -465,6 +464,8 @@ export function AppShell(): React.JSX.Element {
   const settingsOpen = settingsOpenState || setupGate;
   // Where the default-model picker returns: the agents list, or the assistant that opened it.
   const [modelPickerFrom, setModelPickerFrom] = useState<'setup' | 'account' | null>(null);
+  // The setup is reached from the banner on the index while it is unfinished, from Advanced after.
+  const [setupFrom, setSetupFrom] = useState<'index' | 'advanced'>('index');
   // The subscription the account page shows (docs: subscription-accounts in the server repo).
   const [selectedAccount, setSelectedAccount] = useState<AccountKind>('codex');
   /** Which settings page is showing: the index lists the categories, every other value is a
@@ -568,7 +569,6 @@ export function AppShell(): React.JSX.Element {
   /** What the last transfer did. Kept until the page is left: the list reorders itself, which
    *  on its own is indistinguishable from nothing having happened. */
   const [skillsNotice, setSkillsNotice] = useState<string | null>(null);
-  const [voice, setVoice] = useState<VoiceModeResultFrame | null>(null);
   /** Server-owned display prefs: every device starts from the same layout choices. */
   const [uiPrefs, setUiPrefs] = useState<UiPrefsResultFrame | null>(null);
   /** Everything the update button knows. A phase, not booleans: see core/serverUpdate.ts. */
@@ -781,6 +781,9 @@ export function AppShell(): React.JSX.Element {
   const instructions = useInstructions();
   const sessionInstructions = useSessionInstructions();
   const agentsConfig = agentsState.config;
+  // `tags` is listed with the providers on the server and runs nothing: it is not one.
+  const providerCount = agentsConfig ? agentsConfig.providers.filter(p => p.type !== 'tags').length : null;
+  const setupProgress = setupBanner(useSetupSteps(deviceInfo?.deviceId ?? null, providerCount));
   // The Stop button is pinned to the run, not to a streaming bubble: it survives tool calls
   // and model turns, and only disappears when the run itself ends. A compaction the owner typed
   // holds the session for one to two minutes with no run behind it: the same button reaches it
@@ -1215,12 +1218,11 @@ export function AppShell(): React.JSX.Element {
             )
             .catch(() => {});
         }
-        // Server-owned display prefs and voice mode shape the conversation as soon as it loads,
+        // Server-owned display prefs shape the conversation as soon as it loads,
         // not when the owner first opens Settings: a fresh tab must render with the same layout
         // choices a phone already applied. The Settings screens re-ask when they open, so the
         // fetch here is only the boot value.
         connection.send(encodeUiPrefsGet()).catch(() => {});
-        connection.send(encodeVoiceModeGet()).catch(() => {});
       }
     });
     const offPending = connection.onPending(setPending);
@@ -1254,7 +1256,6 @@ export function AppShell(): React.JSX.Element {
       setSessionFiles,
       setFilesTotal,
       setFilesError,
-      setVoice,
       setUiPrefs,
       setUpdate: frame => setUpdatePhase(phase => reduceUpdate(phase, { type: 'result', frame, now: Date.now() })),
       setSkills,
@@ -1496,6 +1497,7 @@ export function AppShell(): React.JSX.Element {
         workspaceFrom,
         instructionBack,
         modelPickerFrom,
+        setupFrom,
         setLayerTarget,
         archivesOpen,
         setArchivesOpen,
@@ -1537,6 +1539,7 @@ export function AppShell(): React.JSX.Element {
       workspaceFrom,
       instructionBack,
       modelPickerFrom,
+      setupFrom,
       workspacePicker,
       jobSessions,
       jobsEditor,
@@ -2062,7 +2065,6 @@ export function AppShell(): React.JSX.Element {
   // and a stale answer from an hour ago would render a switch that no longer matches the server.
   useEffect(() => {
     if (!settingsOpen) return;
-    connection.send(encodeVoiceModeGet()).catch(() => {});
     connection.send(encodeUiPrefsGet()).catch(() => {});
   }, [settingsOpen]);
 
@@ -2135,10 +2137,10 @@ export function AppShell(): React.JSX.Element {
   // The env pages pull the variable names too: the form's "reuse or ask for a value" decision
   // depends on it, and a server that predates the frames flips to unsupported after a beat.
   useEffect(() => {
-    if (!settingsOpen || (settingsPage !== 'providers' && settingsPage !== 'provider')) return;
+    if (!settingsOpen || (settingsPage !== 'models' && settingsPage !== 'provider')) return;
     connection.send(encodeModelList()).catch(() => {});
     // The subscriptions section reads where each sign-in stands.
-    if (settingsPage === 'providers') connection.send(encodeAccounts({ type: 'accounts.get' })).catch(() => {});
+    if (settingsPage === 'models') connection.send(encodeAccounts({ type: 'accounts.get' })).catch(() => {});
   }, [settingsOpen, settingsPage]);
 
   useEffect(() => {
@@ -2434,11 +2436,6 @@ export function AppShell(): React.JSX.Element {
     return offInstall;
   }, []);
 
-  const changeVoiceMode = useCallback((mode: VoiceMode) => {
-    // No optimistic write: the server answers with the state it actually stored, including what
-    // "auto" resolved to, and a switch that lied about that would be worse than a slow one.
-    connection.send(encodeVoiceModeSet(mode)).catch(() => {});
-  }, []);
 
   const changeUiPrefs = useCallback((next: { expandTools?: boolean; expandReasoning?: boolean }) => {
     // No optimistic write either: the server broadcasts the stored state to every window, and
@@ -2446,8 +2443,8 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeUiPrefsSet(next)).catch(() => {});
   }, []);
 
-  // Diagnostics is a page under Other, not a screen of its own: reached from settings, the
-  // back key has to land back on Other instead of dropping the user two levels down.
+  // Diagnostics is a page under Advanced, not a screen of its own: reached from settings, the
+  // back key has to land back on Advanced instead of dropping the user two levels down.
   const openDiagnostics = useCallback(() => {
     setSettingsOpen(true);
     setSettingsPage('diagnostics');
@@ -3264,7 +3261,20 @@ export function AppShell(): React.JSX.Element {
       config={agentsConfig}
       status={agentsState.status}
       error={agentsState.error}
-      onBack={() => setSettingsPage('index')}
+      onBack={() => setSettingsPage(parentOf('agents'))}
+      onOpenAgent={key => {
+        setSelectedAgent(key);
+        setSettingsPage('agent');
+      }}
+      onNewAgent={() => setSettingsPage('newagent')}
+    />
+  );
+  const modelsPage = (
+    <ModelsScreen
+      config={agentsConfig}
+      providers={agentsConfig?.providers ?? []}
+      error={providersEnvState.error}
+      onBack={() => setSettingsPage(parentOf('models'))}
       onOpenDefaultModel={() => {
         setAgentPicker(pickerStart);
         setModelPickerFrom(null);
@@ -3277,21 +3287,10 @@ export function AppShell(): React.JSX.Element {
         setAgentModelFor('fallback');
         setSettingsPage('model-picker');
       }}
-      onOpenAgent={key => {
-        setSelectedAgent(key);
-        setSettingsPage('agent');
-      }}
-      onNewAgent={() => setSettingsPage('newagent')}
       // One tap, no confirmation: the switch is its own feedback, and the server answers with the
       // whole snapshot so the row can never disagree with what was stored.
       onSetRetry={enabled => connection.send(encodeAgentsRetrySet(enabled)).catch(() => {})}
-    />
-  );
-  const providersPage = (
-    <ProvidersScreen
-      providers={agentsConfig?.providers ?? []}
-      error={providersEnvState.error}
-      onBack={() => setSettingsPage('index')}
+      onOpenTags={() => setSettingsPage('tags')}
       onNewProvider={() => {
         setProviderBusy(false);
         setProviderEdit({ mode: 'create', key: null });
@@ -3302,10 +3301,6 @@ export function AppShell(): React.JSX.Element {
         setSettingsPage('account');
       }}
       onOpenProvider={key => {
-        if (key === 'tags') {
-          setSettingsPage('tags');
-          return;
-        }
         setSelectedProvider(key);
         setSettingsPage('provider');
       }}
@@ -3316,7 +3311,7 @@ export function AppShell(): React.JSX.Element {
       tags={tagsState.tags}
       status={tagsState.status}
       error={tagsState.error}
-      onBack={() => setSettingsPage('providers')}
+      onBack={() => setSettingsPage(parentOf('tags'))}
       onNewTag={() => setNewTagPrompt(true)}
       onEditTag={openTagEditor}
       onDeleteTag={setTagToDelete}
@@ -3419,7 +3414,7 @@ export function AppShell(): React.JSX.Element {
     }
     setProviderEdit(null);
     if (providerEdit.mode === 'create') {
-      setSettingsPage('providers');
+      setSettingsPage('models');
     } else {
       setSelectedProvider(patch.key);
       setSettingsPage('provider');
@@ -3438,7 +3433,7 @@ export function AppShell(): React.JSX.Element {
     setProviderToDelete(null);
     setSelectedProvider(null);
     setProviderEdit(null);
-    setSettingsPage('providers');
+    setSettingsPage('models');
   };
   const saveEnvValue = (name: string, value: string): void => {
     if (providerBusy) return;
@@ -3648,10 +3643,9 @@ export function AppShell(): React.JSX.Element {
   const setupPage = (
     <SetupScreen
       deviceId={deviceInfo?.deviceId ?? null}
-      // `tags` is listed with the providers (its row opens the tags page) and runs nothing.
-      providers={agentsConfig ? agentsConfig.providers.filter(p => p.type !== 'tags').length : null}
+      providers={providerCount}
       gate={setupGate ? { onFinish: () => leaveSetup(false), onSkip: () => leaveSetup(true) } : undefined}
-      onBack={() => setSettingsPage('index')}
+      onBack={() => setSettingsPage(setupFrom)}
       onOpen={step => {
         if (step.key === 'profile') openInstruction('default', 'USER.md', 'setup');
         else if (step.page === 'model-picker') {
@@ -3781,63 +3775,64 @@ export function AppShell(): React.JSX.Element {
               <SettingsScreen
                 skillsCount={skills.length}
                 toolsCount={tools.length}
-                providersCount={agentsConfig?.providers.length ?? 0}
+                setup={setupProgress}
+                nativeApp={appUpdateSupported}
                 onBack={() => setSettingsOpen(false)}
-                onOpenCategory={category => setSettingsPage(category)}
+                onOpen={page => {
+                  if (page === 'setup') setSetupFrom('index');
+                  setSettingsPage(page);
+                }}
               />
-            ) : settingsPage === 'general' ? (
-              <GeneralSettingsScreen
-                url={url}
-                onUrlChange={changeUrl}
-                voice={voice}
-                onVoiceModeChange={changeVoiceMode}
-                uiPrefs={uiPrefs}
-                onUiPrefsChange={changeUiPrefs}
+            ) : settingsPage === 'appearance' ? (
+              <AppearanceScreen
+                themeMode={themeControl.mode}
+                onThemeModeChange={themeControl.setMode}
                 chatFontScale={chatFontScale}
                 onChatFontScaleChange={changeChatFontScale}
+                uiPrefs={uiPrefs}
+                onUiPrefsChange={changeUiPrefs}
+                onBack={() => setSettingsPage(parentOf('appearance'))}
+              />
+            ) : settingsPage === 'updates' ? (
+              <UpdatesScreen
+                connected={status.state === 'connected'}
+                serverVersion={serverVersion}
+                appVersion={appVersion}
                 updatePhase={updatePhase}
                 appUpdatePhase={appUpdatePhase}
                 now={updateNow}
-                onUpdateServer={runServerUpdate}
-                onAppUpdate={runAppUpdate}
-                onAppUpdateInstallSettings={openAppUpdateInstallSettings}
-                onEnableNotifications={allowNotifications}
-                status={status}
-                serverVersion={serverVersion}
-                appVersion={appVersion}
-                pending={pending}
-                deviceInfo={deviceInfo}
-                onConnect={() => connection.connect(url)}
-                onDisconnect={() => connection.disconnect()}
-                onClearOutbox={() => {
-                  connection.clearOutbox();
-                  setPending(0);
-                }}
-                onOpenPairing={() => {
-                  // A completed attempt is kept at module scope; clear it before starting a new
-                  // attempt so the granted-state auto-close effect cannot dismiss this screen.
-                  if (pairing.phase === 'granted') cancelPairing();
-                  setSettingsOpen(false);
-                  setPairingOpen(true);
-                }}
-                onBack={() => setSettingsPage('index')}
-              />
-            ) : settingsPage === 'notifications' ? (
-              <NotificationsScreen
-                onBack={() => setSettingsPage('index')}
-                onChannelsChange={sendNotificationChannels}
-              />
-            ) : settingsPage === 'other' ? (
-              <OtherSettingsScreen
-                themeMode={themeControl.mode}
                 updateOnMobileData={updateOnMobileData}
                 onUpdateOnMobileDataChange={value => {
                   prefs.set('updateOnMobileData', value);
                   setUpdateOnMobileData(value);
                 }}
-                onThemeModeChange={themeControl.setMode}
+                onUpdateServer={runServerUpdate}
+                onAppUpdate={runAppUpdate}
+                onAppUpdateInstallSettings={openAppUpdateInstallSettings}
+                onBack={() => setSettingsPage(parentOf('updates'))}
+              />
+            ) : settingsPage === 'advanced' ? (
+              <AdvancedScreen
+                status={status}
+                serverVersion={serverVersion}
+                pending={pending}
+                onClearOutbox={() => {
+                  connection.clearOutbox();
+                  setPending(0);
+                }}
                 onOpenDiagnostics={openDiagnostics}
-                onBack={() => setSettingsPage('index')}
+                onOpenConfig={() => setSettingsPage('config')}
+                onOpenSetup={() => {
+                  setSetupFrom('advanced');
+                  setSettingsPage('setup');
+                }}
+                onBack={() => setSettingsPage(parentOf('advanced'))}
+              />
+            ) : settingsPage === 'notifications' ? (
+              <NotificationsScreen
+                onBack={() => setSettingsPage(parentOf('notifications'))}
+                onChannelsChange={sendNotificationChannels}
+                onEnableNotifications={allowNotifications}
               />
             ) : settingsPage === 'agents' ? (
               agentsPage
@@ -3849,9 +3844,9 @@ export function AppShell(): React.JSX.Element {
                   state={agentPicker}
                   onStateChange={setAgentPicker}
                   onBack={() => {
-                    // The picker returns where it was opened from: the agents list for the
+                    // The picker returns where it was opened from: the models page for the
                     // global default and the fallback, the agent page for an agent key.
-                    const from = modelPickerFrom ?? (agentModelFor === 'global' || agentModelFor === 'fallback' ? 'agents' : 'agent');
+                    const from = modelPickerFrom ?? (agentModelFor === 'global' || agentModelFor === 'fallback' ? 'models' : 'agent');
                     setAgentModelFor(null);
                     setSettingsPage(from);
                   }}
@@ -3946,13 +3941,13 @@ export function AppShell(): React.JSX.Element {
               ) : (
                 workspacePage
               )
-            ) : settingsPage === 'providers' ? (
-              providersPage
+            ) : settingsPage === 'models' ? (
+              modelsPage
             ) : settingsPage === 'account' ? (
               <AccountScreen
                 kind={selectedAccount}
                 needsModel={!modelReady(catalog.defaultModel, catalog.unavailable)}
-                onBack={() => setSettingsPage('providers')}
+                onBack={() => setSettingsPage(parentOf('account'))}
                 onPickModel={() => {
                   setAgentPicker(pickerStart);
                   setAgentModelFor('global');
@@ -3987,10 +3982,10 @@ export function AppShell(): React.JSX.Element {
                     setModelEdit({ mode: 'create', provider: selectedProviderInfo.key, model: null });
                     setSettingsPage('model-edit');
                   }}
-                  onBack={() => setSettingsPage('providers')}
+                  onBack={() => setSettingsPage('models')}
                 />
               ) : (
-                providersPage
+                modelsPage
               )
             ) : settingsPage === 'model-edit' ? (
               modelEdit ? (
@@ -4019,7 +4014,7 @@ export function AppShell(): React.JSX.Element {
                   }}
                 />
               ) : (
-                providersPage
+                modelsPage
               )
             ) : settingsPage === 'provider-edit' ? (
               providerEdit ? (
@@ -4050,7 +4045,7 @@ export function AppShell(): React.JSX.Element {
                   }
                   onOpenEnv={() => setSettingsPage('provider-env')}
                   onBack={() => {
-                    if (providerEdit.mode === 'create') setSettingsPage('providers');
+                    if (providerEdit.mode === 'create') setSettingsPage('models');
                     else setSettingsPage('provider');
                     setProviderEdit(null);
                   }}
@@ -4058,7 +4053,7 @@ export function AppShell(): React.JSX.Element {
                   onEnvRemove={removeEnvLine}
                 />
               ) : (
-                providersPage
+                modelsPage
               )
             ) : settingsPage === 'provider-env' ? (
               providerEdit?.key &&
@@ -4074,7 +4069,7 @@ export function AppShell(): React.JSX.Element {
                   onUnbind={unbindProviderEnv}
                 />
               ) : (
-                providersPage
+                modelsPage
               )
             ) : settingsPage === 'agent' ? (
               selectedAgentInfo ? (
@@ -4217,24 +4212,46 @@ export function AppShell(): React.JSX.Element {
               configEditor ? (
                 <ConfigScreen
                   editor={configEditor}
-                  onBack={() => setSettingsPage('index')}
+                  onBack={() => setSettingsPage(parentOf('config'))}
                   onChange={draft => setConfigEditor(current => (current ? { ...current, draft, error: null } : current))}
                   onSave={saveConfig}
                   onReload={reloadConfig}
                 />
               ) : (
-                <EmptyCategoryScreen title="Config" onBack={() => setSettingsPage('index')} />
+                <EmptyCategoryScreen title="Config" onBack={() => setSettingsPage(parentOf('config'))} />
               )
             ) : settingsPage === 'approvals' ? (
               <ApprovalHistoryScreen
                 history={approvalHistory}
-                onBack={() => setSettingsPage('index')}
+                onBack={() => setSettingsPage(parentOf('approvals'))}
                 onRefresh={() => connection.send(encodeApprovalHistory())}
               />
             ) : settingsPage === 'devices' ? (
-              <DevicesScreen onBack={() => setSettingsPage('index')} />
+              <DevicesScreen
+                onBack={() => setSettingsPage(parentOf('devices'))}
+                head={
+                  <>
+                    <ThisDeviceSection deviceInfo={deviceInfo} appVersion={appVersion} />
+                    <ServerSection
+                      url={url}
+                      onUrlChange={changeUrl}
+                      status={status}
+                      serverVersion={serverVersion}
+                      onConnect={() => connection.connect(url)}
+                      onDisconnect={() => connection.disconnect()}
+                      onOpenPairing={() => {
+                        // A completed attempt is kept at module scope; clear it before starting a
+                        // new one so the granted-state auto-close cannot dismiss this screen.
+                        if (pairing.phase === 'granted') cancelPairing();
+                        setSettingsOpen(false);
+                        setPairingOpen(true);
+                      }}
+                    />
+                  </>
+                }
+              />
             ) : settingsPage === 'services' ? (
-              <ServicesScreen onBack={() => setSettingsPage('index')} />
+              <ServicesScreen onBack={() => setSettingsPage(parentOf('services'))} />
             ) : settingsPage === 'setup' ? (
               setupPage
             ) : settingsPage === 'skills' ? (
@@ -4245,7 +4262,7 @@ export function AppShell(): React.JSX.Element {
                 notice={skillsNotice ?? undefined}
                 onBack={() => {
                   setSkillsNotice(null);
-                  setSettingsPage('index');
+                  setSettingsPage(parentOf('skills'));
                 }}
                 onOpenSkill={skill => {
                   if (!deviceInfo) return;
@@ -4263,7 +4280,7 @@ export function AppShell(): React.JSX.Element {
                 nested={instructions.nested}
                 error={workspacesError}
                 busy={workspacesBusy}
-                onBack={() => setSettingsPage('index')}
+                onBack={() => setSettingsPage(parentOf('workspaces'))}
                 onAdd={(key, path) => {
                   setWorkspacesBusy(true);
                   connection.send(encodeWorkspacesAdd(key, path)).catch(() => {});
@@ -4282,8 +4299,8 @@ export function AppShell(): React.JSX.Element {
                 busy={diagBusy}
                 onSnapshot={openDiagnostics}
                 onLogs={fetchLogs}
-                backLabel="Back to other"
-                onBack={() => setSettingsPage('other')}
+                backLabel="Back to advanced"
+                onBack={() => setSettingsPage(parentOf('diagnostics'))}
               />
             ) : settingsPage === 'tools' ? (
               <ToolsScreen
@@ -4291,21 +4308,22 @@ export function AppShell(): React.JSX.Element {
                 missing={toolsMissing}
                 error={toolsError ?? undefined}
                 saving={toolsSaving}
-                onBack={() => setSettingsPage('index')}
+                onBack={() => setSettingsPage(parentOf('tools'))}
                 onToggle={toggleTool}
+                onOpenMcps={() => setSettingsPage('mcps')}
               />
             ) : settingsPage === 'mcps' ? (
               <McpsScreen
                 servers={mcpServers}
                 error={mcpError}
                 busy={mcpBusy}
-                onBack={() => setSettingsPage('index')}
+                onBack={() => setSettingsPage(parentOf('mcps'))}
                 onAdd={addMcp}
                 onRemove={removeMcp}
                 onEnable={enableMcp}
               />
             ) : (
-              <EmptyCategoryScreen title="Other" onBack={() => setSettingsPage('index')} />
+              <EmptyCategoryScreen title="Settings" onBack={() => setSettingsPage('index')} />
             )
           ) : browserOpen ? (
             <BrowserScreen
@@ -4437,7 +4455,7 @@ export function AppShell(): React.JSX.Element {
                 onClose={() => {
                   setPairingOpen(false);
                   setSettingsOpen(true);
-                  setSettingsPage('general');
+                  setSettingsPage('devices');
                 }}
               />
             ) : (
@@ -4887,7 +4905,9 @@ export function AppShell(): React.JSX.Element {
               },
             },
             {
-              label: 'Agents',
+              // Sub-agents, not "Agents": the orchestrator is the conversation itself, and the
+              // Agents settings page is where every agent, the orchestrator included, is set.
+              label: 'Sub-agents',
               hint: 'shared workers',
               onPress: () => {
                 setMoreOpen(false);

@@ -44,6 +44,34 @@ export function toggleSkip(key: string): void {
 }
 
 /**
+ * Where each setup step stands, from the stores the pages fill: the assistant draws it, the
+ * settings index counts it for its banner. Asking the server is the caller's job.
+ */
+export function useSetupSteps(deviceId: string | null, providers: number | null): SetupStep[] {
+  const catalog = useModelCatalog();
+  const { frame } = useServices();
+  const instructions = useInstructions();
+  const skipped = useSkipped();
+  return setupSteps({
+    defaultModel: catalog.defaultModel,
+    services: frame,
+    instructions: instructions.entries,
+    deviceId,
+    pushSupported,
+    skipped,
+    providers,
+    defaultUnavailable: catalog.defaultModel !== '' && !modelReady(catalog.defaultModel, catalog.unavailable),
+  });
+}
+
+/** The banner on the settings index: shown once every step is known, while one is left. */
+export function setupBanner(steps: SetupStep[]): { settled: number; total: number } | null {
+  if (steps.some(step => step.state === 'unknown')) return null;
+  const settled = setupSettled(steps);
+  return settled < steps.length ? { settled, total: steps.length } : null;
+}
+
+/**
  * The first-run assistant: every setup the install has, in order. A service is set right here, its
  * card unfolded under its row; the rest open the page that sets them. Any step can be skipped, and
  * a skipped one taken back.
@@ -69,24 +97,13 @@ export function SetupScreen({
   const styles = useThemedStyles(createStyles);
   const catalog = useModelCatalog();
   const { frame, busy } = useServices();
-  const instructions = useInstructions();
-  const skipped = useSkipped();
   const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
     connection.send(encodeServicesGet()).catch(() => {});
     instructionsStore.request();
     connection.send(encodeInstructionsList()).catch(() => {});
   }, []);
-  const steps = setupSteps({
-    defaultModel: catalog.defaultModel,
-    services: frame,
-    instructions: instructions.entries,
-    deviceId,
-    pushSupported,
-    skipped,
-    providers,
-    defaultUnavailable: catalog.defaultModel !== '' && !modelReady(catalog.defaultModel, catalog.unavailable),
-  });
+  const steps = useSetupSteps(deviceId, providers);
   const ready = modelReady(catalog.defaultModel, catalog.unavailable);
 
   return (

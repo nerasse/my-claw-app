@@ -139,7 +139,7 @@ async function bootToProviders(): Promise<Tree> {
   await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
   await pressLabel(tree, 'Open conversations');
   await pressLabel(tree, 'Open settings');
-  await pressLabel(tree, 'Open providers');
+  await pressLabel(tree, 'Open models');
   await emit(providersConfig());
   await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
   return tree;
@@ -160,18 +160,15 @@ test('the provider pages ask for the snapshot themselves, with no detour through
   await pressLabel(tree, 'Open conversations');
   await pressLabel(tree, 'Open settings');
 
-  // The index rows carry live counts from that same snapshot, so the index asks on entry.
+  // The index counts the providers for its setup banner, from that same snapshot: it asks on entry.
   await waitFor(() => sentFrames().some(f => f.type === 'agents.config.get'));
   await emit(providersConfig());
-  await waitFor(() =>
-    textsOf(tree).some(text => text.includes('2 providers · model providers, API keys, models')),
-  );
   const asked = sentFrames().filter(f => f.type === 'agents.config.get').length;
 
   // And the list asks again on entry: config.llm.providers hot-reloads under it. Without this
   // request, reaching Providers from the index (instead of through the Agents page, which was
   // the only asker) rendered "0 configured" over an empty list.
-  await pressLabel(tree, 'Open providers');
+  await pressLabel(tree, 'Open models');
   await waitFor(() => sentFrames().filter(f => f.type === 'agents.config.get').length > asked);
   await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
 
@@ -389,7 +386,7 @@ test('back walks env, edit, models, list, index, chat', async () => {
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
   expect(await hardwareBack()).toBe(true);
-  await waitFor(() => labelsOf(tree).includes('Open providers'));
+  await waitFor(() => labelsOf(tree).includes('Open models'));
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Message to send'));
   expect(backHandler().exitApp).not.toHaveBeenCalled();

@@ -278,6 +278,9 @@ test('the profile step opens the default USER.md, and Back from it returns to th
   await press(tree, 'More');
   await waitFor(() => labelsOf(tree).includes('Settings'));
   await press(tree, 'Settings');
+  // Once the first run is past, the assistant is under Advanced (the index banner shows it only
+  // while a step is left, and these tests open settings before the server has said anything).
+  await press(tree, 'Open advanced');
   await press(tree, 'Open get started');
   bridge.sendMessage.mockClear();
   await press(tree, 'Setup step Tell the agent who you are');
@@ -302,6 +305,9 @@ test('a service step unfolds its card on the assistant, its key pasted there; Sk
   await press(tree, 'More');
   await waitFor(() => labelsOf(tree).includes('Settings'));
   await press(tree, 'Settings');
+  // Once the first run is past, the assistant is under Advanced (the index banner shows it only
+  // while a step is left, and these tests open settings before the server has said anything).
+  await press(tree, 'Open advanced');
   await press(tree, 'Open get started');
   await emit({
     type: 'services.result',

@@ -45,13 +45,12 @@ test('the settings expose the three theme modes', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open other');
+  await press(tree, 'Open appearance');
 
   const labels = labelsOf(tree);
   expect(labels).toContain('Theme System');
   expect(labels).toContain('Theme Light');
   expect(labels).toContain('Theme Dark');
-  expect(labels).toContain('Open diagnostics');
   await unmount(tree);
 });
 
@@ -59,7 +58,7 @@ test('the token is masked by default and can be revealed or copied whole', async
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open general');
+  await press(tree, 'Open devices');
 
   // Masked: only the last four characters are visible, never the full value.
   expect(textsOf(tree).join('|')).not.toContain('token-test');

@@ -1,126 +1,84 @@
-import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { searchSettings } from '../core/settingsSearch';
+import type { SettingsPage } from './settingsPages';
 
-const CATEGORIES: Array<{
+interface Category {
+  page: SettingsPage;
   title: string;
   hint: string;
-  accessibilityLabel: string;
-  key: 'setup' | 'general' | 'notifications' | 'providers' | 'services' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other';
-}> = [
+}
+
+/**
+ * The index, by what a setting is about: the app on this device, the AI behind it, what the agent
+ * may use, and who may reach it. Fourteen rows in one list read as chaos (owner, 2026-10-04); a
+ * subject is now one page, and every page sits under the question it answers.
+ */
+export const GROUPS: ReadonlyArray<{ title: string; categories: readonly Category[] }> = [
   {
-    // The first-run assistant, kept here afterwards: what the install still needs, each step a page.
-    title: 'Get started',
-    hint: 'model, services, profile, devices',
-    accessibilityLabel: 'Open get started',
-    key: 'setup',
+    title: 'this app',
+    categories: [
+      { page: 'appearance', title: 'Appearance', hint: 'theme, text size, folding' },
+      { page: 'notifications', title: 'Notifications', hint: 'permission and sounds' },
+      { page: 'updates', title: 'Updates', hint: 'the server and the app' },
+    ],
   },
   {
-    title: 'General',
-    hint: 'appearance, voice, server',
-    accessibilityLabel: 'Open general',
-    key: 'general',
+    title: 'ai',
+    categories: [
+      { page: 'models', title: 'Models', hint: 'default, subscriptions, providers, tags' },
+      { page: 'agents', title: 'Agents', hint: 'the orchestrator and each agent: model, effort, scope' },
+      { page: 'services', title: 'Services', hint: 'voice, location, search, memory, browser' },
+    ],
   },
   {
-    title: 'Notifications',
-    hint: 'sounds for runs and rings',
-    accessibilityLabel: 'Open notifications',
-    key: 'notifications',
+    title: 'what the agent can use',
+    categories: [
+      { page: 'workspaces', title: 'Workspaces', hint: 'folders and their instructions' },
+      { page: 'skills', title: 'Skills', hint: 'built-in, custom, workspace' },
+      { page: 'tools', title: 'Tools', hint: 'built-in, plugins, MCP servers' },
+    ],
   },
   {
-    // The prompt files live here since they are per workspace: a workspace is the directory, its
-    // instructions and its nested AGENTS.md, and they were on two pages that never named each
-    // other.
-    title: 'Workspaces',
-    hint: 'directories, their instructions and skills',
-    accessibilityLabel: 'Open workspaces',
-    key: 'workspaces',
-  },
-  {
-    title: 'Providers',
-    hint: 'model providers, API keys, models',
-    accessibilityLabel: 'Open providers',
-    key: 'providers',
-  },
-  {
-    // Voice, embeddings, search, browser: the cloud by default, this server, or the owner's URL.
-    title: 'Services',
-    hint: 'voice, memory, search, browser: cloud, this server or a URL',
-    accessibilityLabel: 'Open services',
-    key: 'services',
-  },
-  {
-    title: 'Agents',
-    hint: 'default model, effort, per-agent settings',
-    accessibilityLabel: 'Open agents',
-    key: 'agents',
-  },
-  {
-    title: 'Tools',
-    hint: 'built-in, plugins, MCP',
-    accessibilityLabel: 'Open tools',
-    key: 'tools',
-  },
-  {
-    title: 'Skills',
-    hint: 'built-in, custom, workspace',
-    accessibilityLabel: 'Open skills',
-    key: 'skills',
-  },
-  {
-    title: 'MCPs',
-    hint: 'external servers, add/remove/enable',
-    accessibilityLabel: 'Open MCPs',
-    key: 'mcps',
-  },
-  {
-    title: 'Devices',
-    hint: 'paired phones and browsers, pairing approval',
-    accessibilityLabel: 'Open devices',
-    key: 'devices',
-  },
-  {
-    title: 'Tool approvals',
-    hint: 'what the agent was allowed to run, and what was refused',
-    accessibilityLabel: 'Open tool approvals',
-    key: 'approvals',
-  },
-  {
-    title: 'Config',
-    hint: 'the raw config.json',
-    accessibilityLabel: 'Open config',
-    key: 'config',
-  },
-  {
-    title: 'Other',
-    hint: 'appearance, troubleshooting',
-    accessibilityLabel: 'Open other',
-    key: 'other',
+    title: 'security',
+    categories: [
+      { page: 'devices', title: 'Devices', hint: 'this device, its server, paired devices' },
+      { page: 'approvals', title: 'Tool approvals', hint: 'what the agent was allowed to run, and what was refused' },
+      { page: 'advanced', title: 'Advanced', hint: 'connection, diagnostics, raw config, setup' },
+    ],
   },
 ];
 
-/**
- * The settings index: every category is a row that opens its own page, so the back key can
- * always walk one level at a time instead of closing the whole app on a habit press.
- */
 export function SettingsScreen({
   skillsCount,
   toolsCount,
-  providersCount,
+  setup,
+  nativeApp,
   onBack,
-  onOpenCategory,
+  onOpen,
 }: {
   skillsCount: number;
   toolsCount: number;
-  providersCount: number;
+  /** The first-run setup while it is not finished: a banner above everything. Null once done. */
+  setup: { settled: number; total: number } | null;
+  /** The Android app: the search offers what only it has (the APK, its download on mobile data). */
+  nativeApp: boolean;
   onBack: () => void;
-  onOpenCategory: (
-    category: 'setup' | 'general' | 'notifications' | 'providers' | 'services' | 'agents' | 'tools' | 'skills' | 'devices' | 'approvals' | 'mcps' | 'workspaces' | 'config' | 'other',
-  ) => void;
+  onOpen: (page: SettingsPage) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   useDismissKeyboard();
+  const [query, setQuery] = useState('');
+  const results = useMemo(() => searchSettings(query, nativeApp), [query, nativeApp]);
+  /** The catalogs say how much they hold, ahead of what they are: "12 skills · built-in, …". */
+  const hintOf = (category: Category): string => {
+    const count = category.page === 'skills' ? skillsCount : category.page === 'tools' ? toolsCount : 0;
+    const noun = category.page === 'skills' ? 'skill' : 'tool';
+    return count > 0 ? `${count} ${noun}${count === 1 ? '' : 's'} · ${category.hint}` : category.hint;
+  };
 
   return (
     <View style={styles.screen}>
@@ -132,42 +90,91 @@ export function SettingsScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Text style={styles.section}>categories</Text>
-        <View style={styles.card}>
-          {CATEGORIES.map((category, index) => (
-            <Pressable
-              key={category.key}
-              style={[styles.row, index === CATEGORIES.length - 1 && styles.rowLast]}
-              onPress={() => onOpenCategory(category.key)}
-              accessibilityRole="button"
-              accessibilityLabel={category.accessibilityLabel}>
-              <View style={styles.rowMain}>
-                <View style={styles.rowTitleLine}>
-                  <Text style={styles.rowTitle}>{category.title}</Text>
-                  {category.key === 'skills' && skillsCount > 0 ? (
-                    <Text style={styles.badge}>{skillsCount}</Text>
-                  ) : null}
-                  {category.key === 'tools' && toolsCount > 0 ? (
-                    <Text style={styles.badge}>{toolsCount}</Text>
-                  ) : null}
-                  {category.key === 'providers' && providersCount > 0 ? (
-                    <Text style={styles.badge}>{providersCount}</Text>
-                  ) : null}
-                </View>
-                <Text style={styles.rowHint} numberOfLines={1}>
-                  {category.key === 'skills' && skillsCount > 0
-                    ? `${skillsCount} skill${skillsCount === 1 ? '' : 's'} · ${category.hint}`
-                    : category.key === 'tools' && toolsCount > 0
-                      ? `${toolsCount} tool${toolsCount === 1 ? '' : 's'} · ${category.hint}`
-                      : category.key === 'providers' && providersCount > 0
-                        ? `${providersCount} provider${providersCount === 1 ? '' : 's'} · ${category.hint}`
-                        : category.hint}
-                </Text>
-              </View>
-              <Text style={styles.linkGlyph}>›</Text>
+        <View style={styles.search}>
+          <Text style={styles.searchGlyph}>⌕</Text>
+          <TextInput
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search settings"
+            placeholderTextColor={palette.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            onSubmitEditing={() => {
+              if (results[0]) onOpen(results[0].page);
+            }}
+            accessibilityLabel="Search settings"
+          />
+          {query ? (
+            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear the search">
+              <Text style={styles.searchClear}>✕</Text>
             </Pressable>
-          ))}
+          ) : null}
         </View>
+
+        {query.trim() ? (
+          results.length === 0 ? (
+            <Text style={styles.empty}>{`No setting matches “${query.trim()}”`}</Text>
+          ) : (
+            <View style={[styles.card, styles.firstCard]}>
+              {results.map((entry, index) => (
+                <Pressable
+                  key={`${entry.page}-${entry.title}`}
+                  style={[styles.row, index === results.length - 1 && styles.rowLast]}
+                  onPress={() => onOpen(entry.page)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Go to ${entry.title}`}>
+                  <View style={styles.rowMain}>
+                    <Text style={styles.rowTitle}>{entry.title}</Text>
+                    <Text style={styles.rowHint}>{entry.where}</Text>
+                  </View>
+                  <Text style={styles.linkGlyph}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+          )
+        ) : (
+          <>
+            {/* The setup sits on top until it is done or passed, then lives under Advanced. */}
+            {setup ? (
+              <Pressable
+                style={[styles.card, styles.firstCard, styles.banner]}
+                onPress={() => onOpen('setup')}
+                accessibilityRole="button"
+                accessibilityLabel="Open get started">
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowTitle}>Get started</Text>
+                  <Text style={styles.rowHint}>{`${setup.settled} of ${setup.total} done or skipped`}</Text>
+                </View>
+                <Text style={styles.linkGlyph}>›</Text>
+              </Pressable>
+            ) : null}
+            {GROUPS.map(group => (
+              <View key={group.title}>
+                <Text style={styles.section}>{group.title}</Text>
+                <View style={styles.card}>
+                  {group.categories.map((category, index) => (
+                      <Pressable
+                        key={category.page}
+                        style={[styles.row, index === group.categories.length - 1 && styles.rowLast]}
+                        onPress={() => onOpen(category.page)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${category.title.toLowerCase()}`}>
+                        <View style={styles.rowMain}>
+                          <Text style={styles.rowTitle}>{category.title}</Text>
+                          <Text style={styles.rowHint} numberOfLines={1}>
+                            {hintOf(category)}
+                          </Text>
+                        </View>
+                        <Text style={styles.linkGlyph}>›</Text>
+                      </Pressable>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -194,6 +201,21 @@ const createStyles = (palette: Palette) => ({
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   body: { paddingBottom: space.xl },
+  search: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    marginTop: space.md,
+    paddingHorizontal: space.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceAlt,
+  },
+  searchGlyph: { fontSize: font.body, color: palette.textFaint },
+  searchInput: { flex: 1, paddingVertical: space.sm, fontSize: font.body, color: palette.text },
+  searchClear: { fontSize: font.meta, color: palette.textFaint },
+  empty: { marginTop: space.lg, paddingHorizontal: space.xs, fontSize: font.meta, color: palette.textFaint },
   section: {
     marginTop: space.lg,
     marginBottom: space.xs,
@@ -210,6 +232,14 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.md,
     paddingHorizontal: space.md,
   },
+  firstCard: { marginTop: space.md },
+  banner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingVertical: space.md,
+    borderColor: palette.accent,
+  },
   row: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -220,19 +250,7 @@ const createStyles = (palette: Palette) => ({
   },
   rowLast: { borderBottomWidth: 0 },
   rowMain: { flex: 1, gap: 1 },
-  rowTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   rowTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  badge: {
-    fontSize: font.micro,
-    color: palette.accent,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.pill,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
   rowHint: { fontSize: font.small, color: palette.textFaint },
   linkGlyph: { fontSize: font.screen, color: palette.textFaint },
 });

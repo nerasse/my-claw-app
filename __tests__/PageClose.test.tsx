@@ -51,20 +51,20 @@ test('three levels into settings, the cross lands on the conversation in one pre
   // The index's own Back already goes to the conversation: a cross there would be a second one.
   expect(labelsOf(tree)).not.toContain('Close settings');
 
-  await press(tree, 'Open providers');
+  await press(tree, 'Open models');
   expect(labelsOf(tree)).toContain('Close settings');
-  await press(tree, 'Open provider tags');
-  await waitFor(() => labelsOf(tree).includes('Back to providers'));
+  await press(tree, 'Open tags');
+  await waitFor(() => labelsOf(tree).includes('Back to models'));
 
   await press(tree, 'Close settings');
-  await waitFor(() => !labelsOf(tree).includes('Back to providers'));
-  expect(labelsOf(tree)).not.toContain('Open providers');
+  await waitFor(() => !labelsOf(tree).includes('Back to models'));
+  expect(labelsOf(tree)).not.toContain('Open models');
   expect(labelsOf(tree)).toContain('Message to send');
 
   // Settings open again at their index, not on the page the cross left.
   await openSettings(tree);
-  expect(labelsOf(tree)).toContain('Open providers');
-  expect(labelsOf(tree)).not.toContain('Back to providers');
+  expect(labelsOf(tree)).toContain('Open models');
+  expect(labelsOf(tree)).not.toContain('Back to models');
   await unmount(tree);
 });
 
@@ -73,7 +73,7 @@ test('the cross of a jobs page leaves jobs, and only jobs', async () => {
   windowIs(1600);
   const tree = await renderApp();
   await press(tree, 'Open settings');
-  await press(tree, 'Open providers');
+  await press(tree, 'Open models');
   await press(tree, 'More');
   await press(tree, 'Jobs');
   await press(tree, 'Add job');

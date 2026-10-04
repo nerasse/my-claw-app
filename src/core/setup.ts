@@ -127,7 +127,7 @@ export function setupSteps(input: SetupInput): SetupStep[] {
       state: stateOf(input.defaultModel !== '' && !input.defaultUnavailable, 'model', skipped),
       // No provider yet: the provider form first. One there: straight to the default-model picker,
       // the step a newcomer could not find from the providers page.
-      page: input.providers ? 'model-picker' : 'providers',
+      page: input.providers ? 'model-picker' : 'models',
     },
     ...SERVICE_STEPS.flatMap(({ id, title, hint }) => {
       const view = services?.services.find(s => s.id === id);

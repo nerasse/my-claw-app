@@ -54,7 +54,6 @@ import {
   type ToolEntry,
   type UpdateResultFrame,
   type UiPrefsResultFrame,
-  type VoiceModeResultFrame,
   type WorkspaceEntry,
 } from './protocol';
 
@@ -98,7 +97,6 @@ export interface ServerFrameHandlers {
   setSessionFiles: (files: SessionFileMeta[]) => void;
   setFilesTotal: (bytes: number) => void;
   setFilesError: (message: string | null) => void;
-  setVoice: (frame: VoiceModeResultFrame) => void;
   setUiPrefs: (frame: UiPrefsResultFrame) => void;
   setUpdate: (frame: UpdateResultFrame) => void;
   setSkills: (skills: SkillEntry[]) => void;
@@ -163,7 +161,6 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setSessionFiles,
     setFilesTotal,
     setFilesError,
-    setVoice,
     setUiPrefs,
     setUpdate,
     setSkills,
@@ -554,7 +551,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       applyRemoteDraft(frame.threadId, frame.text);
       break;
     case 'voice.mode.result':
-      setVoice(frame);
+      // Nothing shows it any more: speech-to-text is chosen on the Services page, from the
+      // services frame, which already said the same thing (2026-10-04).
       break;
     case 'services.result':
       servicesStore.replace(frame);

@@ -11,7 +11,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { agentsStore } from '../src/core/agents';
-import { retryScheduleText } from '../src/app/AgentsSettingsScreen';
+import { retryScheduleText } from '../src/app/ModelsScreen';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
@@ -132,6 +132,26 @@ async function boot(): Promise<Tree> {
     defaultModel: 'fast-1',
   });
   await waitFor(() => labelsOf(tree).includes('Open agent Scheduled tasks'));
+  return tree;
+}
+
+/** The defaults every agent falls back to live on Models since 2026-10-04, not on Agents. */
+async function bootModels(): Promise<Tree> {
+  const tree = await renderApp();
+  await emit({ type: 'session.list.result', sessions: [summary(THREAD, 'Infra maison')] });
+  await pressLabel(tree, 'Open conversations');
+  await pressLabel(tree, 'Open settings');
+  await pressLabel(tree, 'Open models');
+  await emit(agentsConfig());
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'] },
+      { id: 'opus', label: 'Opus', group: 'Claude', effortLevels: ['low', 'medium', 'high'], vision: true },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await waitFor(() => labelsOf(tree).includes('Default model'));
   return tree;
 }
 
@@ -290,7 +310,7 @@ test('a refused write shows the reason on the page that asked for it', async () 
 });
 
 test('the default model flow walks model then effort, and Apply sends both in one frame', async () => {
-  const tree = await boot();
+  const tree = await bootModels();
   await pressLabel(tree, 'Default model');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
@@ -308,7 +328,7 @@ test('the default model flow walks model then effort, and Apply sends both in on
 });
 
 test('the fallback row opens a picker limited to vision models and Apply pins it', async () => {
-  const tree = await boot();
+  const tree = await bootModels();
   await emit(
     agentsConfig({
       fallback: 'opus',
@@ -331,7 +351,7 @@ test('the fallback row opens a picker limited to vision models and Apply pins it
 });
 
 test('the fallback root option removes the pin with an empty frame', async () => {
-  const tree = await boot();
+  const tree = await bootModels();
   await emit(
     agentsConfig({
       fallback: 'opus',
@@ -380,20 +400,21 @@ describe('providers', () => {
   /** Providers is its own index row: from the agents page, back out to the index first. */
   async function openProviders(tree: Tree): Promise<void> {
     expect(await hardwareBack()).toBe(true);
-    await waitFor(() => labelsOf(tree).includes('Open providers'));
-    await pressLabel(tree, 'Open providers');
+    await waitFor(() => labelsOf(tree).includes('Open models'));
+    await pressLabel(tree, 'Open models');
     await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
   }
 
-  test('Providers is its own index row, not a row of the agents page', async () => {
+  // Rewritten 2026-10-04: the providers, the defaults and the tags are one page, Models. Same
+  // intention: the agents page holds agents, and the providers have an index row of their own.
+  test('Models is its own index row, and the agents page holds no provider or default', async () => {
     const tree = await boot();
     await emit(providersConfig());
-    // The agents page keeps only the defaults and the tags: no Providers row left behind.
-    expect(labelsOf(tree)).not.toContain('Providers');
-    // The index rows the category with its own badge and a live count.
+    expect(labelsOf(tree)).not.toContain('Open provider litellm');
+    expect(labelsOf(tree)).not.toContain('Default model');
     expect(await hardwareBack()).toBe(true);
-    await waitFor(() => labelsOf(tree).includes('Open providers'));
-    expect(textsOf(tree)).toEqual(expect.arrayContaining(['2 providers · model providers, API keys, models']));
+    await waitFor(() => labelsOf(tree).includes('Open models'));
+    expect(textsOf(tree)).toEqual(expect.arrayContaining(['default, subscriptions, providers, tags']));
     await settleAndUnmount(tree);
   });
 
@@ -457,13 +478,13 @@ describe('providers', () => {
     await emit(providersConfig());
     await openProviders(tree);
     await pressLabel(tree, 'Open provider litellm');
-    await waitFor(() => labelsOf(tree).includes('Back to providers'));
+    await waitFor(() => labelsOf(tree).includes('Back to models'));
 
     expect(await hardwareBack()).toBe(true);
     await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
 
     expect(await hardwareBack()).toBe(true);
-    await waitFor(() => labelsOf(tree).includes('Open general'));
+    await waitFor(() => labelsOf(tree).includes('Open appearance'));
 
     expect(await hardwareBack()).toBe(true);
     await waitFor(() => labelsOf(tree).includes('Open conversations'));
@@ -519,7 +540,7 @@ describe('providers', () => {
  * the app holds no copy of the default to disagree with the server about.
  */
 test('the provider-retry switch sends agents.retry.set and reads the schedule the server resolved', async () => {
-  const tree = await boot();
+  const tree = await bootModels();
   await emit(agentsConfig({ retry: { enabled: true, delaysMs: [30_000, 60_000, 120_000] } }));
   await waitFor(() => labelsOf(tree).includes('Retry on provider failure'));
   expect(textsOf(tree).some(text => text.includes('30 s, 1 min, 2 min'))).toBe(true);
@@ -544,9 +565,9 @@ test('the provider-retry switch sends agents.retry.set and reads the schedule th
 });
 
 test('a server that predates the switch draws no retry row', async () => {
-  const tree = await boot();
+  const tree = await bootModels();
   await emit(agentsConfig());
-  await waitFor(() => labelsOf(tree).includes('Open agent Scheduled tasks'));
+  await waitFor(() => labelsOf(tree).includes('Fallback model'));
 
   // Not drawn rather than drawn lying: an older server would ignore the frame entirely.
   expect(labelsOf(tree)).not.toContain('Retry on provider failure');

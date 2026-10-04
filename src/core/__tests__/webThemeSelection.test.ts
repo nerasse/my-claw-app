@@ -54,3 +54,11 @@ test('the marker is web-only', () => {
   // Android selects nothing in the chat list (docs/text-selection.md), so there is nothing to mark.
   expect(nativeOnAccent()).toEqual({});
 });
+
+test('a disabled button keeps the opacity its own style gives it', () => {
+  // An attribute rule (two selectors) outranks the single class react-native-web compiles a style
+  // into: an opacity set here made every faded button full again on the web.
+  const css = webThemeCss(lightPalette);
+  expect(ruleFor(css, '[role="button"][aria-disabled="true"] {')).not.toContain('opacity');
+  expect(css).toContain('[role="button"]:not([aria-disabled="true"]):hover');
+});

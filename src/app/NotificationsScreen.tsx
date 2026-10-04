@@ -11,6 +11,58 @@ import {
 import { useDismissKeyboard } from '../core/keyboard';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { CloseButton } from '../components/CloseButton';
+import { notificationPermission } from '../core/notifications';
+import { Section, useSettingsStyles } from './settingsParts';
+
+/**
+ * Whether this browser may show a notification at all. A phone grants it at install; a browser
+ * asks, and only from a tap: the grant needs a user gesture, which a connect-time attempt lacks.
+ */
+function PermissionSection({ onEnable }: { onEnable: () => Promise<void> }): React.JSX.Element | null {
+  const styles = useSettingsStyles();
+  const [permission, setPermission] = useState(() => notificationPermission());
+  const [enabling, setEnabling] = useState(false);
+  if (permission === 'unavailable') return null;
+  const enable = async (): Promise<void> => {
+    setEnabling(true);
+    try {
+      await onEnable();
+    } finally {
+      // The browser's verdict is the only truth worth showing, "denied" included.
+      setPermission(notificationPermission());
+      setEnabling(false);
+    }
+  };
+  return (
+    <Section title="permission">
+      <View style={styles.kv}>
+        <Text style={styles.key}>tray</Text>
+        <Text style={styles.value}>
+          {permission === 'granted' ? 'allowed' : permission === 'denied' ? 'blocked by the browser' : 'not allowed yet'}
+        </Text>
+      </View>
+      {permission === 'granted' ? (
+        <Text style={styles.hint}>questions and finished runs reach this browser</Text>
+      ) : permission === 'denied' ? (
+        <Text style={styles.hint}>reset it in the site settings of the browser, then reload</Text>
+      ) : (
+        <>
+          <Pressable
+            style={[styles.button, enabling && styles.buttonOff]}
+            onPress={() => {
+              enable().catch(() => {});
+            }}
+            disabled={enabling}
+            accessibilityRole="button"
+            accessibilityLabel="Allow notifications in this browser">
+            <Text style={styles.buttonText}>{enabling ? 'Asking...' : 'Allow notifications'}</Text>
+          </Pressable>
+          <Text style={styles.hint}>a question waiting on you is worth an interruption</Text>
+        </>
+      )}
+    </Section>
+  );
+}
 
 /** One row per usage, with the labels the tests and the screen reader read. */
 const ROWS: ReadonlyArray<{
@@ -53,8 +105,11 @@ function soundLabel(choice: NotificationSoundChoice): string {
 export function NotificationsScreen({
   onBack,
   onChannelsChange,
+  onEnableNotifications,
 }: {
   onBack: () => void;
+  /** Asks the browser for the permission and subscribes (see PermissionSection). */
+  onEnableNotifications: () => Promise<void>;
   /** The new channel names, after any change: the server must follow the sound through them. */
   onChannelsChange: (channels: { ordinary: string; ring: string }) => void;
 }): React.JSX.Element {
@@ -162,6 +217,7 @@ export function NotificationsScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <PermissionSection onEnable={onEnableNotifications} />
         {sounds === undefined ? (
           <View style={styles.categoryItem}>
             <Text style={styles.section}>sounds</Text>

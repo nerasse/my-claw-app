@@ -59,22 +59,33 @@ await press('Escape');
 check((await focused()) === 'none', 'Escape leaves the field first');
 
 await press('Control+Comma');
-check(await has('Open providers'), 'Ctrl+, opens the settings');
+check(await has('Open models'), 'Ctrl+, opens the settings');
 check(!(await has('Close settings')), 'the settings index has no cross: its Back is that already');
-check(await arrowTo('Open providers'), 'the arrows walk the settings list');
+check(await arrowTo('Open models'), 'the arrows walk the settings list');
 await press('Enter');
 await page.waitForTimeout(500);
 check(await has('Close settings'), 'a settings page carries the cross');
-check(await arrowTo('Open provider tags'), 'the arrows walk the next page, from no focus');
+check(await arrowTo('Open tags'), 'the arrows walk the next page, from no focus');
 await press('Enter');
 await page.waitForTimeout(500);
 await press('Home');
-check((await focused()) === 'Back to providers', 'Home is the first control of the page: its Back');
+check((await focused()) === 'Back to models', 'Home is the first control of the page: its Back');
 for (let i = 0; i < 6 && (await focused()) !== 'Close settings'; i++) await press('ArrowRight');
 check((await focused()) === 'Close settings', 'the arrows go sideways along the header to the cross');
 await press('Enter');
 await page.waitForTimeout(500);
-check(!(await has('Back to providers')) && !(await has('Open providers')), 'the cross leaves the whole settings stack');
+check(!(await has('Back to models')) && !(await has('Open models')), 'the cross leaves the whole settings stack');
+
+await press('Control+Comma');
+check(await arrowTo('Search settings'), 'the arrows reach the settings search');
+await page.keyboard.type('thème');
+await page.waitForTimeout(300);
+check(await has('Go to Theme'), 'typing in the search lists what matches, accents and all');
+await press('Enter');
+await page.waitForTimeout(500);
+check(await has('Theme Dark'), 'Enter in the search opens the first result');
+await press('Shift+Escape');
+await page.waitForTimeout(300);
 
 await press('Shift+B');
 await page.waitForTimeout(800);

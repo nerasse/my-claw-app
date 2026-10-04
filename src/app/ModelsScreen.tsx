@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import type { ProviderInfo } from '../core/protocol';
+import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import type { AgentsConfigResultFrame, ProviderInfo } from '../core/protocol';
+import { useModelCatalog, useModelIndex } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
@@ -9,19 +10,35 @@ import type { AccountKind } from '../core/protocol';
 import { ACCOUNT_LABELS, accountSummary } from './AccountScreen';
 import { CloseButton } from '../components/CloseButton';
 
+/** "30 s, 1 min, 2 min": the waits as the owner reads them, seconds under a minute. */
+export function retryScheduleText(delaysMs: readonly number[]): string {
+  if (delaysMs.length === 0) return 'no wait';
+  return delaysMs
+    .map(ms => (ms % 60_000 === 0 ? `${ms / 60_000} min` : `${Math.round(ms / 1000)} s`))
+    .join(', ');
+}
+
 /**
- * The configured providers. Each row names the config key, the backend type, the model count
- * and whether the key is actually set on the server -- never the key itself. The + opens the
- * create form; a row opens the provider's models, which carry their own edit entry.
+ * Everything about which model answers, on one page (owner, 2026-10-04): the defaults every agent
+ * falls back to (they were on Agents), the subscriptions, the providers and their keys, and the
+ * tags (a row hidden among the providers until then). Each provider row names the config key, the
+ * backend type, the model count and whether the key is set on the server -- never the key itself.
  */
-export function ProvidersScreen({
+export function ModelsScreen({
+  config,
   providers,
   error,
   onBack,
   onNewProvider,
   onOpenProvider,
   onOpenAccount,
+  onOpenDefaultModel,
+  onOpenFallback,
+  onSetRetry,
+  onOpenTags,
 }: {
+  /** The agents snapshot the defaults are read from; null until the server answers. */
+  config: AgentsConfigResultFrame | null;
   providers: ProviderInfo[];
   /**
    * The last refusal, from whatever the page behind this one asked for. A delete is answered after
@@ -33,8 +50,18 @@ export function ProvidersScreen({
   onNewProvider: () => void;
   onOpenProvider: (key: string) => void;
   onOpenAccount: (kind: AccountKind) => void;
+  onOpenDefaultModel: () => void;
+  onOpenFallback: () => void;
+  onSetRetry: (enabled: boolean) => void;
+  onOpenTags: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const catalog = useModelCatalog();
+  const byId = useModelIndex(catalog.models);
+  /** Ids are what the config stores; the label is what every other screen shows. */
+  const labelOf = (modelId: string): string => byId.get(modelId)?.label ?? modelId;
+  // The tags are a page of their own now, not a provider row: the list is the providers alone.
+  const real = providers.filter(provider => provider.type !== 'tags');
   // Null on a server older than the accounts frames: no section, rather than rows that do nothing.
   const accounts = useAccounts().frame;
   useDismissKeyboard();
@@ -50,9 +77,9 @@ export function ProvidersScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Providers</Text>
+          <Text style={styles.title}>Models</Text>
           <Text style={styles.subtitle}>
-            {providers.length} configured · models come from the server catalog
+            {real.length} provider{real.length === 1 ? '' : 's'}
           </Text>
         </View>
         {/* Discovery is server-wide, so the button answers for the whole table as well as for one
@@ -77,6 +104,75 @@ export function ProvidersScreen({
       ) : null}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <Text style={styles.section}>Default</Text>
+        <View style={styles.card}>
+          {config ? (
+            <>
+              <Pressable
+                style={[styles.row, styles.link]}
+                onPress={onOpenDefaultModel}
+                accessibilityRole="button"
+                accessibilityLabel="Default model">
+                <View style={styles.linkMain}>
+                  <Text style={styles.linkTitle}>{config.defaultModel ? labelOf(config.defaultModel) : 'Default model'}</Text>
+                  <Text style={styles.hint} numberOfLines={1}>
+                    {config.defaultEffort
+                      ? `${config.defaultModel} · provider ${config.defaultProvider ?? 'default'} · effort ${config.defaultEffort}`
+                      : config.defaultProvider
+                        ? `${config.defaultModel} · provider ${config.defaultProvider}`
+                        : config.defaultModel
+                          ? 'what every agent falls back to'
+                          : 'none set · what every agent falls back to'}
+                  </Text>
+                </View>
+                <Text style={styles.linkGlyph}>›</Text>
+              </Pressable>
+              <View style={styles.separator} />
+              <Pressable
+                style={[styles.row, styles.link]}
+                onPress={onOpenFallback}
+                accessibilityRole="button"
+                accessibilityLabel="Fallback model">
+                <View style={styles.linkMain}>
+                  <Text style={styles.linkTitle}>{config.fallback ? labelOf(config.fallback) : 'Fallback model'}</Text>
+                  <Text style={styles.hint} numberOfLines={1}>
+                    {config.fallback
+                      ? `image runs switch to it when ${labelOf(config.defaultModel)} can't take images`
+                      : 'what image runs switch to when the model cannot take images'}
+                  </Text>
+                </View>
+                <Text style={styles.linkGlyph}>›</Text>
+              </Pressable>
+              {/* Absent on a server that predates it: not drawn, rather than drawn lying. */}
+              {config.retry ? (
+                <>
+                  <View style={styles.separator} />
+                  <View style={[styles.row, styles.link]}>
+                    <View style={styles.linkMain}>
+                      <Text style={styles.linkTitle}>Retry on provider failure</Text>
+                      <Text style={styles.hint}>
+                        {config.retry.enabled
+                          ? `a refused call is tried again after ${retryScheduleText(config.retry.delaysMs)}, before another model is used`
+                          : 'a failed call moves to the next model at once'}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={config.retry.enabled}
+                      onValueChange={value => onSetRetry(value)}
+                      accessibilityLabel="Retry on provider failure"
+                      accessibilityRole="switch"
+                    />
+                  </View>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <View style={styles.row}>
+              <Text style={styles.hint}>loading…</Text>
+            </View>
+          )}
+        </View>
+
         {accounts ? (
           <>
             <Text style={styles.section}>Subscriptions</Text>
@@ -103,12 +199,12 @@ export function ProvidersScreen({
                 </View>
               ))}
             </View>
-            {/* Every provider, the subscriptions once signed in included: their models live there. */}
-            <Text style={styles.section}>All providers</Text>
           </>
         ) : null}
+        {/* Every provider, the subscriptions once signed in included: their models live there. */}
+        <Text style={styles.section}>Providers</Text>
         <View style={styles.card}>
-          {providers.every(provider => provider.type === 'tags') ? (
+          {real.length === 0 ? (
             <Pressable
               style={[styles.row, styles.link]}
               onPress={onNewProvider}
@@ -121,8 +217,7 @@ export function ProvidersScreen({
               <Text style={styles.linkGlyph}>›</Text>
             </Pressable>
           ) : null}
-          {providers.length > 0 && providers.every(provider => provider.type === 'tags') ? <View style={styles.separator} /> : null}
-          {providers.map((provider, index) => (
+          {real.map((provider, index) => (
             <View key={provider.key}>
               {index > 0 ? <View style={styles.separator} /> : null}
               <Pressable
@@ -151,6 +246,23 @@ export function ProvidersScreen({
             </View>
           ))}
         </View>
+
+        <Text style={styles.section}>Tags</Text>
+        <View style={styles.card}>
+          <Pressable
+            style={[styles.row, styles.link]}
+            onPress={onOpenTags}
+            accessibilityRole="button"
+            accessibilityLabel="Open tags">
+            <View style={styles.linkMain}>
+              <Text style={styles.linkTitle}>Tags</Text>
+              <Text style={styles.hint} numberOfLines={1}>
+                named routes: a model, then the ones it falls back to
+              </Text>
+            </View>
+            <Text style={styles.linkGlyph}>›</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -158,14 +270,16 @@ export function ProvidersScreen({
 
 const createStyles = (palette: Palette) => ({
   screen: { flex: 1 },
+  // The same section title as every other settings page: Models used to wear its own, bolder one.
   section: {
-    fontSize: font.small,
-    fontWeight: '600' as const,
-    color: palette.textMuted,
-    textTransform: 'uppercase' as const,
+    marginTop: space.md,
+    paddingHorizontal: space.xs,
+    fontSize: font.micro,
+    color: palette.textFaint,
     letterSpacing: 0.5,
-    marginTop: space.sm,
+    textTransform: 'uppercase' as const,
   },
+
   connected: { color: palette.ok },
   error: {
     color: palette.danger,
@@ -194,7 +308,7 @@ const createStyles = (palette: Palette) => ({
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  body: { padding: space.md, paddingBottom: space.xl, gap: space.sm },
+  body: { paddingBottom: space.xl, gap: space.xs },
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

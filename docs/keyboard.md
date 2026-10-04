@@ -23,6 +23,9 @@ listener is in the capture phase: react-native-web's TextInput stops every key e
 Focus is drawn by `:focus-visible` (keyboard only, `webTheme.web.ts`); a menu row is tinted
 instead, because its scroller clips an outline drawn outside it.
 
+The settings index has a search field on top: the arrows reach it like any row, typing lists what
+matches (`docs/settings.md`), and Enter opens the first result.
+
 ## Shortcuts
 
 One table, `src/core/shortcuts.ts`: the shell binds it, the `?` sheet lists it (each row runs its

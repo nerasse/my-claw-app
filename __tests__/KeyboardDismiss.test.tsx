@@ -118,7 +118,7 @@ test('the settings index and every page under it drop the keyboard', async () =>
   await pressLabel(tree, 'Open conversations');
   dismiss.mockClear();
   await pressLabel(tree, 'Open settings');
-  await waitFor(() => labelsOf(tree).includes('Open general'));
+  await waitFor(() => labelsOf(tree).includes('Open appearance'));
   expect(dismiss).toHaveBeenCalled();
 
   dismiss.mockClear();
@@ -128,7 +128,8 @@ test('the settings index and every page under it drop the keyboard', async () =>
 
   dismiss.mockClear();
   await pressLabel(tree, 'Back to settings');
-  await pressLabel(tree, 'Open general');
+  // The server field moved to Devices with the rest of what this device talks to.
+  await pressLabel(tree, 'Open devices');
   await waitFor(() => labelsOf(tree).includes('Server address'));
   expect(dismiss).toHaveBeenCalled();
 

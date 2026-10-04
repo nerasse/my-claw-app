@@ -133,7 +133,7 @@ export function AgentsScreen({
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title} numberOfLines={1}>
-            Agents
+            Sub-agents
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>
             {subtitle ?? parentTitle}
