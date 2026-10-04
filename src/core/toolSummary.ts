@@ -35,8 +35,7 @@ const FAMILY: Record<string, Family> = {
   spawn: 'agent',
   send: 'agent',
   agents: 'agent',
-  read_skill: 'agent',
-  manage_skills: 'agent',
+  skills: 'agent',
   workspaces: 'agent',
   cron: 'time',
   audio: 'voice',
@@ -63,8 +62,8 @@ const KEYS: Record<string, readonly string[]> = {
   spawn: ['name'],
   send: ['id'],
   agents: ['id'],
-  read_skill: ['name'],
-  manage_skills: ['name'],
+  // Read is the default action and carries none: a bare name is a read (server, 2026-10-04).
+  skills: ['name'],
   workspaces: ['key', 'path'],
   cron: ['name', 'job_id', 'prompt'],
   // The action is the verb (`VERB_KEYS`), these its object: a file, a text, a mode.
@@ -94,7 +93,7 @@ const KEYS: Record<string, readonly string[]> = {
 const CONTENT_KEYS: Record<string, string> = {
   bash: 'command',
   write: 'content',
-  manage_skills: 'instructions',
+  skills: 'instructions',
   audio: 'text',
   cron: 'prompt',
   delegate_browser_task: 'instructions',

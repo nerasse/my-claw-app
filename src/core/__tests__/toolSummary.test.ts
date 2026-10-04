@@ -176,6 +176,12 @@ describe('the merged tools (server, 2026-10-04)', () => {
     expect(toolContent('audio', { action: 'speak', text: 'Bonjour' })).toEqual({ key: 'text', text: 'Bonjour' });
   });
 
+  it('skills reads as its skill, and as the action before it when it writes', () => {
+    expect(summarizeTool('skills', { name: 'voice' }).detail).toBe('voice');
+    expect(summarizeTool('skills', { action: 'update', name: 'voice', instructions: '# Voice' }).detail).toBe('update voice');
+    expect(toolContent('skills', { action: 'create', name: 'x', instructions: '# X' })).toEqual({ key: 'instructions', text: '# X' });
+  });
+
   it('a delegate call on the kept windows says which action', () => {
     expect(summarizeTool('delegate_browser_task', { kept: 'release', window: 2 }).detail).toBe('release');
   });
