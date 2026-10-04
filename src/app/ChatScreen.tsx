@@ -23,7 +23,7 @@ import { probeText, revealFieldAboveKeyboard } from '../core/revealField';
 import { keyboardNow, keyboardResumeMismatch } from '../core/keyboard';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
-import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput } from '../core/protocol';
+import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
 import { clearDraft, draftAttachmentsOf, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
@@ -188,7 +188,7 @@ export function ChatScreen({
    */
   subagentDoors: Map<string, { label: string; status: 'idle' | 'running' }>;
   /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
-  spawnLive?: Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }>;
+  spawnLive?: Map<string, { subagentId: string; displayName: string; status: SpawnStatus }>;
   onOpenSubAgent?: (toolItemId: string) => void;
   onSubAgentMenu?: () => void;
   /** Asks for the page of history just older than what is on screen. */

@@ -60,4 +60,7 @@ test('a bubble no run closed draws no signature', () => {
 test('the signature carries the word the run ended on', () => {
   expect(texts(mount({ ...RUN, status: 'error' }))).toContain(' · error');
   expect(texts(mount({ ...RUN, status: 'aborted' }))).toContain(' · Stopped');
+  // A run the server went down under: nobody stopped it, so it does not say Stopped.
+  expect(texts(mount({ ...RUN, status: 'interrupted' }))).toContain(' · Interrupted');
+  expect(texts(mount({ ...RUN, status: 'interrupted' }))).not.toContain(' · Stopped');
 });

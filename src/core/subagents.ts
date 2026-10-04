@@ -6,6 +6,7 @@ import type {
   SubAgentsCallersResultFrame,
   SubAgentsHandoffResultFrame,
   SubAgentsListResultFrame,
+  SpawnStatus,
 } from './protocol';
 import type { SpawnCard } from './chat';
 
@@ -351,8 +352,8 @@ export function spawnDoorsOf(
  */
 export function spawnLiveOf(
   cards: readonly SpawnCard[],
-): Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }> {
-  const live = new Map<string, { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' }>();
+): Map<string, { subagentId: string; displayName: string; status: SpawnStatus }> {
+  const live = new Map<string, { subagentId: string; displayName: string; status: SpawnStatus }>();
   for (const card of cards) {
     if (!card.subagentId || !card.status) continue;
     const named = typeof card.args.name === 'string' ? card.args.name : undefined;

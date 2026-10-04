@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
+import type { SpawnStatus } from '../core/protocol';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatSpan } from '../core/utils';
@@ -38,7 +39,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   threadId?: string;
   /** Set when this card's sub-agent still exists; without it there is nowhere to go. */
   subagent?: { label: string; status: 'idle' | 'running' };
-  spawn?: { subagentId: string; displayName: string; status: 'running' | 'complete' | 'error' | 'aborted' };
+  spawn?: { subagentId: string; displayName: string; status: SpawnStatus };
   onOpen?: (toolItemId: string) => void;
   expandTools?: boolean;
 }): React.JSX.Element {
@@ -84,11 +85,13 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
     ? { text: '● running', style: styles.stateRunning }
     : spawn?.status === 'complete'
       ? { text: '✓ done', style: styles.stateOk }
-      : spawn?.status === 'error' || item.ok === false
-        ? { text: 'error', style: styles.stateBad }
-        : spawn?.status === 'aborted'
-          ? { text: 'aborted', style: styles.stateFaint }
-          : null;
+      : spawn?.status === 'aborted'
+        ? { text: 'aborted', style: styles.stateFaint }
+        : spawn?.status === 'interrupted'
+          ? { text: 'interrupted', style: styles.stateFaint }
+          : spawn?.status === 'error' || item.ok === false
+            ? { text: 'error', style: styles.stateBad }
+            : null;
 
   return (
     <View style={[styles.card, running && styles.cardRunning, spawn?.status === 'error' && styles.cardError]}>

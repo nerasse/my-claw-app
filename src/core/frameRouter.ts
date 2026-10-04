@@ -526,6 +526,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         frame.truncated,
         frame.hasMore,
         frame.nextBefore,
+        frame.lastRun,
       );
       // The thread's compaction state, in both directions: the operation if one runs, and its
       // absence otherwise. Only the first travels as an event, so a window that was not connected

@@ -144,3 +144,14 @@ it.each([
   });
   expect(texts(tree)).toContain(expected);
 });
+
+// 2026-10-04: a card the server went down under is drawn from its state alone, and such a card is
+// never `ok`. Read before the state, `ok: false` painted it a red "error" -- a stopped one too.
+it.each([
+  ['interrupted' as const, 'interrupted'],
+  ['aborted' as const, 'aborted'],
+])('a card drawn from its state alone says %s, not error', (status, expected) => {
+  const tree = render(makeItem({ ok: false, output: '' }), { ...DOOR, spawn: { subagentId: 's1', displayName: 'digger', status } });
+  expect(texts(tree)).toContain(expected);
+  expect(texts(tree)).not.toContain('error');
+});

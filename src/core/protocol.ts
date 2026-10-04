@@ -246,6 +246,12 @@ export interface ToolCallFrame extends ToolCallPayload {
  * exact running/terminal state without waiting for a live lifecycle frame. */
 export type SpawnAction = 'spawn' | 'send';
 
+/**
+ * Where a sub-agent card stands. `interrupted` is the server's reading of a `running` card whose
+ * child nothing runs any more: the server went down under it and never wrote its end.
+ */
+export type SpawnStatus = 'running' | 'complete' | 'error' | 'aborted' | 'interrupted';
+
 export interface SpawnLifecycleState {
   subagentId: string;
   displayName: string;
@@ -253,7 +259,7 @@ export interface SpawnLifecycleState {
   mode: string;
   /** Which tool opened the card. Same lifecycle either way, only the wording differs. */
   action: SpawnAction;
-  status: 'running' | 'complete' | 'error' | 'aborted';
+  status: SpawnStatus;
   resultLength?: number;
   error?: string;
   startedAt: string;
@@ -357,7 +363,8 @@ export interface SpawnEndFrame {
 export interface RunMeta {
   /** The id of the run's `run_start` entry: the grouping key. */
   id: string;
-  status: 'running' | 'done' | 'aborted' | 'error';
+  /** `interrupted`: no end was ever written and nothing runs it any more (a crash, a kill, a restart). */
+  status: 'running' | 'done' | 'aborted' | 'error' | 'interrupted';
   startTs: string;
   endTs?: string;
 }
@@ -3790,6 +3797,12 @@ export interface SessionSyncResultFrame {
   hasMore?: boolean;
   /** Count of entries before that window; where the next older page starts. */
   nextBefore?: number;
+  /**
+   * The branch's last run as the server reads it now. A delta often carries none of its entries (a
+   * run killed with the server wrote nothing more), so this is what settles a run still held as
+   * running -- `interrupted` included, which is what offers Continue.
+   */
+  lastRun?: RunMeta;
 }
 
 /**

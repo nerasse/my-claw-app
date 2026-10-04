@@ -4,7 +4,7 @@ import { questionStore } from './questionStore';
 import { agentOfCard, indexRoster } from './subagents';
 import { hasNothingToShow, isOwnerMessage } from './runRows';
 
-export type RunStatus = 'running' | 'done' | 'aborted' | 'error';
+export type RunStatus = RunMeta['status'];
 
 /** The run an item belongs to, client-side: timestamps in ms, the server speaks ISO. */
 export interface RunInfo {
@@ -1054,9 +1054,10 @@ class ChatStoreImpl {
    * Two jobs. When the entries carry the real run id of the turn in flight, the synthetic run
    * live frames created under is renamed to it, so one run never renders as two groups. And when
    * the server says no run is active, a trailing run whose end was lost (disconnect, crash)
-   * settles as done instead of spinning forever as an open group.
+   * settles instead of spinning forever as an open group: with the status the server read for it
+   * when it says (`lastRun`), as done otherwise.
    */
-  private reconcileRuns(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
+  private reconcileRuns(threadId: string, entries: HistoryEntry[], activeRun?: boolean, lastRun?: RunMeta): void {
     const open = this.openRuns.get(threadId);
     if (activeRun === true) {
       // The last running run among the incoming entries is the one in flight. Prefer the real id
@@ -1092,8 +1093,17 @@ class ChatStoreImpl {
       // the run was still running left a page that arrived after its end with two ids for one
       // run, the cards under the synthetic one (and a stale start, when an earlier end had been
       // missed), the phases under the server's -- three groups and a wrong duration for one turn.
-      const latest = [...entries].reverse().find(entry => entry.run)?.run;
+      const latest = [...entries].reverse().find(entry => entry.run)?.run ?? lastRun;
       if (open?.synthetic && latest) this.renameRun(threadId, open.info.id, runInfoOf(latest));
+      // The server's own reading of the last run beats whatever this device settled it as. A run
+      // the server went down under has no end frame and, in a delta, often no entry left to send:
+      // the session list dropping the thread then sealed it `done` here, and the Continue it
+      // needed never showed (2026-10-04). `lastRun` says `interrupted`.
+      if (lastRun && lastRun.status !== 'running') {
+        const verdict = runInfoOf(lastRun);
+        this.sealRun(threadId, verdict.id, verdict.status, verdict.endTs ?? Date.now());
+        this.signTrigger(threadId, verdict);
+      }
       // A trailing run still marked running is dead (its end frame or marker was lost): settle it
       // as done so the group closes instead of rendering as an eternal open run. Only the last
       // run can be running, so the search goes from the end.
@@ -1192,6 +1202,7 @@ class ChatStoreImpl {
     truncated?: boolean,
     hasMore?: boolean,
     nextBefore?: number,
+    lastRun?: RunMeta,
   ): void {
     if (activeRun === true) this.activeRuns.add(threadId);
     else if (activeRun === false) this.activeRuns.delete(threadId);
@@ -1212,7 +1223,7 @@ class ChatStoreImpl {
     // The run bookkeeping follows the entries: adopt the server's run id for the turn in flight,
     // or settle a trailing run whose end never arrived. After the page is applied, so the
     // settle sees the entries it is the verdict on.
-    this.reconcileRuns(threadId, entries, activeRun);
+    this.reconcileRuns(threadId, entries, activeRun, lastRun);
 
     // Update sync cursors: head is the last entry in the file, leaf is the branch tip.
     // If truncated, we don't have head yet -- keep asking until we do.

@@ -26,6 +26,7 @@ export function RunFoot({ run }: { run: RunInfo }): React.JSX.Element {
   const span = run.endTs !== undefined ? formatSpan(run.endTs - run.startTs) : '';
   const failed = run.status === 'error';
   const stopped = run.status === 'aborted';
+  const interrupted = run.status === 'interrupted';
   return (
     <View style={styles.wrap}>
       <Text style={styles.span}>{span === '' ? 'run' : `run · ${span}`}</Text>
@@ -33,6 +34,7 @@ export function RunFoot({ run }: { run: RunInfo }): React.JSX.Element {
           so it rides its signature instead of repeating on every fold header it passed. */}
       {failed ? <Text style={styles.statusError}> · error</Text> : null}
       {stopped ? <Text style={styles.statusAborted}> · Stopped</Text> : null}
+      {interrupted ? <Text style={styles.statusAborted}> · Interrupted</Text> : null}
     </View>
   );
 }
