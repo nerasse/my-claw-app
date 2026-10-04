@@ -4,6 +4,7 @@ import type { ModelOption, ProviderInfo, UnavailableModel } from '../core/protoc
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
+import { CloseButton } from '../components/CloseButton';
 
 /** A component of its own, not a closure in render: FlatList keeps it across renders. */
 function Separator(): React.JSX.Element {
@@ -236,6 +237,7 @@ export function ProviderScreen({
           accessibilityLabel="Edit provider">
           <Text style={styles.editGlyph}>⚙</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

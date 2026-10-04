@@ -5,6 +5,7 @@ import type { LayerState } from '../core/instructions';
 import { layerIsDirty } from '../core/instructions';
 import { layerOfFile, sourceStatusOf } from '../core/layers';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 interface LadderStep {
   left: string;
@@ -133,6 +134,7 @@ export function InstructionLayerScreen({
             {saving ? '...' : layer.off ? 'Skip this layer' : 'Save'}
           </Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

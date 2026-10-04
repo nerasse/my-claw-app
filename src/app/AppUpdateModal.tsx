@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppUpdatePhase } from '../core/appUpdate';
 import { useTransferProgress } from '../core/nativeBridge';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { keyLayerProps } from '../core/keyNav';
 
 /**
  * The update dialog: one card in the middle of the screen, not a coloured strip glued over the
@@ -81,7 +82,7 @@ export function AppUpdateModal({
   return (
     <View style={styles.backdrop}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="Close update dialog" />
-      <View style={styles.card}>
+      <View {...keyLayerProps('menu')} style={styles.card}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.body}>{body}</Text>
         {currentVersion ? <Text style={styles.meta}>You are on {currentVersion}</Text> : null}

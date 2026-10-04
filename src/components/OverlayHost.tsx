@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState, useSyncExternalStore } from 'reac
 import { Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import { ActionSheet, type SheetEntry } from './ActionSheet';
 import { overlayStore, type AnchorRect } from '../core/overlay';
+import { keyLayerProps } from '../core/keyNav';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 const MENU_WIDTH = 240;
@@ -100,6 +101,7 @@ function AnchoredMenu({
     <>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => overlayStore.close()} accessibilityLabel="Close menu" />
       <View
+        {...keyLayerProps('menu')}
         style={[styles.menu, { left, top }]}
         onLayout={e => setHeight(e.nativeEvent.layout.height)}
         accessibilityRole="menu">
@@ -116,7 +118,10 @@ function AnchoredMenu({
               ]}
               accessibilityRole="menuitem"
               accessibilityLabel={entry.label}>
-              <Text style={[styles.label, entry.danger && styles.danger]}>{entry.label}</Text>
+              <View style={styles.labelLine}>
+                <Text style={[styles.label, entry.danger && styles.danger]}>{entry.label}</Text>
+                {entry.shortcut ? <Text style={styles.hint}>{entry.shortcut}</Text> : null}
+              </View>
               {entry.hint ? <Text style={styles.hint}>{entry.hint}</Text> : null}
             </Pressable>
           ),
@@ -143,6 +148,7 @@ const createStyles = (palette: Palette) => ({
   },
   row: { paddingHorizontal: space.md, paddingVertical: space.sm, gap: 1 },
   rowActive: { backgroundColor: palette.surfaceAlt },
+  labelLine: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, gap: space.sm },
   label: { fontSize: font.body, color: palette.text },
   danger: { color: palette.danger },
   hint: { fontSize: font.small, color: palette.textFaint },

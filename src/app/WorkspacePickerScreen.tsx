@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /**
  * The workspace picker of one agent: the dynamic `config.workspaces` list plus the default
@@ -59,6 +60,7 @@ export function WorkspacePickerScreen({
           <Text style={styles.title}>Workspace</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

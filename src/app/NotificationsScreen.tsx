@@ -10,6 +10,7 @@ import {
 } from '../core/nativeBridge';
 import { useDismissKeyboard } from '../core/keyboard';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /** One row per usage, with the labels the tests and the screen reader read. */
 const ROWS: ReadonlyArray<{
@@ -157,6 +158,7 @@ export function NotificationsScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.title}>Notifications</Text>
+        <CloseButton />
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-nati
 import type { ProviderInfo, ProvidersEnvResultFrame } from '../core/protocol';
 import { envNamePresent } from '../core/providers';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 export type ProviderType = 'openai' | 'codex' | 'anthropic';
 
@@ -124,6 +125,7 @@ export function ProviderEditScreen({
             {mode === 'create' ? 'the service the agent thinks with: pick one, paste its key' : provider?.key ?? ''}
           </Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

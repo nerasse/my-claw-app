@@ -7,6 +7,7 @@ import { useScrollIndicator } from '../components/ScrollIndicator';
 import { scopeLabelOf, type RosterGroup, type RosterRow, type SubAgentsStatus } from '../core/subagents';
 import type { SubAgentEntry } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
+import { keyLayerProps } from '../core/keyNav';
 
 /**
  * A group as the list consumes it. `showMajor` is decided once, here, rather than by having every
@@ -120,7 +121,7 @@ export function AgentsScreen({
   );
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
+    <View {...keyLayerProps('page')} style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}

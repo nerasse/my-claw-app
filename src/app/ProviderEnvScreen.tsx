@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { ProviderInfo, ProvidersEnvResultFrame } from '../core/protocol';
 import { envNamePresent } from '../core/providers';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /**
  * The env key of one provider, page-sized (the user asked for real config pages, not menus
@@ -62,6 +63,7 @@ export function ProviderEnvScreen({
           <Text style={styles.title}>Environment variable</Text>
           <Text style={styles.subtitle}>{provider.key} · {name || 'none'}</Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

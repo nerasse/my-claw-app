@@ -18,6 +18,7 @@ import {
   useServices,
 } from '../core/services';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /** A compose install runs a local engine as a profile the owner starts on the host. */
 const COMPOSE_PROFILE: Partial<Record<ServiceView['id'], string>> = {
@@ -89,6 +90,7 @@ export function ServicesScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.title}>Services</Text>
+        <CloseButton />
       </View>
       <ScrollView
         contentContainerStyle={styles.content}

@@ -6,6 +6,7 @@ import { accountsStore, useAccounts } from '../core/accounts';
 import { connection } from '../core/connection';
 import { encodeAccounts, type AccountKind, type AccountView, type AccountsRequest } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /** The words of each plan, one place. */
 export const ACCOUNT_LABELS: Record<AccountKind, { title: string; plan: string; signIn: string }> = {
@@ -93,6 +94,7 @@ export function AccountScreen({
           <Text style={styles.title}>{labels.title}</Text>
           <Text style={styles.subtitle}>{labels.plan} · usage counts against your plan</Text>
         </View>
+        <CloseButton />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

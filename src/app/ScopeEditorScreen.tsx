@@ -3,6 +3,7 @@ import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { CardEdge } from '../components/CardEdge';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 const EMPTY_ITEMS: ScopeItem[] = [];
 Object.freeze(EMPTY_ITEMS);
@@ -174,6 +175,7 @@ export function ScopeEditorScreen({
         >
           <Text style={styles.saveText}>{saving ? '...' : 'Save'}</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

@@ -6,6 +6,7 @@ import { useTags } from '../core/tags';
 import { encodeAgentsConfigGet, encodeModelList, encodeTagsRouteUpsert, encodeTagsUpsert, type TagRouteCandidate } from '../core/protocol';
 import { ModelPickerPage, pickerStart, type PickerState } from '../components/ModelSheet';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 function routeOf(tag: { route?: TagRouteCandidate[]; model?: string; effort?: string; contextCap?: number } | null): TagRouteCandidate[] {
   if (tag?.route?.length) return tag.route.map(candidate => ({ ...candidate }));
@@ -148,6 +149,7 @@ export function TagEditorPage({
         <Pressable onPress={save} disabled={draft.length === 0 || saving} style={[styles.saveButton, draft.length > 0 && !saving ? styles.saveEnabled : styles.saveDisabled]} accessibilityRole="button" accessibilityLabel="Save">
           <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save'}</Text>
         </Pressable>
+        <CloseButton />
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">

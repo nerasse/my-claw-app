@@ -230,6 +230,8 @@ test('a server with no model: the assistant takes the whole app, Back cannot lea
   expect(tree.root.findAll(n => n.props.testID === 'pinned-column')).toHaveLength(0);
   expect(labelsOf(tree)).not.toContain('Message to send');
   expect(labelsOf(tree)).not.toContain('Back to settings');
+  // Nor a cross: the setup is not a page of settings to leave, it is the app until it is done.
+  expect(labelsOf(tree)).not.toContain('Close settings');
 
   // Escape (or the hardware back) walks back through settings: the assistant stays.
   await press(tree, 'Setup step Your other devices');

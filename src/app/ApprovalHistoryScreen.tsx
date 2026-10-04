@@ -4,6 +4,7 @@ import type { ApprovalHistoryEntry, ApprovalOutcome, ApprovalHistoryResultFrame 
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { CloseButton } from '../components/CloseButton';
 
 /** How each outcome reads. The wording separates a refusal from a prompt nobody answered. */
 const OUTCOME_LABEL: Record<ApprovalOutcome, string> = {
@@ -87,6 +88,7 @@ export function ApprovalHistoryScreen({
         <Pressable onPress={onRefresh} accessibilityRole="button" accessibilityLabel="Refresh" hitSlop={12}>
           <Text style={styles.refresh}>↻</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {stats ? (

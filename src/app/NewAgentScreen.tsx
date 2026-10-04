@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /** Name rules of the server loader: lowercase, digits, dashes, no leading dash. */
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -45,6 +46,7 @@ export function NewAgentScreen({
           <Text style={styles.title}>New agent</Text>
           <Text style={styles.subtitle}>one file in the custom tier, hot-reloaded</Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

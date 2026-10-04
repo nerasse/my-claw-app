@@ -6,6 +6,7 @@ import { sourceStatusOf, sourceOwnsFile } from '../core/layers';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
+import { CloseButton } from '../components/CloseButton';
 
 /** The loader's workspace key rules, mirrored so the form refuses before the server does. */
 const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
@@ -250,6 +251,7 @@ export function WorkspaceScreen({
             {workspace.default ? 'your conversations and memory live here' : workspace.path}
           </Text>
         </View>
+        <CloseButton />
       </View>
 
       {configError ? (

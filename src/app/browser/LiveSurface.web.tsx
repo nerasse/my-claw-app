@@ -10,6 +10,7 @@ import type { LiveFrame } from '../../core/browserLive';
 import type { BrowserInput } from '../../core/protocol';
 import { LiveImage } from './LiveImage';
 import { keyInput } from './surfaceMath';
+import { keyLayerProps } from '../../core/keyNav';
 
 /** Moves and wheel turns are gathered and sent at this pace. */
 const POINTER_EVERY_MS = 50;
@@ -148,7 +149,11 @@ export function LiveSurface({
   const height = width * aspect;
   return (
     <View style={styles.wrap} onLayout={onLayout}>
-      <View ref={ref} style={[styles.box, { width, height }, focused && styles.focused]} accessibilityLabel="Live page">
+      <View
+        ref={ref}
+        {...keyLayerProps('off')}
+        style={[styles.box, { width, height }, focused && styles.focused]}
+        accessibilityLabel="Live page">
         <LiveImage frame={frame} style={{ width, height }} />
         {frame ? null : <Text style={styles.waiting}>waiting for a picture…</Text>}
       </View>

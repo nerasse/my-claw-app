@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { InstructionEntry, NestedInstruction, WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 /** The loader's workspace key rules, mirrored so the form refuses before the server does. */
 const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
@@ -107,6 +108,7 @@ export function WorkspacesScreen({
           accessibilityLabel={adding ? 'Cancel add workspace' : 'Add workspace'}>
           <Text style={adding ? styles.addTextActive : styles.addTextIdle}>{adding ? '✕' : '+'}</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

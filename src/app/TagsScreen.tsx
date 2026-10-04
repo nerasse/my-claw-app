@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { TagInfo } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 /**
  * The tag catalog (docs/tags.md on the server): named aliases for a model/effort/context combo,
@@ -55,6 +56,7 @@ export function TagsScreen({
           accessibilityLabel="New tag">
           <Text style={styles.addGlyph}>+</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

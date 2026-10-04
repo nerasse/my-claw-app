@@ -29,6 +29,7 @@ import {
   type ModelOption,
   type RouteSort,
 } from '../core/protocol';
+import { CloseButton } from './CloseButton';
 
 function splitGroup(model: ModelOption): string[] {
   return (model.group ?? '')
@@ -679,6 +680,7 @@ export function ModelPickerPage({
             {flow.preview}
           </Text>
         </View>
+        <CloseButton />
       </View>
       {flow.customContextInput ?? flow.search ? (
         <TextInput

@@ -4,6 +4,7 @@ import { GearIcon, PlusIcon, SidebarIcon } from '../components/icons';
 import { ResizeHandle } from '../components/ResizeHandle';
 import { RAIL_WIDTH, drawerColumnOf, pagePaneMax, panes, usePanes } from '../core/panes';
 import { radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { keyLayerProps } from '../core/keyNav';
 
 /**
  * The two desktop columns the owner sizes by hand: the conversation list on the left, the page
@@ -56,7 +57,7 @@ export function PinnedColumn({
  * left border a handle; or in the whole column, styled by the shell.
  */
 export function PagePane({ split, style, children }: { split: boolean; style: StyleProp<ViewStyle>; children: React.ReactNode }): React.JSX.Element {
-  if (!split) return <View style={style}>{children}</View>;
+  if (!split) return <View {...keyLayerProps('page')} style={style}>{children}</View>;
   return <SidePagePane>{children}</SidePagePane>;
 }
 
@@ -68,7 +69,7 @@ function SidePagePane({ children }: { children: React.ReactNode }): React.JSX.El
   // Clamped on the way out too: a window made narrower must not push the conversation off it.
   const width = Math.min(asked, pagePaneMax(windowWidth, drawerColumn));
   return (
-    <View testID="page-pane" style={[styles.pagePane, { width }]}>
+    <View {...keyLayerProps('page')} testID="page-pane" style={[styles.pagePane, { width }]}>
       <ResizeHandle
         edge="left"
         width={width}

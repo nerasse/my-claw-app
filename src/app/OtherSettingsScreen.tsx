@@ -4,6 +4,7 @@ import { appUpdateSupported } from '../core/appUpdateRuntime';
 import type { ThemeMode } from '../core/prefs';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
   { mode: 'system', label: 'System' },
@@ -47,6 +48,7 @@ export function OtherSettingsScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.title}>Other</Text>
+        <CloseButton />
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">

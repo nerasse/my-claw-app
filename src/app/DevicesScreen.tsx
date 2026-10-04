@@ -8,6 +8,7 @@ import { useScrollIndicator } from '../components/ScrollIndicator';
 import { ActionSheet } from '../components/ActionSheet';
 import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
+import { CloseButton } from '../components/CloseButton';
 
 /** "3 hours ago" beats an ISO string on a phone: the question is always how stale a device is. */
 function since(iso: string | undefined): string {
@@ -52,6 +53,7 @@ export function DevicesScreen({ onBack }: { onBack: () => void }): React.JSX.Ele
       <View style={styles.header}>
         <BackButton onPress={onBack} label="Back to settings" />
         <Text style={styles.title}>Devices</Text>
+        <CloseButton />
       </View>
 
       {/* Without this the first tap on Check only dismisses the keyboard: the scroll view eats

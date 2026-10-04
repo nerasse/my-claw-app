@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useDismissKeyboard, useKeyboardHeight, useSheetBottomInset } from '../core/keyboard';
 import { useLayout } from '../core/layout';
+import { keyLayerProps } from '../core/keyNav';
 import { useScrollIndicator } from './ScrollIndicator';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
@@ -14,6 +15,8 @@ export interface SheetOption {
   /** Rendered with a checkmark: this is the option in effect. */
   selected?: boolean;
   danger?: boolean;
+  /** The key that does the same from anywhere (`⇧B`), printed at the end of the row on the web. */
+  shortcut?: string;
   onPress: () => void;
 }
 
@@ -98,6 +101,7 @@ export function ActionSheet({
               </Text>
             ) : null}
           </View>
+          {option.shortcut ? <Text style={styles.shortcut}>{option.shortcut}</Text> : null}
           {option.selected ? <Text style={styles.check}>✓</Text> : null}
         </Pressable>
       ),
@@ -109,6 +113,7 @@ export function ActionSheet({
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
       <View
+        {...keyLayerProps('menu')}
         style={[
           styles.sheet,
           // The padding that lifts the sheet clear of the keyboard counts towards its height:
@@ -239,4 +244,14 @@ const createStyles = (palette: Palette) => ({
   optionDanger: { color: palette.danger },
   optionHint: { fontSize: font.small, color: palette.textFaint },
   check: { fontSize: font.body, color: palette.accent, fontWeight: '700' as const },
+  shortcut: {
+    fontSize: font.small,
+    color: palette.textMuted,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.border,
+    overflow: 'hidden' as const,
+  },
 });

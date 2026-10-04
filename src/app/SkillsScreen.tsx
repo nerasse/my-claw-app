@@ -4,6 +4,7 @@ import type { SkillEntry, WorkspaceEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 /** Display names of the three tiers, with the server-side location as the honest hint. */
 const SOURCE_SECTIONS: Array<{
@@ -179,6 +180,7 @@ export function SkillsScreen({
             {skills.length} skill{skills.length === 1 ? '' : 's'}
           </Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

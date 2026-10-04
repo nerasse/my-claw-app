@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /** One numeric per-agent setting: the iteration budget or the context ceiling. A blank value
  *  removes the key so the default applies again; context cap accepts 0 (no ceiling). The frame
@@ -71,6 +72,7 @@ export function NumberEditorScreen({
             {saving ? '...' : 'Save'}
           </Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

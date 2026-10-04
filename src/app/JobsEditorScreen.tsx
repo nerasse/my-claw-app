@@ -11,6 +11,8 @@ import { ScheduleEditor } from '../components/ScheduleEditor';
 import { scheduleInvalid } from '../core/cron';
 import type { JobEntry, JobScope, JobScopeMode, SkillEntry, ToolEntry, McpEntry, WorkspaceEntry, JobFieldsOut } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
+import { CloseButton } from '../components/CloseButton';
+import { keyLayerProps } from '../core/keyNav';
 
 export interface JobDraft {
   name: string;
@@ -285,7 +287,7 @@ export function JobsEditorScreen({
   };
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.screen, layerFrame]}>
+    <View {...keyLayerProps('page')} style={[StyleSheet.absoluteFill, styles.screen, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onBack}
@@ -313,6 +315,7 @@ export function JobsEditorScreen({
           accessibilityLabel={saving ? 'Saving job' : 'Save job'}>
           <Text style={canSave ? styles.saveText : styles.saveTextOff}>{saving ? '...' : 'Save'}</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

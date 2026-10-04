@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import { useEffect, useRef } from 'react';
+import { typingInField } from './keyNav';
 
 export type HotkeyMap = Record<string, () => void>;
 
@@ -21,8 +22,11 @@ export function useHotkeys(handlers: HotkeyMap): void {
     const onKey = (event: KeyboardEvent): void => {
       // A dead key or a Japanese IME is mid-word: those keystrokes belong to the field.
       if (event.isComposing) return;
-      const run = latest.current[comboOf(event)];
+      const combo = comboOf(event);
+      const run = latest.current[combo];
       if (!run) return;
+      // A letter, `/` or `?` with no Ctrl is text while a field has the keyboard: it types.
+      if (!combo.startsWith('mod+') && !combo.endsWith('escape') && typingInField()) return;
       // Ctrl+K is Firefox's search bar and Ctrl+N is a new window: taking the key is the point.
       event.preventDefault();
       event.stopPropagation();

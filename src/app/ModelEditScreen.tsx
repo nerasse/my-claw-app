@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import type { ModelDeclaration, ModelOption, UnavailableModel } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /** The server's rule, mirrored so a refusal is not the first feedback: no whitespace, no `@`. */
 const ID_RE = /^[^\s@]+$/;
@@ -160,6 +161,7 @@ export function ModelEditScreen({
             {discovered ? `override on ${provider}` : `custom entry on ${provider}`}
           </Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

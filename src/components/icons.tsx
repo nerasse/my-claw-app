@@ -98,6 +98,13 @@ export function SidebarIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M3 3H21V21H3Z M5 5V19H9V5Z M11 5V19H19V5Z" />;
 }
 
+/** A cross: leave the whole stack of pages, not one level of it. */
+export function CloseIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon {...props} d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4z" />
+  );
+}
+
 /** Four corners pointing out: the page takes the whole window. */
 export function ExpandIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M5 5h5v2H7v3H5zm9 0h5v5h-2V7h-3zM5 14h2v3h3v2H5zm12 0h2v5h-5v-2h3z" />;

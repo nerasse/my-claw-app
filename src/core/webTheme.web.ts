@@ -44,6 +44,13 @@ body { overscroll-behavior: none; }
 /* Keyboard focus has to be visible, and only for the keyboard: :focus-visible is exactly that. */
 :focus-visible { outline: 2px solid ${palette.accent}; outline-offset: 2px; border-radius: 6px; }
 input:focus, textarea:focus { outline: none; }
+/* In a menu the rows run edge to edge inside a scroller that clips an outline drawn outside them:
+   the focused row is tinted instead (docs/keyboard.md). */
+[data-claw-keys="menu"] [role="button"]:focus-visible,
+[data-claw-keys="menu"] [role="menuitem"]:focus-visible {
+  outline: none;
+  background-color: ${palette.accentSoft};
+}
 
 /* Selected text must stay readable in both themes: accentSoft is dark-on-dark in the dark
    palette, so the browser paints it nearly invisible. accent + accentText flips one way in

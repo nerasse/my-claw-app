@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { McpEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 function stateBadge(state: McpEntry['state']): string {
   if (state === 'connected') return 'connected';
@@ -84,6 +85,7 @@ export function McpsScreen({
           accessibilityLabel={adding ? 'Cancel add server' : 'Add server'}>
           <Text style={adding ? styles.addTextActive : styles.addTextIdle}>{adding ? '✕' : '+'}</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

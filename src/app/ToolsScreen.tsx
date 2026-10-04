@@ -4,6 +4,7 @@ import type { ToolEntry } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 /** Display names of the three sources, with the server-side location as the honest hint. */
 const SOURCE_SECTIONS: Array<{
@@ -225,6 +226,7 @@ export function ToolsScreen({
           <Text style={styles.title}>Tools</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

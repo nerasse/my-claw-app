@@ -3,6 +3,7 @@ import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { useSheetBottomInset } from '../core/keyboard';
 import { useLayout } from '../core/layout';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { keyLayerProps } from '../core/keyNav';
 
 /**
  * Bottom sheet asking for one line of text.
@@ -58,6 +59,7 @@ export function PromptSheet({
       />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
       <View
+        {...keyLayerProps('menu')}
         style={[
           styles.sheet,
           { paddingBottom: dialogs ? space.lg : bottomInset },

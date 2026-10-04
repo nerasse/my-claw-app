@@ -217,6 +217,10 @@ import { DevicesScreen } from './DevicesScreen';
 import { ServicesScreen } from './ServicesScreen';
 import { SETUP_WIDTH, SetupScreen, toggleSkip } from './SetupScreen';
 import { AccountScreen } from './AccountScreen';
+import { PageCloseContext } from '../components/CloseButton';
+import { overlayStore } from '../core/overlay';
+import { focusField, leaveField, menuOpen, useKeyNav } from '../core/keyNav';
+import { MOVING_AROUND, SHORTCUTS, comboLabel, shortcutHint, type ShortcutId } from '../core/shortcuts';
 import { modelReady } from '../core/setup';
 import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
@@ -1597,26 +1601,135 @@ export function AppShell(): React.JSX.Element {
   // Only where there are columns to take the window from, and only while the browser is the page
   // shown (settings come before it in the page chain).
   const browserFullNow = browserFull && browserOpen && !settingsOpen && layout.pinnedDrawer;
-  useHotkeys({
+  // Leaves the settings stack in one press, wherever in it (the cross of every settings page). The
+  // per-page state the back key clears level by level is cleared here at once; a tag editor with
+  // changes still asks first, as its own back does.
+  const closeSettings = useCallback(() => {
+    if (settingsPage === 'tag-editor' && tagEditorDirty) {
+      setTagEditorDiscard(true);
+      return;
+    }
+    agentsFileStore.close();
+    instructionsStore.closeLayer();
+    instructionsStore.closeEditor();
+    setLayerTarget(null);
+    setScopeEditor(null);
+    setModelEdit(null);
+    setProviderEdit(null);
+    setTagEditor(null);
+    setAgentModelFor(null);
+    setModelPickerFrom(null);
+    setSkillsNotice(null);
+    setSettingsOpen(false);
+  }, [settingsPage, tagEditorDirty]);
+  const closeJobs = useCallback(() => {
+    setJobsEditor(null);
+    setJobSessions(null);
+    jobSessionsRef.current = null;
+    setJobRuns(null);
+    setJobsOpen(false);
+  }, []);
+  // Shift+Escape: every page and menu, back to the conversation (a sub-agent's included, which is a
+  // conversation too). The gate of a first run is not a page and stays.
+  const closeEverything = useCallback(() => {
+    overlayStore.close();
+    setMoreOpen(false);
+    setCommandMenuOpen(false);
+    setModelOpen(false);
+    setTuneOpen(false);
+    if (settingsOpen) closeSettings();
+    if (jobsOpen) closeJobs();
+    setArchivesOpen(false);
+    setBrowserOpen(false);
+    setBrowserFull(false);
+    setFilesOpen(false);
+    if (systemFilesOpen) closeSystemFiles();
+    if (statsOpen) closeStats();
+    if (statusOpen) closeStatus();
+    setAgentsOpen(false);
+    setAgentsGlobalOpen(false);
+    if (!layout.pinnedDrawer) setDrawerOpen(false);
+  }, [settingsOpen, jobsOpen, systemFilesOpen, statsOpen, statusOpen, closeSettings, closeJobs, closeSystemFiles, closeStats, closeStatus, layout.pinnedDrawer]);
+  // The cross of a settings page (the index has none: its Back is that already); the jobs layers
+  // get their own below, which they sit inside. Not during the first run: the setup is the app.
+  const settingsClose = useMemo(
+    () => (settingsOpen && !setupGate ? { close: closeSettings, label: 'Close settings' } : null),
+    [settingsOpen, setupGate, closeSettings],
+  );
+  const jobsClose = useMemo(() => ({ close: closeJobs, label: 'Leave jobs' }), [closeJobs]);
+
+  const openSessions = (): void => {
+    // The conversation list is the palette: it searches, and on a desktop it is already there
+    // (unfolded, if the owner had folded it away).
+    if (!layout.pinnedDrawer) setDrawerOpen(true);
+    else panes.setDrawerCollapsed(false);
+    setSearchFocus(count => count + 1);
+  };
+  const SHORTCUT_ACTIONS: Record<ShortcutId, () => void> = {
+    new: () => newThread(),
+    sessions: openSessions,
+    compose: () => {
+      closeEverything();
+      // After the pages are gone: the composer of the conversation is the one on screen then.
+      requestAnimationFrame(() => focusField('Message to send'));
+    },
+    model: () => openModel(),
+    attachments: () => {
+      const thread = activeThreadRef.current;
+      if (thread) openFilesFor(thread);
+    },
+    files: () => {
+      fsStore.open();
+      setSystemFilesOpen(true);
+    },
+    browser: () => {
+      setBrowserError(null);
+      setBrowserOpen(true);
+    },
+    jobs: () => openJobs(),
+    commands: () => setCommandMenuOpen(true),
+    settings: () => openSettings(),
+    sidebar: () => {
+      if (layout.pinnedDrawer) panes.toggleDrawer();
+    },
+    closeAll: () => closeEverything(),
+    help: () => openShortcuts(),
+  };
+  const openShortcuts = (): void => {
+    overlayStore.open({
+      kind: 'sheet',
+      preview: `Keyboard shortcuts\n${MOVING_AROUND}`,
+      options: SHORTCUTS.map(entry => ({
+        key: entry.id,
+        label: entry.label,
+        hint: entry.hint || undefined,
+        shortcut: entry.combos.slice(0, entry.id === 'compose' || entry.id === 'help' ? 1 : 2).map(comboLabel).join('  '),
+        onPress: () => SHORTCUT_ACTIONS[entry.id](),
+      })),
+    });
+  };
+  const hotkeys: Record<string, () => void> = {
     escape: () => {
+      // A field lets go of the keyboard first: the next press goes back.
+      if (leaveField()) return;
       // Out of full screen first: the page stays open, back in its pane.
       if (browserFullNow) setBrowserFull(false);
       else handleBack();
     },
-    // The conversation list is the palette: it searches, and on a desktop it is already there
-    // (unfolded, if the owner had folded it away).
-    'mod+k': () => {
-      if (!layout.pinnedDrawer) setDrawerOpen(true);
-      else panes.setDrawerCollapsed(false);
-      setSearchFocus(count => count + 1);
-    },
-    'mod+b': () => {
-      if (layout.pinnedDrawer) panes.toggleDrawer();
-    },
-    'mod+n': () => newThread(),
-    'mod+,': () => openSettings(),
-    'mod+/': () => setCommandMenuOpen(true),
-  });
+  };
+  for (const entry of SHORTCUTS) {
+    for (const combo of entry.combos) {
+      hotkeys[combo] = () => {
+        // The first run's setup is the whole app until it is finished: nothing opens beside it.
+        if (setupGate && entry.id !== 'help') return;
+        // An open menu has the keyboard: a shortcut does not open a page under it.
+        if (menuOpen() && entry.id !== 'closeAll') return;
+        SHORTCUT_ACTIONS[entry.id]();
+      };
+    }
+  }
+  useHotkeys(hotkeys);
+  useKeyNav();
 
   // The roster of the conversation in play: while inside a sub-agent that is still the parent's,
   // because that is the scope the server answered for.
@@ -2475,6 +2588,7 @@ export function AppShell(): React.JSX.Element {
       },
       model: {
         label: 'Model…',
+        shortcut: shortcutHint('model'),
         hint: currentModelLabel
           ? `current: ${currentModelLabel}${currentModelOrigin ? ` · ${currentModelOrigin}` : ''}`
           : undefined,
@@ -2512,6 +2626,7 @@ export function AppShell(): React.JSX.Element {
       },
       files: {
         label: 'Session files',
+        shortcut: shortcutHint('attachments'),
         onPress: () => {
           close();
           if (threadId) openFilesFor(threadId);
@@ -2522,6 +2637,7 @@ export function AppShell(): React.JSX.Element {
         // the machine, and it starts where the session works -- docs/files-page.md.
         label: 'System files',
         hint: 'the machine this runs on',
+        shortcut: shortcutHint('files'),
         onPress: () => {
           close();
           if (threadId) fsStore.openFromSession(threadId);
@@ -3559,6 +3675,7 @@ export function AppShell(): React.JSX.Element {
     // Every block inside the thread reaches the selection viewer through here, rather than
     // through a callback threaded down to the tool cards. See docs/text-selection.md.
     <TextSelectionContext.Provider value={openSelection}>
+    <PageCloseContext.Provider value={settingsClose}>
     <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar
         barStyle={dark ? 'light-content' : 'dark-content'}
@@ -4781,6 +4898,7 @@ export function AppShell(): React.JSX.Element {
             {
               label: 'Jobs',
               hint: 'scheduled tasks',
+              shortcut: shortcutHint('jobs'),
               onPress: () => {
                 setMoreOpen(false);
                 setDrawerOpen(false);
@@ -4790,6 +4908,7 @@ export function AppShell(): React.JSX.Element {
             {
               label: 'Browser',
               hint: 'take the session over',
+              shortcut: shortcutHint('browser'),
               onPress: () => {
                 setMoreOpen(false);
                 setDrawerOpen(false);
@@ -4815,6 +4934,7 @@ export function AppShell(): React.JSX.Element {
               // entries -- docs/files-page.md.
               label: 'Files',
               hint: 'every file on this machine',
+              shortcut: shortcutHint('files'),
               onPress: () => {
                 setMoreOpen(false);
                 setDrawerOpen(false);
@@ -4825,12 +4945,27 @@ export function AppShell(): React.JSX.Element {
             {
               label: 'Settings',
               hint: `${CONNECTION_LABEL[status.state]}${pending > 0 ? ` · ${pending} pending` : ''}`,
+              shortcut: shortcutHint('settings'),
               onPress: () => {
                 setMoreOpen(false);
                 setDrawerOpen(false);
                 openSettings();
               },
             },
+            // Where a keyboard is: the list of every key, each row runs its action.
+            ...(Platform.OS === 'web'
+              ? [
+                  {
+                    label: 'Keyboard shortcuts',
+                    shortcut: shortcutHint('help'),
+                    onPress: () => {
+                      setMoreOpen(false);
+                      setDrawerOpen(false);
+                      openShortcuts();
+                    },
+                  },
+                ]
+              : []),
           ]}
           onClose={() => setMoreOpen(false)}
         />
@@ -5172,7 +5307,7 @@ export function AppShell(): React.JSX.Element {
       ) : null}
 
       {jobsOpen ? (
-        <>
+        <PageCloseContext.Provider value={jobsClose}>
           <JobsScreen
             error={jobsError}
             onClose={() => {
@@ -5222,7 +5357,7 @@ export function AppShell(): React.JSX.Element {
               deleting={jobToDelete !== null}
             />
           ) : null}
-        </>
+        </PageCloseContext.Provider>
       ) : null}
 
       {jobToDelete ? (
@@ -5247,6 +5382,7 @@ export function AppShell(): React.JSX.Element {
           the line that says what they did: over everything, the selection viewer included. */}
       <OverlayHost />
     </SafeAreaView>
+    </PageCloseContext.Provider>
     </TextSelectionContext.Provider>
   );
 }

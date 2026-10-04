@@ -5,6 +5,7 @@ import type { AgentsStatus } from '../core/agents';
 import { useModelCatalog, useModelIndex } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 /** "global" and "orchestrator" both mean the same row in the app: the umbrella default. */
 export function inheritLabel(agent: AgentInfo): string {
@@ -89,6 +90,7 @@ export function AgentsSettingsScreen({
               : unavailableText(status, error)}
           </Text>
         </View>
+        <CloseButton />
       </View>
 
       {/* A refused write must be visible where it was asked for, not only when the page is empty. */}

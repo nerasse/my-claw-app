@@ -5,6 +5,7 @@ import { inheritLabel } from './AgentsSettingsScreen';
 import { useModelCatalog } from '../core/model';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 /** A scope is a list of names, `["*"]` for everything, or absent (inherited). */
 function scopeText(scope: string[] | null | undefined, inheritedFrom: string): string {
@@ -68,6 +69,7 @@ export function AgentDetailScreen({
           <Text style={styles.title}>{agent.label}</Text>
           <Text style={styles.subtitle}>{agent.description}</Text>
         </View>
+        <CloseButton />
       </View>
 
       {error ? (

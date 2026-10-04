@@ -7,6 +7,7 @@ import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 import { useAccounts } from '../core/accounts';
 import type { AccountKind } from '../core/protocol';
 import { ACCOUNT_LABELS, accountSummary } from './AccountScreen';
+import { CloseButton } from '../components/CloseButton';
 
 /**
  * The configured providers. Each row names the config key, the backend type, the model count
@@ -64,6 +65,7 @@ export function ProvidersScreen({
           accessibilityLabel="New provider">
           <Text style={styles.addGlyph}>+</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       <DiscoveryNote />

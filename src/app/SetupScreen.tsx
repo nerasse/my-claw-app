@@ -10,6 +10,7 @@ import { pushSupported } from '../core/notifications';
 import { prefs } from '../core/prefs';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { ServiceCard } from './ServicesScreen';
+import { CloseButton } from '../components/CloseButton';
 
 const MARK: Record<SetupStep['state'], string> = {
   done: '✓',
@@ -102,6 +103,7 @@ export function SetupScreen({
             {setupSettled(steps)} of {steps.length} done or skipped
           </Text>
         </View>
+        <CloseButton />
       </View>
       <ScrollView
         contentContainerStyle={styles.content}

@@ -8,6 +8,7 @@ import { font, radius, space, useTheme, useThemedStyles, type Palette } from '..
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useLayerFrame } from '../core/layout';
+import { keyLayerProps } from '../core/keyNav';
 
 /**
  * Full-screen reader for one skill's SKILL.md: frontmatter stripped into a meta header, the
@@ -67,7 +68,7 @@ export function SkillViewer({
   const metaName = doc?.meta.name ?? skill.name;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }, layerFrame]}>
+    <View {...keyLayerProps('page')} style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }, layerFrame]}>
       <View style={styles.topBar}>
         <Pressable
           onPress={onClose}

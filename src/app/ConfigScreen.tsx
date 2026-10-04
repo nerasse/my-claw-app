@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 export type ConfigStatus = 'loading' | 'ready' | 'saving' | 'conflict';
 
@@ -70,6 +71,7 @@ export function ConfigScreen({
             {editor.status === 'saving' ? '...' : 'Save'}
           </Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {editor.status === 'conflict' ? (

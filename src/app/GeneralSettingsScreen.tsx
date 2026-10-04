@@ -19,6 +19,7 @@ import { appUpdateSupported } from '../core/appUpdateRuntime';
 import { notificationPermission } from '../core/notifications';
 import { font, radius, scaleFont, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 const VOICE_OPTIONS: Array<{ mode: VoiceMode; label: string }> = [
   { mode: 'auto', label: 'Auto' },
@@ -162,6 +163,7 @@ export function GeneralSettingsScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.title}>General</Text>
+        <CloseButton />
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">

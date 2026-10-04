@@ -26,6 +26,7 @@ import { matchesWorkspace } from '../core/workspaceFilter';
 import { pointerFine } from '../core/platform';
 import { DRAWER_WIDTH, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import type { WsState } from '../core/types';
+import { keyLayerProps } from '../core/keyNav';
 
 const STATE_LABEL: Record<WsState, string> = {
   idle: 'offline',
@@ -838,7 +839,7 @@ export function Drawer({
   // Pinned: part of the layout, laid out by the row it sits in. The safe-area padding is the
   // shell's job there, which is why only the slide-over pays the status bar itself.
   if (pinned) {
-    return <View style={[styles.panel, styles.panelPinned]}>{content}</View>;
+    return <View {...keyLayerProps('list')} style={[styles.panel, styles.panelPinned]}>{content}</View>;
   }
   // Home: full-screen list on phone/tablet when no thread is open. It sits inside the shell's
   // SafeAreaView and `container` (both already pay the top inset and its own padding), so it
@@ -847,6 +848,7 @@ export function Drawer({
   if (home) {
     return (
       <View
+        {...keyLayerProps('list')}
         testID="home-screen"
         style={styles.homePanel}
       >
@@ -862,6 +864,7 @@ export function Drawer({
       </Animated.View>
 
       <Animated.View
+        {...keyLayerProps('list')}
         style={[
           styles.panel,
           styles.panelFloating,

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { EditorState } from '../core/instructions';
 import { isDirty } from '../core/instructions';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { CloseButton } from '../components/CloseButton';
 
 /** The one-line explanation of what saving will do, which differs per origin. */
 export function saveHint(editor: EditorState): string {
@@ -76,6 +77,7 @@ export function InstructionEditorScreen({
             </Text>
           </Pressable>
         ) : null}
+        <CloseButton />
       </View>
 
       {editor.status === 'conflict' ? (

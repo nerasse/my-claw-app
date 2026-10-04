@@ -5,6 +5,7 @@ import type { AgentFileEditorState } from '../core/agentsFile';
 import { CardEdge } from '../components/CardEdge';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 export interface ScopeOption {
   name: string;
@@ -713,6 +714,7 @@ function Header({
           </Text>
         </Pressable>
       ) : null}
+      <CloseButton />
     </View>
   );
 }

@@ -6,6 +6,7 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { useJobs } from '../core/jobs';
 import type { JobEntry } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
+import { keyLayerProps } from '../core/keyNav';
 
 // Built once: a card shows two of these, and a rebuilt Intl.DateTimeFormat per call was the
 // most expensive thing on the screen.
@@ -43,7 +44,7 @@ export function JobsScreen({
   useDismissKeyboard();
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
+    <View {...keyLayerProps('page')} style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}

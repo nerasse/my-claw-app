@@ -5,6 +5,8 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import type { JobRunEntry } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
+import { CloseButton } from '../components/CloseButton';
+import { keyLayerProps } from '../core/keyNav';
 
 // Built once, not per row: a job on a five-minute cron writes ~288 runs a day and this list is
 // never pruned, so a per-call Intl.DateTimeFormat was thousands of constructions in one pass.
@@ -88,7 +90,7 @@ export function JobSessionsScreen({
   );
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
+    <View {...keyLayerProps('page')} style={[StyleSheet.absoluteFill, styles.stage, layerFrame]}>
       <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <Pressable
           onPress={onClose}
@@ -113,6 +115,7 @@ export function JobSessionsScreen({
           accessibilityLabel="Edit job settings">
           <Text style={styles.settingsText}>settings</Text>
         </Pressable>
+        <CloseButton />
       </View>
 
       {error ? (

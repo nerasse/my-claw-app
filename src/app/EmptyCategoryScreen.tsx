@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { CloseButton } from '../components/CloseButton';
 
 /**
  * A settings category with no content yet: the row exists in the index so the structure is
@@ -24,6 +25,7 @@ export function EmptyCategoryScreen({
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.title}>{title}</Text>
+        <CloseButton />
       </View>
 
       <View style={styles.body}>
