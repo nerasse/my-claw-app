@@ -6,9 +6,42 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 import { useAccounts } from '../core/accounts';
-import type { AccountKind } from '../core/protocol';
+import type { AccountKind, AccountView } from '../core/protocol';
 import { ACCOUNT_LABELS, accountSummary } from './AccountScreen';
 import { CloseButton } from '../components/CloseButton';
+
+/** A plan in the providers list: its name, its kind, and whether it is signed in. */
+function PlanRow({
+  provider,
+  kind,
+  view,
+  onOpen,
+}: {
+  provider: ProviderInfo;
+  kind: AccountKind;
+  view: AccountView | undefined;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const name = provider.group || provider.key;
+  // The account frame says more (email, plan); the providers snapshot alone still says signed in.
+  const summary = view ? accountSummary(kind, view) : provider.keyPresent ? 'Connected' : 'Not signed in';
+  const connected = view?.connected ?? provider.keyPresent;
+  return (
+    <Pressable style={[styles.row, styles.link]} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Open account ${name}`}>
+      <View style={styles.linkMain}>
+        <View style={styles.linkTitleLine}>
+          <Text style={styles.linkTitle}>{name}</Text>
+          <Text style={styles.badge}>{`${ACCOUNT_LABELS[kind].title} plan`}</Text>
+        </View>
+        <Text style={[styles.hint, connected && styles.connected]} numberOfLines={1}>
+          {`${summary} · ${provider.models} model${provider.models === 1 ? '' : 's'}`}
+        </Text>
+      </View>
+      <Text style={styles.linkGlyph}>›</Text>
+    </Pressable>
+  );
+}
 
 /** "30 s, 1 min, 2 min": the waits as the owner reads them, seconds under a minute. */
 export function retryScheduleText(delaysMs: readonly number[]): string {
@@ -49,7 +82,7 @@ export function ModelsScreen({
   onBack: () => void;
   onNewProvider: () => void;
   onOpenProvider: (key: string) => void;
-  onOpenAccount: (kind: AccountKind) => void;
+  onOpenAccount: (provider: string, kind: AccountKind) => void;
   onOpenDefaultModel: () => void;
   onOpenFallback: () => void;
   onSetRetry: (enabled: boolean) => void;
@@ -173,35 +206,8 @@ export function ModelsScreen({
           )}
         </View>
 
-        {accounts ? (
-          <>
-            <Text style={styles.section}>Subscriptions</Text>
-            <View style={styles.card}>
-              {(['codex', 'claude'] as const).map((kind, index) => (
-                <View key={kind}>
-                  {index > 0 ? <View style={styles.separator} /> : null}
-                  <Pressable
-                    style={[styles.row, styles.link]}
-                    onPress={() => onOpenAccount(kind)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open account ${ACCOUNT_LABELS[kind].title}`}>
-                    <View style={styles.linkMain}>
-                      <View style={styles.linkTitleLine}>
-                        <Text style={styles.linkTitle}>{ACCOUNT_LABELS[kind].title}</Text>
-                        <Text style={styles.badge}>{ACCOUNT_LABELS[kind].plan}</Text>
-                      </View>
-                      <Text style={[styles.hint, accounts[kind].connected && styles.connected]} numberOfLines={1}>
-                        {accountSummary(kind, accounts[kind])}
-                      </Text>
-                    </View>
-                    <Text style={styles.linkGlyph}>›</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          </>
-        ) : null}
-        {/* Every provider, the subscriptions once signed in included: their models live there. */}
+        {/* Every provider, plans and keys alike: a plan is a provider that signs in instead of taking
+            a key (owner, 2026-10-04). The + offers both. */}
         <Text style={styles.section}>Providers</Text>
         <View style={styles.card}>
           {real.length === 0 ? (
@@ -212,7 +218,7 @@ export function ModelsScreen({
               accessibilityLabel="Add your first provider">
               <View style={styles.linkMain}>
                 <Text style={styles.linkTitle}>Add your first provider</Text>
-                <Text style={styles.hint}>OpenRouter, OpenAI, Groq… then paste its API key</Text>
+                <Text style={styles.hint}>a ChatGPT or Claude plan, or an API key</Text>
               </View>
               <Text style={styles.linkGlyph}>›</Text>
             </Pressable>
@@ -220,6 +226,14 @@ export function ModelsScreen({
           {real.map((provider, index) => (
             <View key={provider.key}>
               {index > 0 ? <View style={styles.separator} /> : null}
+              {provider.account ? (
+                <PlanRow
+                  provider={provider}
+                  kind={provider.account}
+                  view={accounts?.accounts?.find(account => account.provider === provider.key)}
+                  onOpen={() => onOpenAccount(provider.key, provider.account!)}
+                />
+              ) : (
               <Pressable
                 style={[styles.row, styles.link]}
                 onPress={() => onOpenProvider(provider.key)}
@@ -243,6 +257,7 @@ export function ModelsScreen({
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
               </Pressable>
+              )}
             </View>
           ))}
         </View>

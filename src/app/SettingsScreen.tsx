@@ -26,9 +26,11 @@ export const GROUPS: ReadonlyArray<{ title: string; categories: readonly Categor
     ],
   },
   {
-    title: 'ai',
+    // Not "AI": the whole app is. These three are what the agent is made of: which model thinks,
+    // how each agent is set, and the services it reaches (owner, 2026-10-04).
+    title: 'the agent',
     categories: [
-      { page: 'models', title: 'Models', hint: 'default, subscriptions, providers, tags' },
+      { page: 'models', title: 'Models', hint: 'default, providers and plans, tags' },
       { page: 'agents', title: 'Agents', hint: 'the orchestrator and each agent: model, effort, scope' },
       { page: 'services', title: 'Services', hint: 'voice, location, search, memory, browser' },
     ],
@@ -38,14 +40,13 @@ export const GROUPS: ReadonlyArray<{ title: string; categories: readonly Categor
     categories: [
       { page: 'workspaces', title: 'Workspaces', hint: 'folders and their instructions' },
       { page: 'skills', title: 'Skills', hint: 'built-in, custom, workspace' },
-      { page: 'tools', title: 'Tools', hint: 'built-in, plugins, MCP servers' },
+      { page: 'tools', title: 'Tools', hint: 'on or off, ask before running, MCP servers' },
     ],
   },
   {
     title: 'security',
     categories: [
       { page: 'devices', title: 'Devices', hint: 'this device, its server, paired devices' },
-      { page: 'approvals', title: 'Tool approvals', hint: 'what the agent was allowed to run, and what was refused' },
       { page: 'advanced', title: 'Advanced', hint: 'connection, diagnostics, raw config, setup' },
     ],
   },

@@ -95,6 +95,7 @@ import {
   encodeSkillsTransfer,
   encodeToolsList,
   encodeToolsToggle,
+  encodeToolsConfirm,
   encodeWorkspacesList,
   encodeWorkspacesAdd,
   encodeWorkspacesRemove,
@@ -204,6 +205,7 @@ import { NewAgentScreen } from './NewAgentScreen';
 import { McpsScreen } from './McpsScreen';
 import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
 import { ModelsScreen } from './ModelsScreen';
+import { useAccounts } from '../core/accounts';
 import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ModelEditScreen } from './ModelEditScreen';
 import { ProviderEditScreen } from './ProviderEditScreen';
@@ -467,7 +469,30 @@ export function AppShell(): React.JSX.Element {
   // The setup is reached from the banner on the index while it is unfinished, from Advanced after.
   const [setupFrom, setSetupFrom] = useState<'index' | 'advanced'>('index');
   // The subscription the account page shows (docs: subscription-accounts in the server repo).
-  const [selectedAccount, setSelectedAccount] = useState<AccountKind>('codex');
+  const [selectedAccount, setSelectedAccount] = useState<{ provider: string; kind: AccountKind }>({ provider: 'chatgpt', kind: 'codex' });
+  // The + of the providers: a plan to sign in, a Claude key, or the custom form.
+  const [providerAddMenu, setProviderAddMenu] = useState(false);
+  const [accountPrompt, setAccountPrompt] = useState<
+    { mode: 'add'; kind: AccountKind } | { mode: 'rename'; provider: string; current: string } | null
+  >(null);
+  // The account this window asked for: only it opens the page once the server has declared it.
+  const pendingAccount = useRef<AccountKind | null>(null);
+  const [providerInitial, setProviderInitial] = useState<
+    { key: string; providerType: 'anthropic'; apiKeyEnv: string; group: string } | undefined
+  >(undefined);
+  // The provider page is reached from the list, or from a plan's page: Back returns there.
+  const [providerFrom, setProviderFrom] = useState<'models' | 'account'>('models');
+  const accountsFrame = useAccounts().frame;
+  // An account this window added: open its page and start the sign-in, the next thing to do.
+  useEffect(() => {
+    const added = accountsFrame?.added;
+    const kind = pendingAccount.current;
+    if (!added || !kind) return;
+    pendingAccount.current = null;
+    setSelectedAccount({ provider: added, kind });
+    setSettingsPage('account');
+    connection.send(encodeAccounts({ type: 'accounts.login', provider: added })).catch(() => {});
+  }, [accountsFrame]);
   /** Which settings page is showing: the index lists the categories, every other value is a
    *  page under it, and back always walks one level up. */
   const [settingsPage, setSettingsPage] = useState<SettingsPage>('index');
@@ -1498,6 +1523,7 @@ export function AppShell(): React.JSX.Element {
         instructionBack,
         modelPickerFrom,
         setupFrom,
+        providerFrom,
         setLayerTarget,
         archivesOpen,
         setArchivesOpen,
@@ -1540,6 +1566,7 @@ export function AppShell(): React.JSX.Element {
       instructionBack,
       modelPickerFrom,
       setupFrom,
+      providerFrom,
       workspacePicker,
       jobSessions,
       jobsEditor,
@@ -3291,17 +3318,14 @@ export function AppShell(): React.JSX.Element {
       // whole snapshot so the row can never disagree with what was stored.
       onSetRetry={enabled => connection.send(encodeAgentsRetrySet(enabled)).catch(() => {})}
       onOpenTags={() => setSettingsPage('tags')}
-      onNewProvider={() => {
-        setProviderBusy(false);
-        setProviderEdit({ mode: 'create', key: null });
-        setSettingsPage('provider-edit');
-      }}
-      onOpenAccount={kind => {
-        setSelectedAccount(kind);
+      onNewProvider={() => setProviderAddMenu(true)}
+      onOpenAccount={(provider, kind) => {
+        setSelectedAccount({ provider, kind });
         setSettingsPage('account');
       }}
       onOpenProvider={key => {
         setSelectedProvider(key);
+        setProviderFrom('models');
         setSettingsPage('provider');
       }}
     />
@@ -3515,6 +3539,10 @@ export function AppShell(): React.JSX.Element {
   const toggleTool = (name: string, disabled: boolean): void => {
     setToolsSaving(true);
     connection.send(encodeToolsToggle(name, disabled)).catch(() => {});
+  };
+  const confirmTool = (name: string, confirm: boolean): void => {
+    setToolsSaving(true);
+    connection.send(encodeToolsConfirm(name, confirm)).catch(() => {});
   };
   const addMcp = (
     name: string,
@@ -3945,7 +3973,14 @@ export function AppShell(): React.JSX.Element {
               modelsPage
             ) : settingsPage === 'account' ? (
               <AccountScreen
-                kind={selectedAccount}
+                provider={selectedAccount.provider}
+                kind={selectedAccount.kind}
+                onOpenModels={() => {
+                  setSelectedProvider(selectedAccount.provider);
+                  setProviderFrom('account');
+                  setSettingsPage('provider');
+                }}
+                onRename={current => setAccountPrompt({ mode: 'rename', provider: selectedAccount.provider, current })}
                 needsModel={!modelReady(catalog.defaultModel, catalog.unavailable)}
                 onBack={() => setSettingsPage(parentOf('account'))}
                 onPickModel={() => {
@@ -3982,7 +4017,7 @@ export function AppShell(): React.JSX.Element {
                     setModelEdit({ mode: 'create', provider: selectedProviderInfo.key, model: null });
                     setSettingsPage('model-edit');
                   }}
-                  onBack={() => setSettingsPage('models')}
+                  onBack={() => setSettingsPage(providerFrom === 'account' ? 'account' : 'models')}
                 />
               ) : (
                 modelsPage
@@ -4020,6 +4055,7 @@ export function AppShell(): React.JSX.Element {
               providerEdit ? (
                 <ProviderEditScreen
                   mode={providerEdit.mode}
+                  initial={providerEdit.mode === 'create' ? providerInitial : undefined}
                   provider={
                     providerEdit.mode === 'edit' && providerEdit.key
                       ? (agentsConfig?.providers.find(p => p.key === providerEdit.key) ?? null)
@@ -4310,7 +4346,9 @@ export function AppShell(): React.JSX.Element {
                 saving={toolsSaving}
                 onBack={() => setSettingsPage(parentOf('tools'))}
                 onToggle={toggleTool}
+                onConfirm={confirmTool}
                 onOpenMcps={() => setSettingsPage('mcps')}
+                onOpenApprovals={() => setSettingsPage('approvals')}
               />
             ) : settingsPage === 'mcps' ? (
               <McpsScreen
@@ -5012,6 +5050,83 @@ export function AppShell(): React.JSX.Element {
         <ModelTuneSheet
           threadId={activeThread}
           onClose={() => setTuneOpen(false)}
+        />
+      ) : null}
+
+      {providerAddMenu ? (
+        <ActionSheet
+          preview="Add a provider"
+          options={[
+            // An ActionSheet leaves closing to its options: each one closes the menu, then acts.
+            {
+              label: 'ChatGPT plan',
+              hint: 'sign in, no API key',
+              onPress: () => {
+                setProviderAddMenu(false);
+                setAccountPrompt({ mode: 'add', kind: 'codex' });
+              },
+            },
+            {
+              label: 'Claude plan',
+              hint: 'sign in, no API key',
+              onPress: () => {
+                setProviderAddMenu(false);
+                setAccountPrompt({ mode: 'add', kind: 'claude' });
+              },
+            },
+            // Beside the plan on purpose: Claude paid by the token, same models, another bill.
+            {
+              label: 'Claude API key',
+              hint: 'pay per use, ANTHROPIC_API_KEY',
+              onPress: () => {
+                setProviderAddMenu(false);
+                setProviderBusy(false);
+                setProviderInitial({ key: 'claude-api', providerType: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY', group: 'Claude API' });
+                setProviderEdit({ mode: 'create', key: null });
+                setSettingsPage('provider-edit');
+              },
+            },
+            {
+              label: 'Custom',
+              hint: 'OpenRouter, OpenAI, Groq… any OpenAI-compatible API',
+              onPress: () => {
+                setProviderAddMenu(false);
+                setProviderBusy(false);
+                setProviderInitial(undefined);
+                setProviderEdit({ mode: 'create', key: null });
+                setSettingsPage('provider-edit');
+              },
+            },
+          ]}
+          onClose={() => setProviderAddMenu(false)}
+        />
+      ) : null}
+
+      {accountPrompt ? (
+        <PromptSheet
+          title={
+            accountPrompt.mode === 'rename'
+              ? 'Rename this account'
+              : accountPrompt.kind === 'codex'
+                ? 'Name this ChatGPT account'
+                : 'Name this Claude account'
+          }
+          hint={accountPrompt.mode === 'add' ? 'how it reads in the model picker: "perso", "work"…' : undefined}
+          initialValue={accountPrompt.mode === 'rename' ? accountPrompt.current : ''}
+          placeholder={accountPrompt.mode === 'add' && accountPrompt.kind === 'claude' ? 'Claude perso' : 'ChatGPT perso'}
+          confirmLabel={accountPrompt.mode === 'rename' ? 'Rename' : 'Add'}
+          maxLength={40}
+          onSubmit={value => {
+            const name = value.trim();
+            if (!name) return;
+            if (accountPrompt.mode === 'rename') {
+              connection.send(encodeAccounts({ type: 'accounts.rename', provider: accountPrompt.provider, name })).catch(() => {});
+            } else {
+              pendingAccount.current = accountPrompt.kind;
+              connection.send(encodeAccounts({ type: 'accounts.add', kind: accountPrompt.kind, name })).catch(() => {});
+            }
+          }}
+          onClose={() => setAccountPrompt(null)}
         />
       ) : null}
 

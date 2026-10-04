@@ -83,7 +83,7 @@ export function ApprovalHistoryScreen({
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <BackButton onPress={onBack} label="Back to settings" />
+        <BackButton onPress={onBack} label="Back to tools" />
         <Text style={styles.title}>Tool approvals</Text>
         <Pressable onPress={onRefresh} accessibilityRole="button" accessibilityLabel="Refresh" hitSlop={12}>
           <Text style={styles.refresh}>↻</Text>

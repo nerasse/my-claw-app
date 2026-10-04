@@ -180,6 +180,8 @@ test('creating a provider writes the env value in the same save and returns to t
   await emit(envResult({ names: ['LITELLM_API_KEY'], present: ['LITELLM_API_KEY'] }));
 
   await pressLabel(tree, 'New provider');
+  // The + offers the plans first; the form is "Custom".
+  await pressLabel(tree, 'Custom');
   await waitFor(() => labelsOf(tree).includes('Create provider'));
 
   await typeInto(tree, 'Provider key', 'groq');
@@ -220,6 +222,8 @@ test('a name already set on the server is reused: no value field, no env.set fra
   await emit(envResult());
 
   await pressLabel(tree, 'New provider');
+  // The + offers the plans first; the form is "Custom".
+  await pressLabel(tree, 'Custom');
   await waitFor(() => labelsOf(tree).includes('Create provider'));
   // "groq" suggests GROQ_API_KEY, which IS present on the server: reused, no value asked.
   await typeInto(tree, 'Provider key', 'groq');

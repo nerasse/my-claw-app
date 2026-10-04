@@ -41,14 +41,14 @@ async function holds(tree: Tree, page: string, labels: string[]): Promise<void> 
 test('the index is four groups, one row per subject', async () => {
   const tree = await renderApp();
   await openSettings(tree);
-  expect(textsOf(tree)).toEqual(expect.arrayContaining(['this app', 'ai', 'what the agent can use', 'security']));
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['this app', 'the agent', 'what the agent can use', 'security']));
   const rows = labelsOf(tree).filter(label => label.startsWith('Open ') && label !== 'Open conversations');
   expect(rows).toEqual(
     expect.arrayContaining([
       'Open appearance', 'Open notifications', 'Open updates',
       'Open models', 'Open agents', 'Open services',
       'Open workspaces', 'Open skills', 'Open tools',
-      'Open devices', 'Open tool approvals', 'Open advanced',
+      'Open devices', 'Open advanced',
     ]),
   );
   // The catch-alls are gone: their settings moved to the page of their subject.
@@ -64,7 +64,7 @@ test('what General and Other held is each on the page of its subject', async () 
   await holds(tree, 'Open devices', ['Copy device and token', 'Server address', 'Connect']);
   await holds(tree, 'Open updates', ['Update the server now']);
   await holds(tree, 'Open advanced', ['Open diagnostics', 'Open config', 'Open get started']);
-  await holds(tree, 'Open tools', ['Open MCPs']);
+  await holds(tree, 'Open tools', ['Open MCPs', 'Open tool approvals']);
   // The defaults are drawn from the agents snapshot the server answers with.
   await ReactTestRenderer.act(async () => {
     DeviceEventEmitter.emit('claw:ws:message', {

@@ -164,6 +164,7 @@ export interface BackLayers {
   /** Where the model picker returns when the assistant opened it; null: from the agent pages. */
   modelPickerFrom: 'setup' | 'account' | null;
   setupFrom: SettingsPage;
+  providerFrom: 'models' | 'account';
   setLayerTarget: (value: null) => void;
   archivesOpen: boolean;
   setArchivesOpen: (value: boolean) => void;
@@ -288,6 +289,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     instructionBack,
     modelPickerFrom,
     setupFrom,
+    providerFrom,
     setLayerTarget,
     archivesOpen,
     setArchivesOpen,
@@ -526,7 +528,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
         providerSearch.current.clear();
         return true;
       }
-      setSettingsPage('models');
+      setSettingsPage(providerFrom === 'account' ? 'account' : 'models');
       return true;
     }
     if (settingsPage === 'provider-env') {

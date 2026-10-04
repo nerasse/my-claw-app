@@ -174,3 +174,38 @@ test('the settings index shows the tool count', async () => {
 
   await settleAndUnmount(tree);
 });
+
+describe('asking before a tool runs', () => {
+  // Tool approvals left the index for this page (owner, 2026-10-04): the switch lives on the tool.
+  async function renderAsking(tools: ToolEntry[], onConfirm: (name: string, confirm: boolean) => void): Promise<Tree> {
+    let tree!: Tree;
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(
+        <ThemeProvider>
+          <ToolsScreen tools={tools} missing={[]} saving={false} onBack={() => {}} onToggle={() => {}} onConfirm={onConfirm} onOpenApprovals={() => {}} />
+        </ThemeProvider>,
+      );
+    });
+    return tree;
+  }
+
+  it('a tool turns asking on and off, and says it asks', async () => {
+    const calls: Array<[string, boolean]> = [];
+    const tools = TOOLS.map(tool => ({ ...tool, confirm: tool.name === 'my_weather' }));
+    const tree = await renderAsking(tools, (name, confirm) => calls.push([name, confirm]));
+    expect(labelsOf(tree)).toContain('my_weather asks first');
+    await pressLabel(tree, 'Ask before running read');
+    await pressLabel(tree, 'Ask before running my_weather');
+    expect(calls).toEqual([['read', true], ['my_weather', false]]);
+    // A tool that is off is never run: there is nothing to ask about.
+    expect(labelsOf(tree)).not.toContain('Ask before running bash');
+    expect(labelsOf(tree)).toContain('Open tool approvals');
+    await ReactTestRenderer.act(async () => tree.unmount());
+  });
+
+  it('a server that cannot ask offers no switch that would do nothing', async () => {
+    const tree = await renderAsking(TOOLS, () => {});
+    expect(labelsOf(tree).some(label => label.startsWith('Ask before running'))).toBe(false);
+    await ReactTestRenderer.act(async () => tree.unmount());
+  });
+});

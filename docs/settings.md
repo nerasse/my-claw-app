@@ -10,17 +10,16 @@ Settings                                   search: "voix", "clé", "thème"...
 │  ├─ Appearance       theme · message size · folding (tools, reasoning)
 │  ├─ Notifications    permission (browser) · sounds (phone)
 │  └─ Updates          server · app · download on mobile data
-├─ AI
-│  ├─ Models           default · fallback · retry · subscriptions · providers · tags
+├─ THE AGENT
+│  ├─ Models           default · fallback · retry · providers and plans (+) · tags
 │  ├─ Agents           the orchestrator and every agent
 │  └─ Services         speech-to-text · text-to-speech · location · search · embeddings · browser
 ├─ WHAT THE AGENT CAN USE
 │  ├─ Workspaces       folders and their instructions
 │  ├─ Skills
-│  └─ Tools            › MCP servers
+│  └─ Tools            on/off · ask before running · › MCP servers · › approval history
 └─ SECURITY
    ├─ Devices          this device · its server · pair a browser · paired devices
-   ├─ Tool approvals
    └─ Advanced         connection · diagnostics · raw config · get started
 ```
 
@@ -55,3 +54,17 @@ nobody can reach.
 - MCP servers sit under Tools, the raw config under Advanced.
 - The drawer's "Agents" (the shared workers) is "Sub-agents": the orchestrator is the conversation
   itself, and the Agents settings page is where every agent, the orchestrator included, is set.
+
+## Second pass (owner, 2026-10-04)
+
+- "AI" became "the agent": the whole app is AI; Models, Agents and Services are what the agent is
+  made of.
+- Tool approvals left Security for Tools. The index row was an history for a feature the app could
+  not turn on; each tool now has its "ask" switch (`tools.confirm`, server docs/tool-approvals.md),
+  and the history is a row of the Tools page.
+- The ChatGPT and Claude plans are providers, listed with the keyed ones under Models, not a
+  Subscriptions section apart: "subscription or API key, it is a provider". The `+` offers ChatGPT
+  plan, Claude plan, Claude API key (beside the plan on purpose: same models, paid per use), Custom.
+  A plan is named on the way in, several of a kind can exist, and each has its page: sign in or out,
+  rename, its models (server docs/subscription-accounts.md).
+

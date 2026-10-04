@@ -92,6 +92,8 @@ export function ToolsScreen({
   onBack,
   onToggle,
   onOpenMcps,
+  onConfirm,
+  onOpenApprovals,
 }: {
   tools: ToolEntry[];
   /** Denylist names no tool carries anymore: rendered red so they can be toggled off and away. */
@@ -103,6 +105,10 @@ export function ToolsScreen({
   onToggle: (name: string, disabled: boolean) => void;
   /** The servers that bring the MCP tools: their own page, under this one. */
   onOpenMcps?: () => void;
+  /** Ask before each run of a tool, or stop asking (server docs/tool-approvals.md). */
+  onConfirm?: (name: string, confirm: boolean) => void;
+  /** What the agent was allowed to run, and what was refused. */
+  onOpenApprovals?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // nothing to type into on this page.
@@ -186,11 +192,28 @@ export function ToolsScreen({
                   disabled
                 </Text>
               ) : null}
+              {item.tool.confirm ? (
+                <Text style={styles.badge} accessibilityLabel={`${item.tool.name} asks first`}>
+                  asks first
+                </Text>
+              ) : null}
             </View>
             <Text style={styles.description} numberOfLines={2}>
               {item.tool.description}
             </Text>
           </View>
+          {/* Absent on a server that cannot ask (older than 0.7.86): no switch that would do nothing. */}
+          {onConfirm && item.tool.confirm !== undefined && !item.tool.disabled ? (
+            <Pressable
+              onPress={() => onConfirm(item.tool.name, !item.tool.confirm)}
+              disabled={saving}
+              style={[styles.toggleButton, item.tool.confirm ? styles.askOn : styles.askOff]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: item.tool.confirm === true }}
+              accessibilityLabel={`Ask before running ${item.tool.name}`}>
+              <Text style={item.tool.confirm ? styles.askTextOn : styles.askTextOff}>ask</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => onToggle(item.tool.name, !item.tool.disabled)}
             disabled={saving}
@@ -212,7 +235,7 @@ export function ToolsScreen({
           </Pressable>
         </View>
       ),
-    [onToggle, saving, styles],
+    [onToggle, onConfirm, saving, styles],
   );
 
   return (
@@ -253,9 +276,17 @@ export function ToolsScreen({
           updateCellsBatchingPeriod={50}
           windowSize={9}
           ListHeaderComponent={
-            onOpenMcps ? (
-              <Section title="external servers">
-                <LinkRow title="MCP servers" hint="add, remove, enable" onPress={onOpenMcps} label="Open MCPs" />
+            onOpenMcps || onOpenApprovals ? (
+              <Section title="more">
+                {onOpenMcps ? <LinkRow title="MCP servers" hint="add, remove, enable" onPress={onOpenMcps} label="Open MCPs" /> : null}
+                {onOpenApprovals ? (
+                  <LinkRow
+                    title="Approval history"
+                    hint="what the agent asked to run, allowed and refused · ask on a tool below"
+                    onPress={onOpenApprovals}
+                    label="Open tool approvals"
+                  />
+                ) : null}
               </Section>
             ) : null
           }
@@ -398,6 +429,12 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.accent,
     backgroundColor: palette.surfaceAlt,
   },
+  // Asking is the exception: lit when on, quiet when off, so the few tools that ask stand out
+  // instead of every row wearing the accent.
+  askOn: { backgroundColor: palette.accent, borderColor: palette.accent },
+  askOff: { backgroundColor: 'transparent', borderColor: palette.border },
+  askTextOn: { fontSize: font.small, fontWeight: '600' as const, color: palette.accentText },
+  askTextOff: { fontSize: font.small, fontWeight: '600' as const, color: palette.textFaint },
   toggleTextOn: {
     fontSize: font.small,
     fontWeight: '600' as const,

@@ -824,20 +824,31 @@ export interface ServicesResultFrame {
 /** A ChatGPT or Claude plan, signed in from the app (server docs/subscription-accounts.md). */
 export type AccountKind = 'codex' | 'claude';
 
+/**
+ * One plan: a provider holding its own sign-in, so there can be several of a kind, each named by
+ * the owner (server 0.7.86+, docs/subscription-accounts.md).
+ */
 export interface AccountView {
+  /** The provider key: what its models are addressed by. */
+  provider: string;
+  kind: AccountKind;
+  /** The owner's name for it. */
+  name: string;
   connected: boolean;
   email?: string;
   plan?: string;
-  /** Claude: a sign-in that renews itself, a long-lived token, or one in the server's .env. */
-  source?: 'oauth' | 'token' | 'env';
+  /** Claude: a sign-in that renews itself, or a long-lived token. */
+  source?: 'oauth' | 'token';
   /** A sign-in in flight: the page to open and, for ChatGPT, the code to enter there. */
   login?: { url: string; code?: string; expiresAt: number };
 }
 
 export interface AccountsResultFrame {
   type: 'accounts.result';
-  codex: AccountView;
-  claude: AccountView;
+  /** Absent on a server older than 0.7.86, which had one account of each kind and no list. */
+  accounts?: AccountView[];
+  /** The provider an `accounts.add` just declared: the page that asked opens it. */
+  added?: string;
   /** A ChatGPT sign-in that failed after its code was shown. */
   error?: string;
 }
@@ -1083,6 +1094,8 @@ export interface ToolEntry {
   /** Present for source "mcp": the config key under `mcp`, also the namespace prefix. */
   server?: string;
   disabled: boolean;
+  /** The agent asks before each run of it. Absent on a server older than 0.7.86. */
+  confirm?: boolean;
 }
 
 export interface ToolsListResultFrame {
@@ -2284,6 +2297,8 @@ export interface ProviderInfo {
   /** Models currently known to belong to this provider. */
   models: number;
   keyEnv?: string;
+  /** A ChatGPT or Claude plan: signed in rather than keyed, and `keyPresent` says it is signed in. */
+  account?: AccountKind;
   keyPresent: boolean;
 }
 
@@ -2863,9 +2878,11 @@ export function encodeServicesSet(choice: { id: ServiceId; source: ServiceSource
 
 export type AccountsRequest =
   | { type: 'accounts.get' }
-  | { type: 'accounts.login' | 'accounts.cancel' | 'accounts.logout'; provider: AccountKind }
-  | { type: 'accounts.code'; code: string }
-  | { type: 'accounts.token'; token: string };
+  | { type: 'accounts.login' | 'accounts.cancel' | 'accounts.logout'; provider: string }
+  | { type: 'accounts.code'; provider: string; code: string }
+  | { type: 'accounts.token'; provider: string; token: string }
+  | { type: 'accounts.add'; kind: AccountKind; name: string }
+  | { type: 'accounts.rename'; provider: string; name: string };
 
 export function encodeAccounts(request: AccountsRequest): string {
   return JSON.stringify(request);
@@ -3439,6 +3456,11 @@ export function encodeAgentFileDelete(agent: string): string {
 
 export function encodeToolsToggle(name: string, disabled: boolean): string {
   return JSON.stringify({ type: 'tools.toggle', name, disabled });
+}
+
+/** Asks before each run of a tool, or stops asking (server docs/tool-approvals.md). */
+export function encodeToolsConfirm(name: string, confirm: boolean): string {
+  return JSON.stringify({ type: 'tools.confirm', name, confirm });
 }
 
 export function encodeMcpAdd(

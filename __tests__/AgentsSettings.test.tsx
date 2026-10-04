@@ -414,7 +414,7 @@ describe('providers', () => {
     expect(labelsOf(tree)).not.toContain('Default model');
     expect(await hardwareBack()).toBe(true);
     await waitFor(() => labelsOf(tree).includes('Open models'));
-    expect(textsOf(tree)).toEqual(expect.arrayContaining(['default, subscriptions, providers, tags']));
+    expect(textsOf(tree)).toEqual(expect.arrayContaining(['default, providers and plans, tags']));
     await settleAndUnmount(tree);
   });
 

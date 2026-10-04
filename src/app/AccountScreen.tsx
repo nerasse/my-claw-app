@@ -16,9 +16,9 @@ export const ACCOUNT_LABELS: Record<AccountKind, { title: string; plan: string; 
 
 /** One line under the account's name: who is signed in, or what signing in gives. */
 export function accountSummary(kind: AccountKind, view: AccountView | undefined): string {
-  if (!view?.connected) return view?.login ? 'Sign-in in progress' : `Use your ${ACCOUNT_LABELS[kind].plan}, no API key`;
+  if (!view?.connected) return view?.login ? 'Sign-in in progress' : 'Not signed in';
   if (kind === 'codex') return ['Connected', view.email, view.plan && `${view.plan[0]!.toUpperCase()}${view.plan.slice(1)}`].filter(Boolean).join(' · ');
-  return view.source === 'env' ? 'Connected · token in the server .env' : view.source === 'token' ? 'Connected · long-lived token' : 'Connected';
+  return view.source === 'token' ? 'Connected · long-lived token' : 'Connected';
 }
 
 /** How long a second tap on Sign out stays armed. */
@@ -30,25 +30,34 @@ function send(request: AccountsRequest): void {
 }
 
 /**
- * Signs a ChatGPT or Claude plan in, from the app (server docs/subscription-accounts.md): the
- * page opens the provider's own sign-in page and either shows the code to type there (ChatGPT)
- * or takes back the one it shows (Claude). The tokens stay on the server.
+ * One plan, signed in from the app (server docs/subscription-accounts.md): a provider that signs in
+ * instead of taking a key, several of a kind if the owner wants, each with the name he gave it. The
+ * page opens the vendor's sign-in page and either shows the code to type there (ChatGPT) or takes
+ * back the one it shows (Claude). The tokens stay on the server.
  */
 export function AccountScreen({
+  provider,
   kind,
   needsModel,
   onBack,
   onPickModel,
+  onOpenModels,
+  onRename,
 }: {
+  /** The provider key the page is about. */
+  provider: string;
   kind: AccountKind;
   /** No default model runs yet: once connected, the next step is choosing one. */
   needsModel: boolean;
   onBack: () => void;
   onPickModel: () => void;
+  /** The provider's own page: its models, its settings, its removal. */
+  onOpenModels: () => void;
+  onRename: (current: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { frame, error, busy } = useAccounts();
-  const view = frame?.[kind];
+  const view = frame?.accounts?.find(account => account.provider === provider);
   const login = view?.login;
   const labels = ACCOUNT_LABELS[kind];
   const [code, setCode] = useState('');
@@ -79,7 +88,7 @@ export function AccountScreen({
       return;
     }
     setConfirmOut(false);
-    send({ type: 'accounts.logout', provider: kind });
+    send({ type: 'accounts.logout', provider });
   };
 
   const open = (url: string): void => {
@@ -91,8 +100,8 @@ export function AccountScreen({
       <View style={styles.header}>
         <BackButton onPress={onBack} label="Back to models" />
         <View style={styles.grow}>
-          <Text style={styles.title}>{labels.title}</Text>
-          <Text style={styles.subtitle}>{labels.plan} · usage counts against your plan</Text>
+          <Text style={styles.title} numberOfLines={1}>{view?.name ?? provider}</Text>
+          <Text style={styles.subtitle}>{labels.title} {labels.plan} · usage counts against the plan</Text>
         </View>
         <CloseButton />
       </View>
@@ -114,29 +123,23 @@ export function AccountScreen({
                 {accountSummary(kind, view)}
               </Text>
             </View>
-            <Text style={styles.hint}>Its models are in the model picker, under {labels.title}.</Text>
+            <Text style={styles.hint}>Its models are in the model picker, under {view.name}.</Text>
             {needsModel ? (
               <Pressable onPress={onPickModel} style={styles.primary} accessibilityRole="button" accessibilityLabel="Choose the default model">
                 <Text style={styles.primaryText}>Choose the default model</Text>
               </Pressable>
             ) : null}
-            {view.source === 'env' ? (
-              <Text style={styles.hint}>
-                The token is CLAUDE_CODE_OAUTH_TOKEN in the server's .env: remove it there to sign out.
+            <Pressable
+              onPress={signOut}
+              disabled={busy}
+              hitSlop={8}
+              style={[styles.secondary, confirmOut && styles.dangerOutline]}
+              accessibilityRole="button"
+              accessibilityLabel={confirmOut ? 'Confirm sign out' : 'Sign out'}>
+              <Text style={[styles.secondaryText, confirmOut && styles.dangerText]}>
+                {confirmOut ? 'Tap again to sign out' : 'Sign out'}
               </Text>
-            ) : (
-              <Pressable
-                onPress={signOut}
-                disabled={busy}
-                hitSlop={8}
-                style={[styles.secondary, confirmOut && styles.dangerOutline]}
-                accessibilityRole="button"
-                accessibilityLabel={confirmOut ? 'Confirm sign out' : 'Sign out'}>
-                <Text style={[styles.secondaryText, confirmOut && styles.dangerText]}>
-                  {confirmOut ? 'Tap again to sign out' : 'Sign out'}
-                </Text>
-              </Pressable>
-            )}
+            </Pressable>
           </View>
         ) : login ? (
           <View style={styles.card}>
@@ -189,10 +192,10 @@ export function AccountScreen({
                       autoCorrect={false}
                       style={[styles.input, styles.grow]}
                       accessibilityLabel="Claude sign-in code"
-                      onSubmitEditing={() => code.trim() && send({ type: 'accounts.code', code })}
+                      onSubmitEditing={() => code.trim() && send({ type: 'accounts.code', provider, code })}
                     />
                     <Pressable
-                      onPress={() => send({ type: 'accounts.code', code })}
+                      onPress={() => send({ type: 'accounts.code', provider, code })}
                       disabled={busy || !code.trim()}
                       style={[styles.primarySmall, (busy || !code.trim()) && styles.off]}
                       accessibilityRole="button"
@@ -205,7 +208,7 @@ export function AccountScreen({
             )}
 
             <Pressable
-              onPress={() => send({ type: 'accounts.cancel', provider: kind })}
+              onPress={() => send({ type: 'accounts.cancel', provider })}
               hitSlop={8}
               style={styles.secondary}
               accessibilityRole="button"
@@ -217,11 +220,11 @@ export function AccountScreen({
           <View style={styles.card}>
             <Text style={styles.hint}>
               {kind === 'codex'
-                ? 'Sign in with the ChatGPT account that has the plan. The agent then uses its models (GPT, Codex) with no API key.'
+                ? 'Sign in with the ChatGPT account that has the plan. The agent then uses its models (GPT, Codex) with no API key. For a second account, approve in a browser signed in to that one: a private window does it.'
                 : 'Sign in with the Claude account that has the plan. The agent then uses its models (Opus, Sonnet) with no API key.'}
             </Text>
             <Pressable
-              onPress={() => send({ type: 'accounts.login', provider: kind })}
+              onPress={() => send({ type: 'accounts.login', provider })}
               disabled={busy}
               style={[styles.primary, busy && styles.off]}
               accessibilityRole="button"
@@ -231,7 +234,7 @@ export function AccountScreen({
           </View>
         )}
 
-        {kind === 'claude' && frame && view?.source !== 'env' && !view?.connected ? (
+        {kind === 'claude' && frame && !view?.connected ? (
           <View style={styles.card}>
             <Pressable
               onPress={() => setTokenOpen(shown => !shown)}
@@ -255,7 +258,7 @@ export function AccountScreen({
                     accessibilityLabel="Claude long-lived token"
                   />
                   <Pressable
-                    onPress={() => send({ type: 'accounts.token', token })}
+                    onPress={() => send({ type: 'accounts.token', provider, token })}
                     disabled={busy || !token.trim()}
                     style={[styles.primarySmall, (busy || !token.trim()) && styles.off]}
                     accessibilityRole="button"
@@ -267,12 +270,41 @@ export function AccountScreen({
             ) : null}
           </View>
         ) : null}
+        {/* What the account is, rather than whether it is signed in: its name and its models. */}
+        {frame && view ? (
+          <View style={styles.card}>
+            <Pressable
+              onPress={() => onRename(view.name)}
+              style={styles.linkRow}
+              accessibilityRole="button"
+              accessibilityLabel="Rename this account">
+              <View style={styles.grow}>
+                <Text style={styles.cardTitle}>Name</Text>
+                <Text style={styles.hint} numberOfLines={1}>{`${view.name} · id ${provider}`}</Text>
+              </View>
+              <Text style={styles.linkGlyph}>✎</Text>
+            </Pressable>
+            <Pressable
+              onPress={onOpenModels}
+              style={styles.linkRow}
+              accessibilityRole="button"
+              accessibilityLabel="Open its models">
+              <View style={styles.grow}>
+                <Text style={styles.cardTitle}>Models</Text>
+                <Text style={styles.hint} numberOfLines={1}>what it offers, its settings, remove it</Text>
+              </View>
+              <Text style={styles.linkGlyph}>›</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
 }
 
 const createStyles = (palette: Palette) => ({
+  linkRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md, minHeight: 44 },
+  linkGlyph: { fontSize: 20, color: palette.textFaint },
   root: { flex: 1 },
   header: headerStyle(palette),
   grow: { flex: 1 },

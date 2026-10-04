@@ -48,8 +48,11 @@ export function ProviderEditScreen({
   onOpenEnv,
   onEnvSet,
   onEnvRemove,
+  initial,
 }: {
   mode: 'create' | 'edit';
+  /** A create form seeded from the + menu (Claude API key): engine, key, env name, display. */
+  initial?: { key: string; providerType: ProviderType; apiKeyEnv: string; group: string };
   /** The entry being edited, null in create mode. */
   provider: ProviderInfo | null;
   env: Omit<ProvidersEnvResultFrame, 'type'> | null;
@@ -76,12 +79,12 @@ export function ProviderEditScreen({
   onEnvRemove: (name: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [key, setKey] = useState(provider?.key ?? '');
+  const [key, setKey] = useState(provider?.key ?? initial?.key ?? '');
   const [providerType, setProviderType] = useState<ProviderType>(
-    (provider?.type as ProviderType) ?? 'openai',
+    (provider?.type as ProviderType) ?? initial?.providerType ?? 'openai',
   );
   const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? '');
-  const [group, setGroup] = useState(provider?.group ?? '');
+  const [group, setGroup] = useState(provider?.group ?? initial?.group ?? '');
   // On for a new provider: without discovery a fresh entry lists no model, and the default model
   // picker is empty with nothing saying why.
   const [discover, setDiscover] = useState(provider?.discover ?? mode === 'create');
@@ -91,7 +94,7 @@ export function ProviderEditScreen({
   const [reasoningReplay, setReasoningReplay] = useState(provider?.reasoningReplay ?? true);
   const [pricingProvider, setPricingProvider] = useState(provider?.pricingProvider ?? '');
   const [fallbackModel, setFallbackModel] = useState(provider?.fallbackModel ?? '');
-  const [apiKeyEnv, setApiKeyEnv] = useState(provider?.keyEnv ?? (mode === 'create' ? '' : ''));
+  const [apiKeyEnv, setApiKeyEnv] = useState(provider?.keyEnv ?? initial?.apiKeyEnv ?? '');
   const [envValue, setEnvValue] = useState('');
   const [cliVersion, setCliVersion] = useState('');
   const claim = env?.claudeClaim;
@@ -101,6 +104,10 @@ export function ProviderEditScreen({
   const envNameValid = envName === '' || ENV_NAME_RE.test(envName);
   const keyValid = KEY_RE.test(key);
   const openai = providerType === 'openai';
+  // An Anthropic provider with a key of its own (the + menu's "Claude API key", or Anthropic-
+  // compatible relays) takes its key from .env like an OpenAI one; the plans sign in instead and
+  // are added from the + menu, not from this form.
+  const keyed = openai || providerType === 'anthropic';
   const baseUrlValid = !openai || baseUrl.trim() !== '';
   const canSave = keyValid && envNameValid && baseUrlValid && !busy;
 
@@ -252,7 +259,7 @@ export function ProviderEditScreen({
           </View>
         </View>
 
-        {openai ? (
+        {keyed ? (
           <View style={styles.category}>
             <Text style={styles.section}>environment variable</Text>
             {mode === 'create' ? (

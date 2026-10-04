@@ -1,6 +1,8 @@
 /**
- * A ChatGPT or Claude plan, signed in from Settings -> Providers -> Subscriptions instead of the
- * `/codex` and `/claude` commands (server docs/subscription-accounts.md).
+ * ChatGPT and Claude plans are providers like the keyed ones (owner, 2026-10-04): listed among the
+ * providers on Settings -> Models, added from its +, several of a kind, each named, each with its own
+ * sign-in and its own Sign out (server docs/subscription-accounts.md). Rewritten from the one-of-each
+ * Subscriptions section; the sign-in flows they test are the same.
  *
  * @format
  */
@@ -31,20 +33,47 @@ function typeInto(tree: Tree, label: string, value: string): Promise<void> {
   });
 }
 
+type View = Record<string, unknown>;
 const OUT = { connected: false };
-const accounts = (codex: Record<string, unknown> = OUT, claude: Record<string, unknown> = OUT, extra = {}) => ({
-  type: 'accounts.result',
-  codex,
-  claude,
-  ...extra,
+const chatgpt = (over: View = OUT): View => ({ provider: 'chatgpt', kind: 'codex', name: 'ChatGPT perso', ...over });
+const claude = (over: View = OUT): View => ({ provider: 'anthropic', kind: 'claude', name: 'Claude', ...over });
+const accounts = (list: View[] = [chatgpt(), claude()], extra = {}) => ({ type: 'accounts.result', accounts: list, ...extra });
+
+const plan = (key: string, account: 'codex' | 'claude', group: string, keyPresent = false) => ({
+  key,
+  type: account === 'codex' ? 'codex' : 'anthropic',
+  group,
+  discover: true,
+  models: 3,
+  keyPresent,
+  account,
 });
 
+/** The providers snapshot: the plans are in it, marked `account`, beside a keyed provider. */
+function providers(extra: unknown[] = []) {
+  return {
+    type: 'agents.config.result',
+    defaultModel: 'fast-1',
+    defaultEffort: '',
+    effortLevels: [],
+    fallback: '',
+    providers: [
+      plan('chatgpt', 'codex', 'ChatGPT perso'),
+      plan('anthropic', 'claude', 'Claude'),
+      { key: 'openrouter', type: 'openai', discover: true, models: 9, keyEnv: 'OPENROUTER_API_KEY', keyPresent: true },
+      ...extra,
+    ],
+    agents: [],
+  };
+}
+
 /** A configured server: the launch's first catalogue (seeded) has a model, nothing gates the app. */
-async function openProviders(): Promise<Tree> {
+async function openProviders(extra: unknown[] = []): Promise<Tree> {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
   await press(tree, 'Open models');
+  await emit(providers(extra));
   return tree;
 }
 
@@ -60,13 +89,13 @@ test('ChatGPT: Sign in shows the code to enter and the page to open, then the ac
   const tree = await openProviders();
   await waitFor(() => sent().some(frame => frame.type === 'accounts.get'));
   await emit(accounts());
-  await press(tree, 'Open account ChatGPT');
+  await press(tree, 'Open account ChatGPT perso');
 
   bridge.sendMessage.mockClear();
   await press(tree, 'Sign in with ChatGPT');
-  expect(sent()).toContainEqual({ type: 'accounts.login', provider: 'codex' });
+  expect(sent()).toContainEqual({ type: 'accounts.login', provider: 'chatgpt' });
 
-  await emit(accounts({ connected: false, login: { url: 'https://auth.openai.com/codex/device', code: 'WXYZ-1234', expiresAt: Date.now() + 900_000 } }));
+  await emit(accounts([chatgpt({ connected: false, login: { url: 'https://auth.openai.com/codex/device', code: 'WXYZ-1234', expiresAt: Date.now() + 900_000 } }), claude()]));
   expect(labelsOf(tree)).toContain('Sign-in code WXYZ-1234');
   expect(labelsOf(tree)).toContain('Open the sign-in page');
   expect(labelsOf(tree)).toContain('Copy the sign-in code');
@@ -74,7 +103,7 @@ test('ChatGPT: Sign in shows the code to enter and the page to open, then the ac
   // The approval happens on another device, minutes later: the server pushes it. The model it
   // had is gone (signed out elsewhere): the page offers to choose one, without the setup taking over.
   await emit({ type: 'model.list.result', models: [], defaultModel: '' });
-  await emit(accounts({ connected: true, email: 'owner@example.com', plan: 'plus' }));
+  await emit(accounts([chatgpt({ connected: true, email: 'owner@example.com', plan: 'plus' }), claude()]));
   expect(labelsOf(tree)).toContain('Account status Connected · owner@example.com · Plus');
   expect(labelsOf(tree)).toContain('Choose the default model');
   await press(tree, 'Choose the default model');
@@ -86,49 +115,94 @@ test('ChatGPT: Sign in shows the code to enter and the page to open, then the ac
 
 test('sign-out asks a second tap; a failed ChatGPT sign-in says why', async () => {
   const tree = await openProviders();
-  await emit(accounts({ connected: true, email: 'owner@example.com', plan: 'pro' }));
-  await press(tree, 'Open account ChatGPT');
+  await emit(accounts([chatgpt({ connected: true, email: 'owner@example.com', plan: 'pro' }), claude()]));
+  await press(tree, 'Open account ChatGPT perso');
   bridge.sendMessage.mockClear();
   await press(tree, 'Sign out');
   expect(sent().some(frame => frame.type === 'accounts.logout')).toBe(false);
   await press(tree, 'Confirm sign out');
-  expect(sent()).toContainEqual({ type: 'accounts.logout', provider: 'codex' });
+  expect(sent()).toContainEqual({ type: 'accounts.logout', provider: 'chatgpt' });
 
-  await emit(accounts(OUT, OUT, { error: 'Codex device authorization timed out' }));
+  await emit(accounts(undefined, { error: 'Codex device authorization timed out' }));
   expect(labelsOf(tree)).toContain('Account error Codex device authorization timed out');
   expect(labelsOf(tree)).toContain('Sign in with ChatGPT');
   await unmount(tree);
 });
 
-test('Claude: the code its page shows is pasted back; a token goes through its own field', async () => {
+test('Claude: the code its page shows is pasted back; a token goes through its own field; it signs out like ChatGPT', async () => {
   const tree = await openProviders();
   await emit(accounts());
   await press(tree, 'Open account Claude');
   await press(tree, 'Sign in with Claude');
-  await emit(accounts(OUT, { connected: false, login: { url: 'https://platform.claude.com/oauth/authorize?x=1', expiresAt: Date.now() + 600_000 } }));
+  await emit(accounts([chatgpt(), claude({ connected: false, login: { url: 'https://platform.claude.com/oauth/authorize?x=1', expiresAt: Date.now() + 600_000 } })]));
 
   bridge.sendMessage.mockClear();
   await typeInto(tree, 'Claude sign-in code', 'abc#def');
   await press(tree, 'Connect Claude');
-  expect(sent()).toContainEqual({ type: 'accounts.code', code: 'abc#def' });
+  expect(sent()).toContainEqual({ type: 'accounts.code', provider: 'anthropic', code: 'abc#def' });
   await emit({ type: 'error', scope: 'accounts', message: 'State mismatch: this code belongs to another login attempt.' });
   expect(labelsOf(tree)).toContain('Account error State mismatch: this code belongs to another login attempt.');
 
   await press(tree, 'Use a long-lived token instead');
   await typeInto(tree, 'Claude long-lived token', 'sk-ant-oat01-abc');
   await press(tree, 'Save the Claude token');
-  expect(sent()).toContainEqual({ type: 'accounts.token', token: 'sk-ant-oat01-abc' });
+  expect(sent()).toContainEqual({ type: 'accounts.token', provider: 'anthropic', token: 'sk-ant-oat01-abc' });
 
-  // A token in the server's .env cannot be signed out from here: the page says where it lives.
-  await emit(accounts(OUT, { connected: true, source: 'env' }));
-  expect(labelsOf(tree)).not.toContain('Sign out');
-  expect(labelsOf(tree)).toContain('Account status Connected · token in the server .env');
+  // The token that came from .env is the account's own now: Sign out is there, as for ChatGPT.
+  await emit(accounts([chatgpt(), claude({ connected: true, source: 'token' })]));
+  expect(labelsOf(tree)).toContain('Account status Connected · long-lived token');
+  await press(tree, 'Sign out');
+  await press(tree, 'Confirm sign out');
+  expect(sent()).toContainEqual({ type: 'accounts.logout', provider: 'anthropic' });
   await unmount(tree);
 });
 
-test('a server without the accounts frames shows no Subscriptions section', async () => {
+test('the + offers the plans, then the Claude key beside them, then the custom form', async () => {
   const tree = await openProviders();
-  await waitFor(() => sent().some(frame => frame.type === 'accounts.get'));
-  expect(labelsOf(tree)).not.toContain('Open account ChatGPT');
+  await press(tree, 'New provider');
+  const options = [...new Set(labelsOf(tree).filter(label => ['ChatGPT plan', 'Claude plan', 'Claude API key', 'Custom'].includes(label)))];
+  expect(options).toEqual(['ChatGPT plan', 'Claude plan', 'Claude API key', 'Custom']);
+  await press(tree, 'Claude API key');
+  // The menu is gone once a choice is made: it does not stay over the page it opened.
+  expect(labelsOf(tree)).not.toContain('ChatGPT plan');
+  // The form opens on an Anthropic provider that takes its key from .env.
+  await waitFor(() => labelsOf(tree).includes('Provider key'));
+  const field = (label: string) => tree.root.find(node => node.props.accessibilityLabel === label && typeof node.props.onChangeText === 'function').props.value;
+  expect(field('Provider key')).toBe('claude-api');
+  expect(labelsOf(tree)).toContain('Engine anthropic');
+  await unmount(tree);
+});
+
+test('a second ChatGPT account: named, declared, then its page opens with its sign-in started', async () => {
+  const tree = await openProviders();
+  await press(tree, 'New provider');
+  await press(tree, 'ChatGPT plan');
+  expect(labelsOf(tree)).not.toContain('Claude plan');
+  bridge.sendMessage.mockClear();
+  await typeInto(tree, 'Name this ChatGPT account', 'ChatGPT boulot');
+  await press(tree, 'Add');
+  expect(sent()).toContainEqual({ type: 'accounts.add', kind: 'codex', name: 'ChatGPT boulot' });
+
+  const boulot = { provider: 'chatgpt-boulot', kind: 'codex', name: 'ChatGPT boulot', connected: false };
+  await emit(providers([plan('chatgpt-boulot', 'codex', 'ChatGPT boulot')]));
+  await emit(accounts([chatgpt({ connected: true }), claude(), boulot], { added: 'chatgpt-boulot' }));
+  await waitFor(() => sent().some(frame => frame.type === 'accounts.login'));
+  expect(sent()).toContainEqual({ type: 'accounts.login', provider: 'chatgpt-boulot' });
+  expect(labelsOf(tree)).toContain('Rename this account');
+
+  // Renamed from its page: the name is the owner's, the id stays.
+  await press(tree, 'Rename this account');
+  await typeInto(tree, 'Rename this account', 'Work');
+  bridge.sendMessage.mockClear();
+  await press(tree, 'Rename');
+  expect(sent()).toContainEqual({ type: 'accounts.rename', provider: 'chatgpt-boulot', name: 'Work' });
+  await unmount(tree);
+});
+
+test('another window adding an account does not take this one to its page', async () => {
+  const tree = await openProviders();
+  await emit(accounts([chatgpt(), claude(), { provider: 'claude-2', kind: 'claude', name: 'Claude 2', connected: false }], { added: 'claude-2' }));
+  expect(labelsOf(tree)).toContain('Open account ChatGPT perso');
+  expect(labelsOf(tree)).not.toContain('Rename this account');
   await unmount(tree);
 });

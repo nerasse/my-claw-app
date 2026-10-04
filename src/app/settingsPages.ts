@@ -63,7 +63,7 @@ export const PARENT: Partial<Record<SettingsPage, SettingsPage>> = {
   skills: 'index',
   tools: 'index',
   devices: 'index',
-  approvals: 'index',
+  approvals: 'tools',
   advanced: 'index',
   mcps: 'tools',
   diagnostics: 'advanced',
