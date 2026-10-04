@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Cleartext allowed for dev endpoints on the private network; production will use wss:// only. -->
     <application
@@ -49,6 +51,14 @@
         android:name=".device.ClawConnectionService"
         android:exported="false"
         android:foregroundServiceType="dataSync"
+        android:stopWithTask="false" />
+
+      <!-- A microphone capture has its own foreground lifetime. It is deliberately not sticky:
+           Android or the user stopping it must never restart a recorder without a new gesture. -->
+      <service
+        android:name=".device.VoiceRecordingService"
+        android:exported="false"
+        android:foregroundServiceType="microphone"
         android:stopWithTask="false" />
 
       <!-- The imported notification sounds. A channel's sound uri is played by the system's own

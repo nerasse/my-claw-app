@@ -6,13 +6,14 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter, PermissionsAndroid, Platform } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
-import { deviceBridge } from '../src/core/nativeBridge';
+import { deviceBridge, type VoiceRecording } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
 import { voicePlayback } from '../src/core/voice';
 import {
   renderApp,
   labelsOf,
   press,
+  textsOf,
   unmount,
   waitFor,
   type Tree,
@@ -736,6 +737,35 @@ test('a drag on the waveform seeks once, on release, to where the finger left it
   expect(bridge.seekPlayback.mock.calls).toEqual([[45_000]]);
   // Then the usual countdown, from the new place.
   expect(texts()).toContain('0:15');
+  await unmount(tree);
+});
+
+test('the notification stop action stages the take instead of losing it', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:voice:status', {
+      state: 'stopped',
+      recording: {
+        uri: 'file:///cache/voice.m4a',
+        durationMs: 210000,
+        sizeBytes: 900000,
+      },
+    });
+    await Promise.resolve();
+  });
+
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  await touch.up('Record voice message');
+
+  // The finger release that arrives after the notification stop is only the gesture catching up:
+  // the take is staged once and nothing is cancelled behind it.
+  expect(stagedNotes(tree)).toBe(1);
+  expect(bridge.uploadFile).toHaveBeenCalledTimes(1);
+  expect(bridge.cancelRecording).not.toHaveBeenCalled();
 
   await unmount(tree);
 });
@@ -780,4 +810,89 @@ test('a screen reader moves through the note a tenth at a time', async () => {
   });
   expect(bridge.seekPlayback).toHaveBeenLastCalledWith(6_000);
   await unmount(tree);
+});
+
+test('a silenced microphone warns durably and the interrupted take is kept', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+
+  const warning = 'Android silenced the microphone; the take is still being kept.';
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:voice:status', { state: 'warning', warning });
+    await Promise.resolve();
+  });
+  expect(textsOf(tree)).toContain(warning);
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:voice:status', {
+      state: 'interrupted',
+      warning,
+      recording: {
+        uri: 'file:///cache/voice.m4a',
+        durationMs: 45000,
+        sizeBytes: 180000,
+        warning,
+        interrupted: true,
+      },
+    });
+    await Promise.resolve();
+  });
+
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  expect(stagedNotes(tree)).toBe(1);
+  expect(bridge.uploadFile).toHaveBeenCalledTimes(1);
+
+  await unmount(tree);
+});
+
+test('a release racing a native end stages one take and reports no failure', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+
+  let resolveStop!: (recording: VoiceRecording | null) => void;
+  bridge.stopRecording.mockReturnValueOnce(
+    new Promise<VoiceRecording | null>(resolve => (resolveStop = resolve)),
+  );
+
+  await touch.up();
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:voice:status', {
+      state: 'stopped',
+      recording: {
+        uri: 'file:///cache/voice.m4a',
+        durationMs: 3400,
+        sizeBytes: 13600,
+      },
+    });
+    await Promise.resolve();
+  });
+
+  await ReactTestRenderer.act(async () => {
+    resolveStop(null);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+  expect(stagedNotes(tree)).toBe(1);
+  expect(bridge.uploadFile).toHaveBeenCalledTimes(1);
+  expect(textsOf(tree)).not.toContain('Recording failed.');
+
+  await unmount(tree);
+});
+
+test('navigating away during a take no longer cancels the microphone session', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+
+  await unmount(tree);
+
+  expect(bridge.cancelRecording).not.toHaveBeenCalled();
+  expect(bridge.stopRecording).not.toHaveBeenCalled();
 });

@@ -275,6 +275,7 @@ jest.mock('./src/core/nativeBridge', () => ({
   },
   deviceEvents: require('react-native').DeviceEventEmitter,
   VOICE_LEVEL_EVENT: 'claw:voice:level',
+  VOICE_STATUS_EVENT: 'claw:voice:status',
   VOICE_PLAYBACK_EVENT: 'claw:voice:playback',
   TRANSFER_PROGRESS_EVENT: 'claw:transfer:progress',
   onTransferProgress: jest.fn(() => () => {}),

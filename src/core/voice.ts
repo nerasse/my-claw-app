@@ -18,7 +18,7 @@ import { nextPlaybackRate, prefs } from './prefs';
  * a file the server would reject as empty.
  */
 
-/** Below this a hold reads as a mis-tap, and the encoder has barely written a frame. */
+/** Below this a deliberate hold reads as a mis-tap, and the encoder has barely written a frame. */
 export const MIN_RECORDING_MS = 700;
 
 export interface PlaybackState {
@@ -192,9 +192,9 @@ export type RecordingOutcome =
   | { ok: false; reason: 'too-short' | 'failed' };
 
 /**
- * Ends a take. A recording under MIN_RECORDING_MS is discarded rather than sent: the file would
- * be a fraction of a second of room tone, and the transcription would come back as either
- * nothing or an invented word.
+ * Ends a deliberate hold. A recording under MIN_RECORDING_MS is not staged by the normal gesture
+ * path; an Android interruption is handled by VoiceRecorder's status event instead, so a valid
+ * file finalized by the notification or recorder error is never silently dropped here.
  */
 export async function finishRecording(): Promise<RecordingOutcome> {
   let recording: VoiceRecording | null;

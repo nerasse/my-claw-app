@@ -5,8 +5,10 @@ import {
   deviceBridge,
   deviceEvents,
   VOICE_LEVEL_EVENT,
+  VOICE_STATUS_EVENT,
   type VoiceLevelEvent,
   type VoiceRecording,
+  type VoiceRecordingStatusEvent,
 } from '../core/nativeBridge';
 import { useLayout } from '../core/layout';
 import { ensureMicPermission, finishRecording, formatDuration } from '../core/voice';
@@ -48,6 +50,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [levels, setLevels] = useState<number[]>([]);
+  const [warning, setWarning] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
 
   // The pan callbacks are built once and never see a re-render, so every value they read lives
@@ -56,6 +59,8 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
   const startingRef = useRef(false);
   const cancelRef = useRef(false);
   const armedRef = useRef(false);
+  const pendingWarningRef = useRef<string | null>(null);
+  const nativeEndedRef = useRef(false);
   const slide = useRef(new Animated.Value(0)).current;
 
   const setPhaseBoth = useCallback(
@@ -82,13 +87,9 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     return () => subscription.remove();
   }, [phase]);
 
-  // The microphone must not outlive the bar: an unmount mid-take would leave it held.
-  useEffect(
-    () => () => {
-      if (phaseRef.current !== 'idle') deviceBridge.cancelRecording().catch(() => {});
-    },
-    [],
-  );
+  // The native foreground service owns the capture lifetime once it starts. Unmounting this
+  // bar while navigating must not cancel a valid take; the explicit delete gesture and the
+  // notification's Stop action remain the only user-visible endings besides MediaRecorder errors.
 
   const settle = useCallback(() => {
     cancelRef.current = false;
@@ -96,6 +97,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     setArmed(false);
     setElapsedMs(0);
     setLevels([]);
+    setWarning(null);
     setPhaseBoth('idle');
     Animated.spring(slide, {
       toValue: 0,
@@ -112,9 +114,33 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     return () => subscription.remove();
   }, [settle]);
 
+  useEffect(() => {
+    const subscription = deviceEvents.addListener(
+      VOICE_STATUS_EVENT,
+      (event: VoiceRecordingStatusEvent) => {
+        if (event.state === 'warning') {
+          const message = event.warning ?? 'Android reported a microphone interruption.';
+          if (phaseRef.current !== 'idle') setWarning(message);
+          else pendingWarningRef.current = message;
+          return;
+        }
+        // A service/recorder ending can race the finger release. A recording payload is enough
+        // to accept it even after keep() has already moved the bar back to idle.
+        nativeEndedRef.current = true;
+        if (phaseRef.current === 'idle' && !event.recording) return;
+        settle();
+        if (event.recording) onRecorded(event.recording);
+        if (event.warning) onError(event.warning);
+      },
+    );
+    return () => subscription.remove();
+  }, [onError, onRecorded, settle]);
+
   const begin = useCallback(async () => {
     if (startingRef.current || phaseRef.current !== 'idle') return;
     startingRef.current = true;
+    nativeEndedRef.current = false;
+    pendingWarningRef.current = null;
     try {
       const permission = await ensureMicPermission();
       if (permission !== 'granted') {
@@ -129,6 +155,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
       // and starting then would leave a recording nobody is holding.
       if (cancelRef.current) return;
       await deviceBridge.startRecording();
+      if (nativeEndedRef.current) return;
       if (cancelRef.current) {
         await deviceBridge.cancelRecording().catch(() => {});
         return;
@@ -136,6 +163,10 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
       // Confirms the microphone is live without asking the eye to leave the conversation.
       Vibration.vibrate(12);
       setPhaseBoth('recording');
+      if (pendingWarningRef.current) {
+        setWarning(pendingWarningRef.current);
+        pendingWarningRef.current = null;
+      }
     } catch {
       onError('Could not start recording.');
     } finally {
@@ -161,8 +192,12 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     settle();
     if (outcome.ok) {
       onRecorded(outcome.recording);
+      if (outcome.recording.warning) onError(outcome.recording.warning);
       return;
     }
+    // Native already ended the take (notification stop, recorder error, service teardown): its
+    // status event staged or handled it, and this release is only the finger catching up.
+    if (nativeEndedRef.current) return;
     onError(outcome.reason === 'too-short' ? 'Hold to record.' : 'Recording failed.');
   }, [onError, onRecorded, settle, setPhaseBoth]);
 
@@ -227,6 +262,10 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
             <Text style={styles.armed} numberOfLines={1}>
               Release to delete
             </Text>
+          ) : warning ? (
+            <Text style={styles.warning} numberOfLines={2} accessibilityRole="alert">
+              {warning}
+            </Text>
           ) : (
             <Waveform levels={levels} styles={styles} />
           )}
@@ -285,9 +324,9 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
 }
 
 /**
- * Drawn from the amplitude the recorder reports, not from a decoded waveform: it is proof the
- * microphone is hearing something. A flat line while you speak means a dead take, and that is
- * worth seeing before sending rather than after the transcription comes back empty.
+ * Drawn from the amplitude the recorder reports, not from a decoded waveform. It is a visual aid,
+ * not a silence detector: deliberate pauses are valid, and Android's native recording callback is
+ * the only warning path for a confirmed silencing/interruption.
  */
 function Waveform({
   levels,
@@ -355,6 +394,7 @@ const createStyles = (palette: Palette) => ({
   },
   waveBar: { flex: 1, borderRadius: radius.pill, backgroundColor: palette.accentSoft },
   hint: { fontSize: font.small, color: palette.textFaint },
+  warning: { flex: 1, fontSize: font.small, color: palette.danger },
   armed: { flex: 1, fontSize: font.small, color: palette.danger, textAlign: 'center' as const },
   ghost: { paddingHorizontal: space.sm, paddingVertical: space.xs },
   ghostText: { fontSize: font.meta, color: palette.danger },

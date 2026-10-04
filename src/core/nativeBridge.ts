@@ -34,6 +34,10 @@ export interface VoiceRecording {
   sizeBytes: number;
   /** The encoder's actual container, when the platform exposes it. */
   mimeType?: string;
+  /** Android kept a warning from an interruption or a confirmed microphone silencing. */
+  warning?: string;
+  /** True when MediaRecorder could only be finalized after an error/interruption. */
+  interrupted?: boolean;
 }
 
 export interface VoiceDraftNative {
@@ -79,6 +83,12 @@ export interface VoicePlaybackEvent {
   durationMs: number;
 }
 
+export interface VoiceRecordingStatusEvent {
+  state: 'warning' | 'stopped' | 'interrupted';
+  warning?: string;
+  recording?: VoiceRecording;
+}
+
 /** Which of the two notification sounds a choice belongs to: the ordinary one, or the ring. */
 export type NotificationUsage = 'ordinary' | 'ring';
 
@@ -112,6 +122,7 @@ export interface ImportedSoundNative {
 }
 
 export const VOICE_LEVEL_EVENT = 'claw:voice:level';
+export const VOICE_STATUS_EVENT = 'claw:voice:status';
 export const VOICE_PLAYBACK_EVENT = 'claw:voice:playback';
 
 /** Pushed while a file moves between the device and the server (upload, download, cache, save). */

@@ -359,9 +359,17 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       promise.reject("NO_MIC_PERMISSION", "Microphone permission not granted")
       return
     }
+    val audio = voiceAudio
+    if (!VoiceRecordingService.startForRecording(reactContext)) {
+      promise.reject("RECORD_SERVICE_FAILED", "could not start the microphone foreground service")
+      return
+    }
     try {
-      promise.resolve(voiceAudio.startRecording())
+      // startForRecording waits for startForeground() before this call. A locked-screen capture
+      // never opens MediaRecorder under a plain data-sync service or before the user-visible FGS.
+      promise.resolve(audio.startRecording())
     } catch (err: Exception) {
+      VoiceRecordingService.stop(reactContext)
       promise.reject("RECORD_FAILED", err.message ?: "could not start recording", err)
     }
   }

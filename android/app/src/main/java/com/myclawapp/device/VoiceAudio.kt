@@ -1,16 +1,21 @@
 package com.myclawapp.device
 
+import android.content.Context
+import android.media.AudioManager
+import android.media.AudioRecordingConfiguration
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import androidx.core.content.ContextCompat
 import java.io.File
 
 /**
@@ -28,6 +33,7 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
 
   companion object {
     const val EVENT_LEVEL = "claw:voice:level"
+    const val EVENT_STATUS = "claw:voice:status"
     const val EVENT_PLAYBACK = "claw:voice:playback"
 
     /**
@@ -42,16 +48,59 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
     private const val BIT_RATE = 32000
     private const val LEVEL_INTERVAL_MS = 60L
     private const val PLAYBACK_INTERVAL_MS = 100L
+    /** A partial lock is a bounded reliability aid, never a process-wide or permanent lock. */
+    private const val WAKE_LOCK_TIMEOUT_MS = 35 * 60 * 1000L
 
     /** getMaxAmplitude() is linear over 0..32767; speech lives in the top of a dB scale. */
     private const val MAX_AMPLITUDE = 32767.0
+
+    @Volatile
+    private var activeInstance: VoiceAudio? = null
+
+    /** Called by the service action, without requiring a live JS call. */
+    fun stopFromNotification() {
+      activeInstance?.finishFromService(null, false)
+    }
+
+    /** Called if Android removes the service while the process itself remains alive. */
+    fun onRecordingServiceDestroyed() {
+      activeInstance?.finishFromService(
+        "Recording was interrupted by Android; the take was kept if it could be finalized.",
+        true,
+      )
+    }
   }
 
   private val handler = Handler(Looper.getMainLooper())
+  private val recordingLock = Any()
 
   private var recorder: MediaRecorder? = null
   private var recordingFile: File? = null
   private var startedAt = 0L
+  private var recordingWarning: String? = null
+  private var audioCallbackRegistered = false
+  private var wakeLock: PowerManager.WakeLock? = null
+
+  private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
+    override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+      val silenced = configs.any { it.isClientSilenced }
+      var warning: String? = null
+      synchronized(recordingLock) {
+        if (recorder == null || !silenced || recordingWarning != null) return
+        warning = "Android silenced the microphone; the take is still being kept."
+        recordingWarning = warning
+      }
+      warning?.let {
+        emitStatus("warning", it, null)
+        VoiceRecordingService.updateStatus(it)
+      }
+    }
+  }
+
+  init {
+    activeInstance = this
+  }
 
   private var player: MediaPlayer? = null
   private var rate = 1f
@@ -65,30 +114,63 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
 
   // --- recording ---------------------------------------------------------------------------
 
+  private data class FinishedTake(
+    val recording: WritableMap?,
+    val warning: String?,
+    val file: File?,
+  )
+
   private val levelTick = object : Runnable {
     override fun run() {
-      val active = recorder ?: return
+      val active: MediaRecorder
+      val started: Long
+      synchronized(recordingLock) {
+        active = recorder ?: return
+        started = startedAt
+      }
       val amplitude = try {
         active.maxAmplitude
       } catch (_: IllegalStateException) {
         0
       }
+      synchronized(recordingLock) {
+        // A stop can race the main-thread tick. The elapsed value is wall-clock duration only; it
+        // is never used as proof that the microphone produced samples.
+        if (recorder !== active) return
+      }
       val payload = Arguments.createMap()
-      // Normalised here rather than in JS: the raw scale is a property of MediaRecorder.
+      // Normalised here rather than in JS: the raw scale is a property of MediaRecorder. A zero
+      // sample is valid silence, so it never becomes a warning by itself.
       payload.putDouble("level", (amplitude / MAX_AMPLITUDE).coerceIn(0.0, 1.0))
-      payload.putDouble("elapsedMs", (SystemClock.elapsedRealtime() - startedAt).toDouble())
+      payload.putDouble("elapsedMs", (SystemClock.elapsedRealtime() - started).toDouble())
       emit(EVENT_LEVEL, payload)
       handler.postDelayed(this, LEVEL_INTERVAL_MS)
     }
   }
 
-  fun isRecording(): Boolean = recorder != null
+  private fun emitStatus(state: String, warning: String?, recording: WritableMap?) {
+    val payload = Arguments.createMap()
+    payload.putString("state", state)
+    warning?.let { payload.putString("warning", it) }
+    recording?.let { payload.putMap("recording", it) }
+    emit(EVENT_STATUS, payload)
+  }
+
+  fun isRecording(): Boolean = synchronized(recordingLock) { recorder != null }
 
   /** Throws on a busy or missing microphone; the caller turns that into a rejected promise. */
   fun startRecording(): String {
-    if (recorder != null) throw IllegalStateException("already recording")
+    synchronized(recordingLock) {
+      if (recorder != null) throw IllegalStateException("already recording")
+    }
 
-    val target = File(reactContext.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
+    // A filesDir take survives process death as bytes, unlike cacheDir. There is deliberately no
+    // claim that an unfinalized MP4 can be recovered after a process crash.
+    val directory = File(reactContext.filesDir, "voice-recordings")
+    if (!directory.exists() && !directory.mkdirs()) {
+      throw IllegalStateException("could not create voice recording directory")
+    }
+    val target = File(directory, "voice_${System.currentTimeMillis()}.m4a")
     val created = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       MediaRecorder(reactContext)
     } else {
@@ -104,81 +186,190 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
       created.setAudioSamplingRate(SAMPLE_RATE)
       created.setAudioEncodingBitRate(BIT_RATE)
       created.setOutputFile(target.absolutePath)
+      created.setOnErrorListener { _, what, extra ->
+        handleRecorderError("MediaRecorder error ($what/$extra); the take was kept if valid.")
+      }
       created.prepare()
+      synchronized(recordingLock) {
+        if (recorder != null) throw IllegalStateException("already recording")
+        recorder = created
+        recordingFile = target
+        startedAt = SystemClock.elapsedRealtime()
+        recordingWarning = null
+      }
+      registerAudioCallback()
       created.start()
+      acquireWakeLock()
     } catch (err: Exception) {
-      // A half-configured recorder still owns the mic until it is released.
+      synchronized(recordingLock) {
+        if (recorder === created) {
+          unregisterAudioCallbackLocked(created)
+          recorder = null
+          recordingFile = null
+          releaseWakeLockLocked()
+        }
+      }
       try {
         created.release()
       } catch (_: Exception) {
       }
       target.delete()
+      VoiceRecordingService.stop(reactContext)
       throw err
     }
 
-    recorder = created
-    recordingFile = target
-    startedAt = SystemClock.elapsedRealtime()
     handler.post(levelTick)
     return Uri.fromFile(target).toString()
   }
 
   /**
-   * Returns null when the recording is too short to hold audio. MediaRecorder writes the MP4
-   * container on stop, and stopping within a few dozen milliseconds of start throws instead,
-   * leaving a zero-byte file that the server would reject as an empty upload.
+   * Stops a user-ended take. A non-empty file is retained even if MediaRecorder reports a stop
+   * error: an interruption must not silently throw away bytes that may still be a valid MP4.
    */
   fun stopRecording(): WritableMap? {
-    val active = recorder ?: return null
+    val finished = synchronized(recordingLock) { finishRecordingLocked(null) }
+    VoiceRecordingService.stop(reactContext)
+    if (finished.recording == null && finished.warning != null) {
+      emitStatus("interrupted", finished.warning, null)
+    }
+    return finished.recording
+  }
+
+  /** Explicit slide-to-delete. This is the one path allowed to remove the local take. */
+  fun cancelRecording() {
+    val file = synchronized(recordingLock) {
+      finishRecordingLocked(null).file
+    }
+    file?.delete()
+    VoiceRecordingService.stop(reactContext)
+  }
+
+  /** Finalizes a stop initiated by the foreground notification or by the service lifecycle. */
+  private fun finishFromService(message: String?, interrupted: Boolean) {
+    val finished = synchronized(recordingLock) { finishRecordingLocked(message) }
+    if (finished.recording != null || finished.warning != null) {
+      emitStatus(
+        if (interrupted) "interrupted" else "stopped",
+        finished.warning,
+        finished.recording,
+      )
+    }
+  }
+
+  private fun handleRecorderError(message: String) {
+    val finished = synchronized(recordingLock) {
+      if (recorder == null) return
+      finishRecordingLocked(message)
+    }
+    emitStatus("interrupted", finished.warning ?: message, finished.recording)
+    VoiceRecordingService.updateStatus(finished.warning ?: message)
+    VoiceRecordingService.stop(reactContext)
+  }
+
+  /** Called only while [recordingLock] is held. */
+  private fun finishRecordingLocked(message: String?): FinishedTake {
+    val active = recorder ?: return FinishedTake(null, null, null)
     val file = recordingFile
-    handler.removeCallbacks(levelTick)
+    val elapsed = SystemClock.elapsedRealtime() - startedAt
+    val previousWarning = recordingWarning
+    unregisterAudioCallbackLocked(active)
     recorder = null
     recordingFile = null
+    recordingWarning = null
+    handler.removeCallbacks(levelTick)
 
-    val elapsed = SystemClock.elapsedRealtime() - startedAt
-    var usable = true
+    var stopped = true
     try {
       active.stop()
     } catch (_: RuntimeException) {
-      usable = false
+      stopped = false
     } finally {
       try {
         active.release()
       } catch (_: Exception) {
       }
+      releaseWakeLockLocked()
     }
 
-    if (file == null) return null
-    if (!usable || !file.exists() || file.length() == 0L) {
-      file.delete()
-      return null
-    }
+    if (file == null) return FinishedTake(null, message ?: previousWarning, null)
+    val hasBytes = file.exists() && file.length() > 0L
+    val warning = message
+      ?: previousWarning
+      ?: if (!stopped) "Recording was interrupted; the take was kept if valid." else null
+    if (!hasBytes) return FinishedTake(null, warning, file)
 
     val result = Arguments.createMap()
     result.putString("uri", Uri.fromFile(file).toString())
     result.putDouble("durationMs", elapsed.toDouble())
     result.putDouble("sizeBytes", file.length().toDouble())
-    return result
+    warning?.let { result.putString("warning", it) }
+    if (!stopped) result.putBoolean("interrupted", true)
+    return FinishedTake(result, warning, file)
   }
 
-  /** Discards the take. Used by slide-to-cancel, and on teardown so the mic is never held. */
-  fun cancelRecording() {
-    val active = recorder ?: return
-    handler.removeCallbacks(levelTick)
-    recorder = null
-    val file = recordingFile
-    recordingFile = null
-    try {
-      active.stop()
-    } catch (_: RuntimeException) {
-      // Nothing was written; releasing is all that matters.
-    } finally {
+  private fun registerAudioCallback() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+    synchronized(recordingLock) {
+      val active = recorder ?: return
+      if (audioCallbackRegistered) return
       try {
-        active.release()
+        // MediaRecorder's monitor is scoped to this recorder. AudioManager's global callback would
+        // also report another app's capture and turn its silencing into our warning.
+        active.registerAudioRecordingCallback(
+          ContextCompat.getMainExecutor(reactContext),
+          recordingCallback,
+        )
+        audioCallbackRegistered = true
+      } catch (_: Exception) {
+        // Recording remains usable; the level stream must not invent a silencing warning.
+      }
+    }
+  }
+
+  /** Called only while [recordingLock] is held. */
+  private fun unregisterAudioCallbackLocked(active: MediaRecorder? = recorder) {
+    if (!audioCallbackRegistered || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+    try {
+      active?.unregisterAudioRecordingCallback(recordingCallback)
+    } catch (_: Exception) {
+    }
+    audioCallbackRegistered = false
+  }
+
+  private fun acquireWakeLock() {
+    val manager = reactContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+    val candidate = manager.newWakeLock(
+      PowerManager.PARTIAL_WAKE_LOCK,
+      "${reactContext.packageName}:voice-recording",
+    )
+    candidate.setReferenceCounted(false)
+    try {
+      candidate.acquire(WAKE_LOCK_TIMEOUT_MS)
+      synchronized(recordingLock) {
+        if (recorder == null) {
+          if (candidate.isHeld) candidate.release()
+        } else {
+          wakeLock = candidate
+        }
+      }
+    } catch (_: Exception) {
+      // The foreground service remains the primary protection. Failure to acquire an optional
+      // bounded CPU lock must not turn a valid microphone session into a start error.
+      try {
+        if (candidate.isHeld) candidate.release()
       } catch (_: Exception) {
       }
     }
-    file?.delete()
+  }
+
+  /** Called only while [recordingLock] is held. */
+  private fun releaseWakeLockLocked() {
+    val held = wakeLock
+    wakeLock = null
+    try {
+      if (held?.isHeld == true) held.release()
+    } catch (_: Exception) {
+    }
   }
 
   // --- playback ----------------------------------------------------------------------------
@@ -279,9 +470,14 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
     playingUri = null
   }
 
-  /** Called when the JS context goes away: neither the mic nor the speaker may outlive it. */
+  /**
+   * The bridge can be invalidated by navigation or a JS reload while the foreground service is
+   * still alive. Finalize rather than cancel so a valid take is not silently discarded; a process
+   * crash is different and cannot be promised to recover an unfinalized MP4.
+   */
   fun teardown() {
-    cancelRecording()
+    stopRecording()
     releasePlayer()
+    if (activeInstance === this) activeInstance = null
   }
 }

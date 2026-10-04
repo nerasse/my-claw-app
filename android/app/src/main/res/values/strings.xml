@@ -3,4 +3,8 @@
     <string name="connection_channel_name">my-claw connection</string>
     <string name="connection_notification_title">my-claw</string>
     <string name="connection_notification_text">Agent connection active</string>
+    <string name="voice_notification_channel">voice recording</string>
+    <string name="voice_notification_title">Recording voice note</string>
+    <string name="voice_notification_text">Recording continues while the screen is locked</string>
+    <string name="voice_notification_stop">Stop and keep</string>
 </resources>

@@ -37,6 +37,8 @@ export interface VoiceRecording {
   sizeBytes: number;
   /** The encoder's actual container, used to name and serve the upload correctly. */
   mimeType?: string;
+  warning?: string;
+  interrupted?: boolean;
 }
 
 export interface CurrentLocationNative {
@@ -70,6 +72,12 @@ export interface VoicePlaybackEvent {
   durationMs: number;
 }
 
+export interface VoiceRecordingStatusEvent {
+  state: 'warning' | 'stopped' | 'interrupted';
+  warning?: string;
+  recording?: VoiceRecording;
+}
+
 /** Which of the two notification sounds a choice belongs to: the ordinary one, or the ring. */
 export type NotificationUsage = 'ordinary' | 'ring';
 
@@ -93,6 +101,7 @@ export interface ImportedSoundNative {
 }
 
 export const VOICE_LEVEL_EVENT = 'claw:voice:level';
+export const VOICE_STATUS_EVENT = 'claw:voice:status';
 export const VOICE_PLAYBACK_EVENT = 'claw:voice:playback';
 export const TRANSFER_PROGRESS_EVENT = 'claw:transfer:progress';
 
