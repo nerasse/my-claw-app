@@ -423,6 +423,8 @@ export type HistoryEntry =
        * history shows its duration the way a replayed thinking phase does.
        */
       compactionMs?: number;
+      /** On a boundary: what it archived (finished work), folded beside the summary. */
+      archive?: string;
       /**
        * This boundary stands for a compaction that was stopped: nothing was folded, the summary
        * never landed, and `summaryOf` counts the turns the plan was about to cover -- all of them
@@ -470,6 +472,8 @@ export interface ChatCompactionFrame {
   id: string;
   summary: string;
   count: number;
+  /** What the boundary archived (finished work), when it archived something. */
+  archive?: string;
   ts?: string;
 }
 

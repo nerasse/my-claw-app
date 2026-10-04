@@ -336,6 +336,15 @@ describe('an injected send waits for the run to read it, not for it to speak', (
     expect((chatStore.getItems(THREAD)[1] as { summaryOf?: number }).summaryOf).toBeTruthy();
   });
 
+  test('a boundary carries what it archived, live and from history', () => {
+    chatStore.addCompactionBoundary(THREAD, 'e-live', 'resume', 4, '### Runner\n- released');
+    expect((chatStore.getItems(THREAD)[0] as { archive?: string }).archive).toBe('### Runner\n- released');
+    chatStore.seedHistory(THREAD, [
+      { id: 'e-hist', role: 'user', text: 'resume', ts: new Date().toISOString(), summaryOf: 4, archive: '### Old\n- done' },
+    ]);
+    expect((chatStore.getItems(THREAD).find(i => i.id === 'e-hist') as { archive?: string }).archive).toBe('### Old\n- done');
+  });
+
   test('a compaction in flight is state on the thread, not a bubble in it', () => {
     // It was a bubble (id `compacting`, streaming, a command): one more live item that every
     // delta re-appended at the end of the thread, that a fresh page dropped and a replay

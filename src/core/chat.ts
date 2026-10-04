@@ -93,6 +93,8 @@ export interface TextItem {
    * nothing is drawn rather than a zero.
    */
   compactionMs?: number;
+  /** On a boundary: what the compaction archived, folded beside the summary (server, 2026-10-04). */
+  archive?: string;
   /**
    * A compaction that was stopped: nothing was folded, the summary never landed, and `summaryOf`
    * counts the turns the plan was about to cover -- all of them still on the thread, in full.
@@ -351,6 +353,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.error ? { error: entry.error } : {}),
       ...(entry.summaryOf ? { summaryOf: entry.summaryOf } : {}),
       ...(entry.compactionMs !== undefined ? { compactionMs: entry.compactionMs } : {}),
+      ...(entry.archive ? { archive: entry.archive } : {}),
       ...(entry.compactionStopped ? { compactionStopped: true } : {}),
       ...(entry.run ? { run: runInfoOf(entry.run) } : {}),
       ts,
@@ -1543,7 +1546,7 @@ class ChatStoreImpl {
    * the field that stops it being drawn as a bubble the owner wrote -- ChatScreen routes to
    * CompactionBoundary on it alone.
    */
-  addCompactionBoundary(threadId: string, id: string, summary: string, count: number): void {
+  addCompactionBoundary(threadId: string, id: string, summary: string, count: number, archive?: string): void {
     // The compaction that wrote this rule is over, whether or not its end frame made it here.
     this.compacting.delete(threadId);
     if (this.getItems(threadId).some(item => item.id === id)) {
@@ -1561,6 +1564,7 @@ class ChatStoreImpl {
       // voice, which is the one thing CompactionBoundary exists to prevent. The server never
       // sends 0 (a plan with an empty middle is refused), so the clamp keeps the invariant local.
       summaryOf: Math.max(1, count),
+      ...(archive ? { archive } : {}),
       ts: Date.now(),
     });
   }

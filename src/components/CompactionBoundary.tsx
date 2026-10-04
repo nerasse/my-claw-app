@@ -19,7 +19,9 @@ function turns(count: number): string {
  * A rule across the thread says what it is, because that is the true shape of the thing: the turns
  * above it still exist and are still scrolled through, they are simply not in the prompt any more.
  * The summary folds under it, like every other aside: what the model was handed instead is worth
- * being able to check, and is not worth a screenful on the way past.
+ * being able to check, and is not worth a screenful on the way past. So does the archive, when the
+ * pass archived something: the finished work the summary only names in a line (server,
+ * 2026-10-04), the same text `conversation_search` finds with `source: "archive"`.
  */
 export const CompactionBoundary = React.memo(function CompactionBoundaryView({
   item,
@@ -55,6 +57,15 @@ export const CompactionBoundary = React.memo(function CompactionBoundaryView({
           showHint="Show what the compaction kept"
           hideHint="Hide the summary"
           persistKey={`compaction:${item.id}`}
+        />
+      ) : null}
+      {item.archive ? (
+        <CollapsibleAside
+          label="Archive"
+          body={item.archive}
+          showHint="Show the finished work this compaction archived"
+          hideHint="Hide the archive"
+          persistKey={`compaction-archive:${item.id}`}
         />
       ) : null}
     </View>

@@ -120,3 +120,25 @@ test('a stopped compaction offers no aside: there is no summary to fold', () => 
   expect(texts(tree)).not.toContain('Show what the compaction kept');
   expect(texts(tree)).not.toContain('Summary');
 });
+
+/**
+ * The archive (server, 2026-10-04). A compaction moves finished work out of the summary into an
+ * archive written on the boundary; it folds under the rule beside the summary, shut by default.
+ */
+test('a boundary that archived something offers it as a second fold, shut until opened', () => {
+  const tree = mount({ item: item({ archive: '### Runner rebuild\n- released as 0.7.62' }) });
+  expect(texts(tree)).not.toContain('released as 0.7.62');
+  const archiveButton = tree.root.findAll(n => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Archive')[0]!;
+  expect(archiveButton).toBeDefined();
+  ReactTestRenderer.act(() => {
+    archiveButton.props.onPress();
+  });
+  expect(texts(tree)).toContain('released as 0.7.62');
+  // Opening the archive leaves the summary shut: two folds, two states.
+  expect(texts(tree)).not.toContain('Prior work');
+});
+
+test('a boundary that archived nothing offers no archive fold', () => {
+  const tree = mount({ item: item() });
+  expect(tree.root.findAll(n => n.props.accessibilityLabel === 'Archive')).toHaveLength(0);
+});

@@ -248,7 +248,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // No ring, no unread mark, and deliberately no `noteActivity`: a compaction is not a
       // message and the owner never asked for this one, so bumping the thread in the drawer for
       // it would be noise (docs/notifications.md on the server).
-      chatStore.addCompactionBoundary(frame.threadId, frame.id, frame.summary, frame.count);
+      chatStore.addCompactionBoundary(frame.threadId, frame.id, frame.summary, frame.count, frame.archive);
       break;
     case 'chat.compacting':
       // Same silence as the boundary above: a placeholder in the thread, nothing in the tray.
