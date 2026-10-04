@@ -182,11 +182,14 @@ export interface SpawnCard {
  * lifecycle: matching on `spawn` alone left every `send` card as a plain tool row with no status,
  * no door and nothing replayed after a reload, and the browser call was that plain row until it
  * became a real sub-agent (server 0.7).
+ *
+ * A `delegate_browser_task` call with `kept` runs no task: it lists or settles the windows earlier
+ * tasks kept (the server folded `held_browser_windows` into it, 2026-10-04): a plain tool row.
  */
 const SUBAGENT_TOOLS: ReadonlySet<string> = new Set(['spawn', 'send', 'delegate_browser_task']);
 
-export function isSubAgentTool(name: string): boolean {
-  return SUBAGENT_TOOLS.has(name);
+export function isSubAgentTool(name: string, args: Record<string, unknown>): boolean {
+  return SUBAGENT_TOOLS.has(name) && !(name === 'delegate_browser_task' && args.kept !== undefined);
 }
 
 type Listener = () => void;
@@ -491,7 +494,7 @@ class ChatStoreImpl {
    */
   spawnCardsOf(threadId: string): SpawnCard[] {
     const tools = this.getItems(threadId).filter(
-      (item): item is ToolItem => item.kind === 'tool' && isSubAgentTool(item.name),
+      (item): item is ToolItem => item.kind === 'tool' && isSubAgentTool(item.name, item.args),
     );
     const cached = this.spawnCards.get(threadId);
     if (cached && cached.tools.length === tools.length && cached.tools.every((tool, i) => tool === tools[i])) {
@@ -580,7 +583,7 @@ class ChatStoreImpl {
     // disagree about which sub-agent a card refers to.
     const { byId, byName } = indexRoster(agents);
     for (const item of this.getItems(threadId)) {
-      if (item.kind !== 'tool' || !isSubAgentTool(item.name) || !item.running) continue;
+      if (item.kind !== 'tool' || !isSubAgentTool(item.name, item.args) || !item.running) continue;
       const current = this.spawnState(threadId, item.id) ?? item.spawn;
       if (current) continue;
       const agent = agentOfCard({ args: item.args }, byId, byName);
@@ -601,7 +604,7 @@ class ChatStoreImpl {
   settleSpawn(threadId: string, cardId: string, outcome: { subagentId?: string; status: 'complete' | 'error' | 'aborted'; resultLength?: number; error?: string }): void {
     const current = this.spawnState(threadId, cardId);
     const tool = this.getItems(threadId).find(item => item.id === cardId);
-    const runningTool = tool?.kind === 'tool' && isSubAgentTool(tool.name) && tool.running;
+    const runningTool = tool?.kind === 'tool' && isSubAgentTool(tool.name, tool.args) && tool.running;
     const fallbackName = tool?.kind === 'tool' && typeof tool.args.name === 'string' ? tool.args.name : outcome.subagentId ?? cardId;
     const next: SpawnLifecycleState | undefined = current ?? (outcome.subagentId ? {
       subagentId: outcome.subagentId,
@@ -987,7 +990,7 @@ class ChatStoreImpl {
     let changed = false;
     const next = items.map(item => {
       if (item.kind !== 'tool' || item.running !== true) return item;
-      if (item.run?.id !== runId || isSubAgentTool(item.name)) return item;
+      if (item.run?.id !== runId || isSubAgentTool(item.name, item.args)) return item;
       changed = true;
       return {
         ...item,
@@ -1358,7 +1361,7 @@ class ChatStoreImpl {
    */
   private itemsOfWithSpawnReconcile(threadId: string, entries: HistoryEntry[]): ChatItem[] {
     return itemsOf(entries).map(item => {
-      if (item.kind !== 'tool' || !isSubAgentTool(item.name)) return item;
+      if (item.kind !== 'tool' || !isSubAgentTool(item.name, item.args)) return item;
       const live = this.spawnState(threadId, item.id);
       const history = item.spawn;
       // A terminal history state beats a stale live running bit.
@@ -2103,7 +2106,7 @@ class ChatStoreImpl {
    *  it and replaces the streamed text with the final output. */
   appendToolOutput(threadId: string, id: string, chunk: { stdout?: string; stderr?: string; clipped?: boolean; replay?: boolean }): void {
     const item = (this.threads.get(threadId) ?? EMPTY_ITEMS).find(entry => entry.id === id && entry.kind === 'tool') as ToolItem | undefined;
-    if (!item || (!item.running && !(isSubAgentTool(item.name) && item.spawn && item.spawn.status !== 'running'))) return;
+    if (!item || (!item.running && !(isSubAgentTool(item.name, item.args) && item.spawn && item.spawn.status !== 'running'))) return;
     const base = chunk.replay ? '' : item.output;
     const append = (base ? (base.endsWith('\n') ? '' : '\n') : '') +
       (chunk.stdout ?? '') +

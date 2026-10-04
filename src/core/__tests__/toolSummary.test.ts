@@ -75,7 +75,7 @@ it('still refuses to build a preview no row could ever draw', () => {
 it('marks a path, a command or a pattern as code and a bare verb as prose', () => {
   expect(summarizeTool('read', { path: '/a/b/c.ts' }).mono).toBe(true);
   expect(summarizeTool('search', { pattern: '[0-9]+', path: '/src' }).mono).toBe(true);
-  expect(summarizeTool('list_agents', {}).mono).toBe(false);
+  expect(summarizeTool('agents', { action: 'list' }).mono).toBe(false);
   expect(summarizeTool('spawn', { mode: 'session' }).mono).toBe(false);
 });
 
@@ -131,7 +131,7 @@ describe('content arguments', () => {
   it('reports no fold at all when the content argument was the only one', () => {
     // bash: the command is the whole call. An ARGUMENTS fold there offers `{}`.
     expect(labelArgs('bash', { command: 'ls' })).toBeNull();
-    expect(labelArgs('list_agents', {})).toBeNull();
+    expect(labelArgs('agents', {})).toBeNull();
   });
 });
 
@@ -161,5 +161,22 @@ describe('apply_patch edits', () => {
     // An older client, a plugin passing something else: better the raw fold than a wrong layout.
     expect(toolContent('apply_patch', { edits: ['not a pair'] })).toBeNull();
     expect(labelArgs('apply_patch', { path: '/a.ts', edits: ['x'] })).toEqual({ path: '/a.ts' });
+  });
+});
+
+describe('the merged tools (server, 2026-10-04)', () => {
+  it('agents reads as its action, then the sub-agent it acts on', () => {
+    expect(summarizeTool('agents', { action: 'list' }).detail).toBe('list');
+    expect(summarizeTool('agents', { action: 'kill', id: 'subagent/x-1' }).detail).toBe('kill subagent/x-1');
+  });
+
+  it('audio reads as its action, then what it acts on, and shows the spoken text as content', () => {
+    expect(summarizeTool('audio', { action: 'transcribe', filePath: '/tmp/a/b/voice.ogg' }).detail).toBe('transcribe b/voice.ogg');
+    expect(summarizeTool('audio', { action: 'mode', mode: 'local', feature: 'stt' }).detail).toBe('mode local');
+    expect(toolContent('audio', { action: 'speak', text: 'Bonjour' })).toEqual({ key: 'text', text: 'Bonjour' });
+  });
+
+  it('a delegate call on the kept windows says which action', () => {
+    expect(summarizeTool('delegate_browser_task', { kept: 'release', window: 2 }).detail).toBe('release');
   });
 });

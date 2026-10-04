@@ -195,10 +195,16 @@ describe('sub-agent tools', () => {
   test('a delegated browser task is a sub-agent card, like a spawn and a send', () => {
     // The card is what gives the run a door, a live status and a replay after a reload; a plain
     // tool row has none of those, which is what the browser call was.
-    expect(isSubAgentTool('spawn')).toBe(true);
-    expect(isSubAgentTool('send')).toBe(true);
-    expect(isSubAgentTool('delegate_browser_task')).toBe(true);
-    expect(isSubAgentTool('bash')).toBe(false);
+    expect(isSubAgentTool('spawn', {})).toBe(true);
+    expect(isSubAgentTool('send', {})).toBe(true);
+    expect(isSubAgentTool('delegate_browser_task', { url: 'https://a.fr', instructions: 'go' })).toBe(true);
+    expect(isSubAgentTool('bash', {})).toBe(false);
+  });
+
+  test('the kept windows, asked through the same door, are a plain tool row: no run is started', () => {
+    // A sub-agent card with no run behind it would wait for a lifecycle that never comes.
+    expect(isSubAgentTool('delegate_browser_task', { kept: 'list' })).toBe(false);
+    expect(isSubAgentTool('delegate_browser_task', { kept: 'release', window: 2 })).toBe(false);
   });
 });
 

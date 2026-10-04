@@ -988,7 +988,7 @@ export function ChatScreen({
           );
         }
       }
-      if (item.kind === 'tool' && isSubAgentTool(item.name)) {
+      if (item.kind === 'tool' && isSubAgentTool(item.name, item.args)) {
         return (
           <View style={toolColumn}>
           <SubAgentCard
