@@ -28,6 +28,8 @@ export interface JobDraft {
   tools: JobScope;
   subagents: boolean;
   browser: boolean;
+  followUp: boolean;
+  followUpPrompt: string;
 }
 
 function draftOf(job: JobEntry | null): JobDraft {
@@ -46,6 +48,8 @@ function draftOf(job: JobEntry | null): JobDraft {
       tools: { mode: 'inherit' },
       subagents: true,
       browser: true,
+      followUp: false,
+      followUpPrompt: '',
     };
   }
   const schedule = (() => {
@@ -69,6 +73,8 @@ function draftOf(job: JobEntry | null): JobDraft {
     tools: scopeOf(job.toolsMode, job.tools),
     subagents: job.subagents === true,
     browser: job.browser === true,
+    followUp: job.followUp === true,
+    followUpPrompt: job.followUpPrompt ?? '',
   };
 }
 
@@ -428,6 +434,49 @@ export function JobsEditorScreen({
           {promptMissing ? <Text style={styles.invalidHint}>a prompt is required</Text> : null}
         </View>
 
+        {/* What becomes of the report: a note in the conversation it is delivered to, or that
+            conversation's next turn, which its agent then acts on (docs/cron.md on the server). */}
+        <View style={styles.category}>
+          <Text style={styles.section}>report</Text>
+          <View style={styles.chips}>
+            {(
+              [
+                [false, 'Report only'],
+                [true, 'Report handled'],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={label}
+                onPress={() => setDraft(current => ({ ...current, followUp: value }))}
+                style={[styles.chip, draft.followUp === value ? styles.chipActive : styles.chipIdle]}
+                accessibilityRole="button"
+                accessibilityLabel={`Job ${label}`}
+                accessibilityState={{ selected: draft.followUp === value }}>
+                <Text style={draft.followUp === value ? styles.chipTextActive : styles.chipTextIdle}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {draft.followUp ? (
+            <TextInput
+              style={[styles.input, styles.promptInput]}
+              value={draft.followUpPrompt}
+              onChangeText={followUpPrompt => setDraft(current => ({ ...current, followUpPrompt }))}
+              placeholder="what the conversation's agent does with the report (empty: act on it)"
+              placeholderTextColor={styles.placeholder.color}
+              multiline
+              autoCorrect={false}
+              accessibilityLabel="Follow-up instruction"
+            />
+          ) : null}
+          <Text style={styles.note}>
+            {!job || job.deliver === 'local'
+              ? 'this job delivers nowhere, so there is no conversation to hand the report to'
+              : draft.followUp
+                ? 'the report becomes the conversation\'s next turn: its agent runs on it, or takes it in at the end of a run already going'
+                : 'the report is filed in the conversation, and nobody acts on it until you do'}
+          </Text>
+        </View>
+
         <View style={styles.category}>
           <Text style={styles.section}>schedule</Text>
           <ScheduleEditor
@@ -529,6 +578,8 @@ function toFields(job: JobEntry | null, draft: JobDraft): JobFieldsOut {
     tools: draft.tools,
     subagents: draft.subagents,
     browser: draft.browser,
+    followUp: draft.followUp,
+    followUpPrompt: draft.followUpPrompt.trim(),
   };
 }
 

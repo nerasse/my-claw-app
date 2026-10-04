@@ -780,3 +780,67 @@ test('the capability switches read the job and ride on the save', async () => {
   expect(sentOfType('jobs.save')[1]).toMatchObject({ subagents: true, browser: true });
   await unmount(tree);
 });
+
+describe('the follow-up (server, 2026-10-04)', () => {
+  test('off by default, and a fresh job says so on save', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await pressLabel(tree, 'Add job');
+    await waitFor(() => labelsOf(tree).includes('Job prompt'));
+    await typeInto(tree, 'Job prompt', 'do things');
+    // No instruction field while it is off: there is nothing for it to instruct.
+    expect(labelsOf(tree)).not.toContain('Follow-up instruction');
+    await pressLabel(tree, 'Save job');
+    expect(sentOfType('jobs.save')[0]).toMatchObject({ followUp: false, followUpPrompt: '' });
+    await unmount(tree);
+  });
+
+  test('a job with it reads as on, with its instruction, and both ride on the save', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await emit({ type: 'jobs.list.result', jobs: [job({ deliver: 'my-claw-app:neras:t1', followUp: true, followUpPrompt: 'Mets à jour le workspace.' })] });
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Follow-up instruction'));
+    const field = tree.root.find(node => node.props.accessibilityLabel === 'Follow-up instruction');
+    expect(field.props.value).toBe('Mets à jour le workspace.');
+    await typeInto(tree, 'Follow-up instruction', 'Lance les candidatures.');
+    await pressLabel(tree, 'Save job');
+    expect(sentOfType('jobs.save')[0]).toMatchObject({ followUp: true, followUpPrompt: 'Lance les candidatures.' });
+    await unmount(tree);
+  });
+
+  test('turned on from the editor, and off again, the save follows the tap', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await emit({ type: 'jobs.list.result', jobs: [job({ deliver: 'my-claw-app:neras:t1', followUp: false })] });
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Job Report handled'));
+    await pressLabel(tree, 'Job Report handled');
+    await waitFor(() => labelsOf(tree).includes('Follow-up instruction'));
+    await pressLabel(tree, 'Save job');
+    expect(sentOfType('jobs.save')[0]).toMatchObject({ followUp: true });
+
+    await emit({ type: 'jobs.list.result', jobs: [job({ deliver: 'my-claw-app:neras:t1', followUp: true })] });
+    await waitFor(() => !labelsOf(tree).includes('Edit job model'));
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Job Report only'));
+    await pressLabel(tree, 'Job Report only');
+    await pressLabel(tree, 'Save job');
+    expect(sentOfType('jobs.save')[1]).toMatchObject({ followUp: false });
+    await unmount(tree);
+  });
+
+  test('a job that delivers nowhere says the follow-up has no conversation to go to', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await emit({ type: 'jobs.list.result', jobs: [job({ deliver: 'local' })] });
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Job Report handled'));
+    expect(textsOf(tree).join(' ')).toContain('delivers nowhere');
+    await unmount(tree);
+  });
+});

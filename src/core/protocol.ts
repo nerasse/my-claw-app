@@ -1917,6 +1917,12 @@ export interface JobEntry {
   /** The job's capability switches, resolved server-side: granted unless turned off. */
   subagents: boolean;
   browser: boolean;
+  /**
+   * The report becomes the delivery conversation's next turn, so its agent acts on it; the
+   * instruction it is given, when the job has one. Absent from a server that predates it.
+   */
+  followUp?: boolean;
+  followUpPrompt?: string;
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: 'ok' | 'error' | null;
@@ -3588,6 +3594,9 @@ export interface JobFieldsOut {
   /** Both always carried: a job is the orchestrator's stand-in, so the switches are the narrowing. */
   subagents: boolean;
   browser: boolean;
+  /** Always carried; an empty instruction clears it back to the server's default. */
+  followUp: boolean;
+  followUpPrompt: string;
 }
 
 /** Lists the scheduled tasks; every mutation answers with the same fresh listing. */
@@ -3644,6 +3653,8 @@ export function encodeJobsSave(fields: JobFieldsOut): string {
   frame.tools = fields.tools;
   frame.subagents = fields.subagents;
   frame.browser = fields.browser;
+  frame.followUp = fields.followUp;
+  frame.followUpPrompt = fields.followUpPrompt;
   return JSON.stringify(frame);
 }
 
