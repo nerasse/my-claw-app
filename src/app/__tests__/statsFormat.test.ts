@@ -34,6 +34,8 @@ import {
   totalsMoneyLines,
   tokenTotal,
   shortTokens,
+  compactionTotals,
+  compactionShareLine,
 } from '../StatsScreen';
 
 function totals(over: Partial<StatsTotals> = {}): StatsTotals {
@@ -207,4 +209,26 @@ test('a thousand million tokens read as a billion', () => {
   expect(shortTokens(4_200_000)).toBe('4.2M');
   expect(shortTokens(12_400)).toBe('12k');
   expect(shortTokens(950)).toBe('950');
+});
+
+test('the compaction is every pass, blocking and background, folded into one line of its own', () => {
+  const rows = [
+    { caller: 'agent', ...totals({ calls: 90, promptTokens: 900_000, completionTokens: 90_000, billedUsd: 9 }) },
+    { caller: 'compaction', ...totals({ calls: 2, promptTokens: 393_646, completionTokens: 256_000, billedUsd: 6.14 }) },
+    { caller: 'compaction-speculative', ...totals({ calls: 1, promptTokens: 10_000, completionTokens: 4_000, billedUsd: 0.06 }) },
+  ];
+  const c = compactionTotals(rows)!;
+  expect(c.calls).toBe(3);
+  expect(c.promptTokens).toBe(403_646);
+  expect(c.completionTokens).toBe(260_000);
+  expect(c.billedUsd).toBeCloseTo(6.2);
+  // Nothing compacted in the window: no card rather than a row of zeros.
+  expect(compactionTotals([rows[0]!])).toBeUndefined();
+});
+
+test('its share is said against the whole window, in money and in tokens', () => {
+  const window = totals({ promptTokens: 1_303_646, completionTokens: 350_000, billedUsd: 15.2, referenceUsd: 0 });
+  const c = totals({ calls: 3, promptTokens: 403_646, completionTokens: 260_000, billedUsd: 6.2, referenceUsd: 0 });
+  expect(compactionShareLine(c, window)).toBe('41% of the cost · 40% of the tokens');
+  expect(compactionShareLine(c, totals({ promptTokens: 0, completionTokens: 0, billedUsd: 0 }))).toBe('');
 });

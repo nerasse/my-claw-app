@@ -186,6 +186,48 @@ export function listPrice(t: StatsTotals): number {
 }
 
 /**
+ * What the compactions of the window cost, blocking and background passes folded together, or
+ * nothing when the window did not compact. Read off the per-source rows the server already sends:
+ * a compaction is maintenance on a conversation, and it hid inside Advanced > Source while two
+ * passes could cost as much as a day of work (2026-10-04, $6 for two summaries that were cut).
+ *
+ * Exported for its own test.
+ */
+export function compactionTotals(rows: readonly StatsCallerRow[]): StatsTotals | undefined {
+  const passes = rows.filter(row => row.caller === 'compaction' || row.caller.startsWith('compaction-'));
+  if (passes.length === 0) return undefined;
+  const sum = (key: keyof StatsTotals): number => passes.reduce((total, row) => total + row[key], 0);
+  return {
+    calls: sum('calls'),
+    errors: sum('errors'),
+    promptTokens: sum('promptTokens'),
+    completionTokens: sum('completionTokens'),
+    cacheReadTokens: sum('cacheReadTokens'),
+    cacheWriteTokens: sum('cacheWriteTokens'),
+    billedUsd: sum('billedUsd'),
+    referenceUsd: sum('referenceUsd'),
+    unpriced: sum('unpriced'),
+    durationMs: sum('durationMs'),
+  };
+}
+
+/**
+ * Its weight in the window, in the page's two figures: money and tokens. Empty when the window has
+ * neither, rather than a division by zero drawn as `NaN%`.
+ *
+ * Exported for its own test.
+ */
+export function compactionShareLine(part: StatsTotals, window: StatsTotals): string {
+  const pct = (a: number, b: number): string | null => (b > 0 ? `${Math.round((a / b) * 100)}%` : null);
+  return [
+    pct(listPrice(part), listPrice(window)) ? `${pct(listPrice(part), listPrice(window))} of the cost` : null,
+    pct(tokenTotal(part), tokenTotal(window)) ? `${pct(tokenTotal(part), tokenTotal(window))} of the tokens` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
  * The hero's parts, one line each, and they add up to it -- which is the page's one promise.
  *
  * `unpriced` rides with them because calls counted with no money behind them are information: the
@@ -618,9 +660,34 @@ function Overview({ stats }: { stats: StatsPayload }): React.JSX.Element {
         </Text>
         {reach ? <Text style={styles.codeNote}>{reach}</Text> : null}
       </Card>
+      <CompactionCard stats={stats} />
       <Timeline stats={stats} />
       <TopModels rows={stats.models.slice(0, OVERVIEW_ROWS)} rest={Math.max(0, stats.models.length - OVERVIEW_ROWS)} />
     </>
+  );
+}
+
+/**
+ * The compactions of the window, right under the total they are part of: a pass reads the whole
+ * conversation and writes its summary, which makes it among the heaviest calls there are.
+ */
+function CompactionCard({ stats }: { stats: StatsPayload }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  const c = compactionTotals(stats.callers);
+  if (!c) return null;
+  const share = compactionShareLine(c, stats.totals);
+  return (
+    <Card>
+      <CardHead title="compaction" trailing={`${c.calls} ${c.calls === 1 ? 'pass' : 'passes'}`} />
+      <View style={styles.heroFigures}>
+        <Text style={styles.rankCost}>{rowMoney(c)}</Text>
+        <Text style={styles.rankCost}>{`${shortTokens(tokenTotal(c))} tokens`}</Text>
+      </View>
+      {share ? <Text style={styles.cardNote}>{share}</Text> : null}
+      <Text style={styles.cardNote}>
+        {`${shortTokens(c.promptTokens)} read · ${shortTokens(c.completionTokens)} written · ${duration(c.durationMs)}${c.errors > 0 ? ` · ${c.errors} errors` : ''}`}
+      </Text>
+    </Card>
   );
 }
 

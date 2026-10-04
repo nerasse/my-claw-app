@@ -31,7 +31,7 @@ const NOTHING: StatsTotals = {
   durationMs: 0,
 };
 
-function payload(over: Partial<StatsTotals> = {}): StatsPayload {
+function payload(over: Partial<StatsTotals> = {}, callers: StatsPayload['callers'] = []): StatsPayload {
   return {
     period: '30d',
     rollupIncluded: false,
@@ -41,7 +41,7 @@ function payload(over: Partial<StatsTotals> = {}): StatsPayload {
     sessions: [],
     daily: [],
     reliability: [],
-    callers: [],
+    callers,
     reconciliation: [],
     cache: { promptTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, readSharePct: 0, writeSharePct: 0 },
     filter: {},
@@ -54,13 +54,13 @@ function payload(over: Partial<StatsTotals> = {}): StatsPayload {
  * payload delivered first is thrown away by the `open()` of the mount, and the page stays on
  * "asking the server…" -- which is what the first version of the hero test read.
  */
-function render(over: Partial<StatsTotals> = {}): ReactTestRenderer.ReactTestRenderer {
+function render(over: Partial<StatsTotals> = {}, callers: StatsPayload['callers'] = []): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(<StatsScreen onClose={() => {}} />);
   });
   ReactTestRenderer.act(() => {
-    statsStore.receive({ type: 'stats.result', stats: payload(over) });
+    statsStore.receive({ type: 'stats.result', stats: payload(over, callers) });
   });
   return tree;
 }
@@ -95,4 +95,21 @@ test('the hero draws the consumption beside the price, in the same type', () => 
     .filter(node => [node.props.children].flat().join('').includes('15.00') || [node.props.children].flat().join('') === '1.0B')
     .map(node => (Array.isArray(node.props.style) ? Object.assign({}, ...node.props.style) : node.props.style).fontSize);
   expect(sizes).toEqual([28, 28]);
+});
+
+test('the overview has a compaction card under the total when the window compacted, and none otherwise', () => {
+  const words = (tree: ReactTestRenderer.ReactTestRenderer) =>
+    tree.root.findAllByType(Text).map(node => [node.props.children].flat().join('')).join('|');
+  const compacted = render({ calls: 10, promptTokens: 1_000_000, completionTokens: 100_000, billedUsd: 10 }, [
+    { caller: 'agent', ...NOTHING, calls: 8, promptTokens: 600_000, completionTokens: 40_000, billedUsd: 4 },
+    { caller: 'compaction', ...NOTHING, calls: 2, promptTokens: 400_000, completionTokens: 60_000, billedUsd: 6 },
+  ]);
+  const text = words(compacted);
+  expect(text).toContain('compaction');
+  expect(text).toContain('2 passes');
+  expect(text).toContain('60% of the cost · 42% of the tokens');
+  ReactTestRenderer.act(() => compacted.unmount());
+
+  const quiet = render({ calls: 10, promptTokens: 1_000, billedUsd: 1 }, [{ caller: 'agent', ...NOTHING, calls: 10 }]);
+  expect(words(quiet)).not.toContain('passes');
 });
