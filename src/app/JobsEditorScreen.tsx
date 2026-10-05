@@ -13,6 +13,7 @@ import type { JobEntry, JobScope, JobScopeMode, SkillEntry, ToolEntry, McpEntry,
 import { useLayerFrame } from '../core/layout';
 import { CloseButton } from '../components/CloseButton';
 import { keyLayerProps } from '../core/keyNav';
+import { ALERT_PRESETS, TIMEOUT_PRESETS, durationLabel, limitsOf, limitsOut, type DeliverKind, type JobLimits } from '../core/jobFields';
 
 export interface JobDraft {
   name: string;
@@ -127,6 +128,11 @@ export function JobsEditorScreen({
   const [modelPicker, setModelPicker] = useState(false);
   const [pickerState, setPickerState] = useState<PickerState>(pickerStart);
   const [workspacePicker, setWorkspacePicker] = useState(false);
+  // Apart from the draft because only what moved is sent: the first reading is what it moved from.
+  const [limitsBefore] = useState<JobLimits>(() => limitsOf(job));
+  const [limits, setLimits] = useState<JobLimits>(limitsBefore);
+  // A server that predates these fields would drop them without a word: not offered then.
+  const limitsSupported = !job || job.deliverKind !== undefined;
 
   // The editor owns its layers, so the hardware back walks them before leaving the editor:
   // a press from the scope picker must close the picker, not the whole editor.
@@ -159,7 +165,9 @@ export function JobsEditorScreen({
 
   const invalid = scheduleInvalid(draft.schedule);
   const promptMissing = !draft.prompt.trim();
-  const canSave = !invalid && !promptMissing && !saving;
+  const alertAfter = limits.alertAfterMs || job?.defaultAlertAfterMs;
+  const threadMissing = limits.deliver === 'thread' && !limits.deliverThread.trim();
+  const canSave = !invalid && !promptMissing && !threadMissing && !saving;
   const modelKnown = !draft.model.trim() || draft.model.startsWith('tag:') || catalog.models.some(model => model.id === draft.model);
   const workspaceKnown = !draft.workspace.trim() || workspaces.some(entry => entry.key === draft.workspace);
 
@@ -312,7 +320,7 @@ export function JobsEditorScreen({
           onPress={() => {
             // The disabled prop stops the touch, not a stray programmatic press (tests, AT).
             if (!canSave) return;
-            onSave(toFields(job, draft));
+            onSave({ ...toFields(job, draft), ...(limitsSupported ? limitsOut(limitsBefore, limits) : {}) });
           }}
           disabled={!canSave}
           style={[styles.saveButton, canSave ? styles.saveEnabled : styles.saveDisabled]}
@@ -417,6 +425,27 @@ export function JobsEditorScreen({
               </Pressable>
             ))}
           </View>
+          {/* Off unless granted, unlike the two above: the other conversations are the owner's. */}
+          {limitsSupported ? (
+            <View style={styles.chips}>
+              {(
+                [
+                  [false, 'No archive'],
+                  [true, 'Conversation archive'],
+                ] as const
+              ).map(([value, label]) => (
+                <Pressable
+                  key={label}
+                  onPress={() => setLimits(current => ({ ...current, conversations: value }))}
+                  style={[styles.chip, limits.conversations === value ? styles.chipActive : styles.chipIdle]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Job ${label}`}
+                  accessibilityState={{ selected: limits.conversations === value }}>
+                  <Text style={limits.conversations === value ? styles.chipTextActive : styles.chipTextIdle}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.category}>
@@ -438,6 +467,9 @@ export function JobsEditorScreen({
             conversation's next turn, which its agent then acts on (docs/cron.md on the server). */}
         <View style={styles.category}>
           <Text style={styles.section}>report</Text>
+          {limitsSupported ? (
+            <DeliveryPicker job={job} limits={limits} onChange={setLimits} styles={styles} />
+          ) : null}
           <View style={styles.chips}>
             {(
               [
@@ -469,7 +501,7 @@ export function JobsEditorScreen({
             />
           ) : null}
           <Text style={styles.note}>
-            {!job || job.deliver === 'local'
+            {(limitsSupported ? limits.deliver === 'local' : !job || job.deliver === 'local')
               ? 'this job delivers nowhere, so there is no conversation to hand the report to'
               : draft.followUp
                 ? 'the report becomes the conversation\'s next turn: its agent runs on it, or takes it in at the end of a run already going'
@@ -484,6 +516,36 @@ export function JobsEditorScreen({
             onChange={schedule => setDraft(current => ({ ...current, schedule }))}
           />
         </View>
+
+        {limitsSupported ? (
+          <View style={styles.category}>
+            <Text style={styles.section}>long runs</Text>
+            <DurationChips
+              what="alert"
+              value={limits.alertAfterMs}
+              presets={ALERT_PRESETS}
+              fallback={job?.defaultAlertAfterMs}
+              onChange={alertAfterMs => setLimits(current => ({ ...current, alertAfterMs }))}
+              styles={styles}
+            />
+            <Text style={styles.note}>
+              {`${alertAfter ? `alert after ${durationLabel(alertAfter)}` : 'alert at the default'}: you are told a run is still going, nothing stops it`}
+            </Text>
+            <DurationChips
+              what="limit"
+              value={limits.timeoutMs}
+              presets={TIMEOUT_PRESETS}
+              fallback={job?.defaultTimeoutMs}
+              onChange={timeoutMs => setLimits(current => ({ ...current, timeoutMs }))}
+              styles={styles}
+            />
+            <Text style={styles.note}>
+              {limits.timeoutMs || job?.defaultTimeoutMs
+                ? `stopped after ${durationLabel(limits.timeoutMs || job?.defaultTimeoutMs || 0)}: the run is told to wrap up shortly before`
+                : 'no time limit: a run goes on until it is done'}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.category}>
           <Text style={styles.section}>runtime</Text>
@@ -557,6 +619,106 @@ export function JobsEditorScreen({
           </Pressable>
         ) : null}
       </ScrollView>
+    </View>
+  );
+}
+
+type Styles = ReturnType<typeof createStyles>;
+
+/**
+ * Where the report goes. "Origin" only for a job made from a conversation; an address the editor
+ * cannot name (another channel) is shown as it is and kept unless another choice is made.
+ */
+function DeliveryPicker({
+  job,
+  limits,
+  onChange,
+  styles,
+}: {
+  job: JobEntry | null;
+  limits: JobLimits;
+  onChange: (update: (current: JobLimits) => JobLimits) => void;
+  styles: Styles;
+}): React.JSX.Element {
+  const choices: Array<[DeliverKind, string]> = [];
+  if (job?.hasOrigin) choices.push(['origin', 'Origin chat']);
+  choices.push(['thread', 'Conversation'], ['local', 'Nowhere']);
+  if (job?.deliverKind === 'target') choices.push(['target', 'As set']);
+  return (
+    <>
+      <View style={styles.chips}>
+        {choices.map(([kind, label]) => (
+          <Pressable
+            key={kind}
+            onPress={() => onChange(current => ({ ...current, deliver: kind }))}
+            style={[styles.chip, limits.deliver === kind ? styles.chipActive : styles.chipIdle]}
+            accessibilityRole="button"
+            accessibilityLabel={`Deliver to ${label}`}
+            accessibilityState={{ selected: limits.deliver === kind }}>
+            <Text style={limits.deliver === kind ? styles.chipTextActive : styles.chipTextIdle}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {limits.deliver === 'thread' ? (
+        <>
+          <TextInput
+            style={[styles.input, !limits.deliverThread.trim() ? styles.inputInvalid : null]}
+            value={limits.deliverThread}
+            onChangeText={deliverThread => onChange(current => ({ ...current, deliverThread }))}
+            placeholder="conversation name"
+            placeholderTextColor={styles.placeholder.color}
+            autoCorrect={false}
+            accessibilityLabel="Delivery conversation"
+          />
+          <Text style={limits.deliverThread.trim() ? styles.note : styles.invalidHint}>
+            {limits.deliverThread.trim()
+              ? 'your conversation of that name, or a new one if there is none'
+              : 'a conversation name is required'}
+          </Text>
+        </>
+      ) : null}
+      {limits.deliver === 'target' && job ? <Text style={styles.note}>{`delivered to ${job.deliver}`}</Text> : null}
+    </>
+  );
+}
+
+/** "Default" (the install's), the presets, and the job's own value when it is none of them. */
+function DurationChips({
+  what,
+  value,
+  presets,
+  fallback,
+  onChange,
+  styles,
+}: {
+  what: 'alert' | 'limit';
+  value: number;
+  presets: readonly number[];
+  fallback: number | undefined;
+  onChange: (ms: number) => void;
+  styles: Styles;
+}): React.JSX.Element {
+  const values = [0, ...presets, ...(value && !presets.includes(value) ? [value] : [])];
+  // No install limit means the default is none: said so, rather than a "default" of nothing.
+  const defaultLabel = what === 'limit' && !fallback ? 'No limit' : 'Default';
+  return (
+    <View style={styles.chips}>
+      {values.map(ms => {
+        const label = ms === 0 ? defaultLabel : durationLabel(ms);
+        return (
+          <Pressable
+            key={ms}
+            onPress={() => onChange(ms)}
+            style={[styles.chip, value === ms ? styles.chipActive : styles.chipIdle]}
+            accessibilityRole="button"
+            accessibilityLabel={`Job ${what} ${label}`}
+            accessibilityState={{ selected: value === ms }}>
+            <Text style={value === ms ? styles.chipTextActive : styles.chipTextIdle} numberOfLines={1}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

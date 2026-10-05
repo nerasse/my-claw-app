@@ -844,3 +844,96 @@ describe('the follow-up (server, 2026-10-04)', () => {
     await unmount(tree);
   });
 });
+
+describe('delivery, long runs and the archive (server, 2026-10-05)', () => {
+  const current = { deliverKind: 'local', defaultAlertAfterMs: 3_600_000, hasOrigin: false, conversations: false };
+
+  test('an untouched job saves none of them, so nothing it holds is rewritten', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await emit({ type: 'jobs.list.result', jobs: [job({ ...current, deliver: 'telegram:42', deliverKind: 'target', alertAfterMs: 7_200_000 })] });
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Deliver to As set'));
+    expect(textsOf(tree).join(' ')).toContain('delivered to telegram:42');
+    // A value outside the presets is shown as its own chip, selected.
+    expect(tree.root.find(node => node.props.accessibilityLabel === 'Job alert 2 h').props.accessibilityState).toEqual({ selected: true });
+    await pressLabel(tree, 'Save job');
+    const [save] = sentOfType('jobs.save');
+    expect(save).not.toHaveProperty('deliver');
+    expect(save).not.toHaveProperty('alertAfterMs');
+    expect(save).not.toHaveProperty('timeoutMs');
+    expect(save).not.toHaveProperty('conversations');
+    await unmount(tree);
+  });
+
+  test('a conversation by name, a limit, an alert back to the default and the archive ride on the save', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await emit({ type: 'jobs.list.result', jobs: [job({ ...current, alertAfterMs: 10_800_000 })] });
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Deliver to Conversation'));
+    // No conversation of origin: a job made from the app cannot be sent back to one.
+    expect(labelsOf(tree)).not.toContain('Deliver to Origin chat');
+
+    await pressLabel(tree, 'Deliver to Conversation');
+    await waitFor(() => labelsOf(tree).includes('Delivery conversation'));
+    // An empty name names nothing: the save waits for one.
+    expect(tree.root.find(node => node.props.accessibilityLabel === 'Save job').props.accessibilityState).toEqual({ disabled: true });
+    await typeInto(tree, 'Delivery conversation', 'Crons career');
+    await pressLabel(tree, 'Job alert Default');
+    await pressLabel(tree, 'Job limit 6 h');
+    await pressLabel(tree, 'Job Conversation archive');
+    await pressLabel(tree, 'Save job');
+    expect(sentOfType('jobs.save')[0]).toMatchObject({
+      deliver: { kind: 'thread', title: 'Crons career' },
+      alertAfterMs: 0,
+      timeoutMs: 21_600_000,
+      conversations: true,
+    });
+    await unmount(tree);
+  });
+
+  test('a job from a conversation can go back to it, and the card names its conversation', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await emit({
+      type: 'jobs.list.result',
+      jobs: [job({ ...current, hasOrigin: true, deliver: 'my-claw-app:neras:t1', deliverKind: 'thread', deliverThread: 'Crons career' })],
+    });
+    expect(textsOf(tree).join(' ')).toContain('delivered to “Crons career”');
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Deliver to Origin chat'));
+    await pressLabel(tree, 'Deliver to Origin chat');
+    await pressLabel(tree, 'Save job');
+    expect(sentOfType('jobs.save')[0]).toMatchObject({ deliver: { kind: 'origin' } });
+    await unmount(tree);
+  });
+
+  test('a server that predates them offers none of them', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await emit({ type: 'jobs.list.result', jobs: [job()] });
+    await pressLabel(tree, 'Edit job Morning report');
+    await waitFor(() => labelsOf(tree).includes('Job Report handled'));
+    expect(labelsOf(tree).filter(label => /^Deliver to |^Job alert |^Job limit |archive$/i.test(String(label)))).toEqual([]);
+    await unmount(tree);
+  });
+
+  test('a new job delivers nowhere unless told, with no limit when the install has none', async () => {
+    const tree = await renderApp();
+    await openJobs(tree);
+    await emitCatalogs(tree);
+    await pressLabel(tree, 'Add job');
+    await waitFor(() => labelsOf(tree).includes('Deliver to Nowhere'));
+    expect(tree.root.find(node => node.props.accessibilityLabel === 'Deliver to Nowhere').props.accessibilityState).toEqual({ selected: true });
+    expect(labelsOf(tree)).toContain('Job limit No limit');
+    await typeInto(tree, 'Job prompt', 'do things');
+    await pressLabel(tree, 'Save job');
+    expect(sentOfType('jobs.save')[0]).not.toHaveProperty('deliver');
+    await unmount(tree);
+  });
+});

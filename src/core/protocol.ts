@@ -1979,6 +1979,21 @@ export interface JobEntry {
    */
   followUp?: boolean;
   followUpPrompt?: string;
+  /**
+   * The run limits and the delivery as the editor shows them, all absent from a server that
+   * predates them. The job's own alert and limit, and the install's they fall back to.
+   */
+  alertAfterMs?: number;
+  defaultAlertAfterMs?: number;
+  timeoutMs?: number;
+  defaultTimeoutMs?: number;
+  /** The conversation archive (conversation_search) is granted to this job. */
+  conversations?: boolean;
+  /** The job came from a conversation, so "origin" is a delivery it can be given. */
+  hasOrigin?: boolean;
+  /** `thread`: one of the owner's conversations, named by `deliverThread`; `target`: any other address. */
+  deliverKind?: 'origin' | 'local' | 'thread' | 'target';
+  deliverThread?: string;
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: 'ok' | 'error' | null;
@@ -3677,6 +3692,15 @@ export interface JobFieldsOut {
   /** Always carried; an empty instruction clears it back to the server's default. */
   followUp: boolean;
   followUpPrompt: string;
+  /**
+   * Each absent unless it changed: the server reads absent as "don't touch". A thread is the
+   * owner's conversation of that title, created in the job's workspace when missing; 0 puts an
+   * alert or a limit back to the install's.
+   */
+  deliver?: { kind: 'origin' } | { kind: 'local' } | { kind: 'thread'; title: string };
+  alertAfterMs?: number;
+  timeoutMs?: number;
+  conversations?: boolean;
 }
 
 /** Lists the scheduled tasks; every mutation answers with the same fresh listing. */
@@ -3735,6 +3759,10 @@ export function encodeJobsSave(fields: JobFieldsOut): string {
   frame.browser = fields.browser;
   frame.followUp = fields.followUp;
   frame.followUpPrompt = fields.followUpPrompt;
+  if (fields.deliver) frame.deliver = fields.deliver;
+  if (fields.alertAfterMs !== undefined) frame.alertAfterMs = fields.alertAfterMs;
+  if (fields.timeoutMs !== undefined) frame.timeoutMs = fields.timeoutMs;
+  if (fields.conversations !== undefined) frame.conversations = fields.conversations;
   return JSON.stringify(frame);
 }
 

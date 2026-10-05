@@ -169,7 +169,9 @@ const JobCard = React.memo(function JobCardView({
             ? 'output saved on the server, nothing delivered'
             : job.deliver === 'origin'
               ? 'delivered to the chat it was created from'
-              : `delivered to ${job.deliver}`}
+              : job.deliverThread
+                ? `delivered to “${job.deliverThread}”`
+                : `delivered to ${job.deliver}`}
         </Text>
         <Pressable
           style={styles.sessionsRow}
