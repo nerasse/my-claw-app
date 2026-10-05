@@ -31,6 +31,8 @@ export function CollapsibleAside({
   hideHint,
   defaultOpen = false,
   persistKey,
+  pending,
+  onOpen,
 }: {
   label: string;
   /**
@@ -48,14 +50,22 @@ export function CollapsibleAside({
    * The aside's name across rebuilds, when it has one. Given a key, the fold lives in
    * `asideExpansion` instead of in this component, so a cell that is unmounted and rebuilt -- the
    * live compaction rule moves between the list header and a row -- comes back as the reader left
-   * it. `defaultOpen` does not apply to a keyed aside: the key is the only truth.
+   * it. Until the reader touches it, a keyed aside follows `defaultOpen`: it used to ignore it,
+   * and the "always expand reasoning" pref opened nothing (every reasoning line is keyed).
    */
   persistKey?: string;
+  /** Said in place of the body while it is still on its way (`reasoningFetch.ts`). */
+  pending?: string;
+  /** Told each time the aside is open, so a body that is not here yet can be asked for. */
+  onOpen?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [localOpen, setLocalOpen] = useState(defaultOpen);
   const storedOpen = useStoredAsideExpansion(persistKey);
-  const open = persistKey === undefined ? localOpen : storedOpen;
+  const open = persistKey === undefined ? localOpen : storedOpen ?? defaultOpen;
+  useEffect(() => {
+    if (open) onOpen?.();
+  }, [open, onOpen]);
   const setOpen = (next: boolean): void => {
     if (persistKey === undefined) setLocalOpen(next);
     else setAsideExpanded(persistKey, next);
@@ -89,11 +99,11 @@ export function CollapsibleAside({
           <Text style={styles.label}>{label}</Text>
           {trailing}
         </Pressable>
-        {open && !chatSelectable ? <BlockActions title={label} value={body} /> : null}
+        {open && body && !chatSelectable ? <BlockActions title={label} value={body} /> : null}
       </View>
       {open ? (
         <View style={styles.body}>
-          <AgentMarkdown text={body} tone="aside" />
+          {body ? <AgentMarkdown text={body} tone="aside" /> : <Text style={styles.pending}>{pending ?? ''}</Text>}
         </View>
       ) : null}
     </View>
@@ -106,6 +116,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1 },
   chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
+  pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },
   // A left rule marks it as an aside rather than part of the answer.
   body: {
     borderLeftWidth: 2,

@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import type { AttachmentMeta, HistoryEntry, LocationData, RunMeta, SpawnAction, SpawnLifecycleState, SubAgentEntry, ToolCallPayload } from './protocol';
 import { questionStore } from './questionStore';
+import { rememberReasoning, resetReasoningFetch } from './reasoningFetch';
 import { agentOfCard, indexRoster } from './subagents';
 import { hasNothingToShow, isOwnerMessage } from './runRows';
 
@@ -38,6 +39,8 @@ export interface TextItem {
   transcripts?: Record<string, string>;
   /** What the model thought before answering, shown collapsed. */
   reasoning?: string;
+  /** A history bubble whose reasoning stayed on the server, this long: `reasoningFetch.ts`. */
+  reasoningChars?: number;
   /**
    * Token estimate from an engine that redacts its thinking (the Claude bridge): there is a count
    * to show and nothing to expand.
@@ -346,6 +349,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.location ? { location: entry.location } : {}),
       ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
       ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
+      ...(entry.reasoningChars ? { reasoningChars: entry.reasoningChars } : {}),
       ...(entry.reasoningTokens ? { reasoningTokens: entry.reasoningTokens } : {}),
       ...(entry.reasoningMs !== undefined ? { reasoningMs: entry.reasoningMs } : {}),
       ...(entry.command ? { command: true } : {}),
@@ -1041,6 +1045,8 @@ class ChatStoreImpl {
     // And the stream tables let go of them, so a frame that still turns up cannot reopen a bubble
     // of a run that is over.
     for (const id of closed) {
+      const thought = this.reasoning.get(id);
+      if (thought) rememberReasoning(threadId, id, thought);
       this.streams.delete(id);
       this.reasoning.delete(id);
       this.reasoningStart.delete(id);
@@ -1982,6 +1988,8 @@ class ChatStoreImpl {
     this.sealReasoning(threadId, id);
     const finalText = this.streams.get(id) ?? '';
     const thought = this.reasoning.get(id) ?? '';
+    // The page that follows the run carries a long one as its length only.
+    if (thought) rememberReasoning(threadId, id, thought);
     this.streams.delete(id);
     this.reasoning.delete(id);
     this.reasoningStart.delete(id);
@@ -2188,6 +2196,8 @@ class ChatStoreImpl {
     this.pendingCommands.clear();
     this.unread.clear();
     this.unreadSnapshot = EMPTY_THREADS;
+    // The reasoning read on demand is part of what the threads held.
+    resetReasoningFetch();
     this.emit();
   }
 

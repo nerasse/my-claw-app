@@ -186,6 +186,7 @@ import { appUpdateAsks, appUpdateDecision, reduceAppUpdate, type AppUpdatePhase 
 import { appUpdateRuntime, appUpdateSupported } from '../core/appUpdateRuntime';
 import { playAlertSound } from '../core/alertSound';
 import { resetToolOutputAsks } from '../core/toolOutput';
+import { dropReasoningAsks, knownReasoning } from '../core/reasoningFetch';
 import { httpOrigin, uuid, withView } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { SettingsScreen } from './SettingsScreen';
@@ -713,6 +714,14 @@ export function AppShell(): React.JSX.Element {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [autoFocusHero, setAutoFocusHero] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<TextItem | null>(null);
+  // A reasoning the page left on the server is in the menu once it has been read.
+  const openBubbleMenu = useCallback(
+    (item: TextItem) => {
+      const reasoning = item.reasoning ?? (activeThread ? knownReasoning(activeThread, item.id) : undefined);
+      setBubbleMenu(reasoning ? { ...item, reasoning } : item);
+    },
+    [activeThread],
+  );
   // The block a reader asked to select from. Held by the shell rather than by whoever opened it:
   // a tool card scrolled out of the window must not take the viewer with it.
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
@@ -1227,6 +1236,7 @@ export function AppShell(): React.JSX.Element {
         // would otherwise refuse to ask again -- a skeleton, or a "Show more", stuck for good.
         chatStore.dropInflightHydration();
         resetToolOutputAsks();
+        dropReasoningAsks();
       }
       if (next.state === 'connected') {
         for (const frame of resumeFrames(activeThreadRef.current)) {
@@ -3657,7 +3667,7 @@ export function AppShell(): React.JSX.Element {
                   onSubAgentMenu: () => setSubagentMenuOpen(true),
                 }
               : {})}
-            onBubbleMenu={setBubbleMenu}
+            onBubbleMenu={openBubbleMenu}
             onResend={resendChat}
             onOpenImage={openImage}
             onOpenText={setTextViewer}

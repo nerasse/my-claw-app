@@ -1,6 +1,7 @@
 import { connection } from './connection';
 import { refusalText } from './refusal';
 import { chatStore } from './chat';
+import { rememberReasoning } from './reasoningFetch';
 import { rostersFor } from './subagentStack';
 import { subAgentCallersStore, subAgentStore } from './subagents';
 import { sessionStore } from './sessions';
@@ -401,6 +402,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // is answered `found: false`, and then nothing is touched: the clipped text on screen is
       // better than an empty block.
       if (frame.found) chatStore.setToolOutput(frame.threadId, frame.id, frame.output);
+      break;
+    case 'chat.reasoning.result':
+      rememberReasoning(frame.threadId, frame.id, frame.found ? frame.reasoning : null);
       break;
     case 'chat.run.items':
       // The work a folded row stood for, spliced in where the row was. A range the branch no

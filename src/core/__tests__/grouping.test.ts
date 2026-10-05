@@ -54,6 +54,11 @@ describe('a new thinking phase opens its own block', () => {
     expect(isGrouped(items, 1)).toBe(false);
   });
 
+  test('a reasoning the page left on the server is a thinking phase too', () => {
+    const items = [text({ id: 'a', ts: 1_000 }), text({ id: 'b', ts: 1_400, reasoningChars: 4800 })];
+    expect(isGrouped(items, 1)).toBe(false);
+  });
+
   test('whitespace is not a thought, so the block holds', () => {
     const items = [text({ id: 'a', ts: 1_000 }), text({ id: 'b', ts: 1_400, reasoning: '  \n ' })];
     expect(isGrouped(items, 1)).toBe(true);

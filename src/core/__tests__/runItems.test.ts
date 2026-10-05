@@ -59,6 +59,7 @@ test('opening asks for the range the row carries, and marks it loading', () => {
     threadId: THREAD,
     fromId: 'run-w1',
     untilId: 'w3',
+    lazyReasoning: true,
   });
   expect(rowOf(THREAD).hydration).toBe('loading');
 });

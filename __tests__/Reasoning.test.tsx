@@ -5,6 +5,7 @@
 import ReactTestRenderer from 'react-test-renderer';
 import { AgentMarkdown } from '../src/components/AgentMarkdown';
 import { chatStore } from '../src/core/chat';
+import { resetAsideExpansion } from '../src/core/asideExpansion';
 import { deviceBridge } from '../src/core/nativeBridge';
 import type { HistoryEntry } from '../src/core/protocol';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
@@ -169,5 +170,28 @@ test('a replayed turn from a redacted engine still says it thought', async () =>
     { id: 'h-1', role: 'assistant', text: '9.11', ts: '2026-01-01T10:00:01.000Z', reasoningTokens: 12300 },
   ]);
   await waitFor(() => textsOf(tree).some(text => text.includes('Reasoning · 12.3k tokens')), 60);
+  await unmount(tree);
+});
+
+test('a reasoning the page left on the server still draws its line, even on a bubble with no text', async () => {
+  // `reasoningChars` instead of the text: the server's REASONING_INLINE_LIMIT (docs/run-hydration.md).
+  // The earlier cases opened `h-1` and the fold is held per bubble id, outside the tree.
+  resetAsideExpansion();
+  bridge.sendMessage.mockClear();
+  const tree = await renderWith([
+    { id: 'h-0', role: 'user', text: '9.11 ou 9.8 ?', ts: '2026-01-01T10:00:00.000Z' },
+    { id: 'h-1', role: 'assistant', text: '', ts: '2026-01-01T10:00:01.000Z', reasoningChars: 4800 },
+    { id: 'h-2', role: 'assistant', text: '9.11', ts: '2026-01-01T10:00:02.000Z', reasoningChars: 900 },
+  ]);
+  await waitFor(() => labelsOf(tree).includes('Reasoning'));
+  // Both lines drawn, the one with no answer under it included; neither asked before it opens.
+  const lineOf = (id: string) => tree.root.findAll(node => node.props.id === id && node.props.reasoningChars !== undefined);
+  expect(lineOf('h-1').length).toBeGreaterThan(0);
+  expect(lineOf('h-2').length).toBeGreaterThan(0);
+  const asks = () => bridge.sendMessage.mock.calls.map(([frame]) => JSON.parse(String(frame)) as { type: string; id?: string }).filter(frame => frame.type === 'chat.reasoning');
+  expect(asks()).toEqual([]);
+  // The newest line is the first one in the inverted list.
+  await pressLabel(tree, 'Reasoning');
+  expect(asks()).toEqual([{ type: 'chat.reasoning', threadId: THREAD, id: 'h-2' }]);
   await unmount(tree);
 });

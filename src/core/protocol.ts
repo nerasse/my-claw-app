@@ -315,6 +315,18 @@ export interface ToolFullFrame {
 }
 
 /**
+ * The reasoning a history bubble was sent without (`reasoningChars`), in answer to
+ * `chat.reasoning`. `found` false: the branch no longer holds that bubble.
+ */
+export interface ReasoningResultFrame {
+  type: 'chat.reasoning.result';
+  threadId: string;
+  id: string;
+  reasoning: string;
+  found: boolean;
+}
+
+/**
  * The work a folded run row stood for -- docs/run-hydration.md.
  *
  * `found` false is a range the current branch no longer holds (a compaction dropped the turn, a
@@ -405,6 +417,8 @@ export type HistoryEntry =
       transcripts?: Record<string, string>;
       /** What the model thought before this reply, replayed collapsed. */
       reasoning?: string;
+      /** Its length, instead of the text, when it was too long to travel: asked on open. */
+      reasoningChars?: number;
       /** How much it thought, when the engine redacts the text and only counts it. */
       reasoningTokens?: number;
       /** How long that thinking lasted, so a reopened thread shows the span it took. */
@@ -2639,6 +2653,7 @@ export type ServerFrame =
   | ToolStartFrame
   | ToolDeltaFrame
   | ToolFullFrame
+  | ReasoningResultFrame
   | RunItemsFrame
   | SpawnStartFrame
   | SpawnEndFrame
@@ -2749,6 +2764,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.tool.start',
   'chat.tool.delta',
   'chat.tool.full.result',
+  'chat.reasoning.result',
   'chat.run.items',
   'chat.spawn.start',
   'chat.spawn.end',
@@ -3056,6 +3072,7 @@ export function encodeSessionHistory(threadId: string, limit = 50, before = 0, b
     ...(before ? { before } : {}),
     ...(beforeId ? { beforeId } : {}),
     fold: FOLD_RUNS,
+    lazyReasoning: LAZY_REASONING,
   });
 }
 
@@ -3071,13 +3088,20 @@ export function encodeSessionHistory(threadId: string, limit = 50, before = 0, b
 const FOLD_RUNS = true;
 
 /**
+ * A long reasoning stays on the server and is asked for when its line opens
+ * (`reasoningFetch.ts`). Same reasons as `FOLD_RUNS` for one constant on every read that draws
+ * bubbles; a server that predates it ignores it and sends the text.
+ */
+const LAZY_REASONING = true;
+
+/**
  * Asks for the work a folded run row stands for -- docs/run-hydration.md.
  *
  * The range the row carries, not its run id: a run cut by a page boundary folds into one row per
  * page, and asking by run would splice back items this client already holds.
  */
 export function encodeRunItems(threadId: string, fromId: string, untilId: string): string {
-  return JSON.stringify({ type: 'session.run.items', threadId, fromId, untilId });
+  return JSON.stringify({ type: 'session.run.items', threadId, fromId, untilId, lazyReasoning: LAZY_REASONING });
 }
 
 /**
@@ -3085,6 +3109,10 @@ export function encodeRunItems(threadId: string, fromId: string, untilId: string
  * showing clipped, never on its own: the clip exists so a reconnect does not replay every byte
  * every tool ever printed.
  */
+export function encodeReasoning(threadId: string, id: string): string {
+  return JSON.stringify({ type: 'chat.reasoning', threadId, id });
+}
+
 export function encodeToolFull(threadId: string, id: string): string {
   return JSON.stringify({ type: 'chat.tool.full', threadId, id });
 }
@@ -3882,5 +3910,6 @@ export function encodeSessionSync(threadId: string, since?: string | null, leaf?
     ...(leaf ? { leaf } : {}),
     // Only the window that replaces the thread is ever folded server-side; a delta is never.
     fold: FOLD_RUNS,
+    lazyReasoning: LAZY_REASONING,
   });
 }

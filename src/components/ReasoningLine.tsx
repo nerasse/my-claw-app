@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Text, View } from 'react-native';
 import { CollapsibleAside } from './CollapsibleAside';
 import { useElapsed } from './CommandElapsed';
 import { formatSpan } from '../core/utils';
+import { requestReasoning, useKnownReasoning } from '../core/reasoningFetch';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /** "1.2k" rather than "1234": this is a progress hint, not an accounting figure. */
@@ -37,7 +38,9 @@ function ThinkingElapsed({ since }: { since: number }): React.JSX.Element {
  */
 export function ReasoningLine({
   id,
+  threadId,
   reasoning,
+  reasoningChars,
   tokens,
   startedAt,
   durationMs,
@@ -52,7 +55,11 @@ export function ReasoningLine({
    * stable across that transition -- the live bubble's id is the entry's id.
    */
   id?: string;
+  /** Where to ask for a reasoning the page left on the server. */
+  threadId?: string;
   reasoning?: string;
+  /** The page carried its length instead of the text: asked for when the line opens. */
+  reasoningChars?: number;
   tokens?: number;
   /** When the thinking started, while it is still running. */
   startedAt?: number;
@@ -64,9 +71,14 @@ export function ReasoningLine({
   expandReasoning?: boolean;
 }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
+  const known = useKnownReasoning(threadId, id);
+  const onDemand = !reasoning?.trim() && (reasoningChars ?? 0) > 0;
+  const ask = useCallback(() => {
+    if (threadId && id) requestReasoning(threadId, id);
+  }, [threadId, id]);
 
-  const body = reasoning?.trim() ?? '';
-  const hasBody = body.length > 0;
+  const body = (reasoning?.trim() || known?.trim()) ?? '';
+  const hasBody = body.length > 0 || onDemand;
   const count = tokens && tokens > 0 ? compactCount(tokens) : '';
 
   if (!hasBody && !count) return null;
@@ -105,6 +117,7 @@ export function ReasoningLine({
       hideHint="Hide the model's reasoning"
       defaultOpen={expandReasoning ?? false}
       {...(id ? { persistKey: `reasoning:${id}` } : {})}
+      {...(onDemand && !body ? { pending: known === null ? 'no longer available' : 'loading…', onOpen: ask } : {})}
     />
   );
 }

@@ -195,7 +195,10 @@ export function hasNothingToShow(item: ChatItem): boolean {
   const says = item.text.trim() !== '';
   const shows = (item.attachments?.length ?? 0) > 0;
   const thought =
-    Boolean(item.reasoning?.trim()) || item.reasoningTokens !== undefined || item.reasoningMs !== undefined;
+    Boolean(item.reasoning?.trim()) ||
+    (item.reasoningChars ?? 0) > 0 ||
+    item.reasoningTokens !== undefined ||
+    item.reasoningMs !== undefined;
   const heard = item.transcripts !== undefined && Object.keys(item.transcripts).length > 0;
   const why =
     Boolean(item.error) || item.streaming || item.pending === true || item.queuedSince !== undefined;

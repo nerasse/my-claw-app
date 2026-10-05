@@ -1025,6 +1025,7 @@ export function ChatScreen({
           onOpenAttachment={openAttachment}
           onOpenMedia={openMedia}
           expandReasoning={uiPrefs?.expandReasoning ?? false}
+          threadId={threadId}
         />
         </View>
       );

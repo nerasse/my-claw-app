@@ -15,7 +15,8 @@
 
 import { useSyncExternalStore } from 'react';
 
-const expanded = new Set<string>();
+/** Only what the reader set: an aside nobody touched follows its own default. */
+const expanded = new Map<string, boolean>();
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -29,14 +30,13 @@ export function subscribeAsideExpansion(listener: () => void): () => void {
   };
 }
 
-export function isAsideExpanded(key: string): boolean {
-  return expanded.has(key);
+export function isAsideExpanded(key: string): boolean | undefined {
+  return expanded.get(key);
 }
 
 export function setAsideExpanded(key: string, open: boolean): void {
-  if (open === expanded.has(key)) return;
-  if (open) expanded.add(key);
-  else expanded.delete(key);
+  if (expanded.get(key) === open) return;
+  expanded.set(key, open);
   emit();
 }
 
@@ -46,9 +46,9 @@ export function resetAsideExpansion(): void {
   emit();
 }
 
-/** The expansion a keyed aside carries, or false for a key nobody has touched. */
-export function useStoredAsideExpansion(persistKey: string | undefined): boolean {
+/** The expansion a keyed aside carries, or undefined for a key nobody has touched. */
+export function useStoredAsideExpansion(persistKey: string | undefined): boolean | undefined {
   return useSyncExternalStore(subscribeAsideExpansion, () =>
-    persistKey === undefined ? false : isAsideExpanded(persistKey),
+    persistKey === undefined ? undefined : isAsideExpanded(persistKey),
   );
 }

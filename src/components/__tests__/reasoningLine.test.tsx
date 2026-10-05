@@ -11,6 +11,15 @@ import { darkPalette } from '../../theme/palettes';
 import { ReasoningLine } from '../ReasoningLine';
 import { resetAsideExpansion, setAsideExpanded } from '../../core/asideExpansion';
 
+// Every tree is taken down after its test: one left mounted hears the next test's resets outside
+// act(), and its counter keeps ticking into the tests after it.
+const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
+afterEach(() => {
+  ReactTestRenderer.act(() => {
+    for (const tree of mounted.splice(0)) tree.unmount();
+  });
+});
+
 function render(props: React.ComponentProps<typeof ReasoningLine>) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
@@ -20,6 +29,7 @@ function render(props: React.ComponentProps<typeof ReasoningLine>) {
       </ThemeContext.Provider>,
     );
   });
+  mounted.push(tree);
   return tree;
 }
 
@@ -137,4 +147,18 @@ test('the reasoning of one bubble does not open the reasoning of another', () =>
 
   const other = render({ id: 'bubble-2', reasoning: 'a different thought', streaming: false, durationMs: 900 });
   expect(textOf(other)).not.toContain('a different thought');
+});
+
+/**
+ * The "always expand reasoning" pref did nothing once every reasoning line was keyed: a keyed
+ * aside read only what the reader had set, and nobody had set anything (fixed 2026-10-05).
+ */
+test('the expand pref opens a line nobody touched, and a line the reader closed stays closed', () => {
+  resetAsideExpansion();
+  const opened = render({ id: 'bubble-1', reasoning: 'a long thought', streaming: false, expandReasoning: true });
+  expect(textOf(opened)).toContain('a long thought');
+
+  setAsideExpanded('reasoning:bubble-2', false);
+  const closed = render({ id: 'bubble-2', reasoning: 'another thought', streaming: false, expandReasoning: true });
+  expect(textOf(closed)).not.toContain('another thought');
 });

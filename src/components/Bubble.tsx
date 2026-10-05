@@ -39,6 +39,7 @@ export const Bubble = React.memo(function BubbleView({
   onOpenMedia,
   onResend,
   expandReasoning,
+  threadId,
 }: {
   item: TextItem;
   mediaBase: string;
@@ -62,6 +63,8 @@ export const Bubble = React.memo(function BubbleView({
   onOpenMedia?: (items: MediaItem[], index: number) => void;
   /** Server-owned pref: reasoning blocks start expanded instead of folded. */
   expandReasoning?: boolean;
+  /** The conversation it is in, for what the bubble asks the server on its own (its reasoning). */
+  threadId?: string;
 }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   const scale = useChatFontScale();
@@ -190,7 +193,9 @@ export const Bubble = React.memo(function BubbleView({
         {agent && !item.command && !item.notice ? (
           <ReasoningLine
             id={item.id}
+            threadId={threadId}
             reasoning={item.reasoning}
+            reasoningChars={item.reasoningChars}
             tokens={item.reasoningTokens}
             startedAt={item.reasoningStartedAt}
             durationMs={item.reasoningMs}

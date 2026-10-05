@@ -144,7 +144,7 @@ describe('encoders', () => {
     expect(JSON.parse(encodeCommandsList())).toEqual({ type: 'commands.list' });
     expect(JSON.parse(encodeFilesList('t'))).toEqual({ type: 'files.list', threadId: 't' });
     expect(JSON.parse(encodeFileDelete('t', 'f1'))).toEqual({ type: 'files.delete', threadId: 't', id: 'f1' });
-    expect(JSON.parse(encodeSessionHistory('t', 10))).toEqual({ type: 'session.history', threadId: 't', limit: 10, fold: true });
+    expect(JSON.parse(encodeSessionHistory('t', 10))).toEqual({ type: 'session.history', threadId: 't', limit: 10, fold: true, lazyReasoning: true });
     expect(JSON.parse(encodeSessionHistory('t'))).toMatchObject({ limit: 50 });
     expect(JSON.parse(encodeSessionArchive('t'))).toEqual({ type: 'session.archive', threadId: 't' });
     expect(JSON.parse(encodeSessionDelete('t'))).toEqual({ type: 'session.delete', threadId: 't' });

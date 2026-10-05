@@ -6,7 +6,7 @@ const GROUP_WINDOW_MS = 120_000;
 /** A bubble that opens on the model thinking: the server sealed the previous one to make room. */
 function opensThinking(item: ChatItem): boolean {
   if (item.kind !== 'text' || item.role !== 'agent') return false;
-  return Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
+  return Boolean(item.reasoning?.trim()) || (item.reasoningChars ?? 0) > 0 || (item.reasoningTokens ?? 0) > 0;
 }
 
 /** Same author, close in time and not split by a tool card: render as one visual block. */
