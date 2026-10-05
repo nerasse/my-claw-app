@@ -278,7 +278,9 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
         fsStore.setNotice('the device identity is not ready yet');
         return;
       }
-      requestDownload({ targets: [{ url: fsDownloadUrl(mediaBase, deviceInfo, entry.path), filename: entry.name }] });
+      // A folder goes down as one ZIP named after it: the server writes it as it sends it.
+      const filename = isDirEntry(entry) ? `${entry.name}.zip` : entry.name;
+      requestDownload({ targets: [{ url: fsDownloadUrl(mediaBase, deviceInfo, entry.path), filename }] });
     },
     [deviceInfo, mediaBase],
   );
@@ -406,6 +408,13 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
           hint: 'upload from this device into that folder',
           onPress: fromSheet(() => {
             sendFiles(entry.path);
+          }),
+        },
+        {
+          label: 'Download as ZIP…',
+          hint: 'the whole folder, in one file',
+          onPress: fromSheet(() => {
+            download(entry);
           }),
         },
       );

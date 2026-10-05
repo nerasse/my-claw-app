@@ -586,6 +586,22 @@ describe('SystemFilesScreen', () => {
       expect(labels(tree)).toEqual(expect.arrayContaining(['Save to Downloads', 'Save as…']));
       expect(ancestors(row(tree, 'Save as…'))).toContain(OverlayHost);
     });
+
+    test('a folder goes down as one ZIP named after it, by the same road', async () => {
+      const tree = await renderWithHost();
+      openSheet(tree, '/home/neras/dev');
+      press(tree, 'Download as ZIP…');
+      ReactTestRenderer.act(() => row(tree, 'Save to Downloads').props.onPress());
+      await ReactTestRenderer.act(async () => {
+        await flush();
+      });
+      expect(bridge.downloadFile).toHaveBeenCalledWith(
+        expect.stringContaining('/fs/download?path=%2Fhome%2Fneras%2Fdev'),
+        'dev.zip',
+        false,
+        expect.any(String),
+      );
+    });
   });
 
   test('the row sheet on a directory offers creating and sending inside it', async () => {
@@ -604,6 +620,7 @@ describe('SystemFilesScreen', () => {
     expect(shown).toContain('New file…');
     expect(shown).toContain('New folder…');
     expect(shown).toContain('Send files here…');
+    expect(shown).toContain('Download as ZIP…');
     expect(shown).toContain('Delete folder…');
     expect(shown).not.toContain('Edit');
   });
