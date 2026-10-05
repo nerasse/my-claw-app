@@ -477,6 +477,34 @@ test('two providers of one model are two rows, told apart by the provider', asyn
   await unmount(tree);
 });
 
+test('two accounts on one route are two rows, told apart by the name the owner gave each', async () => {
+  const tree = await renderApp();
+  await openThreadMenu(tree);
+  await pressLabel(tree, 'Status');
+  await emit({
+    type: 'status.result',
+    threadId: THREAD,
+    status: {
+      ...PAYLOAD,
+      usage: {
+        ...PAYLOAD.usage!,
+        own: {
+          ...PAYLOAD.usage!.own,
+          rows: [
+            { ...rowFixture('claude-opus-5', 'api.anthropic.com'), providerKey: 'anthropic', providerLabel: 'Claude perso', calls: 3 },
+            { ...rowFixture('claude-opus-5', 'api.anthropic.com'), providerKey: 'claude-api', providerLabel: 'Claude API', calls: 2 },
+          ],
+        },
+      },
+    },
+  });
+  await waitFor(() => textsOf(tree).includes('claude-opus-5'));
+  const page = textsOf(tree);
+  expect(page.some(text => text.startsWith('Claude perso · api.anthropic.com · 3×'))).toBe(true);
+  expect(page.some(text => text.startsWith('Claude API · api.anthropic.com · 2×'))).toBe(true);
+  await unmount(tree);
+});
+
 test('details name the current model, where it is picked from, and the effort with its rung', async () => {
   const tree = await renderApp();
   await openReport(tree);

@@ -27,6 +27,7 @@ import type {
   StatsModelRow,
   StatsPayload,
   StatsPeriod,
+  StatsProviderKeyRow,
   StatsProviderRow,
   StatsReconciliation,
   StatsReliabilityRow,
@@ -312,11 +313,13 @@ export function sessionRowLabel(row: StatsSessionRow): string {
  */
 export function statsReconciliationLines(r: StatsReconciliation): string[] {
   const covered = `${r.calls} call${r.calls === 1 ? '' : 's'} recorded here`;
+  // One entry per key: the account's name says which one, the host alone could not.
+  const who = r.providerLabel ?? r.provider;
   if (r.providerUnread || r.providerUsd === undefined || r.deltaUsd === undefined) {
-    return [`${r.provider} · we recorded ${money(r.recordedUsd)}`, `${covered} · provider not reached`];
+    return [`${who} · we recorded ${money(r.recordedUsd)}`, `${covered} · provider not reached`];
   }
   return [
-    `${r.provider} · they charged ${money(r.providerUsd)} · we recorded ${money(r.recordedUsd)} · gap ${gap(r.deltaUsd)}`,
+    `${who} · they charged ${money(r.providerUsd)} · we recorded ${money(r.recordedUsd)} · gap ${gap(r.deltaUsd)}`,
     [covered, 'their figure runs from the key, not the window', r.balanceUsd === undefined ? null : `balance ${money(r.balanceUsd)}`]
       .filter(Boolean)
       .join(' · '),
@@ -340,6 +343,14 @@ function volumeLine(t: StatsTotals): string {
 /** Where the calls went, without the route: `StreamLake · fp8`, `api.anthropic.com`. */
 function routeOf(row: { provider: string; providerName?: string; variant?: string }): string {
   return [row.providerName ?? row.provider, row.variant].filter(Boolean).join(' · ');
+}
+
+/**
+ * Which of the owner's providers paid, then where the call went: `OpenRouter boulot · StreamLake`.
+ * Two accounts on one route are two rows, and only the first half tells them apart.
+ */
+function servedBy(row: StatsModelRow): string {
+  return [row.providerLabel, routeOf(row)].filter(Boolean).join(' · ');
 }
 
 export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -540,7 +551,12 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
         ) : (
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
             {tab === 'overview' ? <Overview stats={payload} /> : null}
-            {tab === 'models' ? <Models rows={payload.models} /> : null}
+            {tab === 'models' ? (
+              <>
+                <ProviderKeys rows={payload.providerKeys ?? []} />
+                <Models rows={payload.models} />
+              </>
+            ) : null}
             {tab === 'conversations' ? <Sessions stats={payload} /> : null}
             {tab === 'cache' ? <CacheFold cache={payload.cache} /> : null}
             {tab === 'reliability' ? <Reliability rows={payload.reliability} /> : null}
@@ -700,7 +716,7 @@ function TopModels({ rows, rest }: { rows: StatsModelRow[]; rest: number }): Rea
       <CardHead title="top models" trailing={rest > 0 ? `+ ${rest} more` : undefined} />
       <View style={styles.rank}>
         {rows.map(row => (
-          <RankRow key={`${row.model}\u0000${row.provider}\u0000${row.variant ?? ''}`} name={row.model} detail={routeOf(row)} totals={row} />
+          <RankRow key={`${row.model}\u0000${row.provider}\u0000${row.variant ?? ''}\u0000${row.providerKey ?? ''}`} name={row.model} detail={servedBy(row)} totals={row} />
         ))}
       </View>
       <MoneyLegend />
@@ -846,7 +862,24 @@ function Models({ rows }: { rows: StatsModelRow[] }): React.JSX.Element | null {
       <CardHead title="models" trailing={`${rows.length} · by what they are worth`} />
       <View style={styles.rank}>
         {rows.map(row => (
-          <RankRow key={`${row.model}\u0000${row.provider}\u0000${row.variant ?? ''}`} name={row.model} detail={routeOf(row)} totals={row} />
+          <RankRow key={`${row.model}\u0000${row.provider}\u0000${row.variant ?? ''}\u0000${row.providerKey ?? ''}`} name={row.model} detail={servedBy(row)} totals={row} />
+        ))}
+      </View>
+      <MoneyLegend />
+    </Card>
+  );
+}
+
+/** The owner's providers, each account its own row: what was spent through which one. */
+function ProviderKeys({ rows }: { rows: StatsProviderKeyRow[] }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  if (rows.length === 0) return null;
+  return (
+    <Card>
+      <CardHead title="providers" trailing={`${rows.length} · by what they are worth`} />
+      <View style={styles.rank}>
+        {rows.map(row => (
+          <RankRow key={row.providerKey} name={row.providerLabel} totals={row} />
         ))}
       </View>
       <MoneyLegend />

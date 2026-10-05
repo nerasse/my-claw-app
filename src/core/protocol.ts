@@ -1247,6 +1247,13 @@ export interface SendAckedFrame {
 export interface UsageModelRow {
   model: string;
   /**
+   * The configured provider that served the calls, by key (`(unknown)` on old rows) and by the name
+   * the owner gave it. Two accounts on one address (two OpenRouter keys) are two rows. Absent on a
+   * server that predates the field.
+   */
+  providerKey?: string;
+  providerLabel?: string;
+  /**
    * Where the calls went: the endpoint pin's provider for a routed call (`streamlake`), otherwise
    * the host of the base that was reached (`api.anthropic.com`, `claude-sdk`). Absent on a server
    * that predates the field.
@@ -1501,8 +1508,13 @@ export interface StatsFilter {
  */
 export interface StatsFacets {
   models: string[];
-  /** The hosts, as `base_url`: what the filter matches, not the pin the page draws. */
+  /**
+   * The configured providers, by key, `(unknown)` for the calls nobody could place: what the filter
+   * matches. A server older than 0.7.92 sends hosts (`base_url`) here instead, and no labels.
+   */
   providers: string[];
+  /** The name of each key above, as the owner named the provider. */
+  providerLabels?: Record<string, string>;
   callers: string[];
   sessions: StatsFacetSession[];
   /** Where the window's calls ran from, the unknown sentinel included. */
@@ -1547,11 +1559,23 @@ export interface StatsTotals {
 /** One model on one route. `provider` is the endpoint pin when there is one, else the host. */
 export interface StatsModelRow extends StatsTotals {
   model: string;
+  /** The configured provider that served it, by key and by name. Absent on an older server. */
+  providerKey?: string;
+  providerLabel?: string;
   provider: string;
   /** How OpenRouter spells the provider tag. Decoration: `provider` is the key. */
   providerName?: string;
   /** The rest of the endpoint pin: a quantization or a service tier, never part of the model. */
   variant?: string;
+}
+
+/**
+ * One configured provider, every model it served folded together: two accounts on one address are
+ * two rows, `(unknown)` holds the calls recorded before the provider was.
+ */
+export interface StatsProviderKeyRow extends StatsTotals {
+  providerKey: string;
+  providerLabel: string;
 }
 
 /** One endpoint, every model it served folded together. */
@@ -1630,8 +1654,12 @@ export interface StatsCallerRow extends StatsTotals {
  * provider that the aggregator never billed for.
  */
 export interface StatsReconciliation {
-  /** The host the figures are about, as the page should name it (`openrouter.ai`). */
+  /** The host the figures are about (`openrouter.ai`). */
   provider: string;
+  /** The configured providers that use this key: one account, one ledger. Absent on an older server. */
+  providerKeys?: string[];
+  /** How the page names the account: the providers' names, joined. */
+  providerLabel?: string;
   /** Our own rows for that host over the period, priced like every other figure on the page. */
   recordedUsd: number;
   /** How many recorded calls that sum covers. Zero is a reading: nothing went there. */
@@ -1670,7 +1698,9 @@ export interface StatsPayload {
   totals: StatsTotals;
   /** Ranked by spend, billed first then reference. */
   models: StatsModelRow[];
-  /** Ranked by spend. */
+  /** The configured providers, ranked by spend. Absent on a server older than 0.7.92. */
+  providerKeys?: StatsProviderKeyRow[];
+  /** The endpoints, ranked by spend. */
   providers: StatsProviderRow[];
   /** Ranked by spend. Bounded by `detailSince`. */
   sessions: StatsSessionRow[];

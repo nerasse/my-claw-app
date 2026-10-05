@@ -129,8 +129,33 @@ describe('the sentence an empty screen owes', () => {
       'model model-small · failed only',
     );
     expect(filterSummary({ provider: 'https://openrouter.ai/api/v1', sessionId: 'fixture/gone' }, FACETS)).toBe(
-      'endpoint openrouter.ai · conversation fixture/gone-7f3c1d · deleted',
+      'provider openrouter.ai · conversation fixture/gone-7f3c1d · deleted',
     );
+  });
+});
+
+describe('the provider dimension', () => {
+  const NAMED = {
+    ...FACETS,
+    providers: ['(unknown)', 'openrouter', 'work'],
+    providerLabels: { '(unknown)': '(unknown)', openrouter: 'OpenRouter perso', work: 'OpenRouter boulot' },
+  };
+
+  it('offers each configured provider by the name the owner gave it, two accounts of one service apart', () => {
+    // By name, not by key, and the calls nobody could place last.
+    expect(choicesOf(NAMED, 'provider')).toEqual([
+      { value: 'work', label: 'OpenRouter boulot' },
+      { value: 'openrouter', label: 'OpenRouter perso' },
+      { value: '(unknown)', label: '(unknown)' },
+    ]);
+    expect(chipValue({ provider: 'work' }, 'provider', NAMED)).toBe('OpenRouter boulot');
+  });
+
+  it('falls back to the host for a server that sends addresses and no names', () => {
+    expect(choicesOf(FACETS, 'provider')).toEqual([
+      { value: 'https://api.vendor.test/v1', label: 'api.vendor.test' },
+      { value: 'https://openrouter.ai/api/v1', label: 'openrouter.ai' },
+    ]);
   });
 });
 

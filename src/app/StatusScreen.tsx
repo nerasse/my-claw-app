@@ -143,7 +143,9 @@ export function rowRoute(row: UsageModelRow): string {
  * went, which rung priced them, and what they cost in tokens under that.
  */
 function rowDetail(row: UsageModelRow): string {
-  return [rowRoute(row), rowLine(row), row.costSource].filter(Boolean).join(' · ');
+  // Which of the owner's providers paid comes first: two accounts on one route are two rows, and
+  // only that name tells them apart.
+  return [row.providerLabel, rowRoute(row), rowLine(row), row.costSource].filter(Boolean).join(' · ');
 }
 
 /**

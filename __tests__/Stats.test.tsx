@@ -540,3 +540,56 @@ test('the workspace and the folder are the first filters of the row', async () =
     await unmount(tree);
   }
 });
+
+test('two accounts of one service: the Models tab names each provider, and each ledger by its account', async () => {
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    const row = { ...ZERO, model: 'vendor/model-big', provider: 'openrouter.ai', promptTokens: 1, completionTokens: 1, cacheReadTokens: 0, referenceUsd: 0 };
+    await emit({
+      type: 'stats.result',
+      stats: report('30d', {
+        providerKeys: [
+          { ...ZERO, providerKey: 'work', providerLabel: 'OpenRouter boulot', calls: 2, promptTokens: 2, completionTokens: 2, cacheReadTokens: 0, billedUsd: 2, referenceUsd: 0 },
+          { ...ZERO, providerKey: 'openrouter', providerLabel: 'OpenRouter perso', calls: 1, promptTokens: 1, completionTokens: 1, cacheReadTokens: 0, billedUsd: 1, referenceUsd: 0 },
+        ],
+        models: [
+          { ...row, providerKey: 'work', providerLabel: 'OpenRouter boulot', calls: 2, billedUsd: 2 },
+          { ...row, providerKey: 'openrouter', providerLabel: 'OpenRouter perso', calls: 1, billedUsd: 1 },
+        ],
+        reconciliation: [
+          { provider: 'openrouter.ai', providerKeys: ['work'], providerLabel: 'OpenRouter boulot', recordedUsd: 2, calls: 2, providerUnread: true },
+        ],
+      }),
+    });
+    await waitFor(() => screen(tree).includes('total · last 30 days'));
+    await pressLabel(tree, 'Models');
+    await waitFor(() => screen(tree).includes('providers'));
+    // Each account a row of its own, and the same model on the same route once per account.
+    expect(countText(tree, 'OpenRouter boulot')).toBeGreaterThan(0);
+    expect(countText(tree, 'OpenRouter perso')).toBeGreaterThan(0);
+    expect(screen(tree)).toContain('OpenRouter boulot · openrouter.ai');
+    expect(screen(tree)).toContain('OpenRouter perso · openrouter.ai');
+
+    await pressLabel(tree, 'Advanced');
+    await waitFor(() => screen(tree).includes('reconciliation'));
+    expect(screen(tree)).toContain('OpenRouter boulot · we recorded');
+  } finally {
+    await unmount(tree);
+  }
+});
+
+test('a server that sends no provider rows draws the Models tab as before', async () => {
+  const tree = await renderAppHome();
+  try {
+    await openStats(tree);
+    await emit({ type: 'stats.result', stats: report('30d') });
+    await waitFor(() => screen(tree).includes('total · last 30 days'));
+    await pressLabel(tree, 'Models');
+    await waitFor(() => screen(tree).includes('vendor/model-big'));
+    expect(countText(tree, 'providers')).toBe(0);
+    expect(screen(tree)).toContain('api.other.test · fp8');
+  } finally {
+    await unmount(tree);
+  }
+});

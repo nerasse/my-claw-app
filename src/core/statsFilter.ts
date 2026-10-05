@@ -27,7 +27,7 @@ export const FILTER_CHIPS: ReadonlyArray<{ key: FilterKey; label: string; sheet?
   { key: 'workspace', label: 'Workspace', sheet: 'Workspace' },
   { key: 'folderId', label: 'Folder', sheet: 'Folder' },
   { key: 'model', label: 'Model', sheet: 'Model' },
-  { key: 'provider', label: 'Endpoint', sheet: 'Endpoint' },
+  { key: 'provider', label: 'Provider', sheet: 'Provider' },
   { key: 'caller', label: 'Source', sheet: 'Source' },
   { key: 'sessionId', label: 'Conversation', sheet: 'Conversation' },
   { key: 'errorsOnly', label: 'Failed only' },
@@ -138,12 +138,23 @@ export function callerLabel(value: string): string {
   return CALLER_LABELS[value] ?? value;
 }
 
+/** What the server calls the calls no provider could be given. */
+const UNKNOWN_PROVIDER = '(unknown)';
+
+/**
+ * A provider as the owner named it. A server older than 0.7.92 sends hosts and no names: the host
+ * is then the clearest label there is.
+ */
+function providerChoiceLabel(facets: StatsFacets | undefined, value: string): string {
+  return facets?.providerLabels?.[value] ?? hostLabel(value);
+}
+
 /** What a chip shows beside its dimension name, or '' while that dimension is open. */
 export function chipValue(filter: StatsFilter, key: FilterKey, facets: StatsFacets | undefined): string {
   if (!isChoice(key)) return filter[key] === true ? 'on' : '';
   const value = filter[key];
   if (value === undefined) return '';
-  if (key === 'provider') return hostLabel(value);
+  if (key === 'provider') return providerChoiceLabel(facets, value);
   if (key === 'model') return modelLabel(value);
   if (key === 'sessionId') return sessionChoiceLabel(facets, value);
   if (key === 'folderId') return folderChoiceLabel(facets, value);
@@ -166,7 +177,12 @@ export function choicesOf(facets: StatsFacets | undefined, key: FilterChoiceKey)
   if (key === 'workspace') return facets.workspaces.map((value) => ({ value, label: value }));
   if (key === 'folderId') return facets.folders.map((folder) => ({ value: folder.folderId, label: folder.label }));
   if (key === 'model') return facets.models.map((value) => ({ value, label: value }));
-  if (key === 'provider') return facets.providers.map((value) => ({ value, label: hostLabel(value) }));
+  if (key === 'provider') {
+    // By name, the calls nobody could place last: the keys sort in an order the owner never chose.
+    return facets.providers
+      .map((value) => ({ value, label: providerChoiceLabel(facets, value) }))
+      .sort((a, b) => Number(a.value === UNKNOWN_PROVIDER) - Number(b.value === UNKNOWN_PROVIDER) || a.label.localeCompare(b.label));
+  }
   if (key === 'caller') return facets.callers.map((value) => ({ value, label: callerLabel(value) }));
   return facets.sessions.map((session) => ({
     value: session.sessionId,
