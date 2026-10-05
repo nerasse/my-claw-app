@@ -35,7 +35,7 @@ describe('the update phase', () => {
     expect(phase.kind).toBe('running');
     expect(updateBusy(phase)).toBe(true);
     // The regression: nothing about the lock may depend on knowing the running version.
-    expect(updateBusy(run([{ type: 'socket', connected: true }], phase))).toBe(true);
+    expect(updateBusy(run([{ type: 'socket', connected: true, now: T0 + 2_000 }], phase))).toBe(true);
   });
 
   it('frees the button on a refusal, which is not a swap window', () => {
@@ -64,8 +64,8 @@ describe('the update phase', () => {
     const phase = run([
       { type: 'asked' },
       started('0.4.5'),
-      { type: 'socket', connected: false },
-      { type: 'socket', connected: true },
+      { type: 'socket', connected: false, now: T0 + 1_000 },
+      { type: 'socket', connected: true, now: T0 + 2_000 },
       { type: 'hello', version: '0.4.6' },
     ]);
     expect(phase).toEqual({ kind: 'done', from: '0.4.5', to: '0.4.6' });
@@ -76,8 +76,8 @@ describe('the update phase', () => {
     const phase = run([
       { type: 'asked' },
       started('0.4.5'),
-      { type: 'socket', connected: false },
-      { type: 'socket', connected: true },
+      { type: 'socket', connected: false, now: T0 + 1_000 },
+      { type: 'socket', connected: true, now: T0 + 2_000 },
       { type: 'hello', version: '0.4.5' },
     ]);
     expect(phase).toEqual({ kind: 'rolledBack', version: '0.4.5' });
@@ -105,12 +105,12 @@ describe('the update phase', () => {
 
   it('keeps observing a slow job that restarts after the outcome became unconfirmed', () => {
     const uncertain = run([{ type: 'asked' }, started('0.4.5'), { type: 'tick', now: T0 + SETTLE_MS }]);
-    const restarting = run([{ type: 'socket', connected: false }], uncertain);
-    expect(restarting).toEqual({ kind: 'running', since: T0, version: '0.4.5', sawDrop: true });
+    const restarting = run([{ type: 'socket', connected: false, now: T0 + 1_000 }], uncertain);
+    expect(restarting).toEqual({ kind: 'running', since: T0, version: '0.4.5', droppedAt: T0 + 1_000 });
     expect(updateBusy(restarting)).toBe(true);
     const phase = run([
       { type: 'tick', now: T0 + SETTLE_MS + 30_000 },
-      { type: 'socket', connected: true },
+      { type: 'socket', connected: true, now: T0 + 2_000 },
       { type: 'hello', version: '0.4.6' },
     ], restarting);
     expect(phase).toEqual({ kind: 'done', from: '0.4.5', to: '0.4.6' });
@@ -118,7 +118,7 @@ describe('the update phase', () => {
 
   it('needs a changed version, not a repeated hello, to confirm an unobserved restart', () => {
     const uncertain = run([{ type: 'asked' }, started('0.4.5'), { type: 'tick', now: T0 + SETTLE_MS }]);
-    expect(run([{ type: 'socket', connected: true }, { type: 'hello', version: '0.4.5' }], uncertain)).toEqual(uncertain);
+    expect(run([{ type: 'socket', connected: true, now: T0 + 2_000 }, { type: 'hello', version: '0.4.5' }], uncertain)).toEqual(uncertain);
     expect(run([{ type: 'hello', version: '0.4.6' }], uncertain)).toEqual({ kind: 'done', from: '0.4.5', to: '0.4.6' });
   });
 
@@ -131,7 +131,7 @@ describe('the update phase', () => {
     const phase = run([
       { type: 'asked' },
       started('0.4.5'),
-      { type: 'socket', connected: false },
+      { type: 'socket', connected: false, now: T0 + 1_000 },
       { type: 'tick', now: T0 + SETTLE_MS + 5_000 },
     ]);
     expect(phase.kind).toBe('running');
@@ -142,16 +142,24 @@ describe('the update phase', () => {
     const phase = run([
       { type: 'asked' },
       started('0.4.5'),
-      { type: 'socket', connected: false },
-      { type: 'tick', now: T0 + STALLED_MS },
+      { type: 'socket', connected: false, now: T0 + 1_000 },
+      { type: 'tick', now: T0 + 1_000 + STALLED_MS },
     ]);
     expect(phase).toEqual({ kind: 'stalled', version: '0.4.5' });
     expect(updateHint(phase, false)).toContain('my-claw-auto-update.service in the journal');
   });
 
+  it('counts the wait for the server from the drop, not from the request', () => {
+    // A slow job stopped the server four minutes in: a minute later it is restarting, not lost.
+    const uncertain = run([{ type: 'asked' }, started('0.4.5'), { type: 'tick', now: T0 + SETTLE_MS }]);
+    const dropped = run([{ type: 'socket', connected: false, now: T0 + 4 * 60_000 }], uncertain);
+    expect(run([{ type: 'tick', now: T0 + STALLED_MS + 1 }], dropped).kind).toBe('running');
+    expect(run([{ type: 'tick', now: T0 + 4 * 60_000 + STALLED_MS }], dropped)).toEqual({ kind: 'stalled', version: '0.4.5' });
+  });
+
   it('ignores a hello that belongs to no request', () => {
     expect(run([{ type: 'hello', version: '0.4.6' }])).toEqual({ kind: 'idle' });
-    expect(run([{ type: 'socket', connected: false }])).toEqual({ kind: 'idle' });
+    expect(run([{ type: 'socket', connected: false, now: T0 + 1_000 }])).toEqual({ kind: 'idle' });
   });
 
   it('returns the button when the frame could not even be sent', () => {

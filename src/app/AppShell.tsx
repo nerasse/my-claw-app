@@ -2326,7 +2326,7 @@ export function AppShell(): React.JSX.Element {
   // The socket dropping is half the verdict: the updater only stops the service when it has
   // something to install.
   useEffect(() => {
-    setUpdatePhase(phase => reduceUpdate(phase, { type: 'socket', connected: status.state === 'connected' }));
+    setUpdatePhase(phase => reduceUpdate(phase, { type: 'socket', connected: status.state === 'connected', now: Date.now() }));
   }, [status.state]);
 
   // App self-update: check at launch, then every hour, auto-download on wifi (or on mobile

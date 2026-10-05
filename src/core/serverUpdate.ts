@@ -20,15 +20,19 @@ import type { UpdateResultFrame } from './protocol';
 
 /** No restart within this window leaves the outcome unconfirmed, not "up to date". */
 export const SETTLE_MS = 20_000;
-/** A restart that never comes back. Long enough for a slow swap plus the health check. */
+/**
+ * A restart that never comes back, counted from the drop: a slow job can stop the server minutes
+ * after it was asked, and counting from the ask called a server that had just gone down "not
+ * come back" (PR #4 review, 2026-10-05). Long enough for a slow swap plus the health check.
+ */
 export const STALLED_MS = 5 * 60_000;
 
 export type UpdatePhase =
   | { kind: 'idle' }
   | { kind: 'asking' }
   | { kind: 'refused'; reason: 'busy' | 'denied' | 'failed'; detail?: string }
-  /** Acknowledged. `sawDrop` records a possible restart, not the updater's job status. */
-  | { kind: 'running'; since: number; version: string; sawDrop: boolean }
+  /** Acknowledged. `droppedAt` records a possible restart, not the updater's job status. */
+  | { kind: 'running'; since: number; version: string; droppedAt?: number }
   | { kind: 'done'; from: string; to: string }
   | { kind: 'unconfirmed'; since: number; version: string }
   | { kind: 'rolledBack'; version: string }
@@ -38,7 +42,7 @@ export type UpdateEvent =
   | { type: 'asked' }
   | { type: 'sendFailed' }
   | { type: 'result'; frame: UpdateResultFrame; now: number }
-  | { type: 'socket'; connected: boolean }
+  | { type: 'socket'; connected: boolean; now: number }
   | { type: 'hello'; version: string }
   | { type: 'tick'; now: number };
 
@@ -53,27 +57,27 @@ export function reduceUpdate(phase: UpdatePhase, event: UpdateEvent): UpdatePhas
       if (!started) {
         return { kind: 'refused', reason: reason ?? 'failed', ...(detail ? { detail } : {}) };
       }
-      return { kind: 'running', since: event.now, version, sawDrop: false };
+      return { kind: 'running', since: event.now, version };
     }
     case 'socket':
       // Only a drop is recorded here. The reconnection is not the end of the story: the version
       // it comes back with is, and that arrives in the `hello` right after.
       if (event.connected) return phase;
-      if (phase.kind === 'unconfirmed') return { ...phase, kind: 'running', sawDrop: true };
-      if (phase.kind !== 'running' || phase.sawDrop) return phase;
-      return { ...phase, sawDrop: true };
+      if (phase.kind === 'unconfirmed') return { ...phase, kind: 'running', droppedAt: event.now };
+      if (phase.kind !== 'running' || phase.droppedAt !== undefined) return phase;
+      return { ...phase, droppedAt: event.now };
     case 'hello': {
       if (phase.kind !== 'running' && phase.kind !== 'unconfirmed') return phase;
       if (event.version !== phase.version) return { kind: 'done', from: phase.version, to: event.version };
-      if (phase.kind === 'running' && phase.sawDrop) return { kind: 'rolledBack', version: event.version };
+      if (phase.kind === 'running' && phase.droppedAt !== undefined) return { kind: 'rolledBack', version: event.version };
       return phase;
     }
     case 'tick': {
       if (phase.kind !== 'running') return phase;
-      const waited = event.now - phase.since;
-      if (!phase.sawDrop && waited >= SETTLE_MS) return { kind: 'unconfirmed', since: phase.since, version: phase.version };
-      if (phase.sawDrop && waited >= STALLED_MS) return { kind: 'stalled', version: phase.version };
-      return phase;
+      if (phase.droppedAt === undefined) {
+        return event.now - phase.since >= SETTLE_MS ? { kind: 'unconfirmed', since: phase.since, version: phase.version } : phase;
+      }
+      return event.now - phase.droppedAt >= STALLED_MS ? { kind: 'stalled', version: phase.version } : phase;
     }
   }
 }
@@ -109,7 +113,7 @@ export function updateHint(phase: UpdatePhase, connected: boolean): string {
       if (phase.reason === 'denied') return 'the server may not start the update unit (sudoers drop-in missing)';
       return 'the server could not start the update';
     case 'running':
-      return phase.sawDrop
+      return phase.droppedAt !== undefined
         ? 'the server is restarting · this page reconnects on its own'
         : `started on ${phase.version} · waiting to see whether it restarts`;
     case 'done':
