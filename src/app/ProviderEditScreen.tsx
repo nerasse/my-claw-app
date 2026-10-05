@@ -7,6 +7,8 @@ import {
   envNameFor,
   freshName,
   keySite,
+  NAME_TAKEN,
+  nameTaken,
   providerKeyFor,
   serviceOf,
   type ProviderService,
@@ -124,7 +126,8 @@ export function ProviderEditScreen({
   const keyTaken = (creating || key !== provider?.key) && takenKeys.includes(key);
   const envNameValid = apiKeyEnv === '' || ENV_NAME_RE.test(apiKeyEnv);
   const baseUrlValid = !openai || baseUrl.trim() !== '';
-  const nameValid = name.trim() !== '';
+  const nameClash = nameTaken(name, providers, provider?.key);
+  const nameValid = name.trim() !== '' && !nameClash;
   // A known service is nothing without its key: Add waits for one, unless the variable holds it.
   const keyGiven = !creating || !service || envSet || envValue.trim() !== '';
   const advancedValid = keyValid && !keyTaken && envNameValid && (creating && !service ? true : baseUrlValid);
@@ -171,7 +174,11 @@ export function ProviderEditScreen({
             autoCorrect={false}
             accessibilityLabel="Provider name"
           />
-          <Text style={styles.note}>how it reads in the model picker · two accounts of one service, two names</Text>
+          {nameClash ? (
+            <Text style={[styles.note, styles.noteTaken]}>{NAME_TAKEN}</Text>
+          ) : (
+            <Text style={styles.note}>how it reads in the model picker · two accounts of one service, two names</Text>
+          )}
         </View>
 
         {creating && !service ? (

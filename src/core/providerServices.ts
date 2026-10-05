@@ -197,8 +197,7 @@ export function envNameFor(key: string, service?: ProviderService): string {
  * reads that way or holds its key, so two accounts never share a name in the picker.
  */
 export function freshName(service: ProviderService, providers: ReadonlyArray<Pick<ProviderInfo, 'key' | 'group'>>): string {
-  const taken = (name: string): boolean =>
-    providers.some(p => (p.group ?? p.key).toLowerCase() === name.toLowerCase() || p.key === providerKeyFor(name, service.key, []));
+  const taken = (name: string): boolean => nameTaken(name, providers) || providers.some(p => p.key === providerKeyFor(name, service.key, []));
   if (!taken(service.name)) return service.name;
   for (let n = 2; ; n++) if (!taken(`${service.name} ${n}`)) return `${service.name} ${n}`;
 }
@@ -226,3 +225,20 @@ export function discoveryLine(provider: Pick<ProviderInfo, 'discover' | 'models'
   }
   return { text: `${count} found`, failed: false };
 }
+
+/**
+ * Whether a name is already how another provider reads (its name, else its key), case aside: two
+ * providers that read alike cannot be told apart in the picker or in Stats. The server refuses the
+ * same (`upsertProvider`); this says so before anything is sent.
+ */
+export function nameTaken(
+  name: string,
+  providers: ReadonlyArray<Pick<ProviderInfo, 'key' | 'group'>>,
+  except?: string,
+): boolean {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return false;
+  return providers.some(p => p.key !== except && (p.group?.trim() || p.key).toLowerCase() === wanted);
+}
+
+export const NAME_TAKEN = 'a provider already has this name · pick another';

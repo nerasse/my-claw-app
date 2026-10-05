@@ -117,6 +117,11 @@ The form (`ProviderEditScreen`), for adding and editing alike:
   every pass.
 - Editing, the key line reads the provider's own `keyPresent`, never the variable list, which may
   not have arrived. A new key pasted there replaces the value of the provider's variable.
+- Two providers never read alike: a name already used by another provider (its name, else its key),
+  case aside, is refused on the way in and on a rename, for plans and keyed providers alike
+  (`nameTaken`, and the plan's name sheet through `PromptSheet.invalid`). The server refuses the
+  same in `upsertProvider`, and the names it picks itself (`/claude`, the CLI, a `.env` token) are
+  numbered (`Claude 2`).
 - Custom asks for an address; a key is optional (a local endpoint needs none), and with none it gets
   no variable at all.
 

@@ -699,3 +699,28 @@ test('a provider whose key was refused says so on the list, not "key set"', asyn
   expect(textsOf(tree).some(text => text.includes('key set (LITELLM_API_KEY)'))).toBe(false);
   await settleAndUnmount(tree);
 });
+
+test('a provider cannot be named like another, case aside, but keeps its own name when edited', async () => {
+  const tree = await bootToProviders();
+  await emit(envResult());
+  await addFrom(tree, 'OpenRouter');
+  await typeInto(tree, 'Provider API key', 'sk-or');
+  // "litellm" is the gateway's key, and with no name of its own that is how it reads.
+  await typeInto(tree, 'Provider name', 'LiteLLM');
+  expect(textsOf(tree)).toContain('a provider already has this name · pick another');
+  expect(saveState(tree)).toEqual({ disabled: true });
+  await typeInto(tree, 'Provider name', 'OpenRouter perso');
+  expect(saveState(tree)).toEqual({ disabled: false });
+  await settleAndUnmount(tree);
+
+  const edit = await bootToProviders();
+  await pressLabel(edit, 'Open provider litellm');
+  await pressLabel(edit, 'Edit provider');
+  await waitFor(() => labelsOf(edit).includes('Save provider'));
+  const save = () => edit.root.find(node => node.props.accessibilityLabel === 'Save provider' && node.props.accessibilityState).props.accessibilityState;
+  await typeInto(edit, 'Provider name', 'litellm');
+  expect(save()).toEqual({ disabled: false });
+  await typeInto(edit, 'Provider name', 'Anthropic');
+  expect(save()).toEqual({ disabled: true });
+  await settleAndUnmount(edit);
+});

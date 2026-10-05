@@ -204,6 +204,42 @@ test('a second ChatGPT account: named, declared, then its page opens with its si
   await unmount(tree);
 });
 
+test('a plan cannot take a name another provider already reads as, on the way in or by a rename', async () => {
+  const tree = await openProviders();
+  await press(tree, 'New provider');
+  await press(tree, 'Claude plan');
+  await waitFor(() => labelsOf(tree).includes('Name this Claude account'));
+  const confirm = (label: string) =>
+    tree.root.find(node => node.props.accessibilityLabel === label && node.props.accessibilityState).props.accessibilityState;
+  // Case aside: "chatgpt perso" is the ChatGPT plan's name, "openrouter" the keyed one's key.
+  for (const taken of ['chatgpt perso', 'OpenRouter']) {
+    await typeInto(tree, 'Name this Claude account', taken);
+    expect(labelsOf(tree)).toContain('Problem a provider already has this name · pick another');
+    expect(confirm('Add')).toEqual({ disabled: true });
+  }
+  bridge.sendMessage.mockClear();
+  await press(tree, 'Add');
+  expect(sent().some(frame => frame.type === 'accounts.add')).toBe(false);
+  await typeInto(tree, 'Name this Claude account', 'Claude boulot');
+  expect(confirm('Add')).toEqual({ disabled: false });
+  await press(tree, 'Cancel');
+  // The cancel leaves the + page standing: back to the list from it.
+  await press(tree, 'Back to models');
+
+  // Renaming a plan to its own name is not a clash; to another provider's is.
+  await press(tree, 'Open account ChatGPT perso');
+  // The page draws its rename once the server has said how the account stands.
+  await emit(accounts());
+  await waitFor(() => labelsOf(tree).includes('Rename this account'));
+  await press(tree, 'Rename this account');
+  await waitFor(() => labelsOf(tree).includes('Rename'));
+  await typeInto(tree, 'Rename this account', 'ChatGPT Perso');
+  expect(confirm('Rename')).toEqual({ disabled: false });
+  await typeInto(tree, 'Rename this account', 'claude');
+  expect(confirm('Rename')).toEqual({ disabled: true });
+  await unmount(tree);
+});
+
 test('another window adding an account does not take this one to its page', async () => {
   const tree = await openProviders();
   await emit(accounts([chatgpt(), claude(), { provider: 'claude-2', kind: 'claude', name: 'Claude 2', connected: false }], { added: 'claude-2' }));

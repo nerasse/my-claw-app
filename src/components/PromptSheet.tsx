@@ -18,6 +18,7 @@ export function PromptSheet({
   placeholder,
   confirmLabel = 'Save',
   maxLength,
+  invalid,
   onSubmit,
   onClose,
 }: {
@@ -28,6 +29,8 @@ export function PromptSheet({
   placeholder?: string;
   confirmLabel?: string;
   maxLength?: number;
+  /** Why a value cannot be submitted, or null: said under the field, and the confirm waits. */
+  invalid?: (value: string) => string | null;
   onSubmit: (value: string) => void;
   onClose: () => void;
 }): React.JSX.Element {
@@ -38,7 +41,10 @@ export function PromptSheet({
   const bottomInset = useSheetBottomInset(space.xl);
   const [value, setValue] = useState(initialValue);
 
+  const problem = invalid?.(value) ?? null;
+
   const submit = (): void => {
+    if (problem) return;
     onSubmit(value);
     close();
   };
@@ -82,7 +88,13 @@ export function PromptSheet({
           accessibilityLabel={title}
         />
 
-        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        {problem ? (
+          <Text style={[styles.hint, styles.problem]} accessibilityLabel={`Problem ${problem}`}>
+            {problem}
+          </Text>
+        ) : hint ? (
+          <Text style={styles.hint}>{hint}</Text>
+        ) : null}
 
         <View style={styles.row}>
           <Pressable
@@ -94,8 +106,10 @@ export function PromptSheet({
           </Pressable>
           <Pressable
             onPress={submit}
-            style={[styles.button, styles.buttonPrimary]}
+            disabled={problem !== null}
+            style={[styles.button, styles.buttonPrimary, problem !== null && styles.buttonOff]}
             accessibilityRole="button"
+            accessibilityState={{ disabled: problem !== null }}
             accessibilityLabel={confirmLabel}>
             <Text style={[styles.buttonText, styles.buttonTextPrimary]}>{confirmLabel}</Text>
           </Pressable>
@@ -106,6 +120,8 @@ export function PromptSheet({
 }
 
 const createStyles = (palette: Palette) => ({
+  problem: { color: palette.danger },
+  buttonOff: { opacity: 0.5 },
   backdrop: {
     position: 'absolute' as const,
     top: 0,

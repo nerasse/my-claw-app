@@ -212,7 +212,7 @@ import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ModelEditScreen } from './ModelEditScreen';
 import { ProviderEditScreen, type ProviderPatch } from './ProviderEditScreen';
 import { ProviderAddScreen } from './ProviderAddScreen';
-import type { ProviderService } from '../core/providerServices';
+import { NAME_TAKEN, nameTaken, type ProviderService } from '../core/providerServices';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
@@ -5124,6 +5124,11 @@ export function AppShell(): React.JSX.Element {
           placeholder={accountPrompt.mode === 'add' && accountPrompt.kind === 'claude' ? 'Claude perso' : 'ChatGPT perso'}
           confirmLabel={accountPrompt.mode === 'rename' ? 'Rename' : 'Add'}
           maxLength={40}
+          invalid={value =>
+            nameTaken(value, agentsConfig?.providers ?? [], accountPrompt.mode === 'rename' ? accountPrompt.provider : undefined)
+              ? NAME_TAKEN
+              : null
+          }
           onSubmit={value => {
             const name = value.trim();
             if (!name) return;
