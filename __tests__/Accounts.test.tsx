@@ -13,7 +13,7 @@ import { deviceBridge } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
 import { accountsStore } from '../src/core/accounts';
 import { modelStore } from '../src/core/model';
-import { labelsOf, press, renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
+import { labelsOf, press, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 
@@ -157,18 +157,22 @@ test('Claude: the code its page shows is pasted back; a token goes through its o
   await unmount(tree);
 });
 
-test('the + offers the plans, then the Claude key beside them, then the custom form', async () => {
+test('the + is a page: the plans, then the services that take a key, then Custom', async () => {
   const tree = await openProviders();
   await press(tree, 'New provider');
-  const options = [...new Set(labelsOf(tree).filter(label => ['ChatGPT plan', 'Claude plan', 'Claude API key', 'Custom'].includes(label)))];
-  expect(options).toEqual(['ChatGPT plan', 'Claude plan', 'Claude API key', 'Custom']);
-  await press(tree, 'Claude API key');
-  // The menu is gone once a choice is made: it does not stay over the page it opened.
-  expect(labelsOf(tree)).not.toContain('ChatGPT plan');
-  // The form opens on an Anthropic provider that takes its key from .env.
-  await waitFor(() => labelsOf(tree).includes('Provider key'));
+  await waitFor(() => labelsOf(tree).includes('Custom'));
+  const rows = ['ChatGPT plan', 'Claude plan', 'OpenRouter', 'OpenCode Go', 'OpenCode Zen', 'Claude API', 'OpenAI', 'Groq', 'Mistral', 'DeepSeek', 'Google Gemini', 'xAI (Grok)', 'Custom'];
+  expect([...new Set(labelsOf(tree).filter(label => rows.includes(label)))]).toEqual(rows);
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['sign in, no key', 'paste an API key', 'other']));
+
+  // The Claude API sits with the keys, beside the plan: an Anthropic provider that takes its key.
+  await press(tree, 'Claude API');
+  await waitFor(() => labelsOf(tree).includes('Provider name'));
+  await press(tree, 'Advanced settings');
   const field = (label: string) => tree.root.find(node => node.props.accessibilityLabel === label && typeof node.props.onChangeText === 'function').props.value;
+  expect(field('Provider name')).toBe('Claude API');
   expect(field('Provider key')).toBe('claude-api');
+  expect(field('Provider env name')).toBe('ANTHROPIC_API_KEY');
   expect(labelsOf(tree)).toContain('Engine anthropic');
   await unmount(tree);
 });
@@ -177,7 +181,8 @@ test('a second ChatGPT account: named, declared, then its page opens with its si
   const tree = await openProviders();
   await press(tree, 'New provider');
   await press(tree, 'ChatGPT plan');
-  expect(labelsOf(tree)).not.toContain('Claude plan');
+  // The name is asked over the + page, which a cancel comes back to.
+  await waitFor(() => labelsOf(tree).includes('Name this ChatGPT account'));
   bridge.sendMessage.mockClear();
   await typeInto(tree, 'Name this ChatGPT account', 'ChatGPT boulot');
   await press(tree, 'Add');

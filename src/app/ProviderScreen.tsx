@@ -5,6 +5,7 @@ import { font, radius, space, useTheme, useThemedStyles, type Palette } from '..
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 import { CloseButton } from '../components/CloseButton';
+import { discoveryLine } from '../core/providerServices';
 
 /** A component of its own, not a closure in render: FlatList keeps it across renders. */
 function Separator(): React.JSX.Element {
@@ -246,6 +247,16 @@ export function ProviderScreen({
         </Text>
       ) : null}
       <DiscoveryNote />
+      {/* This provider's own last pass: what a provider just added reads while it is asked, and
+          the reason it lists nothing when its key was refused. A pass that went well says
+          nothing more than the count in the header. */}
+      {provider.discovery && provider.discovery.state !== 'ok' ? (
+        <Text
+          style={provider.discovery.state === 'failed' ? styles.error : styles.discovery}
+          accessibilityLabel={`Provider discovery ${discoveryLine(provider).text}`}>
+          {discoveryLine(provider).text}
+        </Text>
+      ) : null}
 
       {models.length >= SEARCH_MIN_MODELS ? (
         <TextInput
@@ -290,6 +301,7 @@ export function ProviderScreen({
 
 const createStyles = (palette: Palette) => ({
   screen: { flex: 1 },
+  discovery: { fontSize: font.small, color: palette.textMuted, paddingHorizontal: space.xs, paddingTop: space.xs },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

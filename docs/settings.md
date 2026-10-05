@@ -67,8 +67,56 @@ nobody can reach.
   not turn on; each tool now has its "ask" switch (`tools.confirm`, server docs/tool-approvals.md),
   and the history is a row of the Tools page.
 - The ChatGPT and Claude plans are providers, listed with the keyed ones under Models, not a
-  Subscriptions section apart: "subscription or API key, it is a provider". The `+` offers ChatGPT
-  plan, Claude plan, Claude API key (beside the plan on purpose: same models, paid per use), Custom.
-  A plan is named on the way in, several of a kind can exist, and each has its page: sign in or out,
-  rename, its models (server docs/subscription-accounts.md).
+  Subscriptions section apart: "subscription or API key, it is a provider". A plan is named on the
+  way in, several of a kind can exist, and each has its page: sign in or out, rename, its models
+  (server docs/subscription-accounts.md).
+
+## Adding and editing a provider (2026-10-05)
+
+The `+` of the providers is a page (`provider-add`, parent `models`), in three groups:
+
+```
+Add a provider
+├─ sign in, no key      ChatGPT plan · Claude plan            → named, then its sign-in page
+├─ paste an API key     OpenRouter · OpenCode Go · OpenCode Zen · Claude API · OpenAI · Groq
+│                       Mistral · DeepSeek · Google Gemini · xAI (Grok)   → the short form
+└─ other                Custom                                → name, address, optional key
+```
+
+A page, not a sheet: thirteen rows do not fit a phone's sheet. The services are one table,
+`src/core/providerServices.ts`: address, engine, the variable of the first account, the key page,
+and `pricingProvider`, set because the big vendors publish no API address on models.dev, so a
+second account keyed `openai-work` would otherwise go unpriced.
+
+The form (`ProviderEditScreen`), for adding and editing alike:
+
+```
+┌ Add OpenRouter ─────────────────────────┐
+│ name     [OpenRouter boulot        ]    │  key and variable follow it
+│ API key  [••••••••••••             ]    │  Add waits for it (unless the variable holds one)
+│          Get a key at openrouter.ai ↗   │
+│ models   12 models found                │  editing only
+│ ADVANCED ›                              │  folded, every provider, Custom included
+│   key · engine · base url · variable    │
+│   discover · prompt cache · replay      │
+│   pricing / fallback · Claude version   │
+│ [Add]                                   │
+└─────────────────────────────────────────┘
+```
+
+- Adding, the key is the name folded the way the server folds an account's name
+  (`OpenRouter boulot` → `openrouter-boulot`, numbered when taken) and the variable is
+  `<KEY>_API_KEY`; the first account of a service keeps its usual one (`OPENROUTER_API_KEY`,
+  `ANTHROPIC_API_KEY`). A second account is named `OpenRouter 2` until renamed, so two accounts
+  never share a name, a key or a variable. Advanced can override both; once edited, they stop
+  following the name.
+- No check before saving (owner's choice). The key is sent before the declaration, and the provider's
+  page opens at once on "asking the provider for its models…", then shows what the server's discovery
+  found: the models, or the reason in words ("the key was refused: paste it again (HTTP 401)").
+  The server keeps that reason per provider (`ProviderInfo.discovery`) and pushes the snapshot after
+  every pass.
+- Editing, the key line reads the provider's own `keyPresent`, never the variable list, which may
+  not have arrived. A new key pasted there replaces the value of the provider's variable.
+- Custom asks for an address; a key is optional (a local endpoint needs none), and with none it gets
+  no variable at all.
 

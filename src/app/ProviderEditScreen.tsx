@@ -1,7 +1,16 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import type { ProviderInfo, ProvidersEnvResultFrame } from '../core/protocol';
 import { envNamePresent } from '../core/providers';
+import {
+  discoveryLine,
+  envNameFor,
+  freshName,
+  keySite,
+  providerKeyFor,
+  serviceOf,
+  type ProviderService,
+} from '../core/providerServices';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
@@ -12,39 +21,36 @@ const KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
 /** Env names cannot carry dashes: the suggestion turns the key into one. */
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/**
- * OpenAI-compatible endpoints a newcomer is likely to hold a key for: one tap fills the form, the
- * key is all that is left to paste. Discovery is on, so the models appear without typing them.
- */
-export const PROVIDER_PRESETS: Array<{ label: string; key: string; baseUrl: string; apiKeyEnv: string }> = [
-  { label: 'OpenRouter', key: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKeyEnv: 'OPENROUTER_API_KEY' },
-  { label: 'OpenAI', key: 'openai', baseUrl: 'https://api.openai.com/v1', apiKeyEnv: 'OPENAI_API_KEY' },
-  { label: 'Groq', key: 'groq', baseUrl: 'https://api.groq.com/openai/v1', apiKeyEnv: 'GROQ_API_KEY' },
-  { label: 'Mistral', key: 'mistral', baseUrl: 'https://api.mistral.ai/v1', apiKeyEnv: 'MISTRAL_API_KEY' },
-  { label: 'DeepSeek', key: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', apiKeyEnv: 'DEEPSEEK_API_KEY' },
-];
-
-/** The suggestion for a fresh provider: `<KEY>_API_KEY`, dashes folded to underscores. */
-export function suggestEnvName(key: string): string {
-  const cleaned = key.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-  return `${cleaned}_API_KEY`;
-}
-
-/** The preferred key, numbered when taken: a second OpenRouter account is `openrouter2`. */
-export function freeProviderKey(preferred: string, taken: readonly string[]): string {
-  if (!taken.includes(preferred)) return preferred;
-  for (let i = 2; ; i++) if (!taken.includes(`${preferred}${i}`)) return `${preferred}${i}`;
+export interface ProviderPatch {
+  key: string;
+  providerType: ProviderType;
+  baseUrl: string;
+  group: string;
+  discover: boolean;
+  promptCache: boolean;
+  reasoningReplay: boolean;
+  pricingProvider: string;
+  fallbackModel: string;
+  apiKeyEnv: string;
+  envValue: string;
 }
 
 /**
- * The provider form, one page for both halves: creating (empty key, the env value may ride
- * along on the same Save) and editing (the key is the rename target, the env key has its own
- * page). Fields are type-aware: codex and anthropic own their tokens, so baseUrl, the env
- * section and prompt caching are openai-only, and fallbackModel is anthropic/codex-only.
+ * The provider form, for adding one and for editing one. What a newcomer needs is on top: a name,
+ * a key and, for a custom one, its address. Everything else (the config key, the engine, the
+ * address of a known service, the variable the key is stored in, the switches) is in Advanced,
+ * folded but never removed, for every provider (owner, 2026-10-05: "laisse la main pour les
+ * utilisateurs avancés").
+ *
+ * Adding, the key and the variable follow the name until Advanced edits them: "OpenRouter boulot"
+ * is `openrouter-boulot` and `OPENROUTER_BOULOT_API_KEY`, so a second account of a service never
+ * lands on the first one's key or variable.
  */
 export function ProviderEditScreen({
   mode,
   provider,
+  service,
+  providers,
   env,
   error,
   busy,
@@ -54,32 +60,18 @@ export function ProviderEditScreen({
   onOpenEnv,
   onEnvSet,
   onEnvRemove,
-  initial,
-  takenKeys,
 }: {
   mode: 'create' | 'edit';
-  /** The keys already declared: a create never lands on one, it would overwrite that provider. */
-  takenKeys: readonly string[];
-  /** A create form seeded from the + menu (Claude API key): engine, key, env name, display. */
-  initial?: { key: string; providerType: ProviderType; apiKeyEnv: string; group: string };
-  /** The entry being edited, null in create mode. */
+  /** The entry being edited, null when adding. */
   provider: ProviderInfo | null;
+  /** The service being added, absent for Custom. */
+  service?: ProviderService;
+  /** Every declared provider: the names and keys a new one must not take. */
+  providers: readonly ProviderInfo[];
   env: Omit<ProvidersEnvResultFrame, 'type'> | null;
   error: string | null;
   busy: boolean;
-  onSave: (patch: {
-    key: string;
-    providerType: ProviderType;
-    baseUrl: string;
-    group: string;
-    discover: boolean;
-    promptCache: boolean;
-    reasoningReplay: boolean;
-    pricingProvider: string;
-    fallbackModel: string;
-    apiKeyEnv: string;
-    envValue: string;
-  }) => void;
+  onSave: (patch: ProviderPatch) => void;
   onDelete: () => void;
   onOpenEnv: () => void;
   onBack: () => void;
@@ -88,43 +80,59 @@ export function ProviderEditScreen({
   onEnvRemove: (name: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [key, setKey] = useState(provider?.key ?? initial?.key ?? '');
+  const creating = mode === 'create';
+  const known = creating ? service : provider ? serviceOf(provider) : undefined;
+  const takenKeys = providers.map(p => p.key);
+
+  const [name, setName] = useState(provider?.group ?? (service ? freshName(service, providers) : ''));
+  // Null while the key follows the name; a string once Advanced edited it. Editing, it is the key.
+  const [keyDraft, setKeyDraft] = useState<string | null>(provider?.key ?? null);
+  const [envDraft, setEnvDraft] = useState<string | null>(null);
   const [providerType, setProviderType] = useState<ProviderType>(
-    (provider?.type as ProviderType) ?? initial?.providerType ?? 'openai',
+    (provider?.type as ProviderType | undefined) ?? service?.type ?? 'openai',
   );
-  const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? '');
-  const [group, setGroup] = useState(provider?.group ?? initial?.group ?? '');
+  const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? service?.baseUrl ?? '');
   // On for a new provider: without discovery a fresh entry lists no model, and the default model
   // picker is empty with nothing saying why.
-  const [discover, setDiscover] = useState(provider?.discover ?? mode === 'create');
+  const [discover, setDiscover] = useState(provider?.discover ?? true);
   const [promptCache, setPromptCache] = useState(provider?.promptCache ?? false);
   // `?? true`, not `?? false`: this one is on unless the owner turns it off. The providers that
   // document reasoning replay require it, and an endpoint that returns no reasoning gets none back.
   const [reasoningReplay, setReasoningReplay] = useState(provider?.reasoningReplay ?? true);
-  const [pricingProvider, setPricingProvider] = useState(provider?.pricingProvider ?? '');
+  const [pricingProvider, setPricingProvider] = useState(provider?.pricingProvider ?? service?.pricingProvider ?? '');
   const [fallbackModel, setFallbackModel] = useState(provider?.fallbackModel ?? '');
-  const [apiKeyEnv, setApiKeyEnv] = useState(provider?.keyEnv ?? initial?.apiKeyEnv ?? '');
   const [envValue, setEnvValue] = useState('');
   const [cliVersion, setCliVersion] = useState('');
+  const [advanced, setAdvanced] = useState(false);
   const claim = env?.claudeClaim;
 
-  const envName = apiKeyEnv.trim();
-  const envSet = envNamePresent(env, envName);
-  const envNameValid = envName === '' || ENV_NAME_RE.test(envName);
-  const keyValid = KEY_RE.test(key);
-  const keyTaken = mode === 'create' && takenKeys.includes(key);
+  const key = keyDraft ?? providerKeyFor(name, service?.key ?? 'custom', takenKeys);
   const openai = providerType === 'openai';
-  // An Anthropic provider with a key of its own (the + menu's "Claude API key", or Anthropic-
-  // compatible relays) takes its key from .env like an OpenAI one; the plans sign in instead and
-  // are added from the + menu, not from this form.
-  const keyed = openai || providerType === 'anthropic';
-  const baseUrlValid = !openai || baseUrl.trim() !== '';
-  const canSave = keyValid && !keyTaken && envNameValid && baseUrlValid && !busy;
+  const plan = provider?.account !== undefined;
+  // An Anthropic provider with a key of its own (the Claude API, Anthropic-compatible relays) takes
+  // its key from .env like an OpenAI one; a plan signs in on its own page instead.
+  const keyed = !plan && (openai || providerType === 'anthropic');
+  // A custom provider gets a variable only once a key is given: a local endpoint needs none, and a
+  // variable that holds nothing reads as a missing key.
+  const derivedEnv = keyed && (service || envValue.trim()) ? envNameFor(key, service) : '';
+  const apiKeyEnv = (creating ? envDraft ?? derivedEnv : provider?.keyEnv ?? '').trim();
+  // Editing, the provider's own snapshot says whether its key is there; the variable list may not
+  // have arrived yet, and read as "missing" for a key that is perfectly set.
+  const envSet = creating ? envNamePresent(env, apiKeyEnv) : provider?.keyPresent === true;
 
-  const onSuggestedKey = (value: string): void => {
-    setKey(value);
-    if (mode === 'create' && !apiKeyEnv) setApiKeyEnv(suggestEnvName(value));
-  };
+  const keyValid = KEY_RE.test(key);
+  const keyTaken = (creating || key !== provider?.key) && takenKeys.includes(key);
+  const envNameValid = apiKeyEnv === '' || ENV_NAME_RE.test(apiKeyEnv);
+  const baseUrlValid = !openai || baseUrl.trim() !== '';
+  const nameValid = name.trim() !== '';
+  // A known service is nothing without its key: Add waits for one, unless the variable holds it.
+  const keyGiven = !creating || !service || envSet || envValue.trim() !== '';
+  const advancedValid = keyValid && !keyTaken && envNameValid && (creating && !service ? true : baseUrlValid);
+  const canSave = nameValid && keyGiven && advancedValid && baseUrlValid && !busy;
+
+  const title = creating ? (service ? `Add ${service.label}` : 'Custom provider') : name.trim() || provider?.key || '';
+  const subtitle = creating ? (service ? service.hint : 'any OpenAI-compatible API') : 'provider settings';
+  const models = !creating && provider ? discoveryLine(provider) : null;
 
   return (
     <View style={styles.screen}>
@@ -133,14 +141,14 @@ export function ProviderEditScreen({
           onPress={onBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel={mode === 'create' ? 'Back to models' : 'Back to provider'}>
+          accessibilityLabel={creating ? 'Back to add a provider' : 'Back to provider'}>
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
-          <Text style={styles.title}>{mode === 'create' ? 'New provider' : 'Provider settings'}</Text>
-          <Text style={styles.subtitle}>
-            {mode === 'create' ? 'the service the agent thinks with: pick one, paste its key' : provider?.key ?? ''}
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
           </Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
         <CloseButton />
       </View>
@@ -152,78 +160,23 @@ export function ProviderEditScreen({
       ) : null}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {mode === 'create' ? (
-          <View style={styles.category}>
-            <Text style={styles.section}>start from</Text>
-            <View style={styles.presets}>
-              {PROVIDER_PRESETS.map(preset => (
-                <Pressable
-                  key={preset.key}
-                  onPress={() => {
-                    // A second account of the same service gets its own key and its own variable,
-                    // never the first one's: same name, same key, the first account overwritten.
-                    const free = freeProviderKey(preset.key, takenKeys);
-                    setKey(free);
-                    setProviderType('openai');
-                    setBaseUrl(preset.baseUrl);
-                    setApiKeyEnv(free === preset.key ? preset.apiKeyEnv : suggestEnvName(free));
-                    setDiscover(true);
-                  }}
-                  style={[styles.preset, baseUrl === preset.baseUrl && styles.presetOn]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Preset ${preset.label}`}>
-                  <Text style={styles.presetText}>{preset.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text style={styles.note}>fills the form below: paste the API key and save</Text>
-          </View>
-        ) : null}
         <View style={styles.category}>
-          <Text style={styles.section}>key</Text>
+          <Text style={styles.section}>name</Text>
           <TextInput
             style={styles.input}
-            value={key}
-            onChangeText={onSuggestedKey}
-            placeholder="openrouter"
+            value={name}
+            onChangeText={setName}
+            placeholder={service ? service.name : 'My endpoint'}
             placeholderTextColor={styles.placeholder.color}
             autoCorrect={false}
-            autoCapitalize="none"
-            accessibilityLabel="Provider key"
+            accessibilityLabel="Provider name"
           />
-          {keyTaken ? (
-            <Text style={[styles.note, styles.noteTaken]}>a provider with this key already exists · pick another</Text>
-          ) : (
-            <Text style={styles.note}>
-              {mode === 'create'
-                ? 'lowercase letters, digits and dashes · the model namespace'
-                : 'changing it renames the entry and every reference to it'}
-            </Text>
-          )}
+          <Text style={styles.note}>how it reads in the model picker · two accounts of one service, two names</Text>
         </View>
 
-        <View style={styles.category}>
-          <Text style={styles.section}>engine</Text>
-          <View style={styles.segment}>
-            {(['openai', 'codex', 'anthropic'] as const).map(type => (
-              <Pressable
-                key={type}
-                onPress={() => setProviderType(type)}
-                style={[styles.segmentItem, providerType === type && styles.segmentActive]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: providerType === type }}
-                accessibilityLabel={`Engine ${type}`}>
-                <Text style={providerType === type ? styles.segmentTextActive : styles.segmentText}>
-                  {type}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {openai ? (
+        {creating && !service ? (
           <View style={styles.category}>
-            <Text style={styles.section}>base url</Text>
+            <Text style={styles.section}>address</Text>
             <TextInput
               style={styles.input}
               value={baseUrl}
@@ -232,189 +185,269 @@ export function ProviderEditScreen({
               placeholderTextColor={styles.placeholder.color}
               autoCorrect={false}
               autoCapitalize="none"
+              keyboardType="url"
               accessibilityLabel="Provider base url"
             />
+            <Text style={styles.note}>the OpenAI-compatible base, the one /models and /chat/completions hang off</Text>
           </View>
         ) : null}
 
-        <View style={styles.category}>
-          <Text style={styles.section}>display</Text>
-          <TextInput
-            style={styles.input}
-            value={group}
-            onChangeText={setGroup}
-            placeholder="OpenRouter (the picker group)"
-            placeholderTextColor={styles.placeholder.color}
-            autoCorrect={false}
-            accessibilityLabel="Provider group"
-          />
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>discover models</Text>
-            <Switch
-              value={discover}
-              onValueChange={setDiscover}
-              accessibilityLabel="Provider discover"
-            />
-          </View>
-          {openai ? (
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>prompt caching</Text>
-              <Switch
-                value={promptCache}
-                onValueChange={setPromptCache}
-                accessibilityLabel="Provider prompt cache"
-              />
-            </View>
-          ) : null}
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>reasoning replay</Text>
-            <Switch
-              value={reasoningReplay}
-              onValueChange={setReasoningReplay}
-              accessibilityLabel="Provider reasoning replay"
-            />
-          </View>
-        </View>
-
         {keyed ? (
           <View style={styles.category}>
-            <Text style={styles.section}>environment variable</Text>
-            {mode === 'create' ? (
-              <>
-                <TextInput
-                  style={styles.input}
-                  value={apiKeyEnv}
-                  onChangeText={setApiKeyEnv}
-                  placeholder={suggestEnvName(key || 'provider')}
-                  placeholderTextColor={styles.placeholder.color}
-                  autoCorrect={false}
-                  autoCapitalize="characters"
-                  accessibilityLabel="Provider env name"
-                />
-                {envSet ? (
-                  <Text style={styles.note}>already set on the server · it will be reused, no value needed</Text>
-                ) : envName ? (
-                  <>
-                    <Text style={styles.note}>not set yet · the value below is written to .env on Save</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={envValue}
-                      onChangeText={setEnvValue}
-                      placeholder="the secret value, never shown back"
-                      placeholderTextColor={styles.placeholder.color}
-                      secureTextEntry
-                      autoCorrect={false}
-                      accessibilityLabel="Provider env value"
-                    />
-                  </>
-                ) : (
-                  <Text style={styles.note}>no variable: the provider will have no API key</Text>
-                )}
-              </>
+            <Text style={styles.section}>API key</Text>
+            {!creating && apiKeyEnv ? (
+              <Text style={[styles.note, !envSet && styles.noteTaken]}>
+                {envSet ? 'set on the server · paste a new one below to replace it' : 'missing on the server · paste it below'}
+              </Text>
+            ) : null}
+            {creating || apiKeyEnv ? (
+              <TextInput
+                style={styles.input}
+                value={envValue}
+                onChangeText={setEnvValue}
+                placeholder={!creating && envSet ? 'a new key, to replace the one set' : 'paste the key, never shown back'}
+                placeholderTextColor={styles.placeholder.color}
+                secureTextEntry
+                autoCorrect={false}
+                autoCapitalize="none"
+                accessibilityLabel="Provider API key"
+              />
             ) : (
-              <Pressable
-                onPress={onOpenEnv}
-                style={[styles.linkRow, styles.link]}
-                accessibilityRole="button"
-                accessibilityLabel="Open environment settings">
-                <View style={styles.linkMain}>
-                  <Text style={styles.linkText}>{envName || 'none'}</Text>
-                  {envName ? (
-                    <Text style={styles.note}>
-                      {envSet ? 'set on the server · reused' : 'not set yet · no value on the server'}
-                    </Text>
-                  ) : null}
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
+              <Text style={styles.note}>no key: this provider sends none · a variable can be set in Advanced</Text>
             )}
+            {creating && envSet && apiKeyEnv ? (
+              <Text style={styles.note}>{`a key is already set in ${apiKeyEnv} · leave this empty to use it`}</Text>
+            ) : creating && !service ? (
+              <Text style={styles.note}>optional: a local endpoint may need none</Text>
+            ) : null}
+            {known ? (
+              <Pressable
+                onPress={() => Linking.openURL(known.keyUrl).catch(() => {})}
+                accessibilityRole="link"
+                accessibilityLabel={`Get a key at ${keySite(known)}`}>
+                <Text style={styles.keyLink}>{`Get a key at ${keySite(known)} ↗`}</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : (
-          <Text style={styles.note}>
-            {providerType} keeps its own credentials on the server · no variable to configure
-          </Text>
+          <Text style={styles.note}>signs in on its own page · no key to paste here</Text>
         )}
 
-        <View style={styles.category}>
-          <Text style={styles.section}>advanced</Text>
-          {openai ? (
-            <>
-              <TextInput
-                style={styles.input}
-                value={pricingProvider}
-                onChangeText={setPricingProvider}
-                placeholder="models.dev provider for /status costs (rarely needed)"
-                placeholderTextColor={styles.placeholder.color}
-                autoCorrect={false}
-                accessibilityLabel="Provider pricing provider"
-              />
-              <TextInput
-                style={styles.input}
-                value={fallbackModel}
-                onChangeText={setFallbackModel}
-                placeholder="fallback model id (codex and anthropic only)"
-                placeholderTextColor={styles.placeholder.color}
-                autoCorrect={false}
-                accessibilityLabel="Provider fallback model"
-              />
-            </>
-          ) : providerType === 'anthropic' ? (
-            <TextInput
-              style={styles.input}
-              value={fallbackModel}
-              onChangeText={setFallbackModel}
-              placeholder="fallback model id when the primary errors out"
-              placeholderTextColor={styles.placeholder.color}
-              autoCorrect={false}
-              accessibilityLabel="Provider fallback model"
-            />
-          ) : null}
-        </View>
+        {models ? (
+          <View style={styles.category}>
+            <Text style={styles.section}>models</Text>
+            <Text style={[styles.status, models.failed && styles.statusFailed]} accessibilityLabel={`Provider models ${models.text}`}>
+              {models.text}
+            </Text>
+          </View>
+        ) : null}
 
-        {providerType === 'anthropic' ? (
-          <View style={styles.envCard}>
-            <Text style={styles.envTitle}>Claude Code version</Text>
-            <Text style={styles.note}>
-              {claim
-                ? claim.overridden
-                  ? `claims ${claim.version} · overridden in .env (the captured client claims ${claim.pinned})`
-                  : `claims ${claim.version} · the captured client, no override`
-                : 'the version subscription requests claim in their headers. Anthropic gates a new model on it.'}
-            </Text>
-            <Text style={styles.note}>
-              Stored in ~/.my-claw/.env as ANTHROPIC_CLI_VERSION. Applies on the next request of a run in flight: no restart, no end of run.
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={cliVersion}
-              onChangeText={setCliVersion}
-              placeholder={claim ? `pinned: ${claim.pinned}` : '2.1.280'}
-              placeholderTextColor={styles.placeholder.color}
-              autoCapitalize="none"
-              autoCorrect={false}
-              accessibilityLabel="Claude Code version"
-            />
-            <Pressable
-              onPress={() => {
-                const value = cliVersion.trim();
-                if (!value) return;
-                onEnvSet('ANTHROPIC_CLI_VERSION', value);
-                setCliVersion('');
-              }}
-              style={[styles.saveButton, cliVersion.trim() ? styles.saveEnabled : styles.saveDisabled]}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !cliVersion.trim() }}
-              accessibilityLabel="Save Claude Code version">
-              <Text style={cliVersion.trim() ? styles.saveText : styles.saveTextOff}>Set version</Text>
-            </Pressable>
-            {claim?.overridden ? (
-              <Pressable
-                onPress={() => onEnvRemove('ANTHROPIC_CLI_VERSION')}
-                style={styles.dangerRow}
-                accessibilityRole="button"
-                accessibilityLabel="Use the pinned Claude Code version">
-                <Text style={styles.dangerText}>Use the pinned version</Text>
-              </Pressable>
+        <Pressable
+          onPress={() => setAdvanced(open => !open)}
+          style={styles.advancedToggle}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: advanced }}
+          accessibilityLabel="Advanced settings">
+          <Text style={styles.advancedText}>advanced</Text>
+          <Text style={styles.chevron}>{advanced ? '⌄' : '›'}</Text>
+        </Pressable>
+        {!advanced && !advancedValid ? (
+          <Text style={[styles.note, styles.noteTaken]}>a setting in Advanced needs attention</Text>
+        ) : null}
+
+        {advanced ? (
+          <View style={styles.advancedBody}>
+            <View style={styles.category}>
+              <Text style={styles.section}>key</Text>
+              <TextInput
+                style={styles.input}
+                value={key}
+                onChangeText={setKeyDraft}
+                placeholder="openrouter"
+                placeholderTextColor={styles.placeholder.color}
+                autoCorrect={false}
+                autoCapitalize="none"
+                accessibilityLabel="Provider key"
+              />
+              {keyTaken ? (
+                <Text style={[styles.note, styles.noteTaken]}>a provider with this key already exists · pick another</Text>
+              ) : !keyValid ? (
+                <Text style={[styles.note, styles.noteTaken]}>lowercase letters, digits, dashes and underscores only</Text>
+              ) : (
+                <Text style={styles.note}>
+                  {creating
+                    ? 'the model namespace: models read key/model · follows the name until edited here'
+                    : 'changing it renames the entry and every reference to it'}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.category}>
+              <Text style={styles.section}>engine</Text>
+              <View style={styles.segment}>
+                {(['openai', 'codex', 'anthropic'] as const).map(type => (
+                  <Pressable
+                    key={type}
+                    onPress={() => setProviderType(type)}
+                    style={[styles.segmentItem, providerType === type && styles.segmentActive]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: providerType === type }}
+                    accessibilityLabel={`Engine ${type}`}>
+                    <Text style={providerType === type ? styles.segmentTextActive : styles.segmentText}>{type}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {(openai || (providerType === 'anthropic' && !plan)) && !(creating && !service) ? (
+              <View style={styles.category}>
+                <Text style={styles.section}>base url</Text>
+                <TextInput
+                  style={styles.input}
+                  value={baseUrl}
+                  onChangeText={setBaseUrl}
+                  placeholder={openai ? 'https://api.example.com/v1' : 'api.anthropic.com when empty'}
+                  placeholderTextColor={styles.placeholder.color}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  accessibilityLabel="Provider base url"
+                />
+                {openai && !baseUrlValid ? <Text style={[styles.note, styles.noteTaken]}>an OpenAI-compatible provider needs its address</Text> : null}
+              </View>
+            ) : null}
+
+            {keyed ? (
+              <View style={styles.category}>
+                <Text style={styles.section}>environment variable</Text>
+                {creating ? (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      value={apiKeyEnv}
+                      onChangeText={setEnvDraft}
+                      placeholder={envNameFor(key, service)}
+                      placeholderTextColor={styles.placeholder.color}
+                      autoCorrect={false}
+                      autoCapitalize="characters"
+                      accessibilityLabel="Provider env name"
+                    />
+                    <Text style={[styles.note, !envNameValid && styles.noteTaken]}>
+                      {envNameValid
+                        ? 'the ~/.my-claw/.env line the key is written to · empty sends no key'
+                        : 'letters, digits and underscores, not starting with a digit'}
+                    </Text>
+                  </>
+                ) : (
+                  <Pressable
+                    onPress={onOpenEnv}
+                    style={[styles.linkRow, styles.link]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open environment settings">
+                    <View style={styles.linkMain}>
+                      <Text style={styles.linkText}>{apiKeyEnv || 'none'}</Text>
+                      <Text style={styles.note}>rename the variable, or read the key from another one</Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : null}
+
+            <View style={styles.category}>
+              <Text style={styles.section}>behaviour</Text>
+              <View style={styles.switchRow}>
+                <Text style={styles.switchLabel}>discover models</Text>
+                <Switch value={discover} onValueChange={setDiscover} accessibilityLabel="Provider discover" />
+              </View>
+              {openai ? (
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>prompt caching</Text>
+                  <Switch value={promptCache} onValueChange={setPromptCache} accessibilityLabel="Provider prompt cache" />
+                </View>
+              ) : null}
+              <View style={styles.switchRow}>
+                <Text style={styles.switchLabel}>reasoning replay</Text>
+                <Switch value={reasoningReplay} onValueChange={setReasoningReplay} accessibilityLabel="Provider reasoning replay" />
+              </View>
+            </View>
+
+            {openai ? (
+              <View style={styles.category}>
+                <Text style={styles.section}>pricing</Text>
+                <TextInput
+                  style={styles.input}
+                  value={pricingProvider}
+                  onChangeText={setPricingProvider}
+                  placeholder="models.dev provider that prices it"
+                  placeholderTextColor={styles.placeholder.color}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  accessibilityLabel="Provider pricing provider"
+                />
+              </View>
+            ) : (
+              <View style={styles.category}>
+                <Text style={styles.section}>fallback model</Text>
+                <TextInput
+                  style={styles.input}
+                  value={fallbackModel}
+                  onChangeText={setFallbackModel}
+                  placeholder="model id used when the primary errors out"
+                  placeholderTextColor={styles.placeholder.color}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  accessibilityLabel="Provider fallback model"
+                />
+              </View>
+            )}
+
+            {providerType === 'anthropic' ? (
+              <View style={styles.envCard}>
+                <Text style={styles.envTitle}>Claude Code version</Text>
+                <Text style={styles.note}>
+                  {claim
+                    ? claim.overridden
+                      ? `claims ${claim.version} · overridden in .env (the captured client claims ${claim.pinned})`
+                      : `claims ${claim.version} · the captured client, no override`
+                    : 'the version subscription requests claim in their headers. Anthropic gates a new model on it.'}
+                </Text>
+                <Text style={styles.note}>
+                  Stored in ~/.my-claw/.env as ANTHROPIC_CLI_VERSION. Applies on the next request of a run in flight: no restart, no end of run.
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={cliVersion}
+                  onChangeText={setCliVersion}
+                  placeholder={claim ? `pinned: ${claim.pinned}` : '2.1.280'}
+                  placeholderTextColor={styles.placeholder.color}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel="Claude Code version"
+                />
+                <Pressable
+                  onPress={() => {
+                    const value = cliVersion.trim();
+                    if (!value) return;
+                    onEnvSet('ANTHROPIC_CLI_VERSION', value);
+                    setCliVersion('');
+                  }}
+                  style={[styles.saveButton, cliVersion.trim() ? styles.saveEnabled : styles.saveDisabled]}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !cliVersion.trim() }}
+                  accessibilityLabel="Save Claude Code version">
+                  <Text style={cliVersion.trim() ? styles.saveText : styles.saveTextOff}>Set version</Text>
+                </Pressable>
+                {claim?.overridden ? (
+                  <Pressable
+                    onPress={() => onEnvRemove('ANTHROPIC_CLI_VERSION')}
+                    style={styles.dangerRow}
+                    accessibilityRole="button"
+                    accessibilityLabel="Use the pinned Claude Code version">
+                    <Text style={styles.dangerText}>Use the pinned version</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
           </View>
         ) : null}
@@ -425,13 +458,13 @@ export function ProviderEditScreen({
               key: key.trim(),
               providerType,
               baseUrl: baseUrl.trim(),
-              group: group.trim(),
+              group: name.trim(),
               discover,
               promptCache,
               reasoningReplay,
               pricingProvider: pricingProvider.trim(),
               fallbackModel: fallbackModel.trim(),
-              apiKeyEnv: envName,
+              apiKeyEnv,
               envValue: envValue.trim(),
             })
           }
@@ -439,18 +472,12 @@ export function ProviderEditScreen({
           style={[styles.saveButton, canSave ? styles.saveEnabled : styles.saveDisabled]}
           accessibilityRole="button"
           accessibilityState={{ disabled: !canSave }}
-          accessibilityLabel={mode === 'create' ? 'Create provider' : 'Save provider'}>
-          <Text style={canSave ? styles.saveText : styles.saveTextOff}>
-            {busy ? '...' : mode === 'create' ? 'Create' : 'Save'}
-          </Text>
+          accessibilityLabel={creating ? 'Create provider' : 'Save provider'}>
+          <Text style={canSave ? styles.saveText : styles.saveTextOff}>{busy ? '...' : creating ? 'Add' : 'Save'}</Text>
         </Pressable>
 
-        {mode === 'edit' && provider ? (
-          <Pressable
-            onPress={onDelete}
-            style={styles.dangerRow}
-            accessibilityRole="button"
-            accessibilityLabel="Delete provider">
+        {!creating && provider ? (
+          <Pressable onPress={onDelete} style={styles.dangerRow} accessibilityRole="button" accessibilityLabel="Delete provider">
             <Text style={styles.dangerText}>Delete provider</Text>
           </Pressable>
         ) : null}
@@ -511,6 +538,25 @@ const createStyles = (palette: Palette) => ({
   },
   note: { fontSize: font.micro, color: palette.textFaint },
   noteTaken: { color: palette.danger },
+  keyLink: { fontSize: font.small, color: palette.accent, fontWeight: '600' as const, paddingVertical: space.xs },
+  status: { fontSize: font.body, color: palette.text },
+  statusFailed: { color: palette.danger },
+  advancedToggle: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    minHeight: 44,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: space.sm,
+  },
+  advancedText: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
+  advancedBody: { gap: space.lg },
   segment: {
     flexDirection: 'row' as const,
     borderRadius: radius.md,
@@ -524,17 +570,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
   },
   segmentActive: { backgroundColor: palette.surfaceAlt },
-  presets: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.sm },
-  preset: {
-    minHeight: 40,
-    justifyContent: 'center' as const,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  presetOn: { borderColor: palette.accent, backgroundColor: palette.accentSoft },
-  presetText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   segmentText: { fontSize: font.meta, color: palette.textMuted },
   segmentTextActive: { fontSize: font.meta, color: palette.text, fontWeight: '600' as const },
   switchRow: {

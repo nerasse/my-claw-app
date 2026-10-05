@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { AgentsConfigResultFrame, ProviderInfo } from '../core/protocol';
 import { useModelCatalog, useModelIndex } from '../core/model';
+import { discoveryLine } from '../core/providerServices';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
@@ -274,15 +275,22 @@ export function ModelsScreen({
                     <Text style={styles.badge}>{provider.type}</Text>
                     {provider.discover ? <Text style={styles.badge}>discovery</Text> : null}
                   </View>
-                  <Text style={styles.hint} numberOfLines={1}>
-                    {`${provider.group ? `${provider.key} · ` : ''}${provider.models} model${
-                      provider.models === 1 ? '' : 's'
-                    }${
-                      provider.keyEnv
-                        ? ` · key ${provider.keyPresent ? 'set' : 'missing'} (${provider.keyEnv})`
-                        : ' · no key needed'
-                    }`}
-                  </Text>
+                  {/* A refused key is said here too: "0 models · key set" read as fine. */}
+                  {provider.discovery?.state === 'failed' ? (
+                    <Text style={[styles.hint, styles.hintFailed]} numberOfLines={1}>
+                      {`${provider.group ? `${provider.key} · ` : ''}${discoveryLine(provider).text}`}
+                    </Text>
+                  ) : (
+                    <Text style={styles.hint} numberOfLines={1}>
+                      {`${provider.group ? `${provider.key} · ` : ''}${provider.models} model${
+                        provider.models === 1 ? '' : 's'
+                      }${
+                        provider.keyEnv
+                          ? ` · key ${provider.keyPresent ? 'set' : 'missing'} (${provider.keyEnv})`
+                          : ' · no key needed'
+                      }`}
+                    </Text>
+                  )}
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
               </Pressable>
@@ -373,6 +381,7 @@ const createStyles = (palette: Palette) => ({
   linkTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   linkGlyph: { fontSize: 20, color: palette.textFaint },
   hint: { fontSize: font.small, color: palette.textMuted },
+  hintFailed: { color: palette.danger },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
   badge: {
     fontSize: font.micro,

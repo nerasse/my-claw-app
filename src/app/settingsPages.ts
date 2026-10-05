@@ -20,6 +20,7 @@ export type SettingsPage =
   | 'agents'
   | 'agent'
   | 'provider'
+  | 'provider-add'
   | 'provider-edit'
   | 'provider-env'
   | 'account'
@@ -69,6 +70,7 @@ export const PARENT: Partial<Record<SettingsPage, SettingsPage>> = {
   diagnostics: 'advanced',
   config: 'advanced',
   tags: 'models',
+  'provider-add': 'models',
   account: 'models',
   agent: 'agents',
   newagent: 'agents',
@@ -104,6 +106,7 @@ export const AGENTS_CONFIG_PAGES: readonly string[] = [
   // The models page opens on the defaults, from the same snapshot.
   'models',
   'provider',
+  'provider-add',
   'provider-edit',
   'provider-env',
 ];

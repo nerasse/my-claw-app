@@ -54,15 +54,6 @@ function typeInto(tree: Tree, label: string, text: string): Promise<void> {
   });
 }
 
-function setSwitch(tree: Tree, label: string, value: boolean): Promise<void> {
-  return ReactTestRenderer.act(async () => {
-    const sw = tree.root.find(
-      node => node.props.accessibilityLabel === label && typeof node.props.onValueChange === 'function',
-    );
-    sw.props.onValueChange(value);
-  });
-}
-
 async function settleAndUnmount(tree: Tree): Promise<void> {
   await ReactTestRenderer.act(async () => {
     await new Promise<void>(resolve => setTimeout(resolve, 60));
@@ -175,115 +166,136 @@ test('the provider pages ask for the snapshot themselves, with no detour through
   await settleAndUnmount(tree);
 });
 
-test('creating a provider writes the env value in the same save and returns to the list', async () => {
+/** Opens the + page, then one of its rows: a plan, a service or Custom. */
+async function addFrom(tree: Tree, row: string): Promise<void> {
+  await pressLabel(tree, 'New provider');
+  await waitFor(() => labelsOf(tree).includes('Custom'));
+  await pressLabel(tree, row);
+  await waitFor(() => labelsOf(tree).includes('Create provider'));
+}
+
+const field = (tree: Tree, label: string) =>
+  tree.root.find(node => node.props.accessibilityLabel === label && typeof node.props.onChangeText === 'function').props.value;
+
+const saveState = (tree: Tree) =>
+  tree.root.find(node => node.props.accessibilityLabel === 'Create provider' && node.props.accessibilityState).props.accessibilityState;
+
+test('a known service is a name and a key: the key is written first, then its page asks for the models', async () => {
   const tree = await bootToProviders();
   await emit(envResult({ names: ['LITELLM_API_KEY'], present: ['LITELLM_API_KEY'] }));
+  await addFrom(tree, 'Groq');
 
-  await pressLabel(tree, 'New provider');
-  // The + offers the plans first; the form is "Custom".
-  await pressLabel(tree, 'Custom');
-  await waitFor(() => labelsOf(tree).includes('Create provider'));
+  // Named for the service, nothing technical on show, and Add waits for the key.
+  expect(field(tree, 'Provider name')).toBe('Groq');
+  expect(labelsOf(tree)).not.toContain('Provider base url');
+  expect(labelsOf(tree)).not.toContain('Provider key');
+  expect(labelsOf(tree)).toContain('Get a key at console.groq.com');
+  expect(saveState(tree)).toEqual({ disabled: true });
 
-  await typeInto(tree, 'Provider key', 'groq');
-  // The suggested env name is not set anywhere on the server: the value field appears so the
-  // same Save can store it.
-  await waitFor(() => labelsOf(tree).includes('Provider env value'));
-  await typeInto(tree, 'Provider base url', 'https://api.groq.com/openai/v1');
-  await typeInto(tree, 'Provider env value', 'sk-groq-secret');
-  await setSwitch(tree, 'Provider discover', true);
+  await typeInto(tree, 'Provider API key', 'sk-groq-secret');
+  bridge.sendMessage.mockClear();
   await pressLabel(tree, 'Create provider');
-
-  await waitFor(
-    () =>
-      sentFrames().some(
-        f =>
-          f.type === 'providers.upsert' &&
-          f.key === 'groq' &&
-          f.baseUrl === 'https://api.groq.com/openai/v1' &&
-          f.apiKeyEnv === 'GROQ_API_KEY' &&
-          f.discover === true,
-      ),
-    60,
+  await waitFor(() => sentFrames().some(f => f.type === 'providers.upsert'), 60);
+  const frames = sentFrames().filter(f => f.type === 'providers.upsert' || f.type === 'providers.env.set');
+  // The key before the declaration: the discovery the declaration starts finds it already there.
+  expect(frames.map(f => f.type)).toEqual(['providers.env.set', 'providers.upsert']);
+  expect(frames[0]).toEqual(expect.objectContaining({ name: 'GROQ_API_KEY', value: 'sk-groq-secret' }));
+  expect(frames[1]).toEqual(
+    expect.objectContaining({
+      key: 'groq',
+      group: 'Groq',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      apiKeyEnv: 'GROQ_API_KEY',
+      pricingProvider: 'groq',
+      discover: true,
+    }),
   );
-  expect(sentFrames()).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ type: 'providers.env.set', name: 'GROQ_API_KEY', value: 'sk-groq-secret' }),
-    ]),
-  );
-  // Back on the list, where the new row shows after the server answers.
-  await waitFor(() => labelsOf(tree).includes('New provider'), 60);
-  expect(labelsOf(tree)).toContain('Open provider litellm');
 
-  await settleAndUnmount(tree);
-});
-
-test('a name already set on the server is reused: no value field, no env.set frame', async () => {
-  const tree = await bootToProviders();
-  await emit(envResult());
-
-  await pressLabel(tree, 'New provider');
-  // The + offers the plans first; the form is "Custom".
-  await pressLabel(tree, 'Custom');
-  await waitFor(() => labelsOf(tree).includes('Create provider'));
-  // "groq" suggests GROQ_API_KEY, which IS present on the server: reused, no value asked.
-  await typeInto(tree, 'Provider key', 'groq');
-  await waitFor(() => labelsOf(tree).includes('Provider env value'), 30).catch(() => {});
-  expect(labelsOf(tree)).not.toContain('Provider env value');
-  expect(textsOf(tree)).toEqual(
-    expect.arrayContaining(['already set on the server · it will be reused, no value needed']),
-  );
-  await typeInto(tree, 'Provider base url', 'https://api.groq.com/openai/v1');
-  await pressLabel(tree, 'Create provider');
-
-  await waitFor(
-    () => sentFrames().some(f => f.type === 'providers.upsert' && f.apiKeyEnv === 'GROQ_API_KEY'),
-    60,
-  );
-  expect(sentFrames().some(f => f.type === 'providers.env.set')).toBe(false);
-
-  await settleAndUnmount(tree);
-});
-
-test('a second account of a service: the preset numbers its key and its variable, a taken key cannot be saved', async () => {
-  const tree = await bootToProviders();
-  await emit(envResult());
-  await pressLabel(tree, 'New provider');
-  await pressLabel(tree, 'Custom');
-  await waitFor(() => labelsOf(tree).includes('Create provider'));
-  const field = (label: string) =>
-    tree.root.find(node => node.props.accessibilityLabel === label && typeof node.props.onChangeText === 'function').props.value;
-
-  // A first OpenRouter account takes the preset as it is.
-  await pressLabel(tree, 'Preset OpenRouter');
-  expect(field('Provider key')).toBe('openrouter');
-  expect(field('Provider env name')).toBe('OPENROUTER_API_KEY');
-
-  // "litellm" is declared: saving it from here would overwrite that provider.
-  await typeInto(tree, 'Provider key', 'litellm');
-  expect(textsOf(tree)).toContain('a provider with this key already exists · pick another');
-  const save = () => tree.root.find(node => node.props.accessibilityLabel === 'Create provider' && node.props.accessibilityState);
-  expect(save().props.accessibilityState).toEqual({ disabled: true });
-  await typeInto(tree, 'Provider key', 'openrouter');
-  expect(save().props.accessibilityState).toEqual({ disabled: false });
-  await settleAndUnmount(tree);
-
-  // With an OpenRouter account there, the preset is a second one: its own key, its own variable,
-  // so its key is asked for instead of reusing the first account's.
-  const second = await bootToProviders();
+  // Its page opens at once, saying the models are being asked for, before the server answers.
+  await waitFor(() => textsOf(tree).includes('asking the provider for its models…'), 60);
+  const groq = { key: 'groq', type: 'openai', group: 'Groq', discover: true, baseUrl: 'https://api.groq.com/openai/v1', keyEnv: 'GROQ_API_KEY', keyPresent: true };
   const config = providersConfig() as { providers: Array<Record<string, unknown>> };
-  config.providers.push({ key: 'openrouter', type: 'openai', discover: true, models: 3, baseUrl: 'https://openrouter.ai/api/v1', keyEnv: 'OPENROUTER_API_KEY', keyPresent: true });
+  await emit({ ...config, providers: [...config.providers, { ...groq, models: 0, discovery: { state: 'failed', error: 'HTTP 401' } }] });
+  await waitFor(() => textsOf(tree).includes('the key was refused: paste it again (HTTP 401)'), 60);
+  // Answered: the line goes, the models it listed are the page (their count is in the header).
+  await emit({ ...config, providers: [...config.providers, { ...groq, models: 12, discovery: { state: 'ok' } }] });
+  await waitFor(() => !textsOf(tree).some(text => text.startsWith('the key was refused')), 60);
+  expect(textsOf(tree)).not.toContain('asking the provider for its models…');
+
+  await settleAndUnmount(tree);
+});
+
+test('a key already held by the variable is used as it is: no value asked, no env.set frame', async () => {
+  const tree = await bootToProviders();
+  await emit(envResult());
+  await addFrom(tree, 'Groq');
+  // GROQ_API_KEY is present on the server (the voice reads it too): Add needs nothing more.
+  expect(textsOf(tree)).toContain('a key is already set in GROQ_API_KEY · leave this empty to use it');
+  expect(saveState(tree)).toEqual({ disabled: false });
+  bridge.sendMessage.mockClear();
+  await pressLabel(tree, 'Create provider');
+  await waitFor(() => sentFrames().some(f => f.type === 'providers.upsert' && f.apiKeyEnv === 'GROQ_API_KEY'), 60);
+  expect(sentFrames().some(f => f.type === 'providers.env.set')).toBe(false);
+  await settleAndUnmount(tree);
+});
+
+test('a second account of a service gets its own name, key and variable, and a taken key cannot be saved', async () => {
+  const tree = await bootToProviders();
+  const config = providersConfig() as { providers: Array<Record<string, unknown>> };
+  config.providers.push({ key: 'openrouter', type: 'openai', group: 'OpenRouter', discover: true, models: 3, baseUrl: 'https://openrouter.ai/api/v1', keyEnv: 'OPENROUTER_API_KEY', keyPresent: true });
   await emit(config);
   await emit(envResult({ names: ['LITELLM_API_KEY', 'OPENROUTER_API_KEY'], present: ['LITELLM_API_KEY', 'OPENROUTER_API_KEY'] }));
-  await pressLabel(second, 'New provider');
-  await pressLabel(second, 'Custom');
-  await waitFor(() => labelsOf(second).includes('Create provider'));
-  await pressLabel(second, 'Preset OpenRouter');
-  const field2 = (label: string) =>
-    second.root.find(node => node.props.accessibilityLabel === label && typeof node.props.onChangeText === 'function').props.value;
-  expect(field2('Provider key')).toBe('openrouter2');
-  expect(field2('Provider env name')).toBe('OPENROUTER2_API_KEY');
-  await waitFor(() => labelsOf(second).includes('Provider env value'));
-  await settleAndUnmount(second);
+  await addFrom(tree, 'OpenRouter');
+
+  // Numbered, never the first account's name, key or variable: its own key is asked for.
+  expect(field(tree, 'Provider name')).toBe('OpenRouter 2');
+  await pressLabel(tree, 'Advanced settings');
+  expect(field(tree, 'Provider key')).toBe('openrouter-2');
+  expect(field(tree, 'Provider env name')).toBe('OPENROUTER_2_API_KEY');
+
+  // The name the owner gives it is what the key and the variable follow.
+  await typeInto(tree, 'Provider name', 'OpenRouter boulot');
+  expect(field(tree, 'Provider key')).toBe('openrouter-boulot');
+  expect(field(tree, 'Provider env name')).toBe('OPENROUTER_BOULOT_API_KEY');
+  await typeInto(tree, 'Provider API key', 'sk-or-boulot');
+  expect(saveState(tree)).toEqual({ disabled: false });
+
+  // A key edited onto a declared provider would overwrite it: refused before it can be sent.
+  await typeInto(tree, 'Provider key', 'litellm');
+  expect(textsOf(tree)).toContain('a provider with this key already exists · pick another');
+  expect(saveState(tree)).toEqual({ disabled: true });
+  await typeInto(tree, 'Provider key', 'or-work');
+  bridge.sendMessage.mockClear();
+  await pressLabel(tree, 'Create provider');
+  await waitFor(() => sentFrames().some(f => f.type === 'providers.upsert'), 60);
+  // Edited by hand, the key stops following the name; the variable follows the key.
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'providers.env.set', name: 'OR_WORK_API_KEY', value: 'sk-or-boulot' }),
+      expect.objectContaining({ type: 'providers.upsert', key: 'or-work', group: 'OpenRouter boulot', apiKeyEnv: 'OR_WORK_API_KEY' }),
+    ]),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('Custom asks for an address, and a local endpoint needs no key and gets no variable', async () => {
+  const tree = await bootToProviders();
+  await emit(envResult());
+  await addFrom(tree, 'Custom');
+  expect(saveState(tree)).toEqual({ disabled: true });
+  await typeInto(tree, 'Provider name', 'Local vLLM');
+  await typeInto(tree, 'Provider base url', 'http://10.0.0.5:8000/v1');
+  expect(saveState(tree)).toEqual({ disabled: false });
+  bridge.sendMessage.mockClear();
+  await pressLabel(tree, 'Create provider');
+  await waitFor(() => sentFrames().some(f => f.type === 'providers.upsert'), 60);
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'providers.upsert', key: 'local-vllm', baseUrl: 'http://10.0.0.5:8000/v1', apiKeyEnv: '' }),
+    ]),
+  );
+  expect(sentFrames().some(f => f.type === 'providers.env.set')).toBe(false);
+  await settleAndUnmount(tree);
 });
 
 test('the edit form sends the changed fields and a rename when the key changes', async () => {
@@ -294,10 +306,15 @@ test('the edit form sends the changed fields and a rename when the key changes',
   await pressLabel(tree, 'Edit provider');
   await waitFor(() => labelsOf(tree).includes('Save provider'));
 
-  // The form is seeded from the snapshot.
-  expect(labelsOf(tree)).toContain('Provider key');
+  // The form is seeded from the snapshot: its name, its key's state, its models. The key is in
+  // Advanced, like everything technical.
+  expect(field(tree, 'Provider name')).toBe('');
+  expect(textsOf(tree)).toContain('set on the server · paste a new one below to replace it');
+  expect(textsOf(tree)).toContain('2 models found');
+  expect(labelsOf(tree)).not.toContain('Provider key');
+  await typeInto(tree, 'Provider name', 'LiteLLM');
+  await pressLabel(tree, 'Advanced settings');
   await typeInto(tree, 'Provider key', 'llm-gateway');
-  await typeInto(tree, 'Provider group', 'LiteLLM');
 
   const before = sentFrames().length;
   await pressLabel(tree, 'Save provider');
@@ -340,6 +357,9 @@ test('the env page renames the variable and binds the provider onto another', as
   await pressLabel(tree, 'Open provider litellm');
   await waitFor(() => labelsOf(tree).includes('Edit provider'));
   await pressLabel(tree, 'Edit provider');
+  // Everything past the name and the key is folded under Advanced.
+  await waitFor(() => labelsOf(tree).includes('Advanced settings'));
+  await pressLabel(tree, 'Advanced settings');
   await waitFor(() => labelsOf(tree).includes('Open environment settings'));
   await pressLabel(tree, 'Open environment settings');
   await waitFor(() => labelsOf(tree).includes('Rename the variable'));
@@ -421,6 +441,9 @@ test('back walks env, edit, models, list, index, chat', async () => {
   await pressLabel(tree, 'Open provider litellm');
   await waitFor(() => labelsOf(tree).includes('Edit provider'));
   await pressLabel(tree, 'Edit provider');
+  // Everything past the name and the key is folded under Advanced.
+  await waitFor(() => labelsOf(tree).includes('Advanced settings'));
+  await pressLabel(tree, 'Advanced settings');
   await waitFor(() => labelsOf(tree).includes('Open environment settings'));
   await pressLabel(tree, 'Open environment settings');
   await waitFor(() => labelsOf(tree).includes('Rename the variable'));
@@ -606,6 +629,9 @@ test('the anthropic provider page steers the claimed client version through .env
   await pressLabel(tree, 'Open provider claude');
   await waitFor(() => labelsOf(tree).includes('Edit provider'));
   await pressLabel(tree, 'Edit provider');
+  // Everything past the name and the key is folded under Advanced.
+  await waitFor(() => labelsOf(tree).includes('Advanced settings'));
+  await pressLabel(tree, 'Advanced settings');
   await waitFor(() => labelsOf(tree).includes('Claude Code version'));
 
   // The claim is on screen, and says it is the captured client while nothing is steering.
@@ -643,5 +669,33 @@ test('a provider that is not anthropic gets no version card', async () => {
   await waitFor(() => labelsOf(tree).includes('Save provider'));
   expect(labelsOf(tree)).not.toContain('Claude Code version');
 
+  await settleAndUnmount(tree);
+});
+
+test('back walks the add form, the + page, then the list', async () => {
+  const tree = await bootToProviders();
+  await emit(envResult());
+  await addFrom(tree, 'OpenRouter');
+  expect(await hardwareBack()).toBe(true);
+  // The form goes back to the + page it was picked from, not past it.
+  await waitFor(() => labelsOf(tree).includes('Custom'));
+  expect(labelsOf(tree)).not.toContain('Create provider');
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+  // The page's own arrow says where it goes.
+  await pressLabel(tree, 'New provider');
+  await waitFor(() => labelsOf(tree).includes('Back to models'));
+  await pressLabel(tree, 'Back to models');
+  await waitFor(() => labelsOf(tree).includes('Open provider litellm'));
+  await settleAndUnmount(tree);
+});
+
+test('a provider whose key was refused says so on the list, not "key set"', async () => {
+  const tree = await bootToProviders();
+  const config = providersConfig() as { providers: Array<Record<string, unknown>> };
+  config.providers[0] = { ...config.providers[0]!, models: 0, discovery: { state: 'failed', error: 'HTTP 401' } };
+  await emit(config);
+  await waitFor(() => textsOf(tree).includes('litellm · the key was refused: paste it again (HTTP 401)') || textsOf(tree).includes('the key was refused: paste it again (HTTP 401)'), 60);
+  expect(textsOf(tree).some(text => text.includes('key set (LITELLM_API_KEY)'))).toBe(false);
   await settleAndUnmount(tree);
 });

@@ -544,7 +544,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
       return true;
     }
     if (settingsPage === 'provider-edit') {
-      if (providerEdit?.mode === 'create') setSettingsPage('models');
+      if (providerEdit?.mode === 'create') setSettingsPage('provider-add');
       else setSettingsPage('provider');
       setProviderEdit(null);
       return true;

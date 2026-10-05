@@ -112,6 +112,7 @@ import {
   MAX_TITLE_LENGTH,
   type AgentFileFieldsOut,
   type ApprovalRequestFrame,
+  type ProviderInfo,
   type ApprovalHistoryResultFrame,
   type FileScopeMode,
   type FolderSummary,
@@ -209,7 +210,9 @@ import { ModelsScreen } from './ModelsScreen';
 import { useAccounts } from '../core/accounts';
 import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ModelEditScreen } from './ModelEditScreen';
-import { freeProviderKey, ProviderEditScreen, suggestEnvName } from './ProviderEditScreen';
+import { ProviderEditScreen, type ProviderPatch } from './ProviderEditScreen';
+import { ProviderAddScreen } from './ProviderAddScreen';
+import type { ProviderService } from '../core/providerServices';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
@@ -471,16 +474,16 @@ export function AppShell(): React.JSX.Element {
   const [setupFrom, setSetupFrom] = useState<'index' | 'advanced'>('index');
   // The subscription the account page shows (docs: subscription-accounts in the server repo).
   const [selectedAccount, setSelectedAccount] = useState<{ provider: string; kind: AccountKind }>({ provider: 'chatgpt', kind: 'codex' });
-  // The + of the providers: a plan to sign in, a Claude key, or the custom form.
-  const [providerAddMenu, setProviderAddMenu] = useState(false);
   const [accountPrompt, setAccountPrompt] = useState<
     { mode: 'add'; kind: AccountKind } | { mode: 'rename'; provider: string; current: string } | null
   >(null);
   // The account this window asked for: only it opens the page once the server has declared it.
   const pendingAccount = useRef<AccountKind | null>(null);
-  const [providerInitial, setProviderInitial] = useState<
-    { key: string; providerType: 'anthropic'; apiKeyEnv: string; group: string } | undefined
-  >(undefined);
+  // The service the provider form adds, chosen on the + page; absent for Custom.
+  const [providerService, setProviderService] = useState<ProviderService | undefined>(undefined);
+  // The provider just added, drawn on its page until the server's snapshot carries it: the page
+  // opens at once on "asking for its models" rather than flashing the list in between.
+  const [addedProvider, setAddedProvider] = useState<ProviderInfo | null>(null);
   // The provider page is reached from the list, or from a plan's page: Back returns there.
   const [providerFrom, setProviderFrom] = useState<'models' | 'account'>('models');
   const accountsFrame = useAccounts().frame;
@@ -2957,7 +2960,8 @@ export function AppShell(): React.JSX.Element {
   }, [title, unread.length]);
   const selectedAgentInfo = agentsConfig?.agents.find(agent => agent.key === selectedAgent) ?? null;
   const selectedProviderInfo =
-    agentsConfig?.providers.find(provider => provider.key === selectedProvider) ?? null;
+    agentsConfig?.providers.find(provider => provider.key === selectedProvider) ??
+    (addedProvider?.key === selectedProvider ? addedProvider : null);
   // Same grouping rule as the server's provider count: a model with no provider of its own
   // follows the global default provider.
   // Memoized because a discovering provider floods this with hundreds of models, and the array
@@ -3326,7 +3330,7 @@ export function AppShell(): React.JSX.Element {
       onSetRetry={enabled => connection.send(encodeAgentsRetrySet(enabled)).catch(() => {})}
       onOpenContextCap={() => openDefaultCapEditor()}
       onOpenTags={() => setSettingsPage('tags')}
-      onNewProvider={() => setProviderAddMenu(true)}
+      onNewProvider={() => setSettingsPage('provider-add')}
       onOpenAccount={(provider, kind) => {
         setSelectedAccount({ provider, kind });
         setSettingsPage('account');
@@ -3417,24 +3421,16 @@ export function AppShell(): React.JSX.Element {
     setSettingsPage('agent');
     setNumberEditor(null);
   };
-  const saveProviderEdit = (patch: {
-    key: string;
-    providerType: 'openai' | 'codex' | 'anthropic';
-    baseUrl: string;
-    group: string;
-    discover: boolean;
-    promptCache: boolean;
-    reasoningReplay: boolean;
-    pricingProvider: string;
-    fallbackModel: string;
-    apiKeyEnv: string;
-    envValue: string;
-  }): void => {
+  const saveProviderEdit = (patch: ProviderPatch): void => {
     if (!providerEdit || providerBusy) return;
     const from = providerEdit.key;
     setProviderBusy(true);
     if (from !== null && from !== patch.key) {
       connection.send(encodeProvidersRename(from, patch.key)).catch(() => {});
+    }
+    // The key before the declaration: the discovery the declaration starts then finds it.
+    if (patch.apiKeyEnv && patch.envValue) {
+      connection.send(encodeProvidersEnvSet(patch.apiKeyEnv, patch.envValue)).catch(() => {});
     }
     connection
       .send(
@@ -3451,17 +3447,25 @@ export function AppShell(): React.JSX.Element {
         }),
       )
       .catch(() => {});
-    // The one field that rides on a create: a fresh name gets its value in the same Save.
-    if (patch.apiKeyEnv && patch.envValue) {
-      connection.send(encodeProvidersEnvSet(patch.apiKeyEnv, patch.envValue)).catch(() => {});
-    }
     setProviderEdit(null);
+    // Added: its page, where the models it lists (or the reason it lists none) appear once the
+    // server has asked it. Edited: back to that same page.
     if (providerEdit.mode === 'create') {
-      setSettingsPage('models');
-    } else {
-      setSelectedProvider(patch.key);
-      setSettingsPage('provider');
+      setAddedProvider({
+        key: patch.key,
+        type: patch.providerType,
+        ...(patch.group ? { group: patch.group } : {}),
+        ...(patch.baseUrl ? { baseUrl: patch.baseUrl } : {}),
+        discover: patch.discover,
+        models: 0,
+        ...(patch.discover ? { discovery: { state: 'pending' as const } } : {}),
+        ...(patch.apiKeyEnv ? { keyEnv: patch.apiKeyEnv } : {}),
+        keyPresent: patch.envValue !== '',
+      });
+      setProviderFrom('models');
     }
+    setSelectedProvider(patch.key);
+    setSettingsPage('provider');
   };
   const deleteProviderConfirmed = (removeKeyToo: boolean, withModels: boolean): void => {
     if (!providerToDelete) return;
@@ -4041,6 +4045,23 @@ export function AppShell(): React.JSX.Element {
               ) : (
                 modelsPage
               )
+            ) : settingsPage === 'provider-add' ? (
+              <ProviderAddScreen
+                onBack={() => setSettingsPage(parentOf('provider-add'))}
+                onPlan={kind => setAccountPrompt({ mode: 'add', kind })}
+                onService={service => {
+                  setProviderBusy(false);
+                  setProviderService(service);
+                  setProviderEdit({ mode: 'create', key: null });
+                  setSettingsPage('provider-edit');
+                }}
+                onCustom={() => {
+                  setProviderBusy(false);
+                  setProviderService(undefined);
+                  setProviderEdit({ mode: 'create', key: null });
+                  setSettingsPage('provider-edit');
+                }}
+              />
             ) : settingsPage === 'model-edit' ? (
               modelEdit ? (
                 <ModelEditScreen
@@ -4073,9 +4094,11 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'provider-edit' ? (
               providerEdit ? (
                 <ProviderEditScreen
+                  // A fresh form per service: its fields are seeded once, from the row picked.
+                  key={providerEdit.mode === 'create' ? `create:${providerService?.id ?? 'custom'}` : `edit:${providerEdit.key}`}
                   mode={providerEdit.mode}
-                  initial={providerEdit.mode === 'create' ? providerInitial : undefined}
-                  takenKeys={(agentsConfig?.providers ?? []).map(provider => provider.key)}
+                  service={providerEdit.mode === 'create' ? providerService : undefined}
+                  providers={agentsConfig?.providers ?? []}
                   provider={
                     providerEdit.mode === 'edit' && providerEdit.key
                       ? (agentsConfig?.providers.find(p => p.key === providerEdit.key) ?? null)
@@ -4101,7 +4124,7 @@ export function AppShell(): React.JSX.Element {
                   }
                   onOpenEnv={() => setSettingsPage('provider-env')}
                   onBack={() => {
-                    if (providerEdit.mode === 'create') setSettingsPage('models');
+                    if (providerEdit.mode === 'create') setSettingsPage('provider-add');
                     else setSettingsPage('provider');
                     setProviderEdit(null);
                   }}
@@ -5084,62 +5107,6 @@ export function AppShell(): React.JSX.Element {
         <ModelTuneSheet
           threadId={activeThread}
           onClose={() => setTuneOpen(false)}
-        />
-      ) : null}
-
-      {providerAddMenu ? (
-        <ActionSheet
-          preview="Add a provider"
-          options={[
-            // An ActionSheet leaves closing to its options: each one closes the menu, then acts.
-            {
-              label: 'ChatGPT plan',
-              hint: 'sign in, no API key',
-              onPress: () => {
-                setProviderAddMenu(false);
-                setAccountPrompt({ mode: 'add', kind: 'codex' });
-              },
-            },
-            {
-              label: 'Claude plan',
-              hint: 'sign in, no API key',
-              onPress: () => {
-                setProviderAddMenu(false);
-                setAccountPrompt({ mode: 'add', kind: 'claude' });
-              },
-            },
-            // Beside the plan on purpose: Claude paid by the token, same models, another bill.
-            {
-              label: 'Claude API key',
-              hint: 'pay per use, ANTHROPIC_API_KEY',
-              onPress: () => {
-                setProviderAddMenu(false);
-                setProviderBusy(false);
-                // A second Claude API key is a second provider, with a variable of its own.
-                const key = freeProviderKey('claude-api', (agentsConfig?.providers ?? []).map(provider => provider.key));
-                setProviderInitial({
-                  key,
-                  providerType: 'anthropic',
-                  apiKeyEnv: key === 'claude-api' ? 'ANTHROPIC_API_KEY' : suggestEnvName(key),
-                  group: `Claude API ${key.slice('claude-api'.length)}`.trim(),
-                });
-                setProviderEdit({ mode: 'create', key: null });
-                setSettingsPage('provider-edit');
-              },
-            },
-            {
-              label: 'Custom',
-              hint: 'OpenRouter, OpenAI, Groq… any OpenAI-compatible API',
-              onPress: () => {
-                setProviderAddMenu(false);
-                setProviderBusy(false);
-                setProviderInitial(undefined);
-                setProviderEdit({ mode: 'create', key: null });
-                setSettingsPage('provider-edit');
-              },
-            },
-          ]}
-          onClose={() => setProviderAddMenu(false)}
         />
       ) : null}
 
