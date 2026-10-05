@@ -209,7 +209,7 @@ import { ModelsScreen } from './ModelsScreen';
 import { useAccounts } from '../core/accounts';
 import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ModelEditScreen } from './ModelEditScreen';
-import { ProviderEditScreen } from './ProviderEditScreen';
+import { freeProviderKey, ProviderEditScreen, suggestEnvName } from './ProviderEditScreen';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
 import { providersEnvStore, useProvidersEnv } from '../core/providers';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
@@ -4075,6 +4075,7 @@ export function AppShell(): React.JSX.Element {
                 <ProviderEditScreen
                   mode={providerEdit.mode}
                   initial={providerEdit.mode === 'create' ? providerInitial : undefined}
+                  takenKeys={(agentsConfig?.providers ?? []).map(provider => provider.key)}
                   provider={
                     providerEdit.mode === 'edit' && providerEdit.key
                       ? (agentsConfig?.providers.find(p => p.key === providerEdit.key) ?? null)
@@ -5114,7 +5115,14 @@ export function AppShell(): React.JSX.Element {
               onPress: () => {
                 setProviderAddMenu(false);
                 setProviderBusy(false);
-                setProviderInitial({ key: 'claude-api', providerType: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY', group: 'Claude API' });
+                // A second Claude API key is a second provider, with a variable of its own.
+                const key = freeProviderKey('claude-api', (agentsConfig?.providers ?? []).map(provider => provider.key));
+                setProviderInitial({
+                  key,
+                  providerType: 'anthropic',
+                  apiKeyEnv: key === 'claude-api' ? 'ANTHROPIC_API_KEY' : suggestEnvName(key),
+                  group: `Claude API ${key.slice('claude-api'.length)}`.trim(),
+                });
                 setProviderEdit({ mode: 'create', key: null });
                 setSettingsPage('provider-edit');
               },

@@ -117,6 +117,11 @@ describe('the steps', () => {
     ).not.toContain('notifications');
   });
 
+  test('with no provider the model step offers the plans first, then a key', () => {
+    const [model] = setupSteps(input({ defaultModel: '', providers: 0 }));
+    expect(model?.hint).toBe('sign in with a ChatGPT or Claude plan, or paste an API key');
+  });
+
   test('a service is done when on, with no key missing, answering and not failed', () => {
     const steps = setupSteps(
       input({

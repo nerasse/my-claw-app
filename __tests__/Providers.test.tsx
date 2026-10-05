@@ -244,6 +244,48 @@ test('a name already set on the server is reused: no value field, no env.set fra
   await settleAndUnmount(tree);
 });
 
+test('a second account of a service: the preset numbers its key and its variable, a taken key cannot be saved', async () => {
+  const tree = await bootToProviders();
+  await emit(envResult());
+  await pressLabel(tree, 'New provider');
+  await pressLabel(tree, 'Custom');
+  await waitFor(() => labelsOf(tree).includes('Create provider'));
+  const field = (label: string) =>
+    tree.root.find(node => node.props.accessibilityLabel === label && typeof node.props.onChangeText === 'function').props.value;
+
+  // A first OpenRouter account takes the preset as it is.
+  await pressLabel(tree, 'Preset OpenRouter');
+  expect(field('Provider key')).toBe('openrouter');
+  expect(field('Provider env name')).toBe('OPENROUTER_API_KEY');
+
+  // "litellm" is declared: saving it from here would overwrite that provider.
+  await typeInto(tree, 'Provider key', 'litellm');
+  expect(textsOf(tree)).toContain('a provider with this key already exists · pick another');
+  const save = () => tree.root.find(node => node.props.accessibilityLabel === 'Create provider' && node.props.accessibilityState);
+  expect(save().props.accessibilityState).toEqual({ disabled: true });
+  await typeInto(tree, 'Provider key', 'openrouter');
+  expect(save().props.accessibilityState).toEqual({ disabled: false });
+  await settleAndUnmount(tree);
+
+  // With an OpenRouter account there, the preset is a second one: its own key, its own variable,
+  // so its key is asked for instead of reusing the first account's.
+  const second = await bootToProviders();
+  const config = providersConfig() as { providers: Array<Record<string, unknown>> };
+  config.providers.push({ key: 'openrouter', type: 'openai', discover: true, models: 3, baseUrl: 'https://openrouter.ai/api/v1', keyEnv: 'OPENROUTER_API_KEY', keyPresent: true });
+  await emit(config);
+  await emit(envResult({ names: ['LITELLM_API_KEY', 'OPENROUTER_API_KEY'], present: ['LITELLM_API_KEY', 'OPENROUTER_API_KEY'] }));
+  await pressLabel(second, 'New provider');
+  await pressLabel(second, 'Custom');
+  await waitFor(() => labelsOf(second).includes('Create provider'));
+  await pressLabel(second, 'Preset OpenRouter');
+  const field2 = (label: string) =>
+    second.root.find(node => node.props.accessibilityLabel === label && typeof node.props.onChangeText === 'function').props.value;
+  expect(field2('Provider key')).toBe('openrouter2');
+  expect(field2('Provider env name')).toBe('OPENROUTER2_API_KEY');
+  await waitFor(() => labelsOf(second).includes('Provider env value'));
+  await settleAndUnmount(second);
+});
+
 test('the edit form sends the changed fields and a rename when the key changes', async () => {
   const tree = await bootToProviders();
 

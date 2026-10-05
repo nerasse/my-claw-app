@@ -122,7 +122,7 @@ export function setupSteps(input: SetupInput): SetupStep[] {
           : input.defaultModel
             ? `${input.defaultModel} cannot run (its key is missing?): pick another`
             : input.providers === 0
-              ? 'add a provider (OpenRouter, OpenAI, Groq…) and paste its API key'
+              ? 'sign in with a ChatGPT or Claude plan, or paste an API key'
               : 'choose the model the agent answers with',
       state: stateOf(input.defaultModel !== '' && !input.defaultUnavailable, 'model', skipped),
       // No provider yet: the provider form first. One there: straight to the default-model picker,

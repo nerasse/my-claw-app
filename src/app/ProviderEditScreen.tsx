@@ -30,6 +30,12 @@ export function suggestEnvName(key: string): string {
   return `${cleaned}_API_KEY`;
 }
 
+/** The preferred key, numbered when taken: a second OpenRouter account is `openrouter2`. */
+export function freeProviderKey(preferred: string, taken: readonly string[]): string {
+  if (!taken.includes(preferred)) return preferred;
+  for (let i = 2; ; i++) if (!taken.includes(`${preferred}${i}`)) return `${preferred}${i}`;
+}
+
 /**
  * The provider form, one page for both halves: creating (empty key, the env value may ride
  * along on the same Save) and editing (the key is the rename target, the env key has its own
@@ -49,8 +55,11 @@ export function ProviderEditScreen({
   onEnvSet,
   onEnvRemove,
   initial,
+  takenKeys,
 }: {
   mode: 'create' | 'edit';
+  /** The keys already declared: a create never lands on one, it would overwrite that provider. */
+  takenKeys: readonly string[];
   /** A create form seeded from the + menu (Claude API key): engine, key, env name, display. */
   initial?: { key: string; providerType: ProviderType; apiKeyEnv: string; group: string };
   /** The entry being edited, null in create mode. */
@@ -103,13 +112,14 @@ export function ProviderEditScreen({
   const envSet = envNamePresent(env, envName);
   const envNameValid = envName === '' || ENV_NAME_RE.test(envName);
   const keyValid = KEY_RE.test(key);
+  const keyTaken = mode === 'create' && takenKeys.includes(key);
   const openai = providerType === 'openai';
   // An Anthropic provider with a key of its own (the + menu's "Claude API key", or Anthropic-
   // compatible relays) takes its key from .env like an OpenAI one; the plans sign in instead and
   // are added from the + menu, not from this form.
   const keyed = openai || providerType === 'anthropic';
   const baseUrlValid = !openai || baseUrl.trim() !== '';
-  const canSave = keyValid && envNameValid && baseUrlValid && !busy;
+  const canSave = keyValid && !keyTaken && envNameValid && baseUrlValid && !busy;
 
   const onSuggestedKey = (value: string): void => {
     setKey(value);
@@ -150,13 +160,16 @@ export function ProviderEditScreen({
                 <Pressable
                   key={preset.key}
                   onPress={() => {
-                    setKey(preset.key);
+                    // A second account of the same service gets its own key and its own variable,
+                    // never the first one's: same name, same key, the first account overwritten.
+                    const free = freeProviderKey(preset.key, takenKeys);
+                    setKey(free);
                     setProviderType('openai');
                     setBaseUrl(preset.baseUrl);
-                    setApiKeyEnv(preset.apiKeyEnv);
+                    setApiKeyEnv(free === preset.key ? preset.apiKeyEnv : suggestEnvName(free));
                     setDiscover(true);
                   }}
-                  style={[styles.preset, key === preset.key && baseUrl === preset.baseUrl && styles.presetOn]}
+                  style={[styles.preset, baseUrl === preset.baseUrl && styles.presetOn]}
                   accessibilityRole="button"
                   accessibilityLabel={`Preset ${preset.label}`}>
                   <Text style={styles.presetText}>{preset.label}</Text>
@@ -178,11 +191,15 @@ export function ProviderEditScreen({
             autoCapitalize="none"
             accessibilityLabel="Provider key"
           />
-          <Text style={styles.note}>
-            {mode === 'create'
-              ? 'lowercase letters, digits and dashes · the model namespace'
-              : 'changing it renames the entry and every reference to it'}
-          </Text>
+          {keyTaken ? (
+            <Text style={[styles.note, styles.noteTaken]}>a provider with this key already exists · pick another</Text>
+          ) : (
+            <Text style={styles.note}>
+              {mode === 'create'
+                ? 'lowercase letters, digits and dashes · the model namespace'
+                : 'changing it renames the entry and every reference to it'}
+            </Text>
+          )}
         </View>
 
         <View style={styles.category}>
@@ -493,6 +510,7 @@ const createStyles = (palette: Palette) => ({
     marginBottom: space.xs,
   },
   note: { fontSize: font.micro, color: palette.textFaint },
+  noteTaken: { color: palette.danger },
   segment: {
     flexDirection: 'row' as const,
     borderRadius: radius.md,
