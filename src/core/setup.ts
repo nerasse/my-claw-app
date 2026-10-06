@@ -46,6 +46,20 @@ export function modelReady(defaultModel: string, unavailable: Array<{ id: string
   return defaultModel !== '' && !(unavailable ?? []).some(m => m.id === defaultModel);
 }
 
+/**
+ * Whether a send is held back for the setup assistant. Only on the server's word: a catalogue that
+ * has not answered yet carries an empty default too, and reading that as "no model" closed every
+ * send for the life of a socket the resume never ran on (2026-10-06). If the server truly has no
+ * model, it says so on the send itself.
+ */
+export function sendNeedsModel(
+  answered: boolean,
+  defaultModel: string,
+  unavailable: Array<{ id: string }> | undefined,
+): boolean {
+  return answered && !modelReady(defaultModel, unavailable);
+}
+
 const SERVICE_STEPS: Array<{ id: ServiceId; title: string; hint: string }> = [
   {
     id: 'stt',

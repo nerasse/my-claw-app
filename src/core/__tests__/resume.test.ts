@@ -1,4 +1,4 @@
-import { resumeFrames } from '../resume';
+import { bootFrames, resumeFrames } from '../resume';
 import { chatStore } from '../chat';
 
 const typesOf = (frames: string[]): string[] => frames.map(frame => JSON.parse(frame).type as string);
@@ -41,5 +41,25 @@ describe('resumeFrames', () => {
 
   test('no conversation open, nothing to sync', () => {
     expect(typesOf(resumeFrames(null))).toEqual(['session.list', 'commands.list', 'model.list', 'jobs.list']);
+  });
+});
+
+describe('bootFrames', () => {
+  // The JS restarted under a socket the native service kept up: no transition to `connected` is
+  // coming, so the boot is the only chance to resume. It used to send the list alone, the catalogue
+  // was never asked for, and every send opened the setup assistant (2026-10-06).
+  test('a JS that starts on a live socket resumes in full, the catalogue included', () => {
+    const frames = bootFrames('connected', 't1');
+    expect(frames).toEqual(resumeFrames('t1'));
+    expect(typesOf(frames)).toContain('model.list');
+  });
+
+  test('without an open thread, the catalogs still come', () => {
+    expect(typesOf(bootFrames('connected', null))).toEqual(['session.list', 'commands.list', 'model.list', 'jobs.list']);
+  });
+
+  test('a socket still to come asks for the list alone, its connect resumes the rest', () => {
+    expect(typesOf(bootFrames('disconnected', 't1'))).toEqual(['session.list']);
+    expect(typesOf(bootFrames('connecting', 't1'))).toEqual(['session.list']);
   });
 });

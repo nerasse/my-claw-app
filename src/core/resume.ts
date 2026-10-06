@@ -24,6 +24,22 @@ import { statusStore } from './status';
  * If the cursor is stale (unknown-cursor) or the branch diverged (branch-switch), the server
  * responds with a full page instead, and the client replaces its view.
  */
+/**
+ * What the JS asks for when it starts, given the state the transport is already in.
+ *
+ * On Android the socket lives in the native service and outlives the JS: a process the system
+ * restarted, or an activity recreated, comes back to a socket that is already `connected`. No
+ * transition to `connected` will follow, so the resume that runs on that transition never runs,
+ * and everything it fetches -- the model catalogue first -- stays empty for the life of the socket.
+ * An empty catalogue reads as "no model", which closed every send behind the setup assistant
+ * (2026-10-06). So a JS that starts on a live socket resumes here, exactly as a reconnect would.
+ *
+ * Any other state: the list alone, queued natively, and the resume follows the connect.
+ */
+export function bootFrames(state: string, activeThreadId: string | null): string[] {
+  return state === 'connected' ? resumeFrames(activeThreadId) : [encodeSessionList()];
+}
+
 export function resumeFrames(activeThreadId: string | null): string[] {
   const frames = [encodeSessionList(), encodeCommandsList(), encodeModelList(), encodeJobsList()];
   // A watch belongs to a socket, and this is a new one: the status page still open would

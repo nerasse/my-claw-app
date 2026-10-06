@@ -27,7 +27,7 @@ import { formatTranscript } from '../core/transcript';
 import { retryDelayAfter, sendsToRetry } from '../core/sendRetry';
 import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPrompts, undoStore } from '../core/undoStore';
-import { resumeFrames } from '../core/resume';
+import { bootFrames, resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn } from '../core/subagentStack';
 import { sessionStore, useArchivedSessions, useFolders, useSessions } from '../core/sessions';
@@ -226,7 +226,7 @@ import { PageCloseContext } from '../components/CloseButton';
 import { overlayStore } from '../core/overlay';
 import { focusField, leaveField, menuOpen, useKeyNav } from '../core/keyNav';
 import { MOVING_AROUND, SHORTCUTS, comboLabel, shortcutHint, type ShortcutId } from '../core/shortcuts';
-import { modelReady } from '../core/setup';
+import { modelReady, sendNeedsModel } from '../core/setup';
 import { ToolsScreen } from './ToolsScreen';
 import { SkillViewer } from './SkillViewer';
 import { WorkspacesScreen } from './WorkspacesScreen';
@@ -1389,7 +1389,9 @@ export function AppShell(): React.JSX.Element {
         setStatus({ state });
         if (state !== 'connected' && state !== 'connecting')
           connection.connect(stored.serverUrl);
-        connection.send(encodeSessionList());
+        for (const frame of bootFrames(state, activeThreadRef.current)) {
+          connection.send(frame).catch(() => {});
+        }
       });
     });
     // Reports of what killed the previous process, read before the first frame goes out. They
@@ -1881,7 +1883,8 @@ export function AppShell(): React.JSX.Element {
     async (threadId: string, text: string, attachments?: OutgoingAttachment[], location?: LocationInput, again?: string) => {
       // No model that runs: a send would fail on an empty provider or a missing key. The setup
       // assistant opens on its model step instead of posting into a conversation nobody answers.
-      if (!modelReady(catalog.defaultModel, catalog.unavailable)) {
+      // On the server's answer only: a catalogue not received yet is not "no model".
+      if (sendNeedsModel(catalogAnswered(catalog), catalog.defaultModel, catalog.unavailable)) {
         setSettingsPage('setup');
         setSettingsOpen(true);
         return;
@@ -1936,7 +1939,7 @@ export function AppShell(): React.JSX.Element {
       // bubble waits instead of claiming the message is lost.
       if (!delivered) chatStore.markUndelivered(threadId, id);
     },
-    [catalog.defaultModel, catalog.unavailable],
+    [catalog],
   );
 
   const sendChat = useCallback(
