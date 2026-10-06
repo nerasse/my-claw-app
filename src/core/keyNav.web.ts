@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 import { useEffect } from 'react';
-import type { ViewProps } from 'react-native';
+import type { RefObject } from 'react';
+import type { TextInput, ViewProps } from 'react-native';
 import { letterJump, nextIndex } from './keyNavMath';
 
 /**
@@ -224,6 +225,11 @@ export function useKeyNav(): void {
       window.removeEventListener('pointerdown', onPointer, true);
     };
   }, []);
+}
+
+/** The web finds a field by its label in the DOM (`focusField`): nothing to register. */
+export function keyField(_label: string, _ref: RefObject<TextInput | null>): () => void {
+  return () => {};
 }
 
 /** Puts the caret in the field with that label (the composer), when one is on screen. */

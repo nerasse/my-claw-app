@@ -127,6 +127,15 @@ export interface BackLayers {
   setBubbleMenu: (value: null) => void;
   threadMenu: unknown;
   setThreadMenu: (value: null) => void;
+  /** The drawer's own sheets: a folder's actions, its delete confirmation, filing, the filter. */
+  folderMenu: unknown;
+  setFolderMenu: (value: null) => void;
+  folderToDelete: unknown;
+  setFolderToDelete: (value: null) => void;
+  threadToFile: unknown;
+  setThreadToFile: (value: null) => void;
+  workspaceFilterOpen: boolean;
+  closeWorkspaceFilter: () => void;
   drawerOpen: boolean;
   setDrawerOpen: (value: false) => void;
   /** Pinned, the conversation list is not a layer at all: see the drawer case below. */
@@ -257,6 +266,14 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setBubbleMenu,
     threadMenu,
     setThreadMenu,
+    folderMenu,
+    setFolderMenu,
+    folderToDelete,
+    setFolderToDelete,
+    threadToFile,
+    setThreadToFile,
+    workspaceFilterOpen,
+    closeWorkspaceFilter,
     drawerOpen,
     setDrawerOpen,
     pinnedDrawer,
@@ -456,6 +473,21 @@ export function closeTopLayer(layers: BackLayers): boolean {
   }
   if (moreOpen) {
     setMoreOpen(false);
+    return true;
+  }
+  if (folderToDelete) {
+    setFolderToDelete(null);
+    return true;
+  }
+  // They used to have no way out but a tap beside them: back and Escape went past them and closed
+  // the drawer under the sheet still on screen (Android keyboard pass, 2026-10-06).
+  if (folderMenu || threadToFile) {
+    setFolderMenu(null);
+    setThreadToFile(null);
+    return true;
+  }
+  if (workspaceFilterOpen) {
+    closeWorkspaceFilter();
     return true;
   }
   if (bubbleMenu || threadMenu) {

@@ -145,6 +145,12 @@ export interface DeviceBridgeNative {
   getCurrentLocation(): Promise<CurrentLocationNative>;
   prefsGetAll(): Promise<Record<string, string>>;
   prefsSet(key: string, value: string | null): Promise<void>;
+  /** The combos the shell binds: a physical keyboard's keys taken for them (HardwareKeys.kt). */
+  setHotkeys(combos: string[]): void;
+  /** Focuses that view when the last input was a physical key, remembering what had the focus. */
+  focusIfKeyboard(reactTag: number): void;
+  /** Gives the focus back to what had it before the last `focusIfKeyboard`. */
+  restoreKeyboardFocus(): void;
   /** Android's history of previous process deaths, plus the running build's version name. */
   getExitInfo(): Promise<{
     versionName: string;
@@ -324,6 +330,9 @@ export const deviceBridge: DeviceBridgeNative = {
     native?.getCurrentLocation() ?? Promise.reject(new Error('Location unavailable')),
   prefsGetAll: () => native?.prefsGetAll() ?? Promise.resolve({}),
   prefsSet: (key, value) => native?.prefsSet(key, value) ?? Promise.resolve(),
+  setHotkeys: combos => native?.setHotkeys(combos),
+  focusIfKeyboard: reactTag => native?.focusIfKeyboard(reactTag),
+  restoreKeyboardFocus: () => native?.restoreKeyboardFocus(),
   getExitInfo: () =>
     native?.getExitInfo() ?? Promise.resolve({ versionName: '', exits: [] }),
   getAppVersion: () => native?.getAppVersion() ?? Promise.resolve(''),

@@ -3,6 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { useDismissKeyboard, useKeyboardHeight, useSheetBottomInset } from '../core/keyboard';
 import { useLayout } from '../core/layout';
 import { keyLayerProps } from '../core/keyNav';
+import { useMenuFocus } from '../core/menuFocus';
 import { useScrollIndicator } from './ScrollIndicator';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
@@ -82,12 +83,24 @@ export function ActionSheet({
   const keyboard = useKeyboardHeight();
   const { scrollProps, indicator } = useScrollIndicator();
 
+  // The rows a keyboard walks, the search field first: what it focuses on opening, and where the
+  // arrows go round (Android; the web does it with the DOM).
+  const SEARCH_ROW = -1;
+  const rows = [
+    ...(search ? [SEARCH_ROW] : []),
+    ...(options ?? []).flatMap((option, index) => (option.type === 'separator' ? [] : [index])),
+  ];
+  const selected = (options ?? []).findIndex(option => option.type !== 'separator' && option.selected);
+  const { refFor, propsFor } = useMenuFocus(rows, search ? SEARCH_ROW : selected >= 0 ? selected : rows[0]);
+
   const renderEntry = useCallback(
-    ({ item: option }: { item: SheetEntry }) =>
+    ({ item: option, index }: { item: SheetEntry; index: number }) =>
       option.type === 'separator' ? (
         <View style={styles.optionSeparator} />
       ) : (
         <Pressable
+          ref={refFor(index)}
+          {...propsFor(index)}
           style={styles.option}
           onPress={option.onPress}
           accessibilityRole="button"
@@ -105,12 +118,13 @@ export function ActionSheet({
           {option.selected ? <Text style={styles.check}>✓</Text> : null}
         </Pressable>
       ),
-    [styles],
+    [styles, refFor, propsFor],
   );
 
   return (
     <View style={[styles.backdrop, dialogs && styles.backdropCentered]}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
+      {/* A tap's way out. Not a keyboard stop: Escape is that, and Tab must stay in the menu. */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" focusable={false} />
       {/* Same absolute-positioning trap as the drawer: pad the gesture bar ourselves. */}
       <View
         {...keyLayerProps('menu')}
@@ -132,6 +146,8 @@ export function ActionSheet({
         ) : null}
         {search ? (
           <TextInput
+            ref={refFor(SEARCH_ROW)}
+            {...propsFor(SEARCH_ROW)}
             style={styles.search}
             value={search.value}
             onChangeText={search.onChange}
@@ -156,6 +172,10 @@ export function ActionSheet({
               keyExtractor={keyOfEntry}
               renderItem={renderEntry}
               keyboardShouldPersistTaps="handled"
+              // FlatList detaches the rows scrolled out of view on Android by default: a keyboard
+              // going round the menu landed on a row that was not in the window, and the next
+              // arrow left the menu for the page under it.
+              removeClippedSubviews={false}
               nestedScrollEnabled
               initialNumToRender={EAGER_ROWS}
               maxToRenderPerBatch={20}

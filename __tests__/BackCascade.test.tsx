@@ -247,6 +247,20 @@ describe('sheets the cascade used to let the press through', () => {
     await settleAndUnmount(tree);
   });
 
+  test('the workspace filter goes, and the drawer under it does not', async () => {
+    const tree = await renderApp();
+    await listSessions();
+    await pressLabel(tree, 'Open conversations');
+    await pressLabel(tree, 'Filter by workspace');
+    await waitFor(() => sheetShows(tree, 'All workspaces'));
+
+    expect(await hardwareBack()).toBe(true);
+    await waitFor(() => !sheetShows(tree, 'All workspaces'));
+    expect(drawerVisible(tree)).toBe(true);
+
+    await settleAndUnmount(tree);
+  });
+
   test('the workspace picker goes, and the drawer under it does not', async () => {
     const tree = await renderApp();
     await listSessions();

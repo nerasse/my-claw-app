@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChan
 import { ActionSheet, type SheetEntry } from './ActionSheet';
 import { overlayStore, type AnchorRect } from '../core/overlay';
 import { keyLayerProps } from '../core/keyNav';
+import { useMenuFocus } from '../core/menuFocus';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 const MENU_WIDTH = 240;
@@ -97,9 +98,13 @@ function AnchoredMenu({
   const window = useWindowDimensions();
   const [height, setHeight] = useState(0);
   const { left, top } = menuPosition(anchor, origin, window, height);
+  // The keyboard's way in and round, as in a sheet (`menuFocus.ts`): wide windows on Android (DeX)
+  // draw their menus here.
+  const rows = options.flatMap((entry, i) => (entry.type === 'separator' ? [] : [i]));
+  const { refFor, propsFor } = useMenuFocus(rows, rows[0]);
   return (
     <>
-      <Pressable style={StyleSheet.absoluteFill} onPress={() => overlayStore.close()} accessibilityLabel="Close menu" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => overlayStore.close()} accessibilityLabel="Close menu" focusable={false} />
       <View
         {...keyLayerProps('menu')}
         style={[styles.menu, { left, top }]}
@@ -111,6 +116,8 @@ function AnchoredMenu({
           ) : (
             <Pressable
               key={entry.key ?? entry.label}
+              ref={refFor(i)}
+              {...propsFor(i)}
               onPress={entry.onPress}
               style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [
                 styles.row,

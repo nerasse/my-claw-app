@@ -422,6 +422,10 @@ export function AppShell(): React.JSX.Element {
   const [workspaceFilter, setWorkspaceFilter] = useState<string | null>(null);
   const [workspaceFilterOpen, setWorkspaceFilterOpen] = useState(false);
   const [workspaceQuery, setWorkspaceQuery] = useState('');
+  const closeWorkspaceFilter = useCallback(() => {
+    setWorkspaceFilterOpen(false);
+    setWorkspaceQuery('');
+  }, []);
   /**
    * Folders the owner folded away, remembered on the device. Kept in the shell for the same reason
    * the filter is -- three mounts, one list -- and in the settings bag for a different one: a fold
@@ -1504,6 +1508,14 @@ export function AppShell(): React.JSX.Element {
         setBubbleMenu,
         threadMenu,
         setThreadMenu,
+        folderMenu,
+        setFolderMenu,
+        folderToDelete,
+        setFolderToDelete,
+        threadToFile,
+        setThreadToFile,
+        workspaceFilterOpen,
+        closeWorkspaceFilter,
         drawerOpen,
         setDrawerOpen,
         pinnedDrawer: layout.pinnedDrawer,
@@ -1620,6 +1632,11 @@ export function AppShell(): React.JSX.Element {
       textViewer,
       threadMenu,
       threadToRename,
+      folderMenu,
+      folderToDelete,
+      threadToFile,
+      workspaceFilterOpen,
+      closeWorkspaceFilter,
       videoViewer,
       fileViewer,
       layout.pinnedDrawer,
@@ -1705,11 +1722,17 @@ export function AppShell(): React.JSX.Element {
   );
   const jobsClose = useMemo(() => ({ close: closeJobs, label: 'Leave jobs' }), [closeJobs]);
 
+  /** Something other than the conversation is showing: settings, the archives, the files. */
+  const pageOpen =
+    settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
+  /** No conversation on a phone: the list is the screen itself (the `home` mount of Drawer). */
+  const homeList = !layout.pinnedDrawer && !layout.sidePane && !pageOpen && activeThread === null;
   const openSessions = (): void => {
     // The conversation list is the palette: it searches, and on a desktop it is already there
-    // (unfolded, if the owner had folded it away).
-    if (!layout.pinnedDrawer) setDrawerOpen(true);
-    else panes.setDrawerCollapsed(false);
+    // (unfolded, if the owner had folded it away). On the home screen it is the screen: opening
+    // the slide-over on top of it gave the focus to a search field nobody could see.
+    if (layout.pinnedDrawer) panes.setDrawerCollapsed(false);
+    else if (!homeList) setDrawerOpen(true);
     setSearchFocus(count => count + 1);
   };
   const SHORTCUT_ACTIONS: Record<ShortcutId, () => void> = {
@@ -3719,9 +3742,6 @@ export function AppShell(): React.JSX.Element {
     />
   );
 
-  /** Something other than the conversation is showing: settings, the archives, the files. */
-  const pageOpen =
-    settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
   // The browser in full screen, or the first-run setup: the page has the window to itself.
   const fullPage = browserFullNow || setupGate;
   const split = layout.sidePane && !fullPage;
@@ -3785,10 +3805,11 @@ export function AppShell(): React.JSX.Element {
         {/* The home list is a full-bleed panel: the container's md padding would paint a band
             of bg around its surface, a frame the phone does not ask for. It belongs to the
             shell, not to the padded column. */}
-        {!layout.pinnedDrawer && !layout.sidePane && !pageOpen && activeThread === null ? (
+        {homeList ? (
           <Drawer
             home
             open
+            focusSearch={searchFocus}
             sessions={sessions}
             folders={folders}
             unread={unread}
@@ -4969,10 +4990,7 @@ export function AppShell(): React.JSX.Element {
               ? { value: workspaceQuery, onChange: setWorkspaceQuery, placeholder: 'Search workspaces' }
               : null
           }
-          onClose={() => {
-            setWorkspaceFilterOpen(false);
-            setWorkspaceQuery('');
-          }}
+          onClose={closeWorkspaceFilter}
         />
       ) : null}
 

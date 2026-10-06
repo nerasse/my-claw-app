@@ -13,6 +13,7 @@ import { PlusIcon, SendIcon } from './icons';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
 import { COMPOSER_INPUT_ID } from '../core/domIds';
 import { editorIntent } from '../core/editorKeys';
+import { keyField } from '../core/keyNav';
 import { useLayout } from '../core/layout';
 import { autoGrow } from '../core/webProps';
 import type { VoiceRecording } from '../core/nativeBridge';
@@ -225,6 +226,8 @@ export function Composer({
    * overflow stayed hidden, so a fifth line was neither visible nor reachable by scrolling.
    */
   const inputRef = useRef<TextInput>(null);
+  // The `/` shortcut puts the caret here; on the web it finds the field by its label instead.
+  useEffect(() => keyField('Message to send', inputRef), []);
   const maxTextHeight = hero
     ? MAX_TEXT_HEIGHT.hero
     : dense

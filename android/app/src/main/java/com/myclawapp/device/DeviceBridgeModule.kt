@@ -40,10 +40,13 @@ import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.uimanager.UIManagerHelper
+import com.facebook.react.bridge.UiThreadUtil
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -70,6 +73,9 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     private const val PREFS_NAME = "claw_prefs"
     private const val FILE_PICK_REQUEST_CODE = 4201
     private const val FILE_SAVE_REQUEST_CODE = 4202
+    /** How long a menu row has to reach the screen before the keyboard focus gives up: a second. */
+    private const val FOCUS_ATTEMPTS = 60
+    private const val FRAME_MS = 16L
 
     /** The settings pickers: the system ringtone list, and the document picker for an import. */
     private const val SOUND_SYSTEM_REQUEST_CODE = 4203
@@ -990,6 +996,45 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   @ReactMethod
   fun adoptCredentials(deviceId: String, token: String, promise: Promise) {
     promise.resolve(DeviceCredentials.adopt(reactContext, deviceId, token))
+  }
+
+  /** The combos the shell binds: a physical keyboard's keys that are taken for it (HardwareKeys). */
+  @ReactMethod
+  fun setHotkeys(combos: ReadableArray) {
+    HardwareKeys.register((0 until combos.size()).mapNotNull { combos.getString(it) })
+  }
+
+  /** A menu row, focused when the menu was opened from a physical keyboard (HardwareKeys). */
+  @ReactMethod
+  fun focusIfKeyboard(reactTag: Double) {
+    UiThreadUtil.runOnUiThread {
+      reactContext.currentActivity?.let { HardwareKeys.rememberOpener(it) }
+      focusWhenMounted(reactTag.toInt(), FOCUS_ATTEMPTS)
+    }
+  }
+
+  /**
+   * JS asks from an effect, before the row is on screen: Fabric creates the native view on a later
+   * frame and attaches it later still (a whole menu took over 160 ms on the emulator), so the first
+   * menu opened after a launch missed its row and left the focus behind it. Looked at again a frame
+   * apart until the row is on screen, for up to a second.
+   */
+  private fun focusWhenMounted(tag: Int, attempts: Int) {
+    UiThreadUtil.runOnUiThread {
+      val view = runCatching { UIManagerHelper.getUIManagerForReactTag(reactContext, tag)?.resolveView(tag) }.getOrNull()
+      if (view != null && view.isAttachedToWindow && view.isShown && view.width > 0) {
+        HardwareKeys.focusIfKeyboard(view)
+      } else if (attempts > 1) {
+        UiThreadUtil.runOnUiThread({ focusWhenMounted(tag, attempts - 1) }, FRAME_MS)
+      }
+    }
+  }
+
+  @ReactMethod
+  fun restoreKeyboardFocus() {
+    UiThreadUtil.runOnUiThread {
+      HardwareKeys.restoreFocus()
+    }
   }
 
   @ReactMethod

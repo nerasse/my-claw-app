@@ -654,8 +654,13 @@ export function Drawer({
 
   // Counter, not a boolean: pressing the shortcut twice must focus twice, and there is no state
   // to reset in between.
+  // Only the mount on screen: the home list and the slide-over both hear the shortcut, and the
+  // closed slide-over took the focus from the home list's own search (Android keyboard, 2026-10-06).
+  const shown = open || pinned || home === true;
   useEffect(() => {
-    if (focusSearch > 0) searchRef.current?.focus();
+    if (focusSearch > 0 && shown) searchRef.current?.focus();
+    // The shortcut is the trigger, not the opening: a drawer opened by a tap must not focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSearch]);
 
   // Horizontal drag closes the panel; vertical drags stay with the conversation list.

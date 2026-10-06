@@ -1,10 +1,13 @@
 package com.myclawapp
 
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.MotionEvent
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import com.myclawapp.device.HardwareKeys
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
@@ -14,6 +17,15 @@ class MainActivity : ReactActivity() {
     // coloring the background, status bar, and navigation bar.
     setTheme(R.style.AppTheme)
     super.onCreate(null)
+  }
+
+  /** A physical keyboard's shortcuts, before the views see the keys -- HardwareKeys. */
+  override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+      HardwareKeys.dispatch(this, event) || super.dispatchKeyEvent(event)
+
+  override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+    HardwareKeys.touched()
+    return super.dispatchTouchEvent(event)
   }
 
   /**
