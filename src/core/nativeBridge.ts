@@ -22,6 +22,8 @@ export interface VoiceRecording {
   uri: string;
   durationMs: number;
   sizeBytes: number;
+  /** The encoder's actual container, when the platform exposes it. */
+  mimeType?: string;
 }
 
 export interface CurrentLocationNative {

@@ -34,6 +34,8 @@ export interface VoiceRecording {
   uri: string;
   durationMs: number;
   sizeBytes: number;
+  /** The encoder's actual container, used to name and serve the upload correctly. */
+  mimeType?: string;
 }
 
 export interface CurrentLocationNative {
@@ -617,6 +619,13 @@ let recording: Recording | null = null;
 let player: HTMLAudioElement | null = null;
 let playerUri: string | null = null;
 
+const WEB_RECORDING_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+
+function recordingMimeType(): string | undefined {
+  if (typeof MediaRecorder.isTypeSupported !== 'function') return undefined;
+  return WEB_RECORDING_TYPES.find(type => MediaRecorder.isTypeSupported(type));
+}
+
 function emitPlayback(playing: boolean): void {
   deviceEvents.emit(VOICE_PLAYBACK_EVENT, {
     uri: playerUri,
@@ -642,12 +651,15 @@ async function startWebRecording(): Promise<string> {
   context.createMediaStreamSource(stream).connect(analyser);
   const samples = new Uint8Array(analyser.fftSize);
 
-  const recorder = new MediaRecorder(stream);
+  const preferredMimeType = recordingMimeType();
+  const recorder = preferredMimeType
+    ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+    : new MediaRecorder(stream);
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = event => {
     if (event.data.size > 0) chunks.push(event.data);
   };
-  recorder.start();
+  recorder.start(1000);
 
   const startedAt = Date.now();
   // ~16 Hz, the rate the native recorder pushes, so the waveform animates identically.
@@ -690,7 +702,12 @@ async function stopWebRecording(): Promise<VoiceRecording | null> {
   const durationMs = Date.now() - current.startedAt;
   // The native side returns null for a tap rather than a hold, and the composer relies on it.
   if (durationMs < 400 || blob.size === 0) return null;
-  return { uri: URL.createObjectURL(blob), durationMs, sizeBytes: blob.size };
+  return {
+    uri: URL.createObjectURL(blob),
+    durationMs,
+    sizeBytes: blob.size,
+    mimeType: current.recorder.mimeType || 'audio/webm',
+  };
 }
 
 

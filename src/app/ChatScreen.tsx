@@ -549,12 +549,13 @@ export function ChatScreen({
    */
   const stageVoiceNote = useCallback(
     (recording: VoiceRecording) => {
+      const mimeType = recording.mimeType ?? 'audio/mp4';
       const pending: PendingAttachment = {
         id: `voice-${recording.uri}`,
         uri: recording.uri,
-        filename: voiceFilename(),
+        filename: voiceFilename(new Date(), mimeType),
         type: 'audio',
-        mimeType: 'audio/mp4',
+        mimeType,
         sizeBytes: recording.sizeBytes,
         audioAsVoice: true,
         durationMs: recording.durationMs,

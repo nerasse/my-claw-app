@@ -177,7 +177,7 @@ test('releasing the mic stages the note, and sending it is a separate act', asyn
   expect(uri).toBe('file:///cache/voice.m4a');
   expect(url).toContain('/media?device=dev-test');
   expect(filename).toMatch(/^voice-.*\.m4a$/);
-  expect(type).toBe('audio');
+  expect(type).toBe('audio/mp4');
   expect(threadId).toBe(THREAD);
 
   // audioAsVoice is what makes the server apply the configured language instead of guessing.

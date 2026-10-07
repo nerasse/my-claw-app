@@ -159,7 +159,7 @@ export async function uploadMedia(
       attachment.uri,
       url,
       attachment.filename,
-      attachment.type,
+      attachment.mimeType,
       threadId,
       transferId,
     );

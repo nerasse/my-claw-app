@@ -154,9 +154,12 @@ export async function finishRecording(): Promise<RecordingOutcome> {
 }
 
 /** Filename carries the extension the recorder actually wrote; the server types the file by it. */
-export function voiceFilename(at: Date = new Date()): string {
+export function voiceFilename(at: Date = new Date(), mimeType = 'audio/mp4'): string {
   const stamp = at.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  return `voice-${stamp}.m4a`;
+  let extension = 'm4a';
+  if (mimeType.startsWith('audio/webm')) extension = 'webm';
+  else if (mimeType.startsWith('audio/ogg')) extension = 'ogg';
+  return `voice-${stamp}.${extension}`;
 }
 
 export function formatDuration(ms: number): string {
