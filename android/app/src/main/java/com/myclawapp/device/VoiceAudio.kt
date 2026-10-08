@@ -50,6 +50,11 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
     private const val PLAYBACK_INTERVAL_MS = 100L
     /** A partial lock is a bounded reliability aid, never a process-wide or permanent lock. */
     private const val WAKE_LOCK_TIMEOUT_MS = 35 * 60 * 1000L
+    /**
+     * filesDir is never reclaimed by the system, unlike the cache these takes used to live in.
+     * A week covers recovering an interrupted take; past it the server holds the sent copy.
+     */
+    private const val TAKE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000L
 
     /** getMaxAmplitude() is linear over 0..32767; speech lives in the top of a dB scale. */
     private const val MAX_AMPLITUDE = 32767.0
@@ -170,6 +175,8 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
     if (!directory.exists() && !directory.mkdirs()) {
       throw IllegalStateException("could not create voice recording directory")
     }
+    val expired = System.currentTimeMillis() - TAKE_RETENTION_MS
+    directory.listFiles()?.filter { it.lastModified() < expired }?.forEach { it.delete() }
     val target = File(directory, "voice_${System.currentTimeMillis()}.m4a")
     val created = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       MediaRecorder(reactContext)

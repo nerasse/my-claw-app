@@ -45,7 +45,9 @@ The file policy is intentionally asymmetric:
 
 Recordings are written under the app's private `filesDir/voice-recordings` rather than the cache so
 that a finalized interruption survives normal process recreation. The existing native file upload
-path reads the same `file://` URI.
+path reads the same `file://` URI. The system never reclaims `filesDir`, so each new take first
+deletes the takes older than seven days: long enough to recover an interrupted one, while sent
+notes do not pile up on the device forever.
 
 Unmounting a `VoiceRecorder` no longer cancels an active take. This preserves the native session
 through an ordinary navigation or JS tree replacement. The small UI does not attempt to attach a
