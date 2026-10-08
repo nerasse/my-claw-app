@@ -194,7 +194,7 @@ test('a gallery photo (content:// uri) is copied to the cache before staging', a
     'file:///cache/prepared',
     'http://10.10.20.10:8080/media?device=dev-test&token=token-test',
     'photo.jpg',
-    'image',
+    'image/jpeg',
     THREAD,
     expect.any(String),
   );
