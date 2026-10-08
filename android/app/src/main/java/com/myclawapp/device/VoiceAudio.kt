@@ -54,6 +54,7 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
   private var startedAt = 0L
 
   private var player: MediaPlayer? = null
+  private var rate = 1f
   private var playingUri: String? = null
 
   private fun emit(event: String, payload: WritableMap) {
@@ -203,11 +204,13 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
    * One note plays at a time: starting a second stops the first. Two voices over each other is
    * never what was meant, and a paused player left behind keeps an audio focus nobody owns.
    */
-  fun play(uri: String) {
+  fun play(uri: String, speed: Float) {
+    rate = speed
     val resumingSame = playingUri == uri && player != null
     if (resumingSame) {
       val active = player!!
       active.start()
+      applyRate(active)
       handler.post(playbackTick)
       return
     }
@@ -223,9 +226,25 @@ class VoiceAudio(private val reactContext: ReactApplicationContext) {
       created.seekTo(0)
     }
     created.start()
+    applyRate(created)
     player = created
     playingUri = uri
     handler.post(playbackTick)
+  }
+
+  /** A paused player keeps the new speed for its resume: setting it now would start it again. */
+  fun setRate(speed: Float) {
+    rate = speed
+    val active = player ?: return
+    if (active.isPlaying) applyRate(active)
+  }
+
+  private fun applyRate(active: MediaPlayer) {
+    try {
+      active.playbackParams = active.playbackParams.setSpeed(rate)
+    } catch (_: Exception) {
+      // A decoder that cannot stretch time plays at normal speed rather than not at all.
+    }
   }
 
   fun pause() {

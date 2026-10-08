@@ -7,6 +7,7 @@ import {
   type VoicePlaybackEvent,
   type VoiceRecording,
 } from './nativeBridge';
+import { nextPlaybackRate, prefs } from './prefs';
 
 /**
  * Voice note capture and playback.
@@ -71,6 +72,13 @@ class VoicePlaybackStore {
     });
   }
 
+  /** The speed every note plays at; a change applies to the one playing at once. */
+  async cycleRate(): Promise<void> {
+    const rate = nextPlaybackRate(prefs.get().playbackRate);
+    prefs.set('playbackRate', rate);
+    await deviceBridge.setPlaybackRate(rate);
+  }
+
   /** Optimistic: the first progress event is a tick away, and a dead button reads as a bug. */
   async toggle(uri: string, durationMs: number): Promise<void> {
     const current = this.state;
@@ -88,7 +96,7 @@ class VoicePlaybackStore {
     };
     this.emit();
     try {
-      await deviceBridge.playAudio(uri);
+      await deviceBridge.playAudio(uri, prefs.get().playbackRate);
     } catch {
       this.state = { ...this.state, playing: false };
       this.emit();
@@ -109,6 +117,13 @@ class VoicePlaybackStore {
 }
 
 export const voicePlayback = new VoicePlaybackStore();
+
+const subscribeRate = (listener: () => void): (() => void) => prefs.subscribe(listener);
+const rateSnapshot = (): number => prefs.get().playbackRate;
+
+export function usePlaybackRate(): number {
+  return useSyncExternalStore(subscribeRate, rateSnapshot);
+}
 
 /** Playback state of one recording, so a bubble re-renders only while it is the one playing. */
 export function usePlaybackOf(uri: string | undefined): PlaybackState | null {

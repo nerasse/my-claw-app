@@ -255,6 +255,7 @@ jest.mock('./src/core/nativeBridge', () => ({
     listImportedSounds: jest.fn(() => Promise.resolve([])),
     deleteImportedSound: jest.fn(() => Promise.resolve(null)),
     playAudio: jest.fn(() => Promise.resolve()),
+    setPlaybackRate: jest.fn(() => Promise.resolve()),
     pausePlayback: jest.fn(() => Promise.resolve()),
     seekPlayback: jest.fn(() => Promise.resolve()),
     stopPlayback: jest.fn(() => Promise.resolve()),

@@ -376,7 +376,7 @@ test('a voice bubble plays, pauses, and never lets two notes run at once', async
   await waitFor(() => labelsOf(tree).includes('Play voice message'));
 
   await press(tree, 'Play voice message');
-  expect(bridge.playAudio).toHaveBeenCalledWith('file:///cache/voice.m4a');
+  expect(bridge.playAudio).toHaveBeenCalledWith('file:///cache/voice.m4a', 1);
 
   await waitFor(() => labelsOf(tree).includes('Pause voice message'));
   await press(tree, 'Pause voice message');
@@ -589,7 +589,7 @@ test('a staged take can be listened to and scrubbed before it is sent', async ()
 
   // The same controls the bubbles have, on a take that has not left the device.
   await press(tree, 'Play voice message');
-  expect(bridge.playAudio).toHaveBeenCalledWith('file:///cache/voice.m4a');
+  expect(bridge.playAudio).toHaveBeenCalledWith('file:///cache/voice.m4a', 1);
 
   const scrub = labelsOf(tree).find(label => label.startsWith('Seek to '))!;
   expect(scrub).toBeDefined();
@@ -598,6 +598,31 @@ test('a staged take can be listened to and scrubbed before it is sent', async ()
 
   // Nothing has been sent by reviewing it.
   expect(chatSends()).toHaveLength(0);
+
+  await unmount(tree);
+});
+
+test('the speed button steps the playback speed up to 2x, wraps to 1x, and every note plays at it', async () => {
+  const tree = await renderApp();
+  const touch = finger(tree);
+  await touch.down();
+  await touch.up();
+  await waitFor(() => labelsOf(tree).includes('Remove voice message'));
+
+  const speeds: string[] = [];
+  for (let i = 0; i < 6; i += 1) {
+    const label = labelsOf(tree).find(l => l.startsWith('Playback speed '))!;
+    speeds.push(label);
+    await press(tree, label);
+  }
+  expect(speeds).toEqual(['1', '1.1', '1.2', '1.3', '1.5', '2'].map(s => `Playback speed ${s}\u00d7`));
+  expect(labelsOf(tree)).toContain('Playback speed 1\u00d7');
+  expect(bridge.setPlaybackRate.mock.calls.map(([rate]) => rate)).toEqual([1.1, 1.2, 1.3, 1.5, 2, 1]);
+  expect(bridge.prefsSet).toHaveBeenLastCalledWith('playbackRate', '1');
+
+  await press(tree, 'Playback speed 1\u00d7');
+  await press(tree, 'Play voice message');
+  expect(bridge.playAudio).toHaveBeenLastCalledWith('file:///cache/voice.m4a', 1.1);
 
   await unmount(tree);
 });

@@ -294,7 +294,10 @@ export interface DeviceBridgeNative {
   /** Resolves null when the take was too short to hold audio (a tap rather than a hold). */
   stopRecording(): Promise<VoiceRecording | null>;
   cancelRecording(): Promise<void>;
-  playAudio(uri: string): Promise<void>;
+  /** `rate` is the speed (1 = normal); the pitch is kept. */
+  playAudio(uri: string, rate: number): Promise<void>;
+  /** Applies to the note playing now, and to a paused one when it resumes. */
+  setPlaybackRate(rate: number): Promise<void>;
   pausePlayback(): Promise<void>;
   seekPlayback(positionMs: number): Promise<void>;
   stopPlayback(): Promise<void>;
@@ -383,8 +386,9 @@ export const deviceBridge: DeviceBridgeNative = {
     native?.startRecording() ?? Promise.reject(new Error('DeviceBridge unavailable')),
   stopRecording: () => native?.stopRecording() ?? Promise.resolve(null),
   cancelRecording: () => native?.cancelRecording() ?? Promise.resolve(),
-  playAudio: uri =>
-    native?.playAudio(uri) ?? Promise.reject(new Error('DeviceBridge unavailable')),
+  playAudio: (uri, rate) =>
+    native?.playAudio(uri, rate) ?? Promise.reject(new Error('DeviceBridge unavailable')),
+  setPlaybackRate: rate => native?.setPlaybackRate(rate) ?? Promise.resolve(),
   pausePlayback: () => native?.pausePlayback() ?? Promise.resolve(),
   seekPlayback: positionMs => native?.seekPlayback(positionMs) ?? Promise.resolve(),
   stopPlayback: () => native?.stopPlayback() ?? Promise.resolve(),

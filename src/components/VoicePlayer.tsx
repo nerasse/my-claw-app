@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { PlayPauseIcon } from './icons';
-import { formatDuration, usePlaybackOf, voicePlayback } from '../core/voice';
+import { formatDuration, usePlaybackOf, usePlaybackRate, voicePlayback } from '../core/voice';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /** Fixed bar count: the shape is decorative, and reading a real waveform would cost a decode. */
@@ -36,6 +36,7 @@ export function VoicePlayer({
   const styles = useThemedStyles(createStyles);
   const playback = usePlaybackOf(uri);
   const playing = playback?.playing ?? false;
+  const rate = usePlaybackRate();
 
   const total = playback?.durationMs || durationMs || 0;
   const position = playback?.positionMs ?? 0;
@@ -96,9 +97,31 @@ export function VoicePlayer({
         {formatDuration(playing || position > 0 ? Math.max(0, total - position) : total)}
       </Text>
 
+      <Pressable
+        onPress={() => {
+          voicePlayback.cycleRate().catch(() => {});
+        }}
+        style={[styles.rate, onAccent && styles.rateOnAccent, rate !== 1 && (onAccent ? styles.rateActiveOnAccent : styles.rateActive)]}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Playback speed ${formatRate(rate)}`}>
+        <Text
+          style={[
+            styles.rateText,
+            onAccent && styles.rateTextOnAccent,
+            rate !== 1 && (onAccent ? styles.rateTextActiveOnAccent : styles.rateTextActive),
+          ]}>
+          {formatRate(rate)}
+        </Text>
+      </Pressable>
+
       {trailing}
     </View>
   );
+}
+
+function formatRate(rate: number): string {
+  return `${rate}\u00d7`;
 }
 
 /** Deterministic from the id, so a recording keeps its silhouette across renders and reloads. */
@@ -148,4 +171,27 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     textAlign: 'right' as const,
   },
   timeOnAccent: { color: palette.onAccentMuted },
+  // Fixed width: the label goes from "1×" to "1.5×", and the row must not shift under the thumb.
+  rate: {
+    minWidth: 38,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  rateOnAccent: { borderColor: palette.onAccentTrack },
+  rateActive: { borderColor: palette.accent },
+  rateActiveOnAccent: { borderColor: palette.accentText },
+  rateText: {
+    fontSize: scaleFont(font.micro, scale),
+    fontWeight: '600' as const,
+    color: palette.textFaint,
+    fontVariant: ['tabular-nums' as const],
+  },
+  rateTextOnAccent: { color: palette.onAccentMuted },
+  rateTextActive: { color: palette.accent },
+  rateTextActiveOnAccent: { color: palette.accentText },
 });

@@ -383,13 +383,19 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   }
 
   @ReactMethod
-  fun playAudio(uri: String, promise: Promise) {
+  fun playAudio(uri: String, rate: Double, promise: Promise) {
     try {
-      voiceAudio.play(uri)
+      voiceAudio.play(uri, rate.toFloat())
       promise.resolve(null)
     } catch (err: Exception) {
       promise.reject("PLAYBACK_FAILED", err.message ?: "could not play audio", err)
     }
+  }
+
+  @ReactMethod
+  fun setPlaybackRate(rate: Double, promise: Promise) {
+    voiceAudio.setRate(rate.toFloat())
+    promise.resolve(null)
   }
 
   @ReactMethod

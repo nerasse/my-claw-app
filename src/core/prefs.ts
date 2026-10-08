@@ -23,6 +23,8 @@ export interface Prefs {
   collapsedFolders: string[];
   /** Setup steps the owner skipped on this device, by key: the assistant stops asking about them. */
   setupSkipped: string[];
+  /** Audio playback speed, one of PLAYBACK_RATES: kept from one note to the next, like a podcast app. */
+  playbackRate: number;
 }
 
 export { DEFAULT_SERVER_URL };
@@ -35,6 +37,7 @@ const DEFAULTS: Prefs = {
   chatFontScale: 1,
   collapsedFolders: [],
   setupSkipped: [],
+  playbackRate: 1,
 };
 
 const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
@@ -46,6 +49,19 @@ export const CHAT_SCALE_MAX = 1.3;
 /** Folder ids travel as one comma-separated string: ids carry no comma, and the file stays legible. */
 export function parseCollapsedFolders(raw: string | undefined): string[] {
   return raw ? raw.split(',').filter(id => id !== '') : [];
+}
+
+/** Small steps first, where a voice still sounds like itself, then the jumps; past 2 it wraps to 1. */
+export const PLAYBACK_RATES = [1, 1.1, 1.2, 1.3, 1.5, 2] as const;
+
+export function parsePlaybackRate(raw: string | undefined): number {
+  const value = Number(raw);
+  return PLAYBACK_RATES.some(rate => rate === value) ? value : DEFAULTS.playbackRate;
+}
+
+export function nextPlaybackRate(current: number): number {
+  const index = PLAYBACK_RATES.findIndex(rate => rate === current);
+  return PLAYBACK_RATES[(index + 1) % PLAYBACK_RATES.length];
 }
 
 export function clampChatScale(value: number): number {
@@ -92,6 +108,7 @@ class PrefsStore {
         chatFontScale: clampChatScale(Number(raw.chatFontScale)),
         collapsedFolders: parseCollapsedFolders(raw.collapsedFolders),
         setupSkipped: parseCollapsedFolders(raw.setupSkipped),
+        playbackRate: parsePlaybackRate(raw.playbackRate),
       };
     } catch {
       this.current = DEFAULTS;

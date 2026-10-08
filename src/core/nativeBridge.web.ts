@@ -215,7 +215,10 @@ export interface DeviceBridgeNative {
   startRecording(): Promise<string>;
   stopRecording(): Promise<VoiceRecording | null>;
   cancelRecording(): Promise<void>;
-  playAudio(uri: string): Promise<void>;
+  /** `rate` is the speed (1 = normal); the pitch is kept. */
+  playAudio(uri: string, rate: number): Promise<void>;
+  /** Applies to the note playing now, and to a paused one when it resumes. */
+  setPlaybackRate(rate: number): Promise<void>;
   pausePlayback(): Promise<void>;
   seekPlayback(positionMs: number): Promise<void>;
   stopPlayback(): Promise<void>;
@@ -867,12 +870,14 @@ export const deviceBridge: DeviceBridgeNative = {
     stopTracks(current);
     return Promise.resolve();
   },
-  playAudio: uri => {
+  playAudio: (uri, rate) => {
     if (player && playerUri === uri) {
+      player.playbackRate = rate;
       return player.play().then(() => emitPlayback(true));
     }
     player?.pause();
     player = new Audio(uri);
+    player.playbackRate = rate;
     playerUri = uri;
     player.ontimeupdate = () => emitPlayback(true);
     player.onended = () => {
@@ -880,6 +885,10 @@ export const deviceBridge: DeviceBridgeNative = {
       playerUri = null;
     };
     return player.play().then(() => emitPlayback(true));
+  },
+  setPlaybackRate: rate => {
+    if (player) player.playbackRate = rate;
+    return Promise.resolve();
   },
   pausePlayback: () => {
     player?.pause();
