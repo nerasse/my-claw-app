@@ -8,7 +8,7 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter, ScrollView } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { agentsStore } from '../src/core/agents';
 import { providersEnvStore } from '../src/core/providers';
@@ -179,6 +179,19 @@ const field = (tree: Tree, label: string) =>
 
 const saveState = (tree: Tree) =>
   tree.root.find(node => node.props.accessibilityLabel === 'Create provider' && node.props.accessibilityState).props.accessibilityState;
+
+test('the provider form saves from its header, out of the scroll the keyboard can cover', async () => {
+  const tree = await bootToProviders();
+  await addFrom(tree, 'Groq');
+  // Typing the key brings the keyboard up over the end of the form; a save at the bottom of the
+  // scroll went under it with no way back but rotating the phone (owner, 2026-10-09).
+  let node = tree.root.find(n => n.props.accessibilityLabel === 'Create provider' && n.props.accessibilityState).parent;
+  while (node) {
+    expect(node.type).not.toBe(ScrollView);
+    node = node.parent;
+  }
+  await settleAndUnmount(tree);
+});
 
 test('a known service is a name and a key: the key is written first, then its page asks for the models', async () => {
   const tree = await bootToProviders();

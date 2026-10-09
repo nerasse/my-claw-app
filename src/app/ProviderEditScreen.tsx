@@ -153,6 +153,31 @@ export function ProviderEditScreen({
           </Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
+        <Pressable
+          onPress={() =>
+            // The disabled prop stops the touch, not a stray programmatic press (tests, AT).
+            canSave &&
+            onSave({
+              key: key.trim(),
+              providerType,
+              baseUrl: baseUrl.trim(),
+              group: name.trim(),
+              discover,
+              promptCache,
+              reasoningReplay,
+              pricingProvider: pricingProvider.trim(),
+              fallbackModel: fallbackModel.trim(),
+              apiKeyEnv,
+              envValue: envValue.trim(),
+            })
+          }
+          disabled={!canSave}
+          style={[styles.headerSave, canSave ? styles.saveEnabled : styles.saveDisabled]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSave }}
+          accessibilityLabel={creating ? 'Create provider' : 'Save provider'}>
+          <Text style={canSave ? styles.saveText : styles.saveTextOff}>{busy ? '...' : creating ? 'Add' : 'Save'}</Text>
+        </Pressable>
         <CloseButton />
       </View>
 
@@ -459,29 +484,6 @@ export function ProviderEditScreen({
           </View>
         ) : null}
 
-        <Pressable
-          onPress={() =>
-            onSave({
-              key: key.trim(),
-              providerType,
-              baseUrl: baseUrl.trim(),
-              group: name.trim(),
-              discover,
-              promptCache,
-              reasoningReplay,
-              pricingProvider: pricingProvider.trim(),
-              fallbackModel: fallbackModel.trim(),
-              apiKeyEnv,
-              envValue: envValue.trim(),
-            })
-          }
-          disabled={!canSave}
-          style={[styles.saveButton, canSave ? styles.saveEnabled : styles.saveDisabled]}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canSave }}
-          accessibilityLabel={creating ? 'Create provider' : 'Save provider'}>
-          <Text style={canSave ? styles.saveText : styles.saveTextOff}>{busy ? '...' : creating ? 'Add' : 'Save'}</Text>
-        </Pressable>
 
         {!creating && provider ? (
           <Pressable onPress={onDelete} style={styles.dangerRow} accessibilityRole="button" accessibilityLabel="Delete provider">
@@ -605,6 +607,13 @@ const createStyles = (palette: Palette) => ({
     paddingVertical: space.md,
     borderRadius: radius.md,
     alignItems: 'center' as const,
+  },
+  // In the header, like every other editor: at the end of a long form it went under the keyboard
+  // with nothing on screen to save with (owner, 2026-10-09).
+  headerSave: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
   },
   saveEnabled: { backgroundColor: palette.accent },
   saveDisabled: { backgroundColor: palette.surfaceAlt },

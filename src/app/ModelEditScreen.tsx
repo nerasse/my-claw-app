@@ -161,6 +161,17 @@ export function ModelEditScreen({
             {discovered ? `override on ${provider}` : `custom entry on ${provider}`}
           </Text>
         </View>
+        <Pressable
+          onPress={save}
+          disabled={!canSave}
+          style={[styles.headerSave, canSave ? styles.saveEnabled : styles.saveDisabled]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSave }}
+          accessibilityLabel={mode === 'create' ? 'Create model' : 'Save model'}>
+          <Text style={canSave ? styles.saveText : styles.saveTextOff}>
+            {busy ? '...' : mode === 'create' ? 'Create' : 'Save'}
+          </Text>
+        </Pressable>
         <CloseButton />
       </View>
 
@@ -366,17 +377,6 @@ export function ModelEditScreen({
           </Text>
         </View>
 
-        <Pressable
-          onPress={save}
-          disabled={!canSave}
-          style={[styles.saveButton, canSave ? styles.saveEnabled : styles.saveDisabled]}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canSave }}
-          accessibilityLabel={mode === 'create' ? 'Create model' : 'Save model'}>
-          <Text style={canSave ? styles.saveText : styles.saveTextOff}>
-            {busy ? '...' : mode === 'create' ? 'Create' : 'Save'}
-          </Text>
-        </Pressable>
 
         {declared ? (
           <Pressable
@@ -454,11 +454,11 @@ const createStyles = (palette: Palette) => ({
   rungOn: { backgroundColor: palette.surfaceAlt, borderColor: palette.accent },
   rungText: { fontSize: font.meta, color: palette.textMuted },
   rungTextOn: { fontSize: font.meta, color: palette.text, fontWeight: '600' as const },
-  saveButton: {
-    marginTop: space.sm,
-    paddingVertical: space.md,
-    borderRadius: radius.md,
-    alignItems: 'center' as const,
+  // In the header, like every other editor: at the end of a long form it went under the keyboard.
+  headerSave: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
   },
   saveEnabled: { backgroundColor: palette.accent },
   saveDisabled: { backgroundColor: palette.surfaceAlt },

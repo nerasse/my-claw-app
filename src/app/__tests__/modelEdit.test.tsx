@@ -8,7 +8,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Text, TextInput } from 'react-native';
+import { ScrollView, Text, TextInput } from 'react-native';
 import { ModelEditScreen } from '../ModelEditScreen';
 import type { ModelDeclaration, ModelOption } from '../../core/protocol';
 
@@ -84,4 +84,14 @@ test('an Anthropic provider keeps the refusal warning instead', () => {
   const { tree } = render({ providerType: 'anthropic' });
   expect(texts(tree).some(line => line.includes('leave both off unless /v1/models said so'))).toBe(true);
   expect(texts(tree).some(line => line.includes('only the Anthropic transport'))).toBe(false);
+});
+
+test('save sits in the header, out of the scroll: the keyboard cannot take it off screen', () => {
+  const { tree } = render();
+  const save = tree.root.findByProps({ accessibilityLabel: 'Save model' });
+  let node = save.parent;
+  while (node) {
+    expect(node.type).not.toBe(ScrollView);
+    node = node.parent;
+  }
 });
