@@ -4,6 +4,8 @@
 
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter, PermissionsAndroid, Platform } from 'react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
 import { voicePlayback } from '../src/core/voice';
@@ -591,10 +593,16 @@ test('a staged take can be listened to and scrubbed before it is sent', async ()
   await press(tree, 'Play voice message');
   expect(bridge.playAudio).toHaveBeenCalledWith('file:///cache/voice.m4a', 1);
 
-  const scrub = labelsOf(tree).find(label => label.startsWith('Seek to '))!;
-  expect(scrub).toBeDefined();
-  await press(tree, scrub);
-  expect(bridge.seekPlayback).toHaveBeenCalled();
+  await layoutStrip(tree, 200);
+  await ReactTestRenderer.act(async () => {
+    fireGestureHandler(getByGestureTestId(`voiceTap-${STAGED_ID}`), [
+      { state: State.BEGAN, x: 100, y: 10 },
+      { state: State.END, x: 100, y: 10 },
+    ]);
+  });
+  expect(bridge.seekPlayback).toHaveBeenLastCalledWith(1700);
+  // A take still on the device has no server copy to save.
+  expect(labelsOf(tree)).not.toContain('Download');
 
   // Nothing has been sent by reviewing it.
   expect(chatSends()).toHaveLength(0);
@@ -667,5 +675,108 @@ test('a third recording makes the list scrollable instead of pushing the field o
 
   expect(scrollState()).toBe(true);
 
+  await unmount(tree);
+});
+
+/** The strip measures itself: the gesture maps a finger's x to a share of that width. */
+async function layoutStrip(tree: Tree, width: number): Promise<void> {
+  const strips = tree.root.findAll(
+    node => node.props.accessibilityLabel === 'Playback position' && typeof node.props.onLayout === 'function',
+  );
+  await ReactTestRenderer.act(async () => {
+    for (const strip of strips) strip.props.onLayout({ nativeEvent: { layout: { width, height: 32, x: 0, y: 0 } } });
+  });
+}
+
+/** A staged take is keyed by its local file. */
+const STAGED_ID = 'voice-file:///cache/voice.m4a';
+
+async function openSentNote(tree: Tree): Promise<void> {
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'chat.history',
+        threadId: THREAD,
+        messages: [
+          {
+            id: 'h-1',
+            role: 'user',
+            text: 'écoute ça',
+            ts: '2026-08-06T21:00:00.000Z',
+            attachments: [
+              { id: 'voice-9', type: 'audio', filename: 'voice-note.m4a', mimeType: 'audio/mp4', sizeBytes: 13600, durationMs: 60_000 },
+            ],
+          },
+        ],
+      }),
+    });
+  });
+  await waitFor(() => labelsOf(tree).includes('Play voice message'));
+  await layoutStrip(tree, 200);
+}
+
+test('a drag on the waveform seeks once, on release, to where the finger left it', async () => {
+  const tree = await renderApp();
+  await openSentNote(tree);
+  const texts = (): string[] => tree.root.findAll(n => typeof n.props.children === 'string').map(n => n.props.children as string);
+
+  await ReactTestRenderer.act(async () => {
+    fireGestureHandler(getByGestureTestId('voiceScrub-voice-9'), [
+      { state: State.BEGAN, x: 20, y: 10 },
+      { state: State.ACTIVE, x: 20, y: 10 },
+      { state: State.ACTIVE, x: 90, y: 11 },
+      { state: State.ACTIVE, x: 150, y: 12 },
+      { state: State.END, x: 150, y: 12 },
+    ]);
+  });
+  // 150 of 200 px is three quarters of a minute. The note was not loaded: seeking it starts it
+  // there, rather than moving whatever note was.
+  expect(bridge.playAudio).toHaveBeenCalledTimes(1);
+  expect(bridge.seekPlayback.mock.calls).toEqual([[45_000]]);
+  // Then the usual countdown, from the new place.
+  expect(texts()).toContain('0:15');
+
+  await unmount(tree);
+});
+
+test('a drag past either end of the strip clamps to the start or the end', async () => {
+  const tree = await renderApp();
+  await openSentNote(tree);
+  await ReactTestRenderer.act(async () => {
+    fireGestureHandler(getByGestureTestId('voiceScrub-voice-9'), [
+      { state: State.BEGAN, x: 100, y: 10 },
+      { state: State.ACTIVE, x: 100, y: 10 },
+      { state: State.END, x: 260, y: 10 },
+    ]);
+  });
+  expect(bridge.seekPlayback).toHaveBeenLastCalledWith(60_000);
+  await ReactTestRenderer.act(async () => {
+    fireGestureHandler(getByGestureTestId('voiceScrub-voice-9'), [
+      { state: State.BEGAN, x: 100, y: 10 },
+      { state: State.ACTIVE, x: 100, y: 10 },
+      { state: State.END, x: -40, y: 10 },
+    ]);
+  });
+  expect(bridge.seekPlayback).toHaveBeenLastCalledWith(0);
+  await unmount(tree);
+});
+
+test('a sent note saves through the download arrow under its waveform', async () => {
+  const tree = await renderApp();
+  await openSentNote(tree);
+  expect(labelsOf(tree)).toContain('Download');
+  await unmount(tree);
+});
+
+test('a screen reader moves through the note a tenth at a time', async () => {
+  const tree = await renderApp();
+  await openSentNote(tree);
+  const strip = tree.root.find(
+    node => node.props.accessibilityLabel === 'Playback position' && typeof node.props.onAccessibilityAction === 'function',
+  );
+  await ReactTestRenderer.act(async () => {
+    strip.props.onAccessibilityAction({ nativeEvent: { actionName: 'increment' } });
+  });
+  expect(bridge.seekPlayback).toHaveBeenLastCalledWith(6_000);
   await unmount(tree);
 });

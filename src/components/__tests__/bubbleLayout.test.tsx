@@ -6,6 +6,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Bubble } from '../Bubble';
 import { ChatFontScaleContext } from '../../theme';
 import type { TextItem } from '../../core/chat';
@@ -28,6 +29,8 @@ function render(item: TextItem, scale = 1) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
+      // The app renders every bubble under its GestureHandlerRootView (App.tsx): a voice note scrubs.
+      <GestureHandlerRootView>
       <ChatFontScaleContext.Provider value={scale}>
         <Bubble
           item={item}
@@ -37,7 +40,8 @@ function render(item: TextItem, scale = 1) {
           showTime={false}
           onMenu={() => {}}
         />
-      </ChatFontScaleContext.Provider>,
+      </ChatFontScaleContext.Provider>
+      </GestureHandlerRootView>,
     );
   });
   return tree;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { VoicePlayer } from './VoicePlayer';
+import type { DownloadTarget } from '../core/download';
 import type { AttachmentMeta } from '../core/protocol';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
@@ -10,8 +11,11 @@ export function VoiceNote({
   uri,
   transcript,
   onAccent,
+  download,
 }: {
   att: AttachmentMeta;
+  /** The server copy, saved by the arrow under the waveform. */
+  download?: DownloadTarget;
   /** Local file while the note is still on this device, else the authenticated media url. */
   uri: string;
   /** Filled in once the server reports what it heard. */
@@ -22,7 +26,7 @@ export function VoiceNote({
   const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.wrap}>
-      <VoicePlayer id={att.id} uri={uri} durationMs={att.durationMs} onAccent={onAccent} />
+      <VoicePlayer id={att.id} uri={uri} durationMs={att.durationMs} onAccent={onAccent} download={download} />
       {transcript ? (
         <Text style={[styles.transcript, onAccent && styles.transcriptOnAccent]}>
           {transcript}

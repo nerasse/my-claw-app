@@ -103,9 +103,26 @@ class VoicePlaybackStore {
     }
   }
 
-  async seek(positionMs: number): Promise<void> {
-    this.state = { ...this.state, positionMs };
-    this.emit();
+  /**
+   * The native player holds one note: a seek on another one starts that one there, rather than
+   * moving the note that happens to be loaded.
+   */
+  async seek(uri: string, positionMs: number, durationMs: number): Promise<void> {
+    const current = this.state;
+    if (current.uri !== uri) {
+      this.state = { uri, playing: true, positionMs, durationMs };
+      this.emit();
+      try {
+        await deviceBridge.playAudio(uri, prefs.get().playbackRate);
+      } catch {
+        this.state = { ...this.state, playing: false };
+        this.emit();
+        return;
+      }
+    } else {
+      this.state = { ...current, positionMs };
+      this.emit();
+    }
     await deviceBridge.seekPlayback(positionMs);
   }
 

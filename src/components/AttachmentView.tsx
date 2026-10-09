@@ -60,7 +60,15 @@ export function AttachmentView({
   // A voice note plays where it sits. Falling through to the chip would have named a file the
   // sender already knows about and given no way to hear it back.
   if (att.type === 'audio' && uri && !att.deleted) {
-    return <VoiceNote att={att} uri={uri} transcript={transcript} onAccent={onAccent} />;
+    return (
+      <VoiceNote
+        att={att}
+        uri={uri}
+        transcript={transcript}
+        onAccent={onAccent}
+        download={remote ? { url: remote, filename: att.filename ?? `${att.id}.m4a` } : undefined}
+      />
+    );
   }
 
   // Why the picture is not on screen, when it never arrives: the id and the screen it was asked
