@@ -122,7 +122,7 @@ export function PairingScreen({
             returnKeyType="go"
           />
           <Pressable
-            style={[styles.button, styles.approve, busy && styles.busy]}
+            style={[styles.button, styles.approve, (busy || code.trim().length === 0 || !hasServer) && styles.busy]}
             onPress={submit}
             disabled={busy || code.trim().length === 0 || !hasServer}
             accessibilityRole="button"
