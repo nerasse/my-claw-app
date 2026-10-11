@@ -2,12 +2,13 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { serverFromClaimUrl } from '../core/serverUrl';
 
 /**
  * The pairing QR scanner.
  *
- * The QR the web page shows encodes the claim URL, not the credential, so what this reads is
- * only ever a code the server still has to recognise. Anything else scanned here is ignored
+ * The QR the server shows encodes the claim URL (`https://host/pair#CODE`), not the credential, so
+ * what this reads is a code the server still has to recognise, and the address it lives at. Anything else scanned here is ignored
  * rather than sent: the approval path is the one place where a wrong value costs an account.
  */
 
@@ -23,7 +24,8 @@ export function PairScanner({
   onCode,
   onClose,
 }: {
-  onCode: (code: string) => void;
+  /** `server` is the socket address the claim URL names, or null for a bare code. */
+  onCode: (code: string, server: string | null) => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -42,7 +44,7 @@ export function PairScanner({
         return;
       }
       handled.current = true;
-      onCode(code);
+      onCode(code, serverFromClaimUrl(data));
     },
     [onCode],
   );

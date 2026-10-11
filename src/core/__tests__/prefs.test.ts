@@ -9,10 +9,25 @@ beforeEach(() => {
 });
 
 describe('prefs.hydrate', () => {
-  test('falls back to defaults when nothing is stored', async () => {
+  test('falls back to defaults when nothing is stored: a new install has no address', async () => {
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1 });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1 });
+    expect(DEFAULT_SERVER_URL).toBe('');
+    expect(bridge.prefsSet).not.toHaveBeenCalled();
     expect(prefs.isHydrated()).toBe(true);
+  });
+
+  test('a used phone that never stored an address keeps the one older builds had built in, written down', async () => {
+    bridge.prefsGetAll.mockResolvedValueOnce({ lastThreadId: 'thread-9', collapsedFolders: 'f1' });
+    const loaded = await prefs.hydrate();
+    expect(loaded.serverUrl).toBe('ws://10.10.20.10:8080/my-claw-app');
+    expect(bridge.prefsSet).toHaveBeenCalledWith('serverUrl', 'ws://10.10.20.10:8080/my-claw-app');
+  });
+
+  test('a stored address is never replaced by the legacy one', async () => {
+    bridge.prefsGetAll.mockResolvedValueOnce({ lastThreadId: 'x', serverUrl: 'wss://claw.example/my-claw-app' });
+    expect((await prefs.hydrate()).serverUrl).toBe('wss://claw.example/my-claw-app');
+    expect(bridge.prefsSet).not.toHaveBeenCalled();
   });
 
   test('reads back stored values', async () => {
@@ -25,10 +40,10 @@ describe('prefs.hydrate', () => {
     expect(loaded).toEqual({ themeMode: 'dark', serverUrl: 'wss://claw.example/my-claw-app', lastThreadId: 'thread-9', updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1 });
   });
 
-  test('ignores a corrupted theme mode and an empty url', async () => {
+  test('ignores a corrupted theme mode; a blank url on a used phone is no address, so the legacy one holds', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ themeMode: 'neon', serverUrl: '   ', lastThreadId: '' });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: DEFAULT_SERVER_URL, lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1 });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: 'ws://10.10.20.10:8080/my-claw-app', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1 });
   });
 
   test('reads back the folders that were folded away', async () => {

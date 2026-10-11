@@ -3,6 +3,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import App from '../src/App';
 import { prefs } from '../src/core/prefs';
+import { deviceBridge } from '../src/core/nativeBridge';
 
 export type Tree = ReactTestRenderer.ReactTestRenderer;
 
@@ -126,9 +127,13 @@ export async function unmount(tree: Tree): Promise<void> {
 
 /**
  * Like `renderApp` but for the home screen: waits for the "New conversation" button instead of
- * the composer field, because the home has no composer.
+ * the composer field, because the home has no composer. The app is a configured one: with no
+ * address stored, a new install opens on the server screen instead (ConnectServer.test.tsx).
  */
 export async function renderAppHome(): Promise<Tree> {
+  const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
+  const stored = await bridge.prefsGetAll();
+  if (!stored.serverUrl) bridge.prefsGetAll.mockResolvedValue({ ...stored, serverUrl: 'ws://server:8080/my-claw-app' });
   await prefs.hydrate();
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {

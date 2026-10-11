@@ -75,6 +75,23 @@ describe('codeFromScan', () => {
   });
 });
 
+describe('serverFromClaimUrl', () => {
+  // The QR of `myclaw setup` names the server: a new install takes its address from it.
+  const { serverFromClaimUrl } = require('../serverUrl');
+
+  test('a claim URL gives the socket address, the scheme following the page', () => {
+    expect(serverFromClaimUrl('https://claw.example.fr/pair#K7QW3M2P')).toBe('wss://claw.example.fr/my-claw-app');
+    expect(serverFromClaimUrl(' http://192.168.1.20:8080/pair#k7qw-3m2p ')).toBe('ws://192.168.1.20:8080/my-claw-app');
+  });
+
+  test('a bare code, another path or no scheme names no server', () => {
+    expect(serverFromClaimUrl('K7QW3M2P')).toBeNull();
+    expect(serverFromClaimUrl('https://example.com/pairing#K7QW3M2P')).toBeNull();
+    expect(serverFromClaimUrl('claw.example.fr/pair#K7QW3M2P')).toBeNull();
+    expect(serverFromClaimUrl('ftp://claw.example.fr/pair#K7QW3M2P')).toBeNull();
+  });
+});
+
 describe('pairing errors say which failure it was', () => {
   beforeEach(() => devicesStore.reset());
 

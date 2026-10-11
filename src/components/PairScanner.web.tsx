@@ -17,7 +17,7 @@ export function codeFromScan(raw: string): string | null {
 }
 
 export function PairScanner({ onClose: _onClose }: {
-  onCode: (code: string) => void;
+  onCode: (code: string, server: string | null) => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);

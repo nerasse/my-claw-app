@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
+import { isValidServerUrl } from '../core/serverUrl';
 import { pairingStatus, startPairing, cancelPairing, onPairingStatus, type PairingStatus } from '../core/pairingClient';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -55,12 +56,13 @@ export function PairingScreen({
     if (pairing.phase === 'granted') setStarted(false);
   }, [pairing.phase]);
 
+  const hasServer = isValidServerUrl(serverUrl);
   const submit = useCallback(() => {
-    if (code.trim().length > 0 && !started) {
+    if (code.trim().length > 0 && hasServer && !started) {
       setStarted(true);
       startPairing(serverUrl, code);
     }
-  }, [code, serverUrl, started]);
+  }, [code, serverUrl, started, hasServer]);
 
   const busy = pairing.phase === 'connecting' || pairing.phase === 'waiting';
 
@@ -68,26 +70,30 @@ export function PairingScreen({
     <View style={styles.screen}>
       <View style={styles.header}>
         <BackButton onPress={onClose} label="Back to settings" />
-        <Text style={styles.title}>Pair device</Text>
+        <Text style={styles.title}>{hasServer ? 'Pair device' : 'Connect to your server'}</Text>
       </View>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Pair this device</Text>
+          <Text style={styles.cardTitle}>{hasServer ? 'Pair this device' : 'Connect this app to your my-claw'}</Text>
           <Text style={styles.hint}>
             On the server, run: myclaw setup (the first device), or myclaw device add --kind app --name &quot;Phone&quot;
           </Text>
           <Text style={styles.hint}>
-            Then scan the QR it prints, or type the eight-character code.
+            {hasServer
+              ? 'Then scan the QR it prints, or type the eight-character code.'
+              : 'Then scan the QR it prints: it holds the server address and the code. Or type both below.'}
           </Text>
         </View>
 
         {scanning ? (
           <PairScanner
-            onCode={scanned => {
+            onCode={(scanned, server) => {
               setScanning(false);
               setCode(scanned);
               setStarted(true);
-              startPairing(serverUrl, scanned);
+              // The QR names the server: it wins over whatever the field held.
+              if (server) onUrlChange(server);
+              startPairing(server ?? serverUrl, scanned);
             }}
             onClose={() => setScanning(false)}
           />
@@ -118,7 +124,7 @@ export function PairingScreen({
           <Pressable
             style={[styles.button, styles.approve, busy && styles.busy]}
             onPress={submit}
-            disabled={busy || code.trim().length === 0}
+            disabled={busy || code.trim().length === 0 || !hasServer}
             accessibilityRole="button"
             accessibilityLabel="Submit this pairing code"
           >

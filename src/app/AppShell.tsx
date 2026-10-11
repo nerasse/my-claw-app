@@ -1385,6 +1385,12 @@ export function AppShell(): React.JSX.Element {
       // instead of silently reopening the last one. Always null on Android.
       const target = initialRoute().threadId;
       if (target) openThread(target);
+      // No address yet (a new install: none is built in): ask for one before anything connects.
+      if (!stored.serverUrl && Platform.OS !== 'web') {
+        unauthorizedHandled.current = true;
+        setPairingOpen(true);
+        return undefined;
+      }
       return connection.getState().then(state => {
         setStatus({ state });
         if (state !== 'connected' && state !== 'connecting')
@@ -1728,7 +1734,9 @@ export function AppShell(): React.JSX.Element {
   const pageOpen =
     settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
   /** No conversation on a phone: the list is the screen itself (the `home` mount of Drawer). */
-  const homeList = !layout.pinnedDrawer && !layout.sidePane && !pageOpen && activeThread === null;
+  // The pairing screen is a page too: on a first launch there is no conversation, and the list
+  // would cover it.
+  const homeList = !layout.pinnedDrawer && !layout.sidePane && !pageOpen && !pairingOpen && activeThread === null;
   const openSessions = (): void => {
     // The conversation list is the palette: it searches, and on a desktop it is already there
     // (unfolded, if the owner had folded it away). On the home screen it is the screen: opening

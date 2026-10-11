@@ -28,6 +28,14 @@ export function authQuery(): string {
   return '';
 }
 
+/** No legacy address on the web: the page's origin always answers. */
+export const LEGACY_SERVER_URL = '';
+
+/** Twin of the native one; a browser pairs on the server's /pair page and never scans. */
+export function serverFromClaimUrl(_raw: string): string | null {
+  return null;
+}
+
 /** Twin of the native check. The address is the page's own origin here, so it always holds. */
 export function isValidServerUrl(url: string): boolean {
   return /^(wss?|https?):\/\/[^\s/?#]+\S*$/i.test(url.trim());
