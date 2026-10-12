@@ -3,6 +3,8 @@
  * TurboModule the bundle imports at load time has to exist here or the suite dies
  * before a single test runs.
  */
+global.fetch = jest.fn(() => Promise.reject(new Error('Unit tests must mock their HTTP responses')));
+
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
   default: {
@@ -259,6 +261,17 @@ jest.mock('./src/core/nativeBridge', () => ({
     pausePlayback: jest.fn(() => Promise.resolve()),
     seekPlayback: jest.fn(() => Promise.resolve()),
     stopPlayback: jest.fn(() => Promise.resolve()),
+    microphonePermission: jest.fn(() => Promise.resolve('granted')),
+    setRecordingContext: jest.fn(),
+    voiceDrafts: jest.fn(() => Promise.resolve([])),
+    acknowledgeVoiceDraft: jest.fn(() => Promise.resolve()),
+    configureAPNs: jest.fn(() => Promise.resolve({ permission: 'unavailable', status: 'notConfigured' })),
+    getAPNsState: jest.fn(() => Promise.resolve({ permission: 'unavailable', status: 'notConfigured' })),
+    requestAPNs: jest.fn(() => Promise.resolve({ permission: 'notDetermined', status: 'permissionRequired' })),
+    revokeAPNs: jest.fn(() => Promise.resolve()),
+    invalidateAPNs: jest.fn(),
+    drainNotificationOpen: jest.fn(() => Promise.resolve(null)),
+    setVisibleNotificationThread: jest.fn(),
   },
   deviceEvents: require('react-native').DeviceEventEmitter,
   VOICE_LEVEL_EVENT: 'claw:voice:level',

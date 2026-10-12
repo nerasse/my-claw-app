@@ -12,6 +12,13 @@ import { renderApp, textsOf, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-scroll';
+const mounted: Tree[] = [];
+
+afterEach(async () => {
+  await ReactTestRenderer.act(async () => {
+    for (const tree of mounted.splice(0)) tree.unmount();
+  });
+});
 
 beforeEach(() => {
   chatStore.clearAll();
@@ -55,6 +62,7 @@ function threadList(tree: Tree): ReactTestRenderer.ReactTestInstance {
 
 async function renderThread(): Promise<Tree> {
   const tree = await renderApp();
+  mounted.push(tree);
   await ReactTestRenderer.act(async () => {
     chatStore.seedHistory(THREAD, history);
   });

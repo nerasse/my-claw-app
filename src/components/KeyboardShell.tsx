@@ -1,5 +1,6 @@
 import type React from 'react';
-import { KeyboardAvoidingView, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useKeyboardHeight } from '../core/keyboard';
 
 /**
@@ -20,7 +21,9 @@ import { useKeyboardHeight } from '../core/keyboard';
  * foreground (`keyboardNow`), and this view pads by it. Same value as the 'padding' behaviour it
  * replaces on Android: the platform reports the IME inset minus the bar inset it shares with the
  * navigation bar (`ReactRootView.checkForKeyboardEvents`), which is exactly what a view already
- * sitting above the gesture bar has to add. Derived from the live answer alone, so a stale one can
+ * sitting above the gesture bar has to add on an edge-to-edge window. On Android 14 and below,
+ * adjustResize may already have removed that room: measure the shell in screen coordinates and
+ * pad only the remaining overlap. Derived from the live answer, so a stale one can
  * cost a frame of overshoot and never compound -- on any platform, never RN's 'height' behaviour,
  * which renders `height: initialFrameHeight - bottom` with `flex: 0` against an initial frame
  * measured once, forever. See `docs/keyboard-avoidance.md`.
@@ -36,6 +39,16 @@ export function KeyboardShell({
   children: React.ReactNode;
 }): React.JSX.Element {
   const height = useKeyboardHeight();
+  const view = useRef<View>(null);
+  const [bottom, setBottom] = useState<number | null>(null);
+  const measure = useCallback(() => {
+    view.current?.measureInWindow((_x, y, _width, measuredHeight) => {
+      if (view.current && measuredHeight > 0) setBottom(y + measuredHeight);
+    });
+  }, []);
+  useEffect(() => {
+    if (Platform.OS === 'android') measure();
+  }, [height, measure]);
 
   if (Platform.OS === 'ios') {
     return (
@@ -45,5 +58,15 @@ export function KeyboardShell({
     );
   }
 
-  return <View style={[style, height > 0 ? { paddingBottom: height } : null]}>{children}</View>;
+  const keyboardTop = Platform.OS === 'android' ? Keyboard.metrics()?.screenY : undefined;
+  const padding = height > 0
+    ? bottom !== null && keyboardTop !== undefined
+      ? Math.min(height, Math.max(0, bottom - keyboardTop))
+      : height
+    : 0;
+  return (
+    <View ref={view} collapsable={false} onLayout={measure} style={[style, padding > 0 ? { paddingBottom: padding } : null]}>
+      {children}
+    </View>
+  );
 }

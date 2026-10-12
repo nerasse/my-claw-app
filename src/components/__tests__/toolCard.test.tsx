@@ -15,6 +15,14 @@ import type { ToolItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
 
+const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
+
+afterEach(async () => {
+  await ReactTestRenderer.act(async () => {
+    for (const tree of mounted.splice(0)) tree.unmount();
+  });
+});
+
 function makeItem(overrides: Partial<ToolItem> = {}): ToolItem {
   return {
     id: 'tool-1',
@@ -37,6 +45,7 @@ function renderTool(item: ToolItem, props: Record<string, unknown> = {}) {
         <ToolCard item={item} {...props} />
       </ThemeContext.Provider>,
     );
+    mounted.push(tree);
   });
   return tree;
 }

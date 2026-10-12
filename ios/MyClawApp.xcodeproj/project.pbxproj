@@ -7,23 +7,104 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0073E47B0CD3A0C4188A62CF /* OutboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F2A339B01C5C81E19675A8 /* OutboxTests.swift */; };
 		0C80B921A6F3F58F76C31292 /* libPods-MyClawApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-MyClawApp.a */; };
+		0CFF819426FCD53E5BB1360F /* SocketProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6425D5D3BAEF62F12D119F2 /* SocketProbeTests.swift */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		302A08A319596C3EDC5CC7DC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		34A1367C5A69959CB23E2D5F /* DeviceRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F041E119D457C1D97B1CC63E /* DeviceRuntimeTests.swift */; };
+		4442F817F52FA8AB848B5D60 /* PhoneCompanionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCCDAD5BEAAF673F96812B9 /* PhoneCompanionUITests.swift */; };
+		48CCF64985AD8B095F836E42 /* MyClawNativeAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = 99A7EE46F6694FA52CC665A2 /* MyClawNativeAdapters */; };
+		4CFCA6B6874A87D3A13033E2 /* EncryptedOutboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7FFA77DE489F8568C6C9F9 /* EncryptedOutboxTests.swift */; };
+		510BD96423EDC24C4E91468C /* AudioPlaybackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41C0F5DB552F6AB08CB38A82 /* AudioPlaybackServiceTests.swift */; };
+		53A3CA158D26CFEE98EB383D /* MyClawNativeAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = 8CD11E210D376532476B41DD /* MyClawNativeAdapters */; };
+		542E60A2FC978423F8EBB5BE /* MediaAuthorizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4650531318AB73005449863D /* MediaAuthorizationTests.swift */; };
+		5997E6E2E7E24E3BD16A6AC4 /* CompanionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D557BA94EE015BFD58CE39A7 /* CompanionUITests.swift */; };
+		610F320C35660555237F357B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F921F97838F4BCA98A38C97 /* Foundation.framework */; };
+		70C0EAEFCEFBD4FBBA4F39D5 /* PushRegistrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56FF1251A922C87961D0440F /* PushRegistrationTests.swift */; };
+		752166175D7B4AA2D339AF94 /* ServerAddressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57C569F44F5EC15D55530BD6 /* ServerAddressTests.swift */; };
+		75BD8768D85A505986973BD9 /* libPods-MyClawAppTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D590E85C7A8C2DAF14273D8F /* libPods-MyClawAppTests.a */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
+		7667EE7E0D49A804460316ED /* VoiceCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68D3801E5730705124AE1A84 /* VoiceCaptureTests.swift */; };
+		788ADB09706A538FF37B2CEA /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ABA217CC090F7CDE369010A /* StorageTests.swift */; };
+		78B5D8A53ECCC52B82845220 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F921F97838F4BCA98A38C97 /* Foundation.framework */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		85B2DB5D7EB841BF16D77985 /* FixtureEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FEC3307E75C6654FBEFA5A /* FixtureEndpoint.swift */; };
+		8B62877DB485DE982BFCAF88 /* IOSNotificationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5702AA9328A54D06590D4763 /* IOSNotificationsTests.swift */; };
+		8BE9BABE4360CF54B6E9C4AF /* DeviceBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 9DEC1FB3D8768F5572EF1383 /* DeviceBridge.m */; };
+		8E0DF6C68D45CB27A8831469 /* ConnectionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A504E3F0C37DC5C4266C396 /* ConnectionCoordinatorTests.swift */; };
+		920A48C6DF89133F7AA41577 /* LocalFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6CEBE5218E8583C4A57454B /* LocalFileTests.swift */; };
+		9A84F81F6A1583C0F5B1E170 /* MyClawNativeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9EE187BC1D33E7DA402B7860 /* MyClawNativeCore */; };
+		9AA8316D0099F7B26A77D78A /* MyClawNativeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CF3E4908528096F934929BDD /* MyClawNativeCore */; };
+		B57F8ED797AE4345470E0CF8 /* MediaProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB247E7D9C367CE3F8AABDA7 /* MediaProbeTests.swift */; };
+		CA6F3075B53C4CD34BF2EC76 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54D4AB5ECAC78E8C43579CE /* ExpoModulesProvider.swift */; };
+		CC81C89790F19E31210ECCA8 /* IOSAudioPlaybackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 321B2311234B9A74C8A2E20E /* IOSAudioPlaybackTests.swift */; };
+		CDF6B831F3695ED466349240 /* DeviceBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F44EBCFE5FFC7D1E81BBC9 /* DeviceBridge.swift */; };
+		D866DA71D881D665958C9675 /* DeviceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12BA04229E92E7DDB542631 /* DeviceRuntime.swift */; };
+		E2F49D2817609EC9374A43AA /* VoicePlaybackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E867D4EDBD45FB85EB30C28 /* VoicePlaybackUITests.swift */; };
+		F111240E17AF119A680E1978 /* DebugFixtureProxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF761F54C8D640E3F457499 /* DebugFixtureProxy.swift */; };
+		F5C71E68BF4F07679F3FAC66 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF8023504FE90C9F510C85B /* ExpoModulesProvider.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		1B2F3EA55E6D8753CB17968A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 13B07F861A680F5B00A75B9A;
+			remoteInfo = MyClawApp;
+		};
+		36033EF50B5082373A542A22 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 13B07F861A680F5B00A75B9A;
+			remoteInfo = MyClawApp;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		0A7FFA77DE489F8568C6C9F9 /* EncryptedOutboxTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EncryptedOutboxTests.swift; path = MyClawNativeAdaptersTests/EncryptedOutboxTests.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* MyClawApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyClawApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = MyClawApp/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = MyClawApp/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = MyClawApp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1E867D4EDBD45FB85EB30C28 /* VoicePlaybackUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoicePlaybackUITests.swift; sourceTree = "<group>"; };
+		23F44EBCFE5FFC7D1E81BBC9 /* DeviceBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceBridge.swift; sourceTree = "<group>"; };
+		2A1507ED54A5A0E6DD6A42AD /* MyClawAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyClawAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		314CB7D1FC4D6C5F9CBEEF1F /* Pods-MyClawAppTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MyClawAppTests.debug.xcconfig"; path = "Target Support Files/Pods-MyClawAppTests/Pods-MyClawAppTests.debug.xcconfig"; sourceTree = "<group>"; };
+		321B2311234B9A74C8A2E20E /* IOSAudioPlaybackTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IOSAudioPlaybackTests.swift; path = MyClawNativeAdaptersTests/IOSAudioPlaybackTests.swift; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-MyClawApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MyClawApp.debug.xcconfig"; path = "Target Support Files/Pods-MyClawApp/Pods-MyClawApp.debug.xcconfig"; sourceTree = "<group>"; };
+		3EF634DAA30E7BF7BD0919C0 /* Pods-MyClawAppTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MyClawAppTests.release.xcconfig"; path = "Target Support Files/Pods-MyClawAppTests/Pods-MyClawAppTests.release.xcconfig"; sourceTree = "<group>"; };
+		41C0F5DB552F6AB08CB38A82 /* AudioPlaybackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AudioPlaybackServiceTests.swift; path = MyClawNativeCoreTests/AudioPlaybackServiceTests.swift; sourceTree = "<group>"; };
+		458EDEC3488A2124FDC453E3 /* MyClawAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyClawAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4650531318AB73005449863D /* MediaAuthorizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MediaAuthorizationTests.swift; path = MyClawNativeCoreTests/MediaAuthorizationTests.swift; sourceTree = "<group>"; };
+		56FF1251A922C87961D0440F /* PushRegistrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PushRegistrationTests.swift; path = MyClawNativeCoreTests/PushRegistrationTests.swift; sourceTree = "<group>"; };
+		5702AA9328A54D06590D4763 /* IOSNotificationsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IOSNotificationsTests.swift; path = MyClawNativeAdaptersTests/IOSNotificationsTests.swift; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-MyClawApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MyClawApp.release.xcconfig"; path = "Target Support Files/Pods-MyClawApp/Pods-MyClawApp.release.xcconfig"; sourceTree = "<group>"; };
+		57C569F44F5EC15D55530BD6 /* ServerAddressTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ServerAddressTests.swift; path = MyClawNativeCoreTests/ServerAddressTests.swift; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-MyClawApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-MyClawApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		68D3801E5730705124AE1A84 /* VoiceCaptureTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VoiceCaptureTests.swift; path = MyClawNativeCoreTests/VoiceCaptureTests.swift; sourceTree = "<group>"; };
+		6F921F97838F4BCA98A38C97 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = MyClawApp/AppDelegate.swift; sourceTree = "<group>"; };
+		7FF8023504FE90C9F510C85B /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-MyClawAppTests/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = MyClawApp/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		8ABA217CC090F7CDE369010A /* StorageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StorageTests.swift; path = MyClawNativeAdaptersTests/StorageTests.swift; sourceTree = "<group>"; };
+		9A504E3F0C37DC5C4266C396 /* ConnectionCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConnectionCoordinatorTests.swift; path = MyClawNativeCoreTests/ConnectionCoordinatorTests.swift; sourceTree = "<group>"; };
+		9DEC1FB3D8768F5572EF1383 /* DeviceBridge.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = DeviceBridge.m; sourceTree = "<group>"; };
+		C54D4AB5ECAC78E8C43579CE /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-MyClawApp/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		CBF761F54C8D640E3F457499 /* DebugFixtureProxy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DebugFixtureProxy.swift; sourceTree = "<group>"; };
+		D3F2A339B01C5C81E19675A8 /* OutboxTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OutboxTests.swift; path = MyClawNativeCoreTests/OutboxTests.swift; sourceTree = "<group>"; };
+		D557BA94EE015BFD58CE39A7 /* CompanionUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CompanionUITests.swift; sourceTree = "<group>"; };
+		D590E85C7A8C2DAF14273D8F /* libPods-MyClawAppTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-MyClawAppTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D6425D5D3BAEF62F12D119F2 /* SocketProbeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SocketProbeTests.swift; path = MyClawNativeAdaptersTests/SocketProbeTests.swift; sourceTree = "<group>"; };
+		D6CEBE5218E8583C4A57454B /* LocalFileTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LocalFileTests.swift; path = MyClawNativeAdaptersTests/LocalFileTests.swift; sourceTree = "<group>"; };
+		D6FEC3307E75C6654FBEFA5A /* FixtureEndpoint.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FixtureEndpoint.swift; sourceTree = "<group>"; };
+		DCCCDAD5BEAAF673F96812B9 /* PhoneCompanionUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PhoneCompanionUITests.swift; sourceTree = "<group>"; };
+		E12BA04229E92E7DDB542631 /* DeviceRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceRuntime.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		F041E119D457C1D97B1CC63E /* DeviceRuntimeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceRuntimeTests.swift; sourceTree = "<group>"; };
+		FB247E7D9C367CE3F8AABDA7 /* MediaProbeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MediaProbeTests.swift; path = MyClawNativeAdaptersTests/MediaProbeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -32,12 +113,51 @@
 			buildActionMask = 2147483647;
 			files = (
 				0C80B921A6F3F58F76C31292 /* libPods-MyClawApp.a in Frameworks */,
+				9AA8316D0099F7B26A77D78A /* MyClawNativeCore in Frameworks */,
+				53A3CA158D26CFEE98EB383D /* MyClawNativeAdapters in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		44081B9AB5925BA2DC8F3497 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				78B5D8A53ECCC52B82845220 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		87272606D63D6AAC47BE5D90 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				610F320C35660555237F357B /* Foundation.framework in Frameworks */,
+				9A84F81F6A1583C0F5B1E170 /* MyClawNativeCore in Frameworks */,
+				48CCF64985AD8B095F836E42 /* MyClawNativeAdapters in Frameworks */,
+				75BD8768D85A505986973BD9 /* libPods-MyClawAppTests.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		074CD0007B8AA151AEB86469 /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				AD281B6B482AD6B8AE1EC450 /* MyClawApp */,
+				8DF4F4FCA2A5B5CC2099C113 /* MyClawAppTests */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
+		11407DEA430884641922F12B /* MyClawAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				F041E119D457C1D97B1CC63E /* DeviceRuntimeTests.swift */,
+			);
+			name = MyClawAppTests;
+			path = MyClawAppTests;
+			sourceTree = "<group>";
+		};
 		13B07FAE1A68108700A75B9A /* MyClawApp */ = {
 			isa = PBXGroup;
 			children = (
@@ -46,6 +166,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				ED9921369E8F7FE0C5D50E19 /* Native */,
 			);
 			name = MyClawApp;
 			sourceTree = "<group>";
@@ -55,8 +176,32 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				5DCACB8F33CDC322A6C60F78 /* libPods-MyClawApp.a */,
+				A9917DECCE47A5A9ABF9DCA7 /* iOS */,
+				D590E85C7A8C2DAF14273D8F /* libPods-MyClawAppTests.a */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		373F2FC65E1244DC541E5A49 /* NativeCoreTests */ = {
+			isa = PBXGroup;
+			children = (
+				D6425D5D3BAEF62F12D119F2 /* SocketProbeTests.swift */,
+				8ABA217CC090F7CDE369010A /* StorageTests.swift */,
+				9A504E3F0C37DC5C4266C396 /* ConnectionCoordinatorTests.swift */,
+				D3F2A339B01C5C81E19675A8 /* OutboxTests.swift */,
+				57C569F44F5EC15D55530BD6 /* ServerAddressTests.swift */,
+				D6CEBE5218E8583C4A57454B /* LocalFileTests.swift */,
+				4650531318AB73005449863D /* MediaAuthorizationTests.swift */,
+				FB247E7D9C367CE3F8AABDA7 /* MediaProbeTests.swift */,
+				68D3801E5730705124AE1A84 /* VoiceCaptureTests.swift */,
+				56FF1251A922C87961D0440F /* PushRegistrationTests.swift */,
+				321B2311234B9A74C8A2E20E /* IOSAudioPlaybackTests.swift */,
+				0A7FFA77DE489F8568C6C9F9 /* EncryptedOutboxTests.swift */,
+				5702AA9328A54D06590D4763 /* IOSNotificationsTests.swift */,
+				41C0F5DB552F6AB08CB38A82 /* AudioPlaybackServiceTests.swift */,
+			);
+			name = NativeCoreTests;
+			path = NativeCore/Tests;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -74,6 +219,10 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				074CD0007B8AA151AEB86469 /* ExpoModulesProviders */,
+				373F2FC65E1244DC541E5A49 /* NativeCoreTests */,
+				845865766D0BD504457C83A7 /* MyClawAppUITests */,
+				11407DEA430884641922F12B /* MyClawAppTests */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -84,8 +233,46 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* MyClawApp.app */,
+				2A1507ED54A5A0E6DD6A42AD /* MyClawAppTests.xctest */,
+				458EDEC3488A2124FDC453E3 /* MyClawAppUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		845865766D0BD504457C83A7 /* MyClawAppUITests */ = {
+			isa = PBXGroup;
+			children = (
+				D557BA94EE015BFD58CE39A7 /* CompanionUITests.swift */,
+				1E867D4EDBD45FB85EB30C28 /* VoicePlaybackUITests.swift */,
+				D6FEC3307E75C6654FBEFA5A /* FixtureEndpoint.swift */,
+				DCCCDAD5BEAAF673F96812B9 /* PhoneCompanionUITests.swift */,
+			);
+			name = MyClawAppUITests;
+			path = MyClawAppUITests;
+			sourceTree = "<group>";
+		};
+		8DF4F4FCA2A5B5CC2099C113 /* MyClawAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				7FF8023504FE90C9F510C85B /* ExpoModulesProvider.swift */,
+			);
+			name = MyClawAppTests;
+			sourceTree = "<group>";
+		};
+		A9917DECCE47A5A9ABF9DCA7 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				6F921F97838F4BCA98A38C97 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		AD281B6B482AD6B8AE1EC450 /* MyClawApp */ = {
+			isa = PBXGroup;
+			children = (
+				C54D4AB5ECAC78E8C43579CE /* ExpoModulesProvider.swift */,
+			);
+			name = MyClawApp;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -93,8 +280,22 @@
 			children = (
 				3B4392A12AC88292D35C810B /* Pods-MyClawApp.debug.xcconfig */,
 				5709B34CF0A7D63546082F79 /* Pods-MyClawApp.release.xcconfig */,
+				3EF634DAA30E7BF7BD0919C0 /* Pods-MyClawAppTests.release.xcconfig */,
+				314CB7D1FC4D6C5F9CBEEF1F /* Pods-MyClawAppTests.debug.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		ED9921369E8F7FE0C5D50E19 /* Native */ = {
+			isa = PBXGroup;
+			children = (
+				23F44EBCFE5FFC7D1E81BBC9 /* DeviceBridge.swift */,
+				E12BA04229E92E7DDB542631 /* DeviceRuntime.swift */,
+				9DEC1FB3D8768F5572EF1383 /* DeviceBridge.m */,
+				CBF761F54C8D640E3F457499 /* DebugFixtureProxy.swift */,
+			);
+			name = Native;
+			path = MyClawApp/Native;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -105,6 +306,8 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "MyClawApp" */;
 			buildPhases = (
 				C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */,
+				057B641700B40915307251D2 /* Prepare iOS Info.plist */,
+				947F084DBE4D0A08A13BC4F1 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
@@ -117,9 +320,55 @@
 			dependencies = (
 			);
 			name = MyClawApp;
+			packageProductDependencies = (
+				CF3E4908528096F934929BDD /* MyClawNativeCore */,
+				8CD11E210D376532476B41DD /* MyClawNativeAdapters */,
+			);
 			productName = MyClawApp;
 			productReference = 13B07F961A680F5B00A75B9A /* MyClawApp.app */;
 			productType = "com.apple.product-type.application";
+		};
+		18AF01F6084C52E6882BADB2 /* MyClawAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6EA979B574F111B58D12404E /* Build configuration list for PBXNativeTarget "MyClawAppUITests" */;
+			buildPhases = (
+				C5E0D08CAF4F2DCB6AC11D26 /* Sources */,
+				44081B9AB5925BA2DC8F3497 /* Frameworks */,
+				0251C648B53715150FCC198F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FBF694AAC26D7A5C759FC04E /* PBXTargetDependency */,
+			);
+			name = MyClawAppUITests;
+			productName = MyClawAppUITests;
+			productReference = 458EDEC3488A2124FDC453E3 /* MyClawAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		4D52942E51354C2B3AD94977 /* MyClawAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2292FE1BB56E36D6E7E8AA7F /* Build configuration list for PBXNativeTarget "MyClawAppTests" */;
+			buildPhases = (
+				29790E0CBBE4673772C30A33 /* [CP] Check Pods Manifest.lock */,
+				CEFDBD98EE4FA05F4742D51F /* [Expo] Configure project */,
+				EB67DF2BF649FF5403596E70 /* Sources */,
+				87272606D63D6AAC47BE5D90 /* Frameworks */,
+				11672B3632D600DC0790CEC6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DEF97DED9FE3E44EDD9B9962 /* PBXTargetDependency */,
+			);
+			name = MyClawAppTests;
+			packageProductDependencies = (
+				9EE187BC1D33E7DA402B7860 /* MyClawNativeCore */,
+				99A7EE46F6694FA52CC665A2 /* MyClawNativeAdapters */,
+			);
+			productName = MyClawAppTests;
+			productReference = 2A1507ED54A5A0E6DD6A42AD /* MyClawAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -143,22 +392,42 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				3CFDC853902114050F03BCF9 /* XCLocalSwiftPackageReference "NativeCore" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* MyClawApp */,
+				4D52942E51354C2B3AD94977 /* MyClawAppTests */,
+				18AF01F6084C52E6882BADB2 /* MyClawAppUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		0251C648B53715150FCC198F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		11672B3632D600DC0790CEC6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		13B07F8E1A680F5B00A75B9A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+				302A08A319596C3EDC5CC7DC /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,7 +448,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n";
+			shellScript = "set -e\n\nif [ \"$CONFIGURATION\" = Release ]; then export SOURCEMAP_FILE=\"$DWARF_DSYM_FOLDER_PATH/MyClawSymbols/$PRODUCT_NAME.hermes.map\"; mkdir -p \"$DWARF_DSYM_FOLDER_PATH/MyClawSymbols\"; fi\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n";
 		};
 		00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -197,6 +466,73 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MyClawApp/Pods-MyClawApp-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		057B641700B40915307251D2 /* Prepare iOS Info.plist */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/MyClawApp/Info.plist",
+				"$(SRCROOT)/scripts/prepare-info.sh",
+			);
+			name = "Prepare iOS Info.plist";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/MyClawApp-Info.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$SRCROOT/scripts/prepare-info.sh\"";
+		};
+		29790E0CBBE4673772C30A33 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MyClawAppTests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		947F084DBE4D0A08A13BC4F1 /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/MyClawApp/MyClawApp.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-MyClawApp/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Pods/Target Support Files/Pods-MyClawApp/ExpoModulesProvider.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-MyClawApp/expo-configure-project.sh\"\n";
 		};
 		C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -219,6 +555,29 @@
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
+		};
+		CEFDBD98EE4FA05F4742D51F /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-MyClawAppTests/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Pods/Target Support Files/Pods-MyClawAppTests/ExpoModulesProvider.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-MyClawAppTests/expo-configure-project.sh\"\n";
 		};
 		E235C05ADACE081382539298 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -245,34 +604,115 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				CA6F3075B53C4CD34BF2EC76 /* ExpoModulesProvider.swift in Sources */,
+				CDF6B831F3695ED466349240 /* DeviceBridge.swift in Sources */,
+				D866DA71D881D665958C9675 /* DeviceRuntime.swift in Sources */,
+				8BE9BABE4360CF54B6E9C4AF /* DeviceBridge.m in Sources */,
+				F111240E17AF119A680E1978 /* DebugFixtureProxy.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C5E0D08CAF4F2DCB6AC11D26 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5997E6E2E7E24E3BD16A6AC4 /* CompanionUITests.swift in Sources */,
+				E2F49D2817609EC9374A43AA /* VoicePlaybackUITests.swift in Sources */,
+				85B2DB5D7EB841BF16D77985 /* FixtureEndpoint.swift in Sources */,
+				4442F817F52FA8AB848B5D60 /* PhoneCompanionUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EB67DF2BF649FF5403596E70 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0CFF819426FCD53E5BB1360F /* SocketProbeTests.swift in Sources */,
+				788ADB09706A538FF37B2CEA /* StorageTests.swift in Sources */,
+				8E0DF6C68D45CB27A8831469 /* ConnectionCoordinatorTests.swift in Sources */,
+				0073E47B0CD3A0C4188A62CF /* OutboxTests.swift in Sources */,
+				752166175D7B4AA2D339AF94 /* ServerAddressTests.swift in Sources */,
+				920A48C6DF89133F7AA41577 /* LocalFileTests.swift in Sources */,
+				542E60A2FC978423F8EBB5BE /* MediaAuthorizationTests.swift in Sources */,
+				B57F8ED797AE4345470E0CF8 /* MediaProbeTests.swift in Sources */,
+				7667EE7E0D49A804460316ED /* VoiceCaptureTests.swift in Sources */,
+				70C0EAEFCEFBD4FBBA4F39D5 /* PushRegistrationTests.swift in Sources */,
+				CC81C89790F19E31210ECCA8 /* IOSAudioPlaybackTests.swift in Sources */,
+				4CFCA6B6874A87D3A13033E2 /* EncryptedOutboxTests.swift in Sources */,
+				8B62877DB485DE982BFCAF88 /* IOSNotificationsTests.swift in Sources */,
+				510BD96423EDC24C4E91468C /* AudioPlaybackServiceTests.swift in Sources */,
+				34A1367C5A69959CB23E2D5F /* DeviceRuntimeTests.swift in Sources */,
+				F5C71E68BF4F07679F3FAC66 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		DEF97DED9FE3E44EDD9B9962 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MyClawApp;
+			target = 13B07F861A680F5B00A75B9A /* MyClawApp */;
+			targetProxy = 1B2F3EA55E6D8753CB17968A /* PBXContainerItemProxy */;
+		};
+		FBF694AAC26D7A5C759FC04E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MyClawApp;
+			target = 13B07F861A680F5B00A75B9A /* MyClawApp */;
+			targetProxy = 36033EF50B5082373A542A22 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		02CEE35DD6AB48B35D90A472 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3EF634DAA30E7BF7BD0919C0 /* Pods-MyClawAppTests.release.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = org.reactjs.native.example.MyClawAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyClawApp.app/MyClawApp";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-MyClawApp.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = MyClawApp/MyClawApp.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9TU8PY7588;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = MyClawApp/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				INFOPLIST_FILE = "$(DERIVED_FILE_DIR)/MyClawApp-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				MYCLAW_APNS_ENVIRONMENT = development;
+				MYCLAW_RELAY_URL = "";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.kalira.myclaw;
 				PRODUCT_NAME = MyClawApp;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "MyClaw Development";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -287,25 +727,68 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = MyClawApp/MyClawApp.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				INFOPLIST_FILE = MyClawApp/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				DEVELOPMENT_TEAM = 9TU8PY7588;
+				INFOPLIST_FILE = "$(DERIVED_FILE_DIR)/MyClawApp-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				MYCLAW_APNS_ENVIRONMENT = production;
+				MYCLAW_RELAY_URL = "";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.kalira.myclaw;
 				PRODUCT_NAME = MyClawApp;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "MyClaw App Store";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		3552AEC96423783B87E18BB4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9TU8PY7588;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.kalira.myclaw.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MyClawApp;
+			};
+			name = Debug;
+		};
+		65D9756220B1E78882349548 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9TU8PY7588;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.kalira.myclaw.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MyClawApp;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -358,7 +841,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -370,6 +853,10 @@
 				);
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_CFLAGS = (
+					"$(inherited)",
+					"-DRCT_REMOVE_LEGACY_ARCH=1",
+				);
 				OTHER_CPLUSPLUSFLAGS = (
 					"$(OTHER_CFLAGS)",
 					"-DFOLLY_NO_CONFIG",
@@ -377,8 +864,14 @@
 					"-DFOLLY_USE_LIBCPP=1",
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
+					"-DRCT_REMOVE_LEGACY_ARCH=1",
 				);
+				PODFILE_DIR = "$(SRCROOT)";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
+				USE_HERMES = true;
 			};
 			name = Debug;
 		};
@@ -424,7 +917,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -435,6 +928,10 @@
 					"\"$(inherited)\"",
 				);
 				MTL_ENABLE_DEBUG_INFO = NO;
+				OTHER_CFLAGS = (
+					"$(inherited)",
+					"-DRCT_REMOVE_LEGACY_ARCH=1",
+				);
 				OTHER_CPLUSPLUSFLAGS = (
 					"$(OTHER_CFLAGS)",
 					"-DFOLLY_NO_CONFIG",
@@ -442,11 +939,34 @@
 					"-DFOLLY_USE_LIBCPP=1",
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
+					"-DRCT_REMOVE_LEGACY_ARCH=1",
 				);
+				PODFILE_DIR = "$(SRCROOT)";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
+				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
+		};
+		F7AD38FBCCEDA4BF7C349047 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 314CB7D1FC4D6C5F9CBEEF1F /* Pods-MyClawAppTests.debug.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = org.reactjs.native.example.MyClawAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyClawApp.app/MyClawApp";
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -456,6 +976,24 @@
 			buildConfigurations = (
 				13B07F941A680F5B00A75B9A /* Debug */,
 				13B07F951A680F5B00A75B9A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2292FE1BB56E36D6E7E8AA7F /* Build configuration list for PBXNativeTarget "MyClawAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				02CEE35DD6AB48B35D90A472 /* Release */,
+				F7AD38FBCCEDA4BF7C349047 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6EA979B574F111B58D12404E /* Build configuration list for PBXNativeTarget "MyClawAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				65D9756220B1E78882349548 /* Release */,
+				3552AEC96423783B87E18BB4 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -470,6 +1008,36 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3CFDC853902114050F03BCF9 /* XCLocalSwiftPackageReference "NativeCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = NativeCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8CD11E210D376532476B41DD /* MyClawNativeAdapters */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3CFDC853902114050F03BCF9 /* XCLocalSwiftPackageReference "NativeCore" */;
+			productName = MyClawNativeAdapters;
+		};
+		99A7EE46F6694FA52CC665A2 /* MyClawNativeAdapters */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3CFDC853902114050F03BCF9 /* XCLocalSwiftPackageReference "NativeCore" */;
+			productName = MyClawNativeAdapters;
+		};
+		9EE187BC1D33E7DA402B7860 /* MyClawNativeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3CFDC853902114050F03BCF9 /* XCLocalSwiftPackageReference "NativeCore" */;
+			productName = MyClawNativeCore;
+		};
+		CF3E4908528096F934929BDD /* MyClawNativeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3CFDC853902114050F03BCF9 /* XCLocalSwiftPackageReference "NativeCore" */;
+			productName = MyClawNativeCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }

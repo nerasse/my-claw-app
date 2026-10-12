@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type { WsStatusPayload } from '../core/types';
 import type { DeviceInfo } from '../core/device';
-import { appUpdateSupported } from '../core/appUpdateRuntime';
 import { useTheme } from '../theme';
 import { Section, useSettingsStyles } from './settingsParts';
 
@@ -115,6 +114,11 @@ export function ServerSection({
         accessibilityLabel="Server address"
       />
       <Text style={styles.hint}>{`${status.state}${serverVersion ? ` · my-claw ${serverVersion}` : ''}`}</Text>
+      {status.state === 'disconnected' && status.reason && status.reason !== 'disconnected' && status.reason !== 'background' ? (
+        <Text style={styles.hint} accessibilityLabel="Connection failure">
+          {`Connection failed: ${status.reason}`}
+        </Text>
+      ) : null}
       {elsewhere ? (
         <Text style={styles.hint} accessibilityLabel="Live server differs">
           {`still talking to ${status.url} · reconnect to apply`}
@@ -130,7 +134,7 @@ export function ServerSection({
           <Text style={styles.buttonText}>{elsewhere ? 'Reconnect' : 'Connect'}</Text>
         </Pressable>
         {/* A browser pairs on the server's own /pair page: it cannot store a token. */}
-        {appUpdateSupported ? (
+        {Platform.OS !== 'web' ? (
           <Pressable
             style={[styles.button, styles.buttonGhost]}
             onPress={onOpenPairing}

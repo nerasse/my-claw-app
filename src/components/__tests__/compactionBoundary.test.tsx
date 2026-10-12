@@ -19,6 +19,14 @@ import { CompactionBoundary } from '../CompactionBoundary';
 import { resetAsideExpansion } from '../../core/asideExpansion';
 import type { TextItem } from '../../core/chat';
 
+const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
+
+afterEach(async () => {
+  await ReactTestRenderer.act(async () => {
+    for (const tree of mounted.splice(0)) tree.unmount();
+  });
+});
+
 beforeEach(() => {
   resetAsideExpansion();
 });
@@ -44,6 +52,7 @@ function mount(props: { item: TextItem }): ReactTestRenderer.ReactTestRenderer {
       </ThemeContext.Provider>,
     );
   });
+  mounted.push(tree);
   return tree;
 }
 

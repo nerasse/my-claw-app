@@ -33,6 +33,14 @@ const listeners = new Set<Listener>();
 const synced = new Map<string, string>();
 const pending = new Map<string, string>();
 let timer: ReturnType<typeof setTimeout> | undefined;
+let scope = '';
+
+export function draftScope(): string { return scope; }
+export function setDraftScope(origin: string): void {
+  if (scope === origin) return;
+  scope = origin;
+  clearAllDrafts();
+}
 
 export function draftTextOf(threadId: string): string {
   return drafts.get(threadId)?.text ?? '';
@@ -42,7 +50,8 @@ export function draftAttachmentsOf(threadId: string): PendingAttachment[] {
   return drafts.get(threadId)?.attachments ?? [];
 }
 
-export function saveDraft(threadId: string, text: string, attachments: PendingAttachment[]): void {
+export function saveDraft(threadId: string, text: string, attachments: PendingAttachment[], expectedScope = scope): void {
+  if (expectedScope !== scope) return;
   if (!threadId) return;
   if (!text.trim() && attachments.length === 0) {
     drafts.delete(threadId);

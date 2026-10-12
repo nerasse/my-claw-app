@@ -1,0 +1,186 @@
+[
+  {
+    "file": "braces/lib/compile.js",
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "source": "Local bounds check",
+    "before": "dc98f22eee3d511785d92a00758d5f0d48efed5f5813bdecc2de430c529b5c9f",
+    "after": "303aa90ebd0e219228a566796ec87dbaa77d0e4afca6576c6e76be6fa19b3ab3",
+    "replacements": [
+      {
+        "from": "const walk = (node, parent = {}) => {",
+        "to": "const walk = (node, parent = {}, depth = 0) => {\n    if (depth > 128) throw new SyntaxError('Brace nesting exceeds 128 levels');",
+        "count": 1
+      },
+      {
+        "from": "walk(child, node)",
+        "to": "walk(child, node, depth + 1)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "braces/lib/expand.js",
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "source": "Local bounds check",
+    "before": "41ccc196ebfa7b7781a634e721eb744e4e7bcb54cba427a7e3d6806a1b9e58f7",
+    "after": "1f30e1d598ba80882d26e2ec2fe1e5fa61a1a5cef7ad81f5d98a9885846748f7",
+    "replacements": [
+      {
+        "from": "const walk = (node, parent = {}) => {",
+        "to": "const walk = (node, parent = {}, depth = 0) => {\n    if (depth > 128) throw new SyntaxError('Brace nesting exceeds 128 levels');",
+        "count": 1
+      },
+      {
+        "from": "walk(child, node)",
+        "to": "walk(child, node, depth + 1)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "braces/lib/stringify.js",
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "source": "Local bounds check",
+    "before": "379f22d77bfa1478341ccd49c5e4267464aabcbba03558bab332aac23fc6f23a",
+    "after": "dea89db797e46ad56f0889cd67c78c09eb0f37154360169c096e6fa800850a46",
+    "replacements": [
+      {
+        "from": "const stringify = (node, parent = {}) => {",
+        "to": "const stringify = (node, parent = {}, depth = 0) => {\n    if (depth > 128) throw new SyntaxError('Brace nesting exceeds 128 levels');",
+        "count": 1
+      },
+      {
+        "from": "stringify(child)",
+        "to": "stringify(child, {}, depth + 1)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "braces/lib/parse.js",
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "source": "Local bounds check",
+    "before": "e572166565f15fa6ad9865ae49d678218e32aabfd1b3720f6d0d43d39800d310",
+    "after": "2b00b16d92b012344c3b6247e599e7f934096c22c45d3435c082476b02c019c0",
+    "replacements": [
+      {
+        "from": "      stack.push(block);",
+        "to": "      if (stack.length >= 128) throw new SyntaxError('Brace nesting exceeds 128 levels');\n      stack.push(block);",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "file": "node-forge/lib/rsa.js",
+    "advisory": "GHSA-86w9-cpqp-85rv",
+    "source": "https://github.com/digitalbazaar/forge/pull/1152/commits/ceba34402e329f0365134f23fe19898756527d65",
+    "before": "fd4740238145ec26470eb3f06a627c72039538ce1307dbdce40521f94dfd0a50",
+    "after": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "replacements": [
+      {
+        "from": "            obj.value.length !== 2) {",
+        "to": "            obj.value.length !== 2 ||\n            obj.value[0].value.length !== (('parameters' in capture) ? 2 : 1)) {",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "uuid/dist/v35.js",
+    "advisory": "GHSA-w5hq-g745-h8pq",
+    "source": "https://github.com/uuidjs/uuid/commit/3d2c5b0342f0fcb52a5ac681c3d47c13e7444b34",
+    "before": "40c035385b53d4e5ef6438893345e124c12233c38c9d7ebe23f406780d3951d8",
+    "after": "60294b7001175b45dc24f4cd175e54276339ffa04e7c960d1a9a131288935304",
+    "replacements": [
+      {
+        "from": "    var off = buf && offset || 0;",
+        "to": "    var off = buf && offset || 0;\n    if (buf && (!Number.isInteger(off) || off < 0 || off + 16 > buf.length)) {\n      throw new RangeError('UUID byte range is out of buffer bounds');\n    }",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "uuid/dist/esm-node/v35.js",
+    "advisory": "GHSA-w5hq-g745-h8pq",
+    "source": "https://github.com/uuidjs/uuid/commit/3d2c5b0342f0fcb52a5ac681c3d47c13e7444b34",
+    "before": "e66df62ca489f25e1f9f228b88fcee538007c51be9476aeff4548eb7a29e8161",
+    "after": "9c5c357325e990a555858d79dc3a15cf196149c1f5818979921e5dc7b2f49bfc",
+    "replacements": [
+      {
+        "from": "    var off = buf && offset || 0;",
+        "to": "    var off = buf && offset || 0;\n    if (buf && (!Number.isInteger(off) || off < 0 || off + 16 > buf.length)) {\n      throw new RangeError('UUID byte range is out of buffer bounds');\n    }",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "uuid/dist/esm-browser/v35.js",
+    "advisory": "GHSA-w5hq-g745-h8pq",
+    "source": "https://github.com/uuidjs/uuid/commit/3d2c5b0342f0fcb52a5ac681c3d47c13e7444b34",
+    "before": "0873ba3def698bbfabfb6931eceefb52094c80bfecd8f552e4777d499c1baa51",
+    "after": "c4c4659aabc93ece0e292276987ae9f32cd0973486aaae2b85176d7077c7127a",
+    "replacements": [
+      {
+        "from": "    var off = buf && offset || 0;",
+        "to": "    var off = buf && offset || 0;\n    if (buf && (!Number.isInteger(off) || off < 0 || off + 16 > buf.length)) {\n      throw new RangeError('UUID byte range is out of buffer bounds');\n    }",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "image-size/dist/types/utils.js",
+    "advisory": "GHSA-5p2g-fcmc-qvqq",
+    "source": "Local bounds check",
+    "before": "e9faf86abcc962a5fc2488a4c3c9d8dc915aa22a0dd6a7bad6556cd9a326c349",
+    "after": "fb8fa323fb6b7a9ae2dff2ba1b89a8521e26bd7bf86b9486e1d99e7e76c109af",
+    "replacements": [
+      {
+        "from": "    if (input.length - offset < 4)",
+        "to": "    if (input.length - offset < 8)",
+        "count": 1
+      },
+      {
+        "from": "    const boxSize = (0, exports.readUInt32BE)(input, offset);",
+        "to": "    const declaredSize = (0, exports.readUInt32BE)(input, offset);\n    const boxSize = declaredSize === 0 ? input.length - offset : declaredSize;\n    if (boxSize < 8) return;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "image-size/dist/types/icns.js",
+    "advisory": "GHSA-w3rx-r6r6-pgpr",
+    "source": "Local bounds check",
+    "before": "5e6a097fca237b0bb3b68a1be920e39a3846c0018d8917658b5ed88590a710e8",
+    "after": "361110bffea16a8ed8799c685d2617e6ac7f7f9bb6b8ca02a5a5b98854bd8db6",
+    "replacements": [
+      {
+        "from": "    const imageLengthOffset = imageOffset + ENTRY_LENGTH_OFFSET;",
+        "to": "    if (imageOffset + 8 > input.length) throw new TypeError('Invalid ICNS entry header');\n    const imageLengthOffset = imageOffset + ENTRY_LENGTH_OFFSET;\n    const length = (0, utils_1.readUInt32BE)(input, imageLengthOffset);\n    if (length < 8 || imageOffset + length > input.length) throw new TypeError('Invalid ICNS entry length');",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "file": "sprintf-js/src/sprintf.js",
+    "advisory": "GHSA-hp3w-g68c-fv3c",
+    "source": "Local bounds check",
+    "before": "9904b0d448280bfdfcb0329bdac995883033597727404f9c058d051d9174b7c7",
+    "after": "228184b97be6f287f5d55cc71627ab37238eab8a980dd8eef4dbe9579b0578f3",
+    "replacements": [
+      {
+        "from": "arg.toExponential(match[7])",
+        "to": "arg.toExponential(Math.min(Number(match[7]), 100))",
+        "count": 1
+      },
+      {
+        "from": "parseFloat(arg).toFixed(match[7])",
+        "to": "parseFloat(arg).toFixed(Math.min(Number(match[7]), 100))",
+        "count": 1
+      },
+      {
+        "from": "parseFloat(arg).toPrecision(match[7])",
+        "to": "parseFloat(arg).toPrecision(Math.max(1, Math.min(Number(match[7]), 100)))",
+        "count": 1
+      }
+    ]
+  }
+]

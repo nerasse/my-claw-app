@@ -2173,6 +2173,8 @@ class ChatStoreImpl {
   }
 
   clearAll(): void {
+    for (const timer of this.awaitingReceipt.values()) clearTimeout(timer);
+    this.awaitingReceipt.clear();
     this.threads.clear();
     this.hydrated.clear();
     this.compacting.clear();

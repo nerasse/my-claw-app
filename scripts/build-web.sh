@@ -31,4 +31,4 @@ for required in index.js index.html sw.js manifest.webmanifest icons/icon-192.pn
 done
 
 echo "$OUT ready:"
-find "$OUT" -type f -printf '  %P (%s bytes)\n' | sort
+find "$OUT" -type f | sed "s|^$OUT/|  |" | sort

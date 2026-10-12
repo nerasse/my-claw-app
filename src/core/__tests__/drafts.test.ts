@@ -4,6 +4,8 @@ import {
   clearAllDrafts,
   clearDraft,
   draftTextOf,
+  draftScope,
+  setDraftScope,
   onRemoteDraft,
   queueDraftSync,
   saveDraft,
@@ -33,6 +35,16 @@ function typed(): Array<{ type: string; threadId: string; text: string }> {
 }
 
 describe('draft sync', () => {
+  test('switching instances cancels pending sync and ignores a late screen cleanup', () => {
+    setDraftScope('https://first.example');
+    const previous = draftScope();
+    saveDraft(THREAD, 'private draft', []);
+    setDraftScope('https://second.example');
+    saveDraft(THREAD, 'private draft', [], previous);
+    jest.advanceTimersByTime(500);
+    expect(draftTextOf(THREAD)).toBe('');
+    expect(sent).toEqual([]);
+  });
   test('a burst of keystrokes is one frame', () => {
     for (const text of ['b', 'bo', 'bon', 'bonj', 'bonjour']) queueDraftSync(THREAD, text);
     expect(sent).toHaveLength(0);

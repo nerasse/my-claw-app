@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
@@ -22,12 +22,12 @@ import { connection } from '../core/connection';
 import { recordDiag } from '../core/diagnostics';
 import { probeText, revealFieldAboveKeyboard } from '../core/revealField';
 import { keyboardResumeMismatch, onKeyboardResume, RESUME_CHECKS_MS } from '../core/keyboard';
-import { deviceBridge } from '../core/nativeBridge';
+import { deviceBridge, deviceEvents } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
 import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
-import { clearDraft, draftAttachmentsOf, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
+import { clearDraft, draftAttachmentsOf, draftScope, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid, viewerFor, type ViewerKind } from '../core/utils';
@@ -273,6 +273,8 @@ export function ChatScreen({
   const [uploadFailed, setUploadFailed] = useState<Record<string, true>>({});
   /** The upload running for each staged file, so a send waits for it instead of pushing twice. */
   const uploadsRef = useRef(new Map<string, Promise<string>>());
+  const mediaBaseRef = useRef(mediaBase);
+  mediaBaseRef.current = mediaBase;
   const [location, setLocation] = useState<LocationData | undefined>();
   const [locationBusy, setLocationBusy] = useState(false);
   /** Owner decision on the display address: null = provider value, '' = coordinates only. */
@@ -303,9 +305,10 @@ export function ChatScreen({
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
   useEffect(() => {
+    const scope = draftScope();
     setDraft(draftTextOf(threadId));
     setAttachments(draftAttachmentsOf(threadId));
-    return () => saveDraft(threadId, draftRef.current, attachmentsRef.current);
+    return () => saveDraft(threadId, draftRef.current, attachmentsRef.current, scope);
   }, [threadId]);
 
   /** Every change, so the owner's other devices see it. Debounced and deduped by the store. */
@@ -368,6 +371,7 @@ export function ChatScreen({
         setUploadProgress(current => ({ ...current, [pending.id]: Math.round((bytes / total) * 100) }));
       })
         .then(uploaded => {
+          if (mediaBaseRef.current !== mediaBase) throw new Error('server changed during upload');
           setAttachments(current =>
             current.map(item => (item.id === pending.id ? { ...item, mediaId: uploaded.id } : item)),
           );
@@ -571,6 +575,37 @@ export function ChatScreen({
     [startUpload],
   );
 
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let active = true;
+    deviceBridge.setRecordingContext(threadId);
+    const restore = (): void => {
+      deviceBridge.voiceDrafts().then(drafts => {
+        if (!active) return;
+        const restored = drafts.filter(item => item.threadId === threadId && item.recording.durationMs >= 700).map(item => ({
+          id: `voice-${item.recording.uri}`,
+          uri: item.recording.uri,
+          filename: voiceFilename(new Date(), 'audio/mp4'),
+          type: 'audio' as const,
+          mimeType: 'audio/mp4',
+          sizeBytes: item.recording.sizeBytes,
+          audioAsVoice: true,
+          durationMs: item.recording.durationMs,
+        }));
+        if (!restored.length) return;
+        setAttachments(current => {
+          const known = new Set(current.map(item => item.id));
+          return [...current, ...restored.filter(item => !known.has(item.id))];
+        });
+        setUploadError('Recording interrupted. Voice note kept as a draft.');
+      }).catch(() => { if (active) setUploadError('Could not restore the interrupted recording.'); });
+    };
+    restore();
+    const interrupted = deviceEvents.addListener('claw:voice:interrupted', restore);
+    const resumed = AppState.addEventListener('change', state => { if (state === 'active') restore(); });
+    return () => { active = false; interrupted.remove(); resumed.remove(); deviceBridge.setRecordingContext(null); };
+  }, [threadId, mediaBase]);
+
   const submit = useCallback(() => {
     // The button is disabled while an upload runs, and this is what covers the keyboard: Enter
     // does not read the button's state.
@@ -640,6 +675,7 @@ export function ChatScreen({
               ...(attachment.durationMs === undefined ? {} : { durationMs: attachment.durationMs }),
             });
           }
+          if (mediaBaseRef.current !== mediaBase) return;
           setAttachments([]);
           setUploadProgress({});
           setUploadFailed({});
@@ -745,6 +781,7 @@ export function ChatScreen({
   const removeAttachment = useCallback(
     (id: string): void => {
       const staged = attachmentsRef.current.find(item => item.id === id);
+      if (Platform.OS === 'ios' && staged) deviceBridge.acknowledgeVoiceDraft(staged.uri, mediaBaseRef.current).catch(() => {});
       const inFlight = uploadsRef.current.get(id);
       uploadsRef.current.delete(id);
       setAttachments(current => current.filter(item => item.id !== id));
@@ -752,12 +789,13 @@ export function ChatScreen({
       setUploadFailed(current => without(current, id));
       if (!threadId) return;
       const drop = (mediaId: string): void => {
+        if (mediaBaseRef.current !== mediaBase) return;
         connection.send(encodeFileDelete(threadId, mediaId)).catch(() => {});
       };
       if (staged?.mediaId) drop(staged.mediaId);
       else if (inFlight) inFlight.then(drop).catch(() => {});
     },
-    [threadId],
+    [threadId, mediaBase],
   );
 
   /**

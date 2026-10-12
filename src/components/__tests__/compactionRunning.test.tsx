@@ -13,6 +13,15 @@ import { ThemeContext } from '../../theme';
 import { darkPalette } from '../../theme/palettes';
 import { CompactionRunning } from '../CompactionBoundary';
 
+const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
+
+// Leaving these counters mounted lets their timers run after Jest tears down RN.
+afterEach(async () => {
+  await ReactTestRenderer.act(async () => {
+    for (const tree of mounted.splice(0)) tree.unmount();
+  });
+});
+
 function render(props: React.ComponentProps<typeof CompactionRunning>) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
@@ -21,6 +30,7 @@ function render(props: React.ComponentProps<typeof CompactionRunning>) {
         <CompactionRunning {...props} />
       </ThemeContext.Provider>,
     );
+    mounted.push(tree);
   });
   return tree;
 }

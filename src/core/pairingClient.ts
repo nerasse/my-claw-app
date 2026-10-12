@@ -28,6 +28,7 @@ let status: PairingStatus = { phase: 'idle' };
 let socket: WebSocket | null = null;
 let currentUrl = '';
 let claimed = false;
+let generation = 0;
 
 function set(next: PairingStatus): void {
   status = next;
@@ -55,6 +56,7 @@ export function startPairing(baseUrl: string, code: string): void {
     set({ phase: 'error', reason: 'invalid pairing code or server address' });
     return;
   }
+  const session = ++generation;
   if (socket) {
     try {
       socket.close();
@@ -65,17 +67,20 @@ export function startPairing(baseUrl: string, code: string): void {
   // The origin only: the app's own address setting is the socket URL (`ws://host:8080/my-claw-app`),
   // and appending the pairing path to it asked for `/my-claw-app/my-claw-app/pair`.
   currentUrl = httpOrigin(baseUrl).replace(/^http/, 'ws') + '/my-claw-app/pair';
+  const pairingUrl = currentUrl;
+  const origin = httpOrigin(baseUrl);
   claimed = false;
   set({ phase: 'connecting', url: currentUrl });
 
   try {
-    socket = new WebSocket(currentUrl);
+    socket = new WebSocket(pairingUrl);
   } catch {
     set({ phase: 'error', reason: 'could not open the pairing socket' });
     return;
   }
 
   socket.onopen = () => {
+    if (session !== generation) return;
     socket?.send(JSON.stringify({ type: 'pair.hello', kind: 'native', userAgent: 'my-claw-app' }));
     // The CLI ticket is pre-approved: no human is asked to approve. The code is claimed right
     // after the hello; the server answers pair.granted when it recognises the code.
@@ -84,6 +89,7 @@ export function startPairing(baseUrl: string, code: string): void {
   };
 
   socket.onmessage = async (event: { data: string }) => {
+    if (session !== generation) return;
     let frame: Record<string, unknown> | null = null;
     try {
       frame = JSON.parse(String(event.data)) as Record<string, unknown>;
@@ -95,7 +101,10 @@ export function startPairing(baseUrl: string, code: string): void {
     const token = typeof frame.token === 'string' ? frame.token : '';
     if (!deviceId || !token || claimed) return;
     claimed = true;
-    const ok = await deviceBridge.adoptCredentials(deviceId, token);
+    let ok = false;
+    try { ok = await deviceBridge.adoptCredentials(deviceId, token, origin); }
+    catch { ok = false; }
+    if (session !== generation) return;
     try {
       socket?.close();
     } catch {
@@ -107,14 +116,16 @@ export function startPairing(baseUrl: string, code: string): void {
     }
     set({ phase: 'granted', deviceId });
     // Reconnect the chat socket against the same origin with the new, server-minted identity.
-    connection.connect(currentUrl.replace('/my-claw-app/pair', '/my-claw-app'));
+    connection.connect(pairingUrl.replace('/my-claw-app/pair', '/my-claw-app'));
   };
 
   socket.onerror = () => {
+    if (session !== generation) return;
     set({ phase: 'error', reason: 'the pairing socket failed (is the server up?)' });
   };
 
   socket.onclose = () => {
+    if (session !== generation) return;
     if (!claimed) set({ phase: 'error', reason: 'the pairing socket closed before the code was granted' });
     socket = null;
   };
@@ -130,6 +141,7 @@ export function startPairing(baseUrl: string, code: string): void {
 }
 
 export function cancelPairing(): void {
+  generation++;
   if (socket) {
     try {
       socket.close();
@@ -143,6 +155,7 @@ export function cancelPairing(): void {
 
 /** Only tests need it: the module state is intentionally module-level. */
 export function resetPairingClient(): void {
+  generation++;
   socket = null;
   claimed = false;
   currentUrl = '';

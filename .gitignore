@@ -19,6 +19,9 @@ xcuserdata
 DerivedData
 *.hmap
 *.ipa
+*.xcarchive/
+*.p8
+*.mobileprovision
 *.xcuserstate
 **/.xcode.env.local
 
@@ -59,12 +62,15 @@ yarn-error.log
 # Ruby / CocoaPods
 **/Pods/
 /vendor/bundle/
+ios/NativeCore/.build/
+ios/NativeCore/.swiftpm/
 
 # Temporary files created by Metro to check the health of the file watcher
 .metro-health-check*
 
 # testing
 /coverage
+__pycache__/
 
 # Yarn
 .yarn/*
@@ -80,3 +86,4 @@ dist-web.tar.gz
 
 # Copied from assets/codeditor/ by the Gradle preBuild task: the committed page is the source.
 android/app/src/main/assets/codeditor/
+android/app/src/main/assets/pdfviewer/

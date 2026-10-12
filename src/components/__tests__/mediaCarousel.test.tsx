@@ -25,17 +25,26 @@ import { ChatFontScaleContext } from '../../theme';
 import type { AttachmentMeta } from '../../core/protocol';
 import type { TextItem } from '../../core/chat';
 
+const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
+
+afterEach(async () => {
+  await ReactTestRenderer.act(async () => {
+    for (const tree of mounted.splice(0)) tree.unmount();
+  });
+});
+
 const shot = (n: number): AttachmentMeta => ({ id: `m${n}`, type: 'image', filename: `shot-${n}.png` });
 
 const items = (n: number): MediaItem[] =>
   Array.from({ length: n }, (_, i) => ({ url: `http://h/media/${i}`, filename: `shot-${i}.png` }));
 
-function render(element: React.JSX.Element): ReactTestRenderer.ReactTestRenderer {
+async function render(element: React.JSX.Element): Promise<ReactTestRenderer.ReactTestRenderer> {
   let tree!: ReactTestRenderer.ReactTestRenderer;
-  ReactTestRenderer.act(() => {
+  await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(
       <ChatFontScaleContext.Provider value={1}>{element}</ChatFontScaleContext.Provider>,
     );
+    mounted.push(tree);
   });
   return tree;
 }
@@ -51,18 +60,18 @@ function byLabel(tree: ReactTestRenderer.ReactTestRenderer, label: string) {
 }
 
 describe('the carousel', () => {
-  it('steps through the run with the arrows, caption and counter following', () => {
-    const tree = render(<MediaCarousel items={items(5)} onOpen={() => {}} />);
+  it('steps through the run with the arrows, caption and counter following', async () => {
+    const tree = await render(<MediaCarousel items={items(5)} onOpen={() => {}} />);
     expect(texts(tree)).toContain('shot-0.png');
     expect(texts(tree)).toContain('1/5');
 
-    ReactTestRenderer.act(() => {
+    await ReactTestRenderer.act(async () => {
       byLabel(tree, 'Next image')[0]!.props.onPress();
     });
     expect(texts(tree)).toContain('shot-1.png');
     expect(texts(tree)).toContain('2/5');
 
-    ReactTestRenderer.act(() => {
+    await ReactTestRenderer.act(async () => {
       byLabel(tree, 'Previous image')[0]!.props.onPress();
     });
     expect(texts(tree)).toContain('shot-0.png');
@@ -71,52 +80,52 @@ describe('the carousel', () => {
     expect(byLabel(tree, 'Previous image')[0]!.props.disabled).toBe(true);
   });
 
-  it('opens the gallery on the picture that was on screen, not the first', () => {
+  it('opens the gallery on the picture that was on screen, not the first', async () => {
     const opened: number[] = [];
-    const tree = render(<MediaCarousel items={items(3)} onOpen={index => opened.push(index)} />);
-    ReactTestRenderer.act(() => {
+    const tree = await render(<MediaCarousel items={items(3)} onOpen={index => opened.push(index)} />);
+    await ReactTestRenderer.act(async () => {
       byLabel(tree, 'Next image')[0]!.props.onPress();
     });
-    ReactTestRenderer.act(() => {
+    await ReactTestRenderer.act(async () => {
       byLabel(tree, 'Open attachment shot-1.png')[0]!.props.onPress();
     });
     expect(opened).toEqual([1]);
   });
 
-  it('is not a carousel when there is only one picture', () => {
-    const tree = render(<MediaCarousel items={items(1)} onOpen={() => {}} />);
+  it('is not a carousel when there is only one picture', async () => {
+    const tree = await render(<MediaCarousel items={items(1)} onOpen={() => {}} />);
     expect(byLabel(tree, 'Next image')).toHaveLength(0);
     expect(texts(tree)).toContain('shot-0.png');
   });
 });
 
 describe('the geometry', () => {
-  it('gives a wide capture the whole width and its own height, never a square', () => {
+  it('gives a wide capture the whole width and its own height, never a square', async () => {
     // 1280x520 is the browser capture of the report; in a 350pt column that is 142pt tall, where
     // the square it replaced always reserved a flat 190 of empty space around it.
     expect(mediaHeight(350, 1280 / 520)).toBe(142);
     expect(mediaHeight(350, 1280 / 520)).toBeLessThan(190);
   });
 
-  it('clamps a very wide capture at the floor and a tall page at the ceiling', () => {
+  it('clamps a very wide capture at the floor and a tall page at the ceiling', async () => {
     expect(mediaHeight(350, 10)).toBe(MEDIA_MIN_HEIGHT);
     expect(mediaHeight(350, 0.4, CAROUSEL_MAX_HEIGHT)).toBe(CAROUSEL_MAX_HEIGHT);
   });
 
-  it('falls back to 16:9 while the header has not been read', () => {
+  it('falls back to 16:9 while the header has not been read', async () => {
     expect(mediaHeight(320, null)).toBe(180);
   });
 });
 
 describe('the grouping rule', () => {
-  it('collects pictures and videos, and leaves everything else alone', () => {
+  it('collects pictures and videos, and leaves everything else alone', async () => {
     expect(isCarouselMedia({ id: 'a', type: 'image', filename: 'a.png' })).toBe(true);
     expect(isCarouselMedia({ id: 'b', type: 'video', filename: 'b.mp4' })).toBe(true);
     expect(isCarouselMedia({ id: 'c', type: 'file', filename: 'c.pdf' })).toBe(false);
     expect(isCarouselMedia({ id: 'd', type: 'image', filename: 'd.png', deleted: true })).toBe(false);
   });
 
-  it('skips a picture with no bytes left, so a run is only grouped when it is whole', () => {
+  it('skips a picture with no bytes left, so a run is only grouped when it is whole', async () => {
     const run: AttachmentMeta[] = [
       { id: 'm1', type: 'image', filename: 'a.png' },
       { id: 'm2', type: 'image', filename: 'b.png', deleted: true },
@@ -124,7 +133,7 @@ describe('the grouping rule', () => {
     expect(mediaItemsOf(run, 'http://h', { deviceId: 'd', token: 't', ticket: 'k' })).toHaveLength(1);
   });
 
-  it('draws consecutive pictures as one carousel and the rest as their own rows', () => {
+  it('draws consecutive pictures as one carousel and the rest as their own rows', async () => {
     const item: TextItem = {
       id: 'turn-1',
       kind: 'text',
@@ -134,7 +143,7 @@ describe('the grouping rule', () => {
       streaming: false,
       attachments: [shot(1), shot(2), shot(3), { id: 'doc', type: 'file', filename: 'notes.pdf' }],
     };
-    const tree = render(
+    const tree = await render(
       <Bubble
         item={item}
         mediaBase="http://h"

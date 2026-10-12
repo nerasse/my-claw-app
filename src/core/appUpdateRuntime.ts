@@ -10,7 +10,7 @@ import type { AppUpdateCheckResult } from './appUpdate';
  * the tab gets offered a 45 MB Android download it could never install. A web client updates by
  * reloading the page the server serves. Gate the check, the modal and the settings card on this.
  */
-export const appUpdateSupported = Platform.OS !== 'web';
+export const appUpdateSupported = Platform.OS === 'android';
 
 /**
  * The runtime glue between the appUpdate reducer and the device: what the phone asks the server,

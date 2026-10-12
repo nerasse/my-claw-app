@@ -83,7 +83,7 @@ describe('pairingClient', () => {
     ws.server({ type: 'pair.granted', deviceId: 'app-abc1', owner: 'neras', name: 'Phone', token: 'the-token' });
 
     await new Promise(resolve => setTimeout(resolve, 10));
-    expect(bridge.adoptCredentials).toHaveBeenCalledWith('app-abc1', 'the-token');
+    expect(bridge.adoptCredentials).toHaveBeenCalledWith('app-abc1', 'the-token', 'http://10.0.0.5:8080');
     expect((connection as unknown as { connect: jest.Mock }).connect).toHaveBeenCalledWith('ws://10.0.0.5:8080/my-claw-app');
     expect(pairingStatus()).toMatchObject({ phase: 'granted', deviceId: 'app-abc1' });
 
@@ -100,4 +100,23 @@ describe('pairingClient', () => {
     expect(bridge.adoptCredentials).not.toHaveBeenCalled();
     expect(pairingStatus()).toMatchObject({ phase: 'waiting' });
   });
+
+  test('a grant from a cancelled socket cannot pair a different instance', () => {
+    startPairing('https://first.example', 'GW6E73PK');
+    const previous = FakeWebSocket.instances[0]!;
+    previous.open();
+    startPairing('https://second.example', 'GW6E73PK');
+    previous.server({ type: 'pair.granted', deviceId: 'old', token: 'old-token' });
+    expect(bridge.adoptCredentials).not.toHaveBeenCalled();
+    expect(pairingStatus()).toMatchObject({ phase: 'connecting', url: 'wss://second.example/my-claw-app/pair' });
+  });
+});
+
+test('a secure storage rejection surfaces a pairing error and does not reconnect', async () => {
+  resetPairingClient();
+  bridge.adoptCredentials.mockRejectedValueOnce(new Error('keychain unavailable'));
+  startPairing('https://instance.example', 'GW6E73PK');
+  const ws = FakeWebSocket.instances.at(-1)!;
+  await ws.onmessage?.({ data: JSON.stringify({ type: 'pair.granted', deviceId: 'device', token: 'token' }) });
+  expect(pairingStatus()).toMatchObject({ phase: 'error', reason: 'the credentials could not be stored on this device' });
 });

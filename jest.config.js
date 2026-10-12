@@ -1,5 +1,6 @@
 module.exports = {
   preset: '@react-native/jest-preset',
+  testPathIgnorePatterns: ['/node_modules/', '\\.ios\\.test\\.[tj]sx?$'],
   // The gesture engine ships the mock its own detectors need: without it a rendered
   // GestureDetector is a native module that does not exist, and `fireGestureHandler` has nothing
   // to fire into. Official setup file, and it has to come after jest.setup.js.
@@ -9,7 +10,7 @@ module.exports = {
   // The worklets babel plugin compiles in a native unpacker at build time; under Jest its
   // `.native` implementations are redirected to the plain ones, which is what the official
   // resolver does (reanimated 4 + worklets render through the worklets-native path).
-  resolver: 'react-native-worklets/jest/resolver',
+  resolver: '<rootDir>/scripts/jest-native-resolver.js',
   // The gesture engine and the zoom library ship untranspiled ESM; without them in the
   // allow-list babel-jest refuses to parse the import chain of the app. marked is a direct
   // parse target of the markdown safety tests (zero-dependency ESM).

@@ -205,3 +205,8 @@ describe('encodeAgentsDefaultCapSet', () => {
     expect(JSON.parse(encodeAgentsDefaultCapSet(null))).toEqual({ type: 'agents.defaultcap.set', value: null });
   });
 });
+
+test('APNs result JSON enters the real parser and rejects malformed acknowledgements', () => {
+  expect(parseServerFrame(JSON.stringify({ type: 'notifications.apns.result', ok: true, registrationId: 'registration' }))).toMatchObject({ ok: true });
+  expect(parseServerFrame(JSON.stringify({ type: 'notifications.apns.result', ok: 'yes' }))).toBeNull();
+});

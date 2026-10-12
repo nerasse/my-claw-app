@@ -53,16 +53,17 @@ export function PairingScreen({
 
   useEffect(() => {
     // Leave the screen when the pairing lands: the chat socket is reconnecting already.
-    if (pairing.phase === 'granted') setStarted(false);
+    if (pairing.phase === 'granted' || pairing.phase === 'error') setStarted(false);
   }, [pairing.phase]);
 
   const hasServer = isValidServerUrl(serverUrl);
+  const validCode = /^[A-Z0-9]{8}$/.test(code.trim().toUpperCase().replace(/[\s-]/g, ''));
   const submit = useCallback(() => {
-    if (code.trim().length > 0 && hasServer && !started) {
+    if (validCode && hasServer && !started) {
       setStarted(true);
       startPairing(serverUrl, code);
     }
-  }, [code, serverUrl, started, hasServer]);
+  }, [code, serverUrl, started, hasServer, validCode]);
 
   const busy = pairing.phase === 'connecting' || pairing.phase === 'waiting';
 
@@ -78,6 +79,7 @@ export function PairingScreen({
           <Text style={styles.hint}>
             On the server, run: myclaw setup (the first device), or myclaw device add --kind app --name &quot;Phone&quot;
           </Text>
+          <Text style={styles.hint}>The code is single-use and expires after 10 minutes. Your server address stays on this device.</Text>
           <Text style={styles.hint}>
             {hasServer
               ? 'Then scan the QR it prints, or type the eight-character code.'
@@ -109,12 +111,31 @@ export function PairingScreen({
         ) : null}
 
         <Text style={styles.orLabel}>or type the code</Text>
+        <View style={styles.serverCard}>
+          <Text style={styles.cardTitle}>Server address</Text>
+          <TextInput
+            style={styles.input}
+            value={serverUrl}
+            onChangeText={onUrlChange}
+            editable={!busy}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            placeholder="https://myclaw.example.com"
+            placeholderTextColor={styles.placeholder.color}
+            accessibilityLabel="Server address"
+          />
+          <Text style={styles.hint}>Use the HTTPS address of your MyClaw instance.</Text>
+        </View>
+        <Text style={styles.cardTitle}>Pairing code</Text>
         <View style={styles.row}>
           <TextInput
             style={[styles.input, styles.codeInput]}
             value={code}
             onChangeText={setCode}
             placeholder="XXXX-XXXX"
+            placeholderTextColor={styles.placeholder.color}
+            accessibilityLabel="Pairing code"
             autoCapitalize="characters"
             autoCorrect={false}
             editable={!busy}
@@ -122,9 +143,9 @@ export function PairingScreen({
             returnKeyType="go"
           />
           <Pressable
-            style={[styles.button, styles.approve, (busy || code.trim().length === 0 || !hasServer) && styles.busy]}
+            style={[styles.button, styles.approve, (busy || !validCode || !hasServer) && styles.busy]}
             onPress={submit}
-            disabled={busy || code.trim().length === 0 || !hasServer}
+            disabled={busy || !validCode || !hasServer}
             accessibilityRole="button"
             accessibilityLabel="Submit this pairing code"
           >
@@ -133,30 +154,15 @@ export function PairingScreen({
         </View>
 
         {busy || pairing.phase === 'error' || pairing.phase === 'granted' ? (
-          <Text style={[styles.status, pairing.phase === 'error' && styles.error]}>{statusText(pairing)}</Text>
+          <Text style={[styles.status, pairing.phase === 'error' && styles.error]} accessibilityLiveRegion="polite">{statusText(pairing)}</Text>
         ) : null}
 
-        {started && !busy ? (
-          <Pressable onPress={() => { setStarted(false); cancelPairing(); }} style={styles.cancel}>
+        {started ? (
+          <Pressable onPress={() => { setStarted(false); cancelPairing(); }} style={styles.cancel} accessibilityRole="button" accessibilityLabel="Cancel pairing">
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
         ) : null}
 
-        {!started ? (
-          <View style={styles.serverCard}>
-            <Text style={styles.cardTitle}>Server</Text>
-            <TextInput
-              style={styles.input}
-              value={serverUrl}
-              onChangeText={onUrlChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="ws://server:8080/my-claw-app"
-              placeholderTextColor="#888"
-              accessibilityLabel="Server address"
-            />
-          </View>
-        ) : null}
       </ScrollView>
     </View>
   );
@@ -174,19 +180,20 @@ const createStyles = (palette: Palette) => ({
   title: { color: palette.text, fontSize: font.title, fontWeight: '600' as const },
   body: { paddingVertical: space.md, gap: space.sm },
   card: { marginBottom: space.xs },
-  serverCard: { marginTop: space.lg },
+  serverCard: { gap: space.xs, marginBottom: space.sm },
+  placeholder: { color: palette.textFaint },
   cardTitle: { color: palette.text, fontSize: font.body, fontWeight: '600' as const, marginBottom: space.xs },
   hint: { color: palette.textFaint, fontSize: font.small, marginTop: space.xxs, lineHeight: 16 },
   orLabel: { color: palette.textFaint, fontSize: font.small, marginVertical: space.sm, textAlign: 'center' as const },
   row: { flexDirection: 'row' as const, gap: space.sm, alignItems: 'center' as const },
-  input: { flex: 1, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, color: palette.text },
-  codeInput: { letterSpacing: 2 },
-  button: { backgroundColor: palette.accent, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, alignItems: 'center' as const },
+  input: { minHeight: 48, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, color: palette.text },
+  codeInput: { flex: 1, letterSpacing: 2 },
+  button: { minHeight: 48, justifyContent: 'center' as const, backgroundColor: palette.accent, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, alignItems: 'center' as const },
   buttonText: { color: palette.accentText, fontWeight: '600' as const },
   approve: { minWidth: 88 },
   busy: { opacity: 0.6 },
   status: { color: palette.textFaint, fontSize: font.small, marginTop: space.sm },
   error: { color: palette.danger },
-  cancel: { marginTop: space.sm, alignSelf: 'center' as const },
+  cancel: { minHeight: 44, justifyContent: 'center' as const, marginTop: space.sm, alignSelf: 'center' as const, paddingHorizontal: space.md },
   cancelText: { color: palette.textFaint, fontSize: font.small },
 });

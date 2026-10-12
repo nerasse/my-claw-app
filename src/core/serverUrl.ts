@@ -36,12 +36,4 @@ export function isValidServerUrl(url: string): boolean {
  * and a URL built without it would be a 401: the caller waits. The device token never goes in a
  * URL, where every proxy on the way logs it.
  */
-export function authQuery(deviceInfo: { ticket?: string }): string | null {
-  return deviceInfo.ticket ? `ticket=${encodeURIComponent(deviceInfo.ticket)}` : null;
-}
-
-/** The device credential, for a request the app makes itself. */
-export function authHeaders(deviceInfo: { deviceId: string; token: string }): Record<string, string> {
-  if (!deviceInfo.deviceId || !deviceInfo.token) return {};
-  return { 'X-My-Claw-Device': deviceInfo.deviceId, Authorization: `Bearer ${deviceInfo.token}` };
-}
+export { authQuery, authHeaders } from './serverCredentials';

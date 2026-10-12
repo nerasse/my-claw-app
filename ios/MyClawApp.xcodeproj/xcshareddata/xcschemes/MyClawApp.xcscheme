@@ -26,19 +26,63 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
+      shouldUseLaunchSchemeArgsEnv = "NO">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
+            BuildableName = "MyClawApp.app"
+            BlueprintName = "MyClawApp"
+            ReferencedContainer = "container:MyClawApp.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
       <Testables>
          <TestableReference
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "00E356ED1AD99517003FC87E"
+               BlueprintIdentifier = "4D52942E51354C2B3AD94977"
                BuildableName = "MyClawAppTests.xctest"
                BlueprintName = "MyClawAppTests"
                ReferencedContainer = "container:MyClawApp.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "18AF01F6084C52E6882BADB2"
+               BuildableName = "MyClawAppUITests.xctest"
+               BlueprintName = "MyClawAppUITests"
+               ReferencedContainer = "container:MyClawApp.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
+      <EnvironmentVariables>
+         <EnvironmentVariable key = "MYCLAW_QR_PHYSICAL_QA" value = "$(MYCLAW_QR_PHYSICAL_QA)" isEnabled = "YES"/>
+         <EnvironmentVariable key = "MYCLAW_PHYSICAL_QA" value = "$(MYCLAW_PHYSICAL_QA)" isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MYCLAW_IOS_WS_PROBE_URL"
+            value = "$(MYCLAW_IOS_WS_PROBE_URL)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MYCLAW_IOS_MEDIA_PROBE_URL"
+            value = "$(MYCLAW_IOS_MEDIA_PROBE_URL)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MYCLAW_IOS_UI_PROBE_URL"
+            value = "$(MYCLAW_IOS_UI_PROBE_URL)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MYCLAW_IOS_UI_PROBE_CODE"
+            value = "$(MYCLAW_IOS_UI_PROBE_CODE)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

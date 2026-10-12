@@ -106,6 +106,12 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     }).start();
   }, [setPhaseBoth, slide]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const subscription = deviceEvents.addListener('claw:voice:interrupted', () => settle());
+    return () => subscription.remove();
+  }, [settle]);
+
   const begin = useCallback(async () => {
     if (startingRef.current || phaseRef.current !== 'idle') return;
     startingRef.current = true;
@@ -114,7 +120,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
       if (permission !== 'granted') {
         onError(
           permission === 'blocked'
-            ? 'Microphone blocked. Enable it in Android settings.'
+            ? 'Microphone blocked. Enable it in system settings.'
             : 'Microphone permission is needed to record.',
         );
         return;

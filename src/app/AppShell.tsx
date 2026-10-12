@@ -178,7 +178,7 @@ import { InstructionEditorScreen } from './InstructionEditorScreen';
 import { SessionInstructionsScreen } from './SessionInstructionsScreen';
 import { skillUrl } from '../core/skills';
 import { getDeviceInfo, type DeviceInfo } from '../core/device';
-import { deviceBridge } from '../core/nativeBridge';
+import { deviceBridge, deviceEvents } from '../core/nativeBridge';
 import type { OutgoingAttachment } from '../core/upload';
 import type { WsStatusPayload } from '../core/types';
 import { reduceUpdate, type UpdatePhase } from '../core/serverUpdate';
@@ -197,6 +197,8 @@ import { ServerSection, ThisDeviceSection } from './ConnectionSections';
 import { NotificationsScreen } from './NotificationsScreen';
 import { PairingScreen, usePairing } from './PairingScreen';
 import { cancelPairing } from '../core/pairingClient';
+import { subscribeAPNs, enableAPNs, subscribeNotificationOpen, setVisiblePushThread, invalidateAPNs } from '../core/apns';
+import { setDraftScope } from '../core/drafts';
 import { AgentsSettingsScreen } from './AgentsSettingsScreen';
 import { TagsScreen } from './TagsScreen';
 import { AgentDetailScreen } from './AgentDetailScreen';
@@ -402,6 +404,7 @@ export function AppShell(): React.JSX.Element {
     if (pairing.phase === 'granted') {
       setPairingOpen(false);
       unauthorizedHandled.current = false;
+      getDeviceInfo().then(setDeviceInfo).catch(() => setDeviceInfo(null));
     }
   }, [pairing.phase]);
   useEffect(() => {
@@ -411,6 +414,8 @@ export function AppShell(): React.JSX.Element {
     if (Platform.OS === 'web') return;
     if (status.state === 'disconnected' && status.reason === 'unauthorized' && !unauthorizedHandled.current) {
       unauthorizedHandled.current = true;
+      invalidateAPNs();
+      setDeviceInfo(null);
       setPairingOpen(true);
     }
   }, [status]);
@@ -1276,6 +1281,13 @@ export function AppShell(): React.JSX.Element {
       }
     });
     const offPending = connection.onPending(setPending);
+    const instance = Platform.OS === 'ios' ? deviceEvents.addListener('claw:instance', ({ origin }: { origin: string }) => {
+      setDraftScope(origin);
+      chatStore.clearAll(); sessionStore.replace([]); modelStore.reset(); questionStore.clear();
+      activeThreadRef.current = null;
+      setActiveThread(null); setApprovals([]); setApprovalHistory(null); setServerVersion(null);
+      getDeviceInfo().then(setDeviceInfo).catch(() => setDeviceInfo(null));
+    }) : null;
 
     const frameHandlers: ServerFrameHandlers = {
       activeThreadId: () => activeThreadRef.current,
@@ -1387,6 +1399,12 @@ export function AppShell(): React.JSX.Element {
     // what the user sees on the first frame.
     prefs.hydrate().then(stored => {
       setUrl(stored.serverUrl);
+      if (Platform.OS === 'ios') {
+        getDeviceInfo().then(storedIdentity => {
+          setDeviceInfo(storedIdentity);
+          if (!storedIdentity.deviceId || !storedIdentity.token) setPairingOpen(true);
+        }).catch(() => setPairingOpen(true));
+      }
       // A link wins over everything: the address is what the owner asked for. With none, the
       // app boots on the home screen (the session list) and the owner picks a conversation,
       // instead of silently reopening the last one. Always null on Android.
@@ -1400,7 +1418,7 @@ export function AppShell(): React.JSX.Element {
       }
       return connection.getState().then(state => {
         setStatus({ state });
-        if (state !== 'connected' && state !== 'connecting')
+        if (stored.serverUrl && state !== 'connected' && state !== 'connecting')
           connection.connect(stored.serverUrl);
         for (const frame of bootFrames(state, activeThreadRef.current)) {
           connection.send(frame).catch(() => {});
@@ -1439,6 +1457,7 @@ export function AppShell(): React.JSX.Element {
       offState();
       offFrame();
       offPending();
+      instance?.remove();
     };
   }, [openThread, openStatus, selectThread, ringOnScreen]);
 
@@ -1739,7 +1758,7 @@ export function AppShell(): React.JSX.Element {
 
   /** Something other than the conversation is showing: settings, the archives, the files. */
   const pageOpen =
-    settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
+    pairingOpen || settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
   /** No conversation on a phone: the list is the screen itself (the `home` mount of Drawer). */
   // The pairing screen is a page too: on a first launch there is no conversation, and the list
   // would cover it.
@@ -1906,6 +1925,7 @@ export function AppShell(): React.JSX.Element {
       }
       // `again` is a message sent before that never got its receipt: same id, so the server takes
       // it once whatever happened to the first try, and the bubble already on screen is the one.
+      const sendingOrigin = httpOrigin(prefs.get().serverUrl);
       const id = again ?? uuid();
       if (!again) {
         chatStore.addUserMessage(
@@ -1953,6 +1973,11 @@ export function AppShell(): React.JSX.Element {
       // Neither sent nor queued by the device: the app holds it now and retries it itself, so the
       // bubble waits instead of claiming the message is lost.
       if (!delivered) chatStore.markUndelivered(threadId, id);
+      else if (Platform.OS === 'ios') {
+        for (const attachment of attachments ?? []) {
+          if (attachment.uri) deviceBridge.acknowledgeVoiceDraft(attachment.uri, sendingOrigin).catch(() => {});
+        }
+      }
     },
     [catalog],
   );
@@ -2031,6 +2056,8 @@ export function AppShell(): React.JSX.Element {
   }, [waitingKey, activeThread, resendChat]);
 
 
+  useEffect(() => subscribeAPNs(), []);
+
   // Push notifications (docs/notifications.md). The distributor answers registrations on its
   // own channel: whenever it hands out an endpoint the server gets it, and a lost registration
   // clears the server side so it stops publishing into the void.
@@ -2059,6 +2086,7 @@ export function AppShell(): React.JSX.Element {
    * this is the whole of it: ask, and let the registration path do its job.
    */
   const allowNotifications = useCallback(async () => {
+    if (Platform.OS === 'ios') { await enableAPNs(); return; }
     const key = vapidRef.current;
     if (!key) return;
     resetPushRegistration();
@@ -2083,8 +2111,9 @@ export function AppShell(): React.JSX.Element {
       // stays.
       if (foreground && activeThreadRef.current) dismissThreadNotification(activeThreadRef.current);
     };
+    setVisiblePushThread(AppState.currentState === 'active' ? activeThreadRef.current : null);
     report(AppState.currentState === 'active');
-    const subscription = AppState.addEventListener('change', state => report(state === 'active'));
+    const subscription = AppState.addEventListener('change', state => { setVisiblePushThread(state === 'active' ? activeThreadRef.current : null); report(state === 'active'); });
     return () => subscription.remove();
   }, [activeThread]);
 
@@ -2139,11 +2168,12 @@ export function AppShell(): React.JSX.Element {
         }
       }
     };
+    const unsubscribeNative = subscribeNotificationOpen(handle);
     Linking.getInitialURL()
       .then(handle)
       .catch(() => {});
     const subscription = Linking.addEventListener('url', event => handle(event.url));
-    return () => subscription.remove();
+    return () => { subscription.remove(); unsubscribeNative(); };
   }, [openThread, openJobs, openJobSessions]);
 
   // Asked for when the screen opens rather than at boot: it is the only place that shows it,
@@ -2563,8 +2593,12 @@ export function AppShell(): React.JSX.Element {
   );
 
   const changeUrl = useCallback((next: string) => {
+    if (Platform.OS === 'ios') setDeviceInfo(null);
     setUrl(next);
     prefs.set('serverUrl', next);
+    if (Platform.OS === 'ios') getDeviceInfo().then(nextIdentity => {
+      if (prefs.get().serverUrl === next) setDeviceInfo(nextIdentity);
+    }).catch(() => { if (prefs.get().serverUrl === next) setDeviceInfo(null); });
   }, []);
 
   /** Destroys the conversation: messages, uploads and name all go, here and on the server. */
@@ -3876,7 +3910,7 @@ export function AppShell(): React.JSX.Element {
                 skillsCount={skills.length}
                 toolsCount={tools.length}
                 setup={setupProgress}
-                nativeApp={appUpdateSupported}
+                nativeApp={Platform.OS !== 'web'}
                 onBack={() => setSettingsOpen(false)}
                 onOpen={page => {
                   if (page === 'setup') setSetupFrom('index');
@@ -4371,6 +4405,7 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'devices' ? (
               <DevicesScreen
                 onBack={() => setSettingsPage(parentOf('devices'))}
+                connected={status.state === 'connected'}
                 head={
                   <>
                     <ThisDeviceSection deviceInfo={deviceInfo} appVersion={appVersion} />

@@ -43,6 +43,18 @@ class VoicePlaybackStore {
   private state: PlaybackState = IDLE;
   private listeners = new Set<() => void>();
   private attached = false;
+  private request = 0;
+  private pending: { uri: string; result: Promise<void> } | null = null;
+
+  private async start(uri: string): Promise<void> {
+    const pending = { uri, result: deviceBridge.playAudio(uri, prefs.get().playbackRate) };
+    this.pending = pending;
+    try {
+      await pending.result;
+    } finally {
+      if (this.pending === pending) this.pending = null;
+    }
+  }
 
   private emit(): void {
     for (const listener of this.listeners) listener();
@@ -81,6 +93,7 @@ class VoicePlaybackStore {
 
   /** Optimistic: the first progress event is a tick away, and a dead button reads as a bug. */
   async toggle(uri: string, durationMs: number): Promise<void> {
+    const request = ++this.request;
     const current = this.state;
     if (current.uri === uri && current.playing) {
       this.state = { ...current, playing: false };
@@ -96,8 +109,9 @@ class VoicePlaybackStore {
     };
     this.emit();
     try {
-      await deviceBridge.playAudio(uri, prefs.get().playbackRate);
+      await this.start(uri);
     } catch {
+      if (request !== this.request) return;
       this.state = { ...this.state, playing: false };
       this.emit();
     }
@@ -108,26 +122,34 @@ class VoicePlaybackStore {
    * moving the note that happens to be loaded.
    */
   async seek(uri: string, positionMs: number, durationMs: number): Promise<void> {
+    const request = ++this.request;
     const current = this.state;
+    let startup: Promise<void> | undefined;
     if (current.uri !== uri) {
       this.state = { uri, playing: true, positionMs, durationMs };
       this.emit();
-      try {
-        await deviceBridge.playAudio(uri, prefs.get().playbackRate);
-      } catch {
-        this.state = { ...this.state, playing: false };
-        this.emit();
-        return;
-      }
+      startup = this.start(uri);
     } else {
       this.state = { ...current, positionMs };
       this.emit();
+      if (this.pending?.uri === uri) startup = this.pending.result;
     }
+    try {
+      if (startup) await startup;
+    } catch {
+      if (request !== this.request) return;
+      this.state = { ...this.state, playing: false };
+      this.emit();
+      return;
+    }
+    if (request !== this.request) return;
     await deviceBridge.seekPlayback(positionMs);
   }
 
   /** Test seam: the store outlives a render tree, so a suite would leak state between cases. */
   reset(): void {
+    ++this.request;
+    this.pending = null;
     this.state = IDLE;
     this.emit();
   }
@@ -156,6 +178,7 @@ export type MicPermission = 'granted' | 'denied' | 'blocked';
  * reason, and a denial then is permanent for a feature never seen.
  */
 export async function ensureMicPermission(): Promise<MicPermission> {
+  if (Platform.OS === 'ios') return deviceBridge.microphonePermission();
   if (Platform.OS !== 'android') return 'granted';
   const permission = PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
   if (await PermissionsAndroid.check(permission)) return 'granted';

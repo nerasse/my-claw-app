@@ -21,9 +21,9 @@ jest.mock('../../core/serverUrl', () => jest.requireActual('../../core/serverUrl
 
 const BASE = 'http://host:8080';
 
-function render(att: AttachmentMeta, deviceInfo: DeviceInfo | null) {
+async function render(att: AttachmentMeta, deviceInfo: DeviceInfo | null) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
-  ReactTestRenderer.act(() => {
+  await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(
       <AttachmentView att={att} mediaBase={BASE} deviceInfo={deviceInfo} onOpen={() => {}} />,
     );
@@ -38,17 +38,17 @@ function imageUris(tree: ReactTestRenderer.ReactTestRenderer): string[] {
 }
 
 describe('AttachmentView with a cookie session', () => {
-  it('renders an image from the plain media url', () => {
-    const tree = render({ id: 'abc', type: 'image', filename: 'shot.png' }, { deviceId: '', token: '' });
+  it('renders an image from the plain media url', async () => {
+    const tree = await render({ id: 'abc', type: 'image', filename: 'shot.png' }, { deviceId: '', token: '' });
     expect(imageUris(tree)).toEqual([`${BASE}/media/abc`]);
   });
 
-  it('gives a video its server thumbnail', () => {
-    const tree = render({ id: 'vid', type: 'video' }, { deviceId: '', token: '' });
+  it('gives a video its server thumbnail', async () => {
+    const tree = await render({ id: 'vid', type: 'video' }, { deviceId: '', token: '' });
     expect(imageUris(tree)).toEqual([`${BASE}/media/vid?thumb=1`]);
   });
 
-  it('opens a file with the same url the viewer will fetch', () => {
+  it('opens a file with the same url the viewer will fetch', async () => {
     const opened: Array<{ kind: string; url: string }> = [];
     let tree!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
@@ -69,7 +69,7 @@ describe('AttachmentView with a cookie session', () => {
     expect(opened).toEqual([{ kind: 'file', url: `${BASE}/media/doc` }]);
   });
 
-  it('sends a code file to the reader, carrying the server kind', () => {
+  it('sends a code file to the reader, carrying the server kind', async () => {
     const opened: Array<{ kind: string; fileKind?: string }> = [];
     let tree!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
@@ -91,7 +91,7 @@ describe('AttachmentView with a cookie session', () => {
     expect(opened).toEqual([{ kind: 'code', fileKind: 'code' }]);
   });
 
-  it('sends a PDF to the PDF reader', () => {
+  it('sends a PDF to the PDF reader', async () => {
     const opened: Array<{ kind: string }> = [];
     let tree!: ReactTestRenderer.ReactTestRenderer;
     ReactTestRenderer.act(() => {
@@ -112,8 +112,8 @@ describe('AttachmentView with a cookie session', () => {
     expect(opened).toEqual([{ kind: 'pdf' }]);
   });
 
-  it('has nothing to show before the identity resolves', () => {
-    const tree = render({ id: 'abc', type: 'image', filename: 'shot.png' }, null);
+  it('has nothing to show before the identity resolves', async () => {
+    const tree = await render({ id: 'abc', type: 'image', filename: 'shot.png' }, null);
     expect(imageUris(tree)).toEqual([]);
   });
 });
@@ -133,15 +133,15 @@ describe('AttachmentView: an attachment with nothing to draw', () => {
     failed.mockClear();
   });
 
-  it('draws a deleted image as a chip, never as a stage', () => {
-    const tree = render({ id: 'gone', type: 'image', filename: 'shot.png', deleted: true }, { deviceId: '', token: '' });
+  it('draws a deleted image as a chip, never as a stage', async () => {
+    const tree = await render({ id: 'gone', type: 'image', filename: 'shot.png', deleted: true }, { deviceId: '', token: '' });
     expect(imageUris(tree)).toEqual([]);
     const labels = tree.root.findAll(node => typeof node.children?.join === 'function');
     expect(JSON.stringify(labels.map(node => node.children.join('')))).toContain('shot.png (deleted)');
   });
 
-  it('falls back to the chip when the bytes never come, and names it in the diagnostics', () => {
-    const tree = render(
+  it('falls back to the chip when the bytes never come, and names it in the diagnostics', async () => {
+    const tree = await render(
       { id: 'abc', type: 'image', filename: 'shot.png' },
       { deviceId: 'phone', token: 'secret-token', ticket: 'secret-ticket' },
     );
@@ -166,14 +166,14 @@ describe('AttachmentView: an attachment with nothing to draw', () => {
 describe("a picture takes its own shape", () => {
   const original = (Image as unknown as { getSize?: unknown }).getSize;
 
-  it('sizes a wide capture by its ratio instead of the old 190 square', () => {
+  it('sizes a wide capture by its ratio instead of the old 190 square', async () => {
     // The browser capture of a report is 1280x520. In a 350pt bubble that is a 142pt picture;
     // the square it replaces drew it 190x77 inside a 190 box, and the empty band under it is
     // what the owner kept scrolling past (2026-09-17).
     (Image as unknown as { getSize: unknown }).getSize = (_uri: string, ok?: (w: number, h: number) => void) =>
       ok?.(1280, 520);
     try {
-      const tree = render({ id: 'wide', type: 'image', filename: 'shot.png' }, { deviceId: 'd', token: 't' });
+      const tree = await render({ id: 'wide', type: 'image', filename: 'shot.png' }, { deviceId: 'd', token: 't' });
       const stage = tree.root.findAll(node => typeof node.props.onLayout === 'function')[0]!;
       ReactTestRenderer.act(() => {
         stage.props.onLayout({ nativeEvent: { layout: { width: 350 } } });

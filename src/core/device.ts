@@ -1,10 +1,14 @@
 import { deviceBridge } from './nativeBridge';
+import { Platform } from 'react-native';
+import { prefs } from './prefs';
+import { httpOrigin } from './utils';
 
 export interface DeviceInfo {
   deviceId: string;
   token: string;
   /** The server's media ticket (hello frame): what goes in a URL instead of the token. */
   ticket?: string;
+  origin?: string;
 }
 
 /**
@@ -20,5 +24,11 @@ export interface DeviceInfo {
  * leaves the credential query off.
  */
 export async function getDeviceInfo(): Promise<DeviceInfo> {
-  return deviceBridge.getDeviceInfo();
+  const identity = await deviceBridge.getDeviceInfo();
+  if (Platform.OS === 'ios' && identity.origin) {
+    const current = httpOrigin(prefs.get().serverUrl, '').toLowerCase();
+    const normalized = current.startsWith('https:') ? current.replace(/:443$/, '') : current.replace(/:80$/, '');
+    if (identity.origin !== normalized) throw new Error('identity belongs to another server');
+  }
+  return identity;
 }

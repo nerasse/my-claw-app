@@ -30,6 +30,10 @@ describe('appUpdateSupported', () => {
     expect(loadSupported('web')).toBe(false);
   });
 
+  it('is off on iOS', () => {
+    expect(loadSupported('ios')).toBe(false);
+  });
+
   it('is on where an APK can be installed', () => {
     expect(loadSupported('android')).toBe(true);
   });

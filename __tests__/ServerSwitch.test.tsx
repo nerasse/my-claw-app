@@ -5,6 +5,7 @@
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
+import { devicesStore } from '../src/core/devices';
 import { renderApp, labelsOf, textsOf, press, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -83,6 +84,31 @@ test('a disconnected app never claims to be talking to another server', async ()
   await typeUrl(tree, NEW_URL);
 
   expect(labelsOf(tree)).not.toContain('Live server differs');
+  await unmount(tree);
+});
+
+test('a failed connection explains itself in Devices instead of leaving the list loading', async () => {
+  devicesStore.reset();
+  const tree = await renderApp();
+  await announce('connecting', OLD_URL);
+  await openSettings(tree);
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:state', { state: 'disconnected', url: OLD_URL, reason: 'connection closed' });
+  });
+
+  expect(textsOf(tree)).toContain('Connection failed: connection closed');
+  expect(textsOf(tree)).toContain('Connect to your server to load paired devices.');
+  expect(textsOf(tree)).not.toContain('loading');
+
+  await announce('connected', OLD_URL);
+  expect(textsOf(tree)).not.toContain('Connection failed: connection closed');
+  expect(textsOf(tree)).not.toContain('Connect to your server to load paired devices.');
+  expect(textsOf(tree)).toContain('loading');
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify({ type: 'device.list.result', devices: [] }) });
+  });
+  expect(textsOf(tree)).toContain('no device');
+  expect(textsOf(tree)).not.toContain('loading');
   await unmount(tree);
 });
 

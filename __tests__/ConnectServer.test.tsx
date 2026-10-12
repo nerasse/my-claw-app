@@ -124,3 +124,45 @@ test('without an address, a typed code cannot be sent', async () => {
   expect(Socket.urls).toEqual([]);
   await ReactTestRenderer.act(async () => tree.unmount());
 });
+
+
+test('an incomplete code cannot start a request', async () => {
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => { tree = ReactTestRenderer.create(screen('https://claw.example.fr')); });
+  const input = tree.root.find(n => n.props.placeholder === 'XXXX-XXXX' && typeof n.props.onChangeText === 'function');
+  await ReactTestRenderer.act(async () => input.props.onChangeText('K7'));
+  const pair = tree.root.find(n => n.props.accessibilityLabel === 'Submit this pairing code' && n.props.disabled !== undefined);
+  expect(pair.props.disabled).toBe(true);
+  expect(Socket.urls).toEqual([]);
+  await unmount(tree);
+});
+
+test('an expired code can be replaced and submitted without leaving the screen', async () => {
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => { tree = ReactTestRenderer.create(screen('https://claw.example.fr')); });
+  const input = () => tree.root.find(n => n.props.placeholder === 'XXXX-XXXX' && typeof n.props.onChangeText === 'function');
+  await ReactTestRenderer.act(async () => input().props.onChangeText('K7QW3M2P'));
+  await press(tree, 'Submit this pairing code');
+  await ReactTestRenderer.act(async () => {
+    tree.update(<PairingScreen serverUrl="https://claw.example.fr" onUrlChange={() => {}}
+      pairing={{ phase: 'error', reason: 'Code expired' }} onClose={() => {}} />);
+  });
+  await ReactTestRenderer.act(async () => input().props.onChangeText('P2M3WQ7K'));
+  await press(tree, 'Submit this pairing code');
+  expect(Socket.urls).toHaveLength(2);
+  await unmount(tree);
+});
+
+test('pairing can be cancelled while it waits for the server', async () => {
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => { tree = ReactTestRenderer.create(screen('https://claw.example.fr')); });
+  const input = tree.root.find(n => n.props.placeholder === 'XXXX-XXXX' && typeof n.props.onChangeText === 'function');
+  await ReactTestRenderer.act(async () => input.props.onChangeText('K7QW3M2P'));
+  await press(tree, 'Submit this pairing code');
+  await ReactTestRenderer.act(async () => {
+    tree.update(<PairingScreen serverUrl="https://claw.example.fr" onUrlChange={() => {}}
+      pairing={{ phase: 'waiting', code: 'K7QW3M2P' }} onClose={() => {}} />);
+  });
+  expect(labelsOf(tree)).toContain('Cancel pairing');
+  await unmount(tree);
+});

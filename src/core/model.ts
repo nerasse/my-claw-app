@@ -209,6 +209,7 @@ class ModelStoreImpl {
 
   /** Test seam: back to "the server has not answered", as at launch. */
   reset(): void {
+    this.perThread.clear();
     this.replaceCatalog(EMPTY);
   }
 

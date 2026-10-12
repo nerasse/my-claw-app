@@ -2608,9 +2608,17 @@ export interface ConfigSavedFrame {
  * The VAPID public key the device hands to its UnifiedPush distributor at registration.
  * Sent by the server as soon as the socket opens. See docs/notifications.md.
  */
+export interface APNsResultFrame {
+  type: 'notifications.apns.result';
+  ok: boolean;
+  registrationId?: string;
+  error?: string;
+}
+
 export interface NotificationsInfoFrame {
   type: 'notifications.info';
   vapidPublicKey: string;
+  apns?: { relayURL: string };
 }
 
 /**
@@ -2622,6 +2630,7 @@ export interface HelloFrame {
   version: string;
   /** The server receipts every `chat.send`; absent on one that predates receipts, which is then not waited for. */
   receipts?: boolean;
+  capabilities?: { apns: boolean };
 }
 
 /**
@@ -2739,6 +2748,7 @@ export type ServerFrame =
   | UpdateResultFrame
   | ProvidersEnvResultFrame
   | NotificationsInfoFrame
+  | APNsResultFrame
   | HelloFrame
   | ErrorFrame;
 
@@ -2840,6 +2850,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'subagents.callers.result',
   'subagents.handoff.result',
   'notifications.info',
+  'notifications.apns.result',
   'hello',
   'media.ticket',
   'tags.result',
@@ -2871,6 +2882,11 @@ export function parseServerFrame(raw: string): ServerFrame | null {
     // `hasOwnProperty`, never `in`: a frame announcing itself as "toString" would walk in.
     if (!Object.prototype.hasOwnProperty.call(FRAME_TYPES, parsed.type)) {
       return null;
+    }
+    if (parsed.type === 'notifications.apns.result') {
+      const result = parsed as Record<string, unknown>;
+      if (typeof result.ok !== 'boolean' || (result.registrationId !== undefined && typeof result.registrationId !== 'string') ||
+        (result.error !== undefined && typeof result.error !== 'string')) return null;
     }
     return parsed as ServerFrame;
   } catch {
@@ -3930,3 +3946,8 @@ export function encodeSessionSync(threadId: string, since?: string | null, leaf?
     lazyReasoning: LAZY_REASONING,
   });
 }
+
+export function encodeAPNsRegister(registrationId: string, secret: string): string {
+  return JSON.stringify({ type: 'notifications.apns.register', registrationId, secret });
+}
+export function encodeAPNsUnregister(): string { return JSON.stringify({ type: 'notifications.apns.unregister' }); }

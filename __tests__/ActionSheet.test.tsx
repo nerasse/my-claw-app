@@ -37,7 +37,7 @@ test('a separator is not a pressable row, so it can never act as an option', () 
     'Delete',
   ]);
   expect(tree.root.findAll(node => typeof node.props.accessibilityLabel === 'string', { deep: true })).not.toContain('separator');
-  tree.unmount();
+  ReactTestRenderer.act(() => tree.unmount());
 });
 
 describe('a physical keyboard on Android (docs/keyboard.md)', () => {
@@ -104,7 +104,7 @@ describe('a physical keyboard on Android (docs/keyboard.md)', () => {
     expect(three.nextFocusForward).toBe(one.nextFocusLeft);
     expect(one.nextFocusUp).toBe(three.nextFocusRight);
     expect(row(tree, 'Two').props.nextFocusDown).toBeUndefined();
-    tree.unmount();
+    ReactTestRenderer.act(() => tree.unmount());
   });
 
   test('the search field comes first, and is where the focus goes', () => {
@@ -113,12 +113,12 @@ describe('a physical keyboard on Android (docs/keyboard.md)', () => {
     expect(field.props.nextFocusUp).toBeDefined();
     expect(field.props.nextFocusUp).toBe(row(tree, 'One').props.nextFocusLeft);
     expect(bridge.focusIfKeyboard).toHaveBeenCalledWith(field.props.nextFocusLeft);
-    tree.unmount();
+    ReactTestRenderer.act(() => tree.unmount());
   });
 
   test("the backdrop is a tap's way out, never a keyboard stop", () => {
     const tree = render([{ label: 'One', onPress: () => {} }]);
     expect(row(tree, 'Close menu').props.focusable).toBe(false);
-    tree.unmount();
+    ReactTestRenderer.act(() => tree.unmount());
   });
 });

@@ -1,9 +1,22 @@
 # Making room for the keyboard
 
-One rule: **the shell gives up exactly one keyboard's worth of room, and it derives that from the
-frame it is standing in right now.** There is a single `KeyboardAvoidingView` in the app, in
-`AppShell`, wrapping everything but the bottom sheets. Its behavior is `padding`, on every
-platform. Never `height`.
+One rule: **the shell gives up only the room actually covered by the keyboard, from its current
+frame.** `AppShell` uses `KeyboardShell`: iOS keeps `KeyboardAvoidingView` with `padding`;
+Android measures with `measureInWindow`, compares the bottom with keyboard `screenY`, and pads
+only that overlap, bounded by the live IME height. Never `height`.
+
+Read `Keyboard.metrics()` only on Android. React Native Web does not implement that
+API, so reading it while rendering the shared shell crashes the web client immediately
+after pairing. The browser regression test renders without that native API; iOS keeps
+its existing platform component.
+
+The October 11, 2026 API 34 qualification caught a regression in the September replacement:
+the full IME height counted room twice when `adjustResize` had already shrunk the window.
+Measuring the remaining overlap fixes this without losing edge-to-edge avoidance or the
+live-state resume check. `src/components/__tests__/keyboardShell.test.tsx` covers resized,
+edge-to-edge and hidden states; the actual API 34 screenshot shows the composer above the IME.
+The historical explanations below describe earlier implementations, not a reason to restore
+full-height padding.
 
 ## The bug that fixed the rule
 

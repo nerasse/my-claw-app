@@ -6,7 +6,14 @@
  * which is how a staged voice note from one test made the microphone disappear in the next.
  */
 const { clearAllDrafts } = require('./src/core/drafts');
+const { act } = require('react-test-renderer');
 
 beforeEach(() => {
   clearAllDrafts();
+});
+
+afterEach(async () => {
+  // Load after the suite's connection mocks, rather than caching the real connection before them.
+  const { chatStore } = require('./src/core/chat');
+  await act(async () => chatStore.clearAll());
 });

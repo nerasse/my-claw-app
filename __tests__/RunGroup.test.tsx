@@ -18,7 +18,8 @@ import { chatStore, type ChatItem, type RunInfo, type RunSummaryItem } from '../
 import { deviceBridge } from '../src/core/nativeBridge';
 import { sessionStore } from '../src/core/sessions';
 import type { HistoryEntry, RunMeta } from '../src/core/protocol';
-import { ThemeProvider } from '../src/theme/ThemeProvider';
+import { ThemeContext } from '../src/theme';
+import { darkPalette } from '../src/theme/palettes';
 import { labelsOf, renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const RUN: RunInfo = { id: 'r1', status: 'done', startTs: 1_000, endTs: 61_000 };
@@ -38,11 +39,20 @@ const summaryRow = (id: string, itemCount: number): RunSummaryItem => ({
   ts: 5,
 });
 
+const mounted: ReactTestRenderer.ReactTestRenderer[] = [];
+
+afterEach(async () => {
+  await ReactTestRenderer.act(async () => {
+    for (const tree of mounted.splice(0)) tree.unmount();
+  });
+});
+
 function render(node: React.JSX.Element): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
-    tree = ReactTestRenderer.create(<ThemeProvider>{node}</ThemeProvider>);
+    tree = ReactTestRenderer.create(<ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>{node}</ThemeContext.Provider>);
   });
+  mounted.push(tree);
   return tree;
 }
 
@@ -243,9 +253,9 @@ test('a redraw that hands back a row without its work asks again', () => {
   const refreshed = [summaryRow('run-w1', 10)];
   ReactTestRenderer.act(() => {
     tree.update(
-      <ThemeProvider>
+      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
         <FoldedRunGroup run={RUN} summaries={refreshed} open onToggle={jest.fn()} onOpen={onOpen} />
-      </ThemeProvider>,
+      </ThemeContext.Provider>,
     );
   });
   expect(onOpen).toHaveBeenNthCalledWith(2, refreshed);

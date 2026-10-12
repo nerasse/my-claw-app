@@ -296,7 +296,7 @@ describe('QuestionCard', () => {
       press(tree, 'Send');
       expect(onReply).toHaveBeenCalledTimes(2);
     } finally {
-      questionStore.clear();
+      ReactTestRenderer.act(() => questionStore.clear());
       jest.useRealTimers();
     }
   });

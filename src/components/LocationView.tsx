@@ -31,7 +31,7 @@ export function LocationView({ location, onAccent }: { location: LocationData; o
         accessibilityLabel="Open shared location on OpenStreetMap">
         <Text style={[styles.buttonText, onAccent && styles.buttonTextOnAccent]}>Open in OpenStreetMap</Text>
       </Pressable>
-      <Text style={[styles.attribution, onAccent && styles.metaOnAccent]}>Map data © OpenStreetMap contributors</Text>
+      <Text style={[styles.attribution, onAccent && styles.metaOnAccent]}>{address?.provider === 'geoapify' ? 'Geocoding by Geoapify · ' : ''}Map data © OpenStreetMap contributors</Text>
     </View>
   );
 }

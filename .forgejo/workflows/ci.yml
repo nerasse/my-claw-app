@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify dependency security patches
+        run: npm run check:dependency-patches
+
       - name: Lint
         run: npm run lint
 

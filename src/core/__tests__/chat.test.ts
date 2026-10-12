@@ -1610,6 +1610,17 @@ describe('a send waits for its receipt', () => {
     return item?.kind === 'text' ? item : undefined;
   };
 
+  test('clearing an instance cancels receipt waits before an id is reused', () => {
+    jest.useFakeTimers();
+    chatStore.addUserMessage(THREAD, 'u1', 'old instance');
+    chatStore.expectReceipt(THREAD, 'u1', 15_000);
+    chatStore.clearAll();
+    chatStore.addUserMessage(THREAD, 'u1', 'new instance');
+    jest.advanceTimersByTime(15_000);
+    expect(textAt(0)?.queuedReason).toBeUndefined();
+    expect(textAt(0)?.pending).toBeUndefined();
+  });
+
   test('the receipt lifts the wait; none within the delay leaves the bubble waiting, and retrying', () => {
     jest.useFakeTimers();
     chatStore.addUserMessage(THREAD, 'u1', 'hello');

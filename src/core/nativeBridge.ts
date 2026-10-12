@@ -1,10 +1,20 @@
-import { DeviceEventEmitter, NativeModules } from 'react-native';
+import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import type { NotificationChannelsState } from './protocol';
+
+export interface APNsNativeState {
+  serverStatus?: 'pending' | 'ready' | 'failed';
+  permission: 'granted' | 'denied' | 'notDetermined' | 'unavailable';
+  status: 'notConfigured' | 'permissionRequired' | 'blocked' | 'waitingForToken' | 'registering' | 'registered' | 'unavailable' | 'failed';
+  reason?: string;
+  registrationId?: string;
+  secret?: string;
+}
 
 export interface DeviceInfoNative {
   deviceId: string;
   token: string;
+  origin?: string;
 }
 
 export interface DeviceCapabilities {
@@ -24,6 +34,14 @@ export interface VoiceRecording {
   sizeBytes: number;
   /** The encoder's actual container, when the platform exposes it. */
   mimeType?: string;
+}
+
+export interface VoiceDraftNative {
+  id: string;
+  origin: string;
+  threadId: string | null;
+  reason: string;
+  recording: VoiceRecording;
 }
 
 export interface CurrentLocationNative {
@@ -108,7 +126,7 @@ export interface TransferProgress {
 
 /** Subscribes to transfer progress; the returned function unsubscribes. */
 export function onTransferProgress(cb: (progress: TransferProgress) => void): () => void {
-  const sub = DeviceEventEmitter.addListener(TRANSFER_PROGRESS_EVENT, cb);
+  const sub = deviceEvents.addListener(TRANSFER_PROGRESS_EVENT, cb);
   return () => sub.remove();
 }
 
@@ -141,7 +159,7 @@ export interface DeviceBridgeNative {
   getConnectionState(): Promise<string>;
   getDeviceInfo(): Promise<DeviceInfoNative>;
   /** Replaces the locally generated credentials with the pair the server minted (CLI pairing). */
-  adoptCredentials(deviceId: string, token: string): Promise<boolean>;
+  adoptCredentials(deviceId: string, token: string, origin?: string): Promise<boolean>;
   getCapabilities(): Promise<DeviceCapabilities>;
   /** Captures one foreground location, waiting briefly for the best available fix. */
   getCurrentLocation(): Promise<CurrentLocationNative>;
@@ -301,6 +319,17 @@ export interface DeviceBridgeNative {
   pausePlayback(): Promise<void>;
   seekPlayback(positionMs: number): Promise<void>;
   stopPlayback(): Promise<void>;
+  microphonePermission(): Promise<'granted' | 'denied' | 'blocked'>;
+  setRecordingContext(threadId: string | null): void;
+  voiceDrafts(): Promise<VoiceDraftNative[]>;
+  acknowledgeVoiceDraft(uri: string, origin?: string): Promise<void>;
+  configureAPNs(relay: string): Promise<APNsNativeState>;
+  getAPNsState(): Promise<APNsNativeState>;
+  requestAPNs(): Promise<APNsNativeState>;
+  revokeAPNs(): Promise<void>;
+  invalidateAPNs(): void;
+  drainNotificationOpen(): Promise<string | null>;
+  setVisibleNotificationThread(threadId: string | null): void;
 }
 
 const native = NativeModules.DeviceBridge as DeviceBridgeNative | undefined;
@@ -323,8 +352,8 @@ export const deviceBridge: DeviceBridgeNative = {
   getDeviceInfo: () =>
     native?.getDeviceInfo() ??
     Promise.reject(new Error('DeviceBridge unavailable')),
-  adoptCredentials: (deviceId, token) =>
-    native?.adoptCredentials(deviceId, token) ??
+  adoptCredentials: (deviceId, token, origin) =>
+    (Platform.OS === 'ios' ? native?.adoptCredentials(deviceId, token, origin) : native?.adoptCredentials(deviceId, token)) ??
     Promise.reject(new Error('DeviceBridge unavailable')),
   getCapabilities: () =>
     native?.getCapabilities() ??
@@ -392,6 +421,19 @@ export const deviceBridge: DeviceBridgeNative = {
   pausePlayback: () => native?.pausePlayback() ?? Promise.resolve(),
   seekPlayback: positionMs => native?.seekPlayback(positionMs) ?? Promise.resolve(),
   stopPlayback: () => native?.stopPlayback() ?? Promise.resolve(),
+  microphonePermission: () => native?.microphonePermission?.() ?? Promise.resolve('blocked'),
+  setRecordingContext: threadId => native?.setRecordingContext?.(threadId),
+  voiceDrafts: () => native?.voiceDrafts?.() ?? Promise.resolve([]),
+  acknowledgeVoiceDraft: (uri, origin) => native?.acknowledgeVoiceDraft?.(uri, origin) ?? Promise.resolve(),
+  configureAPNs: relay => native?.configureAPNs?.(relay) ?? Promise.resolve({ permission: 'unavailable', status: 'notConfigured' }),
+  getAPNsState: () => native?.getAPNsState?.() ?? Promise.resolve({ permission: 'unavailable', status: 'notConfigured' }),
+  requestAPNs: () => native?.requestAPNs?.() ?? Promise.resolve({ permission: 'unavailable', status: 'notConfigured' }),
+  revokeAPNs: () => native?.revokeAPNs?.() ?? Promise.resolve(),
+  invalidateAPNs: () => native?.invalidateAPNs?.(),
+  drainNotificationOpen: () => native?.drainNotificationOpen?.() ?? Promise.resolve(null),
+  setVisibleNotificationThread: threadId => native?.setVisibleNotificationThread?.(threadId),
 };
 
-export const deviceEvents = DeviceEventEmitter;
+export const deviceEvents = Platform.OS === 'ios' && native
+  ? new NativeEventEmitter(NativeModules.DeviceBridge)
+  : DeviceEventEmitter;

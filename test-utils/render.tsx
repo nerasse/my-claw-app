@@ -6,6 +6,14 @@ import { prefs } from '../src/core/prefs';
 import { deviceBridge } from '../src/core/nativeBridge';
 
 export type Tree = ReactTestRenderer.ReactTestRenderer;
+const mounted = new Set<Tree>();
+
+afterEach(async () => {
+  await ReactTestRenderer.act(async () => {
+    for (const tree of mounted) tree.unmount();
+    mounted.clear();
+  });
+});
 
 export function labelsOf(tree: Tree): string[] {
   return tree.root
@@ -85,6 +93,7 @@ export async function renderApp({ seedCatalog = true }: { seedCatalog?: boolean 
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(<App />);
+    mounted.add(tree);
   });
   await handMediaTicket();
   const last = prefs.get().lastThreadId;
@@ -147,6 +156,7 @@ export async function press(tree: Tree, label: string): Promise<void> {
 
 export async function unmount(tree: Tree): Promise<void> {
   await ReactTestRenderer.act(async () => tree.unmount());
+  mounted.delete(tree);
 }
 
 /**
@@ -159,6 +169,7 @@ export async function renderAppHome(): Promise<Tree> {
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(<App />);
+    mounted.add(tree);
   });
   await handMediaTicket();
   await waitFor(() => tree.root.findAll(node => node.props.testID === 'home-screen').length > 0);

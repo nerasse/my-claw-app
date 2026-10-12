@@ -27,6 +27,7 @@ import { accountsStore } from './accounts';
 import { fsStore } from './fsStore';
 import { locationPreview } from './locationPreview';
 import { applyRemoteDraft } from './drafts';
+import { configureAPNs, handleAPNsResult } from './apns';
 import { notificationPermission, registerForPush } from './notifications';
 
 /** Same page size the shell requests on open: a branch switch refreshes the thread with it. */
@@ -771,7 +772,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       setRunsError(null);
       break;
     }
+    case 'notifications.apns.result':
+      handleAPNsResult(frame);
+      break;
     case 'notifications.info': {
+      configureAPNs(frame.apns?.relayURL).catch(() => {});
       // The server hands its VAPID key on every connection; registering again is how the
       // library verifies the distributor link is still alive (and picks up a rotation).
       setVapidKey(frame.vapidPublicKey);

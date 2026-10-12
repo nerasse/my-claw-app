@@ -31,8 +31,10 @@ function formatCode(code: string): string {
 export function DevicesScreen({
   onBack,
   head,
+  connected,
 }: {
   onBack: () => void;
+  connected: boolean;
   /** This device and its server, above the devices it paired: one page for every device. */
   head?: React.ReactNode;
 }): React.JSX.Element {
@@ -47,9 +49,9 @@ export function DevicesScreen({
   const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
-    devicesStore.refresh();
-    return () => devicesStore.clearMessages();
-  }, []);
+    if (connected) devicesStore.refresh();
+  }, [connected]);
+  useEffect(() => () => devicesStore.clearMessages(), []);
 
   const submitCode = useCallback(() => {
     devicesStore.lookup(code);
@@ -184,7 +186,7 @@ export function DevicesScreen({
 
         <Text style={styles.sectionLabel}>PAIRED · {state.devices.length}</Text>
         {state.status === 'unknown' ? (
-          <Text style={styles.hint}>loading</Text>
+          <Text style={styles.hint}>{connected ? 'loading' : 'Connect to your server to load paired devices.'}</Text>
         ) : state.devices.length === 0 ? (
           <Text style={styles.hint}>no device</Text>
         ) : null}

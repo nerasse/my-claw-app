@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { DownloadControl } from '../components/DownloadControl';
@@ -31,14 +31,7 @@ export function VideoViewer({
   return (
     <View style={[StyleSheet.absoluteFill, styles.stage]}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      <VideoView
-        player={player}
-        style={styles.video}
-        nativeControls
-        contentFit="contain"
-      />
-
-      <View style={[styles.topBar, { paddingTop: insets.top + space.md }]}>
+      <View style={[styles.topBar, Platform.OS === 'ios' && styles.iosTopBar, { paddingTop: insets.top + space.md }]}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
@@ -53,6 +46,12 @@ export function VideoViewer({
           <Text style={styles.closeGlyph}>✕</Text>
         </Pressable>
       </View>
+      <VideoView
+        player={player}
+        style={[styles.video, Platform.OS === 'ios' && styles.iosVideo]}
+        nativeControls
+        contentFit="contain"
+      />
     </View>
   );
 }
@@ -60,7 +59,11 @@ export function VideoViewer({
 const createStyles = (_palette: Palette) => ({
   stage: { backgroundColor: '#000' },
   video: { width: '100%' as const, height: '100%' as const },
+  // AVKit places controls at the edges of its view, so the iOS header must stay outside it.
+  iosVideo: { flex: 1, height: undefined },
+  iosTopBar: { position: 'relative' as const },
   topBar: {
+    zIndex: 1,
     position: 'absolute' as const,
     top: 0,
     left: 0,

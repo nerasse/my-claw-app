@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>MyClawRelayURL</key>
+	<string>$(MYCLAW_RELAY_URL)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -28,7 +30,6 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 		<key>NSAllowsLocalNetworking</key>
@@ -36,8 +37,44 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MyClaw uses your location only when you choose to share your current position in a chat.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record a voice note when you hold the microphone in a conversation.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a pairing code or take a photo you choose to share in a conversation.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select the photos and videos you choose to share in a conversation.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save a photo or video to your library when you choose Download.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array><string>myclaw</string></array>
+		</dict>
+	</array>
+	<key>RCTNewArchEnabled</key>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>MyClaw</string>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>
