@@ -206,6 +206,30 @@ test('a gallery photo (content:// uri) is copied to the cache before staging', a
   await unmount(tree);
 });
 
+test('a photo the web picker hands over untyped and unnamed is still sent as an image', async () => {
+  // The web build's picker returns a bare data: URI: no fileName, no type. It used to go out as a
+  // file named .jpg whatever it held, drawn as a chip instead of a picture.
+  const { launchImageLibrary } = require('react-native-image-picker');
+  const tree = await renderWithHistory();
+
+  await pressLabel(tree, 'Add attachment');
+  await waitFor(
+    () => tree.root.findAll(node => node.props.children === 'Photo from gallery', { deep: true }).length > 0,
+  );
+  await pressText(tree, 'Photo from gallery');
+  const callback = launchImageLibrary.mock.calls.at(-1)[1];
+  await ReactTestRenderer.act(async () => {
+    callback({ didCancel: false, assets: [{ uri: 'data:image/png;base64,iVBORw0KGgo=', width: 1, height: 1 }] });
+  });
+
+  await waitFor(() => bridge.uploadFile.mock.calls.length > 0);
+  const [, , filename, type] = bridge.uploadFile.mock.calls.at(-1)!;
+  expect(type).toBe('image/png');
+  expect(filename).toMatch(/^photo-\d+\.png$/);
+
+  await unmount(tree);
+});
+
 test('an upload that fails gives the typed message back instead of eating it', async () => {
   const { launchImageLibrary } = require('react-native-image-picker');
   const tree = await renderWithHistory();

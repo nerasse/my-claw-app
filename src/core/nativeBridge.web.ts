@@ -3,6 +3,7 @@
 // code compile against APIs the phone does not have.
 import { useEffect, useState } from 'react';
 import { pastedName } from './fileDrop.web';
+import { readLocalUri } from './dataUri';
 import type { NotificationChannelsState } from './protocol';
 
 /**
@@ -829,11 +830,11 @@ export const deviceBridge: DeviceBridgeNative = {
   },
   // A blob URL is already local and readable: there is nothing to copy anywhere.
   prepareFile: async uri => {
-    const blob = await fetch(uri).then(response => response.blob());
+    const blob = await readLocalUri(uri);
     return { uri, name: 'file', size: blob.size };
   },
   uploadFile: async (uri, url, filename, type, threadId, transferId) => {
-    const blob = await fetch(uri).then(response => response.blob());
+    const blob = await readLocalUri(uri);
     return uploadWithProgress(
       blob,
       url,

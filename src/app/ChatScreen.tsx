@@ -14,6 +14,7 @@ import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
+import { dataUriType } from '../core/dataUri';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
 import type { DeviceInfo } from '../core/device';
@@ -53,8 +54,11 @@ function without<T>(map: Record<string, T>, key: string): Record<string, T> {
 
 function pickAssetToPending(asset: { uri?: string; fileName?: string | null; type?: string | null; fileSize?: number | null }): PendingAttachment | null {
   if (!asset.uri) return null;
-  const filename = asset.fileName ?? `photo-${Date.now()}.jpg`;
-  const mimeType = asset.type ?? 'application/octet-stream';
+  // The web picker names nothing and types nothing; its data: URI still says what it holds, and
+  // without that a photo was sent as a file called .jpg whatever it was.
+  const mimeType = asset.type ?? dataUriType(asset.uri) ?? 'application/octet-stream';
+  const extension = mimeType.startsWith('image/') ? mimeType.slice(6).replace('jpeg', 'jpg').replace(/\+.*/, '') : 'jpg';
+  const filename = asset.fileName ?? `photo-${Date.now()}.${extension}`;
   const type: AttachmentMeta['type'] = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'file';
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
