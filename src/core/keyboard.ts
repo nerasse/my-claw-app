@@ -32,6 +32,46 @@ export function heightAfterResume(state: KeyboardStateNative, previous: number):
 }
 
 /**
+ * When a return to the foreground asks the platform, counted from `active`.
+ *
+ * Once was not enough. `active` fires at the activity's resume, before its window has focus back,
+ * and at that instant the insets can still describe the keyboard the window had when it left: the
+ * shell kept that height, the IME was in fact gone, and nothing told it so. RN's own hide comes
+ * from a layout pass (`ReactRootView.checkForKeyboardEvents`), and a window whose insets change
+ * without anything changing size gets none -- the band stayed until the owner focused the field
+ * and dropped the keyboard, which is what finally sent `keyboardDidHide` (2026-10-12). The later
+ * answers are the ones given once the window is settled.
+ */
+export const RESUME_CHECKS_MS = [0, 300, 1000] as const;
+
+/**
+ * Calls `check` with the platform's answer at every `RESUME_CHECKS_MS` after each return to the
+ * foreground; a trip back to the background drops the ones still to come. Returns the unsubscribe.
+ */
+export function onKeyboardResume(check: (now: KeyboardStateNative, attempt: number) => void): () => void {
+  let timers: Array<ReturnType<typeof setTimeout>> = [];
+  const cancel = () => {
+    timers.forEach(clearTimeout);
+    timers = [];
+  };
+  const subscription = AppState.addEventListener('change', state => {
+    cancel();
+    if (state !== 'active') return;
+    timers = RESUME_CHECKS_MS.map((delay, attempt) =>
+      setTimeout(() => {
+        keyboardNow()
+          .then(now => check(now, attempt))
+          .catch(() => {});
+      }, delay),
+    );
+  });
+  return () => {
+    cancel();
+    subscription.remove();
+  };
+}
+
+/**
  * Whether a return to the foreground has something worth writing to the diagnostics.
  *
  * Silent by default: the normal resume finds no keyboard and nothing to undo, and a line per
@@ -70,18 +110,14 @@ export function useKeyboardHeight(): number {
     });
     // The way back into the foreground re-asks: a keyboard-derived layout outlives the keyboard
     // itself, and coming back to a shell still padded by one is what this hook is for. See
-    // `keyboardNow` -- the platform is the only source that cannot be stale.
-    const resumed = AppState.addEventListener('change', state => {
-      if (state !== 'active') return;
-      keyboardNow()
-        .then(now => setHeight(current => heightAfterResume(now, current)))
-        .catch(() => {});
-    });
+    // `keyboardNow` -- the platform is the only source that cannot be stale -- and
+    // `RESUME_CHECKS_MS` for why it is asked more than once.
+    const unsubscribe = onKeyboardResume(now => setHeight(current => heightAfterResume(now, current)));
 
     return () => {
       show.remove();
       hide.remove();
-      resumed.remove();
+      unsubscribe();
     };
   }, []);
 

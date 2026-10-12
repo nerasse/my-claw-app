@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
+import { ActivityIndicator, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
@@ -21,7 +21,7 @@ import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
 import { recordDiag } from '../core/diagnostics';
 import { probeText, revealFieldAboveKeyboard } from '../core/revealField';
-import { keyboardNow, keyboardResumeMismatch } from '../core/keyboard';
+import { keyboardResumeMismatch, onKeyboardResume, RESUME_CHECKS_MS } from '../core/keyboard';
 import { deviceBridge } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
 import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
@@ -946,30 +946,38 @@ export function ChatScreen({
      * padded by a keyboard that is gone is the owner's report, so the return asks the platform and
      * the answer overrides the pad -- and RN's own memory of it.
      */
-    const resumed = AppState.addEventListener('change', state => {
-      if (state !== 'active') return;
-      keyboardNow()
-        .then(now => {
-          const believed = Keyboard.isVisible();
-          if (keyboardResumeMismatch(padRef.current, believed, now.visible)) {
-            recordDiag({
-              kind: 'js',
-              at: Date.now(),
-              message:
-                `keyboard resume: ime=${now.visible ? 'up' : 'down'} height=${Math.round(now.height)}` +
-                ` jsVisible=${believed} pad=${Math.round(padRef.current)}`,
-            });
-          }
-          if (now.visible) return;
-          applyPad(0);
-          probedRef.current = false;
-        })
-        .catch(() => {});
+    let firstUp = false;
+    const unsubscribe = onKeyboardResume((now, attempt) => {
+      const believed = Keyboard.isVisible();
+      if (attempt === 0) {
+        firstUp = now.visible;
+        if (keyboardResumeMismatch(padRef.current, believed, now.visible)) {
+          recordDiag({
+            kind: 'js',
+            at: Date.now(),
+            message:
+              `keyboard resume: ime=${now.visible ? 'up' : 'down'} height=${Math.round(now.height)}` +
+              ` jsVisible=${believed} pad=${Math.round(padRef.current)}`,
+          });
+        }
+      } else if (firstUp && !now.visible) {
+        // The case a single answer missed: a keyboard on the way back in that was gone once the
+        // window settled. Named once per resume, with when it was seen gone.
+        firstUp = false;
+        recordDiag({
+          kind: 'js',
+          at: Date.now(),
+          message: `keyboard resume settled: ime=up then down after ${RESUME_CHECKS_MS[attempt]}ms jsVisible=${believed} pad=${Math.round(padRef.current)}`,
+        });
+      }
+      if (now.visible) return;
+      applyPad(0);
+      probedRef.current = false;
     });
     return () => {
       subscription.remove();
       hidden.remove();
-      resumed.remove();
+      unsubscribe();
     };
   }, [applyPad]);
 

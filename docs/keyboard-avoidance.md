@@ -237,3 +237,27 @@ keyboard resume: ime=down height=0 jsVisible=true pad=212
 Silent unless there is something to say (`keyboardResumeMismatch`): a layout still applied for a
 keyboard that is gone, or RN still believing a keyboard the platform says is down. `jsVisible=true`
 next to `ime=down` is the stale memory, named; `pad=212` is the thread that was still padded.
+
+## Asked once was not enough (2026-10-12)
+
+"Quand on revient sans le clavier y a un espace vide et on doit cliquer sur l'input et quitter le
+clavier." The same band, after the 2026-09-15 fix. The device diagnostics had been saying it for
+days without naming it: dozens of `keyboard resume: ime=down jsVisible=true pad=0` lines, RN still
+believing a keyboard the platform said was gone. Those were the resumes the re-ask caught. The
+missing ones were silent by construction: `keyboardResumeMismatch` speaks only when the platform
+says *down*.
+
+`active` fires at the activity's resume, before its window has its focus back, and at that instant
+the insets can still describe the keyboard the window left with. The single answer said *up*, the
+shell kept the height, and the IME was in fact gone. Nothing else corrects it: RN's hide comes from
+`checkForKeyboardEvents`, which runs on a layout pass, and insets that change without anything
+changing size trigger none. Focusing the field and dropping the keyboard was the first layout pass
+with a visible-then-hidden IME, hence the owner's workaround.
+
+So the platform is asked at `active` and again at 300 ms and 1 s (`RESUME_CHECKS_MS`,
+`onKeyboardResume`), each answer taken whole, by the shell and the thread's pad alike. A keyboard
+really restored on the way back keeps its height through all three. And the case is named now:
+
+```
+keyboard resume settled: ime=up then down after 300ms jsVisible=true pad=0
+```
