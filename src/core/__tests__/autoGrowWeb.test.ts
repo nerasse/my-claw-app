@@ -13,9 +13,16 @@ interface FakeStyle {
 
 class FakeTextArea {
   style: Record<string, string> = {};
-  scrollHeight = 0;
   rows = 2;
+  value = '';
+  placeholder = '';
   computed: FakeStyle = { borderTopWidth: '1px', borderBottomWidth: '1px' };
+  /** What the content measures, and what the placeholder alone does when the field is empty. */
+  content = 0;
+  placeholderHeight = 0;
+  get scrollHeight(): number {
+    return this.value === '' && this.placeholder !== '' ? Math.max(this.content, this.placeholderHeight) : this.content;
+  }
 }
 
 const globals = globalThis as unknown as {
@@ -30,7 +37,8 @@ const { autoGrow } = require('../webProps.web') as typeof import('../webProps.we
 
 function field(scrollHeight: number, border = '1px'): FakeTextArea {
   const node = new FakeTextArea();
-  node.scrollHeight = scrollHeight;
+  node.value = 'x';
+  node.content = scrollHeight;
   node.computed = { borderTopWidth: border, borderBottomWidth: border };
   return node;
 }
@@ -94,4 +102,31 @@ test('anything that is not a textarea is left alone', () => {
   autoGrow(node, 94);
 
   expect(node.style).toEqual({});
+});
+
+// Chrome measures an empty textarea on its placeholder, wrapped at the width the field had then:
+// "message" in a field caught narrow mid-layout was seven lines, and the composer kept that height
+// until the next keystroke.
+test('an empty field is one line whatever its placeholder wraps to', () => {
+  const node = field(16);
+  node.value = '';
+  node.placeholder = 'Answer the pending questions';
+  node.placeholderHeight = 112;
+
+  autoGrow(node, 94);
+
+  expect(node.style.height).toBe('18px');
+  expect(node.style.overflowY).toBe('hidden');
+  // Measured without it, not rid of it.
+  expect(node.placeholder).toBe('Answer the pending questions');
+});
+
+test('text in the field is measured as text, the placeholder playing no part', () => {
+  const node = field(40);
+  node.placeholder = 'message';
+  node.placeholderHeight = 112;
+
+  autoGrow(node, 94);
+
+  expect(node.style.height).toBe('42px');
 });

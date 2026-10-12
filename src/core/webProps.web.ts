@@ -81,7 +81,13 @@ export function autoGrow(node: unknown, maxHeight: number): void {
   const style = getComputedStyle(node);
   const frame =
     (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+  // An empty field is measured on its placeholder, wrapped at whatever width it had then: "message"
+  // in a field caught narrow mid-layout came out seven lines tall, and stayed so until a keystroke.
+  // A placeholder is a hint, never a reason to grow: the empty field is measured without it.
+  const placeholder = node.value === '' ? node.placeholder : '';
+  if (placeholder) node.placeholder = '';
   const needed = node.scrollHeight + frame;
+  if (placeholder) node.placeholder = placeholder;
   node.style.height = `${Math.min(needed, maxHeight)}px`;
   node.style.overflowY = needed > maxHeight ? 'auto' : 'hidden';
 }

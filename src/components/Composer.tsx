@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from 'react-native';
@@ -233,9 +235,23 @@ export function Composer({
     : dense
       ? MAX_TEXT_HEIGHT.dense
       : MAX_TEXT_HEIGHT.compact;
+  const placeholder = hero ? (questionPending ? 'Answer the pending questions' : 'Ask anything') : questionPending ? 'Answer the pending questions' : 'message';
   useEffect(() => {
     autoGrow(inputRef.current, maxTextHeight);
-  }, [value, maxTextHeight]);
+  }, [value, maxTextHeight, placeholder]);
+  // The height depends on where the text wraps, which is the field's width as much as its text: a
+  // field measured while a column folded or a page opened beside it kept that height until the
+  // next keystroke. Only a new width measures again; the height this sets moves the layout too.
+  const fieldWidth = useRef(0);
+  const onFieldLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const width = e.nativeEvent.layout.width;
+      if (width === fieldWidth.current) return;
+      fieldWidth.current = width;
+      autoGrow(inputRef.current, maxTextHeight);
+    },
+    [maxTextHeight],
+  );
 
   return (
     <View style={[styles.wrap, hero && styles.wrapHero]}>
@@ -367,7 +383,7 @@ export function Composer({
         // The frame is the wrapper's, never the field's: border, background and padding on the
         // input itself scroll away with the text on Android, which is why a long message came to
         // sit across the rounded edge, cut in the middle of a line.
-        <View style={[styles.field, hero && styles.fieldHero, dense && !hero && styles.fieldDense]}>
+        <View style={[styles.field, hero && styles.fieldHero, dense && !hero && styles.fieldDense]} onLayout={onFieldLayout}>
           <TextInput
             ref={inputRef}
             // Read back by the window paste listener on web: a paste is for the chat only when the
@@ -380,7 +396,7 @@ export function Composer({
             onBlur={() => onFocusChange?.(false)}
             onSubmitEditing={submitOrSelect}
             onKeyPress={onKeyPress}
-            placeholder={hero ? (questionPending ? 'Answer the pending questions' : 'Ask anything') : questionPending ? 'Answer the pending questions' : 'message'}
+            placeholder={placeholder}
             placeholderTextColor={palette.textFaint}
             autoFocus={autoFocus}
             multiline
@@ -441,6 +457,17 @@ export function Composer({
  * field at and the number the browser's autoGrow stops at, and there is only one of it.
  */
 const MAX_TEXT_HEIGHT = { compact: 94, dense: 188, hero: 218 };
+
+/**
+ * A browser's `line-height: normal` is the font's own ascent plus descent, and the textarea is
+ * sized to exactly that: the caret, drawn a little taller than the glyphs, was cut at the top and
+ * the bottom, and so was the "g" of the placeholder. A line box with room around the glyphs keeps
+ * both whole. Web only: on Android a pinned line box clips colour emoji (`lineBoxFor`), and the
+ * EditText draws its caret within its own padding.
+ */
+function webLineBox(fontSize: number): { lineHeight?: number } {
+  return Platform.OS === 'web' ? { lineHeight: lineHeightFor(fontSize) } : {};
+}
 
 const createStyles = (palette: Palette) => ({
   wrap: { borderTopWidth: 1, borderTopColor: palette.border, paddingTop: space.sm, gap: space.xs },
@@ -550,10 +577,12 @@ const createStyles = (palette: Palette) => ({
     padding: 0,
     fontSize: font.body,
     color: palette.text,
+    ...webLineBox(font.body),
   },
   inputHero: {
     maxHeight: MAX_TEXT_HEIGHT.hero,
     fontSize: 16,
+    ...webLineBox(16),
   },
   send: {
     width: 44,
