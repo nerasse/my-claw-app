@@ -87,9 +87,16 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     return () => subscription.remove();
   }, [phase]);
 
-  // The native foreground service owns the capture lifetime once it starts. Unmounting this
-  // bar while navigating must not cancel a valid take; the explicit delete gesture and the
-  // notification's Stop action remain the only user-visible endings besides MediaRecorder errors.
+  // On Android the native foreground service owns the capture lifetime once it starts: unmounting
+  // this bar while navigating must not cancel a valid take, and the delete gesture and the
+  // notification's Stop action remain the only endings besides MediaRecorder errors. Nothing owns
+  // it anywhere else, so there the microphone must not outlive the bar.
+  useEffect(
+    () => () => {
+      if (Platform.OS !== 'android' && phaseRef.current !== 'idle') deviceBridge.cancelRecording().catch(() => {});
+    },
+    [],
+  );
 
   const settle = useCallback(() => {
     cancelRef.current = false;

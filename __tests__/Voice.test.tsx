@@ -896,3 +896,17 @@ test('navigating away during a take no longer cancels the microphone session', a
   expect(bridge.cancelRecording).not.toHaveBeenCalled();
   expect(bridge.stopRecording).not.toHaveBeenCalled();
 });
+
+// Only Android has a service to hand the take to: a browser tab or an iPhone that let the bar go
+// would leave the microphone open behind the page the owner moved to.
+test('elsewhere, navigating away during a take releases the microphone', async () => {
+  const tree = await renderApp();
+
+  const touch = finger(tree);
+  await touch.down();
+  Platform.OS = 'web';
+
+  await unmount(tree);
+
+  expect(bridge.cancelRecording).toHaveBeenCalledTimes(1);
+});
