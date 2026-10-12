@@ -17,6 +17,7 @@ describe('resumeFrames', () => {
 
     const frames = resumeFrames('t1');
     expect(typesOf(frames)).toEqual([
+      'media.ticket.get',
       'session.list',
       'commands.list',
       'model.list',
@@ -25,14 +26,14 @@ describe('resumeFrames', () => {
       'subagents.list',
       'model.get',
     ]);
-    const sync = JSON.parse(frames[4]!);
+    const sync = JSON.parse(frames[5]!);
     // Asks for entries since the last one we have
     expect(sync).toMatchObject({ threadId: 't1', since: 'entry-2' });
   });
 
   test('a fresh thread syncs with null cursor (start from beginning)', () => {
     const frames = resumeFrames('t1');
-    const sync = JSON.parse(frames[4]!);
+    const sync = JSON.parse(frames[5]!);
     expect(sync).toMatchObject({ threadId: 't1' });
     // null cursor means "give me everything from the start"
     expect(sync.since).toBeNull();
@@ -40,7 +41,7 @@ describe('resumeFrames', () => {
   });
 
   test('no conversation open, nothing to sync', () => {
-    expect(typesOf(resumeFrames(null))).toEqual(['session.list', 'commands.list', 'model.list', 'jobs.list']);
+    expect(typesOf(resumeFrames(null))).toEqual(['media.ticket.get', 'session.list', 'commands.list', 'model.list', 'jobs.list']);
   });
 });
 
@@ -52,10 +53,12 @@ describe('bootFrames', () => {
     const frames = bootFrames('connected', 't1');
     expect(frames).toEqual(resumeFrames('t1'));
     expect(typesOf(frames)).toContain('model.list');
+    // The ticket the server sent as the socket opened went to the JS that died: it is asked again.
+    expect(typesOf(frames)[0]).toBe('media.ticket.get');
   });
 
   test('without an open thread, the catalogs still come', () => {
-    expect(typesOf(bootFrames('connected', null))).toEqual(['session.list', 'commands.list', 'model.list', 'jobs.list']);
+    expect(typesOf(bootFrames('connected', null))).toEqual(['media.ticket.get', 'session.list', 'commands.list', 'model.list', 'jobs.list']);
   });
 
   test('a socket still to come asks for the list alone, its connect resumes the rest', () => {

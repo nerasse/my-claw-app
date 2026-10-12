@@ -192,7 +192,8 @@ test('a gallery photo (content:// uri) is copied to the cache before staging', a
   await waitFor(() => bridge.uploadFile.mock.calls.length > 0);
   expect(bridge.uploadFile).toHaveBeenCalledWith(
     'file:///cache/prepared',
-    'http://10.10.20.10:8080/media?device=dev-test&token=token-test',
+    // The native upload carries the device credential in its headers, never in the URL.
+    'http://server:8080/media',
     'photo.jpg',
     'image/jpeg',
     THREAD,

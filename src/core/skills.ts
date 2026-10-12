@@ -1,4 +1,5 @@
 import type { DeviceInfo } from './device';
+import { authQuery } from './serverUrl';
 import type { SkillEntry } from './protocol';
 
 export type SkillSource = SkillEntry['source'];
@@ -12,15 +13,14 @@ export function skillUrl(
   name: string,
   workspace?: string,
 ): string {
-  // The credential pair is omitted rather than sent empty: a browser has none, and its cookie
-  // is what the server falls back to.
+  const credential = authQuery(deviceInfo);
+  if (credential === null) return '';
   const params = new URLSearchParams({
-    ...(deviceInfo.deviceId ? { device: deviceInfo.deviceId, token: deviceInfo.token } : {}),
     source,
     name,
     ...(workspace ? { workspace } : {}),
   });
-  return `${mediaBase}/skills?${params.toString()}`;
+  return `${mediaBase}/skills?${[params.toString(), credential].filter(Boolean).join('&')}`;
 }
 
 export interface SkillDoc {

@@ -385,7 +385,13 @@ export function AppShell(): React.JSX.Element {
   /** The version the connected server announced (`hello` frame); null until it speaks. */
   const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [identity, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  /** The server's media ticket (`media.ticket`), kept apart: it may arrive before the identity does. */
+  const [mediaTicket, setMediaTicket] = useState<string | undefined>(undefined);
+  const deviceInfo = useMemo(
+    () => (identity ? { ...identity, ...(mediaTicket ? { ticket: mediaTicket } : {}) } : null),
+    [identity, mediaTicket],
+  );
   /** Native pairing state; the PairingScreen drives it and this screen chooses whether to show it. */
   const pairing = usePairing();
   const [pairingOpen, setPairingOpen] = useState(false);
@@ -1290,6 +1296,7 @@ export function AppShell(): React.JSX.Element {
       setLocationEnabled,
       // The version the server announces is the other half of the verdict: same one back means
       // nothing was installed, a different one means the swap happened.
+      setMediaTicket,
       setServerVersion: version => {
         setServerVersion(version);
         setUpdatePhase(phase => reduceUpdate(phase, { type: 'hello', version }));
@@ -4508,7 +4515,7 @@ export function AppShell(): React.JSX.Element {
           ) : statsOpen ? (
             <StatsScreen onClose={closeStats} />
           ) : systemFilesOpen ? (
-            <SystemFilesScreen onClose={closeSystemFiles} />
+            <SystemFilesScreen deviceInfo={deviceInfo} onClose={closeSystemFiles} />
           ) : instructionsPageOpen ? (
             instructionsPageEditing && instructions.editor ? (
               <InstructionEditorScreen

@@ -54,15 +54,39 @@ export async function waitFor(check: () => boolean, timeoutMs = 10000): Promise<
  * old boot sent too.
  */
 /**
+ * The app as a phone that has been set up: an address is stored. No address is built in, so
+ * with none a launch opens on the server screen instead (ConnectServer.test.tsx). The test's own
+ * stored prefs are kept, and an address it stored wins.
+ */
+async function asConfiguredApp(): Promise<void> {
+  const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
+  const stored = await bridge.prefsGetAll();
+  if (!stored.serverUrl) bridge.prefsGetAll.mockResolvedValue({ ...stored, serverUrl: 'ws://server:8080/my-claw-app' });
+  await prefs.hydrate();
+}
+
+/** What a server sends as the socket opens: the ticket every media and download URL carries. */
+export const TEST_MEDIA_TICKET = 'ticket-test';
+
+async function handMediaTicket(): Promise<void> {
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'media.ticket', ticket: TEST_MEDIA_TICKET, expiresAt: Date.now() + 86_400_000 }),
+    });
+  });
+}
+
+/**
  * `seedCatalog: false` leaves the launch's first catalogue to the test: the first-run setup is
  * decided on it, so a suite about a server with no model must be the one to send it.
  */
 export async function renderApp({ seedCatalog = true }: { seedCatalog?: boolean } = {}): Promise<Tree> {
-  await prefs.hydrate();
+  await asConfiguredApp();
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(<App />);
   });
+  await handMediaTicket();
   const last = prefs.get().lastThreadId;
   if (last) {
     await waitFor(() => labelsOf(tree).includes('New conversation'));
@@ -131,14 +155,12 @@ export async function unmount(tree: Tree): Promise<void> {
  * address stored, a new install opens on the server screen instead (ConnectServer.test.tsx).
  */
 export async function renderAppHome(): Promise<Tree> {
-  const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
-  const stored = await bridge.prefsGetAll();
-  if (!stored.serverUrl) bridge.prefsGetAll.mockResolvedValue({ ...stored, serverUrl: 'ws://server:8080/my-claw-app' });
-  await prefs.hydrate();
+  await asConfiguredApp();
   let tree!: Tree;
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(<App />);
   });
+  await handMediaTicket();
   await waitFor(() => tree.root.findAll(node => node.props.testID === 'home-screen').length > 0);
   return tree;
 }

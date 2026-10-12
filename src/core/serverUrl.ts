@@ -12,13 +12,6 @@ export const DEFAULT_SERVER_URL = '';
 
 export const DEFAULT_HTTP_ORIGIN = '';
 
-/**
- * The address builds before 0.6.144 used when none was stored: `prefs.set` writes nothing that
- * equals the default, so a phone that never typed one stored nothing and ran on it. Such a phone
- * adopts it once (prefs.hydrate). Remove once the owner's phone has run 0.6.144.
- */
-export const LEGACY_SERVER_URL = 'ws://10.10.20.10:8080/my-claw-app';
-
 /** `https://host/pair#CODE`, the claim URL the QR of `myclaw setup` encodes, read as the socket address. */
 export function serverFromClaimUrl(raw: string): string | null {
   const match = /^(https?):\/\/([^\s/?#]+)\/pair(?:[/?#]|$)/i.exec(raw.trim());
@@ -37,8 +30,18 @@ export function isValidServerUrl(url: string): boolean {
   return /^(wss?|https?):\/\/[^\s/?#]+\S*$/i.test(url.trim());
 }
 
-/** The `?device=&token=` a media or skill URL needs, or an empty string when a cookie covers it. */
-export function authQuery(deviceInfo: { deviceId: string; token: string }): string {
-  if (!deviceInfo.deviceId || !deviceInfo.token) return '';
-  return `device=${encodeURIComponent(deviceInfo.deviceId)}&token=${encodeURIComponent(deviceInfo.token)}`;
+/**
+ * The credential of a URL that a view loads by itself (an image, a player, a download): the
+ * server's media ticket, which only reads media and expires. Null until the server has sent one,
+ * and a URL built without it would be a 401: the caller waits. The device token never goes in a
+ * URL, where every proxy on the way logs it.
+ */
+export function authQuery(deviceInfo: { ticket?: string }): string | null {
+  return deviceInfo.ticket ? `ticket=${encodeURIComponent(deviceInfo.ticket)}` : null;
+}
+
+/** The device credential, for a request the app makes itself. */
+export function authHeaders(deviceInfo: { deviceId: string; token: string }): Record<string, string> {
+  if (!deviceInfo.deviceId || !deviceInfo.token) return {};
+  return { 'X-My-Claw-Device': deviceInfo.deviceId, Authorization: `Bearer ${deviceInfo.token}` };
 }

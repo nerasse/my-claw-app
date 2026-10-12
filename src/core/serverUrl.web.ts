@@ -24,12 +24,14 @@ export const DEFAULT_SERVER_URL =
 
 export const DEFAULT_HTTP_ORIGIN = origin();
 
-export function authQuery(): string {
+/** The session cookie covers every URL: nothing to add, and nothing to wait for. */
+export function authQuery(_deviceInfo?: unknown): string {
   return '';
 }
 
-/** No legacy address on the web: the page's origin always answers. */
-export const LEGACY_SERVER_URL = '';
+export function authHeaders(_deviceInfo?: unknown): Record<string, string> {
+  return {};
+}
 
 /** Twin of the native one; a browser pairs on the server's /pair page and never scans. */
 export function serverFromClaimUrl(_raw: string): string | null {

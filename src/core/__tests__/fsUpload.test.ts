@@ -1,17 +1,18 @@
 /**
  * The two transfer halves of the files page.
  *
- * They are HTTP, not frames, and the credential is the one `/app-update/apk` presents: the
- * `device`/`token` query pair a native client carries, or nothing at all for a browser whose
- * session cookie speaks. What this suite pins is exactly that shape of the URL -- a route that
- * authenticates like the APK route has to be built like it -- plus the two behaviours copied
- * from `uploadMedia`: a refusal is sent once, a transport failure is retried once.
+ * They are HTTP, not frames. The upload is a request the app makes itself: the device credential
+ * goes in its headers, never in the URL, where every proxy on the way logs it. The download link
+ * is handed to a downloader that cannot set headers: it carries the server's media ticket, and
+ * there is no link before the ticket. A browser's session cookie speaks on its own (the web twin
+ * of serverUrl). Plus the two behaviours copied from `uploadMedia`: a refusal is sent once, a
+ * transport failure is retried once.
  */
 
 import { fsDownloadUrl, uploadToFs } from '../upload';
 
 
-const device = { deviceId: 'dev-test', token: 'token-test' };
+const device = { deviceId: 'dev-test', token: 'token-test', ticket: 'ticket-test' };
 const files = [
   { uri: 'content://docs/1', name: 'notes.md', type: 'text/markdown' },
   { uri: 'content://docs/2', name: 'photo.jpg', type: 'image/jpeg' },
@@ -53,21 +54,21 @@ afterEach(() => {
 });
 
 describe('uploadToFs', () => {
-  test('posts multipart to the directory, authenticated like the APK route', async () => {
+  test('posts multipart to the directory, the credential in the headers and not the URL', async () => {
     const result = await uploadToFs('http://server:8080', device, '/home/neras', files);
 
-    expect(fetchUrls()).toEqual([
-      'http://server:8080/fs/upload?path=%2Fhome%2Fneras&device=dev-test&token=token-test',
-    ]);
-    const init = fetchMock.mock.calls[0][1] as { method?: string; body?: unknown };
+    expect(fetchUrls()).toEqual(['http://server:8080/fs/upload?path=%2Fhome%2Fneras']);
+    const init = fetchMock.mock.calls[0][1] as { method?: string; body?: unknown; headers?: Record<string, string> };
+    expect(init.headers).toEqual({ 'X-My-Claw-Device': 'dev-test', Authorization: 'Bearer token-test' });
     expect(init.method).toBe('POST');
     expect(init.body).toBeInstanceOf(FormData);
     expect(result).toEqual({ path: '/home/neras', files: [{ name: 'notes.md', size: 3 }] });
   });
 
-  test('a browser identity leaves the query off and lets the session cookie speak', async () => {
+  test('with no identity, nothing is attached and the session cookie speaks', async () => {
     await uploadToFs('http://server:8080', null, '/', files);
     expect(fetchUrls()).toEqual(['http://server:8080/fs/upload?path=%2F']);
+    expect((fetchMock.mock.calls[0][1] as { headers?: unknown }).headers).toEqual({});
   });
 
   test('a refusal from the server is final: one attempt, and the reason is kept', async () => {
@@ -100,13 +101,14 @@ describe('uploadToFs', () => {
 });
 
 describe('fsDownloadUrl', () => {
-  test('carries the same credential as the APK download', () => {
-    expect(fsDownloadUrl('http://server:8080', device, '/var/log/app.log')).toBe(
-      'http://server:8080/fs/download?path=%2Fvar%2Flog%2Fapp.log&device=dev-test&token=token-test',
-    );
+  test('carries the media ticket, never the device token', () => {
+    const url = fsDownloadUrl('http://server:8080', device, '/var/log/app.log');
+    expect(url).toBe('http://server:8080/fs/download?path=%2Fvar%2Flog%2Fapp.log&ticket=ticket-test');
+    expect(url).not.toContain('token-test');
   });
 
-  test('a browser trips the same route with no query at all', () => {
-    expect(fsDownloadUrl('http://server:8080', null, '/etc/hosts')).toBe('http://server:8080/fs/download?path=%2Fetc%2Fhosts');
+  test('has no link to give before the identity or the ticket', () => {
+    expect(fsDownloadUrl('http://server:8080', null, '/etc/hosts')).toBe('');
+    expect(fsDownloadUrl('http://server:8080', { deviceId: 'dev-test', token: 'token-test' }, '/etc/hosts')).toBe('');
   });
 });

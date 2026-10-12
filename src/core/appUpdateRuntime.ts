@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { deviceBridge, deviceEvents } from './nativeBridge';
-import { authQuery } from './serverUrl';
+import { authHeaders } from './serverUrl';
 import type { DeviceInfo } from './device';
 import type { AppUpdateCheckResult } from './appUpdate';
 
@@ -60,8 +60,7 @@ export const appUpdateRuntime: AppUpdateRuntime = {
   async check(mediaBase, deviceInfo) {
     if (!deviceInfo) return { ok: false, error: 'no device identity' };
     try {
-      const url = `${mediaBase}/app-update?${authQuery(deviceInfo)}`;
-      const res = await fetch(url);
+      const res = await fetch(`${mediaBase}/app-update`, { headers: authHeaders(deviceInfo) });
       if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
       const body = (await res.json()) as AppUpdateCheckResult;
       return body.ok ? body : { ok: false, error: body.error ?? 'check failed' };
@@ -72,8 +71,8 @@ export const appUpdateRuntime: AppUpdateRuntime = {
 
   async download(mediaBase, deviceInfo, transferId, version, expectedSize) {
     if (!deviceInfo) throw new Error('no device identity');
-    const url = `${mediaBase}/app-update/apk?${authQuery(deviceInfo)}`;
-    await deviceBridge.downloadApk(url, transferId, version, expectedSize);
+    // The native download puts the device credential in its headers.
+    await deviceBridge.downloadApk(`${mediaBase}/app-update/apk`, transferId, version, expectedSize);
   },
 
   async staged() {

@@ -16,27 +16,23 @@ import { mediaUrl } from '../mediaUrl';
 const BASE = 'http://host:8080';
 
 describe('mediaUrl', () => {
-  it('leaves the query off when the cookie is the credential', () => {
-    expect(mediaUrl(BASE, { deviceId: '', token: '' }, 'abc')).toBe(`${BASE}/media/abc`);
+  // The device token never goes in a URL (proxies log URLs): a view loading by itself carries
+  // the server's media ticket, and has no URL to give until the ticket arrives.
+  it('carries the media ticket, never the device token', () => {
+    const url = mediaUrl(BASE, { deviceId: 'phone', token: 'secret', ticket: 't/k' }, 'abc');
+    expect(url).toBe(`${BASE}/media/abc?ticket=t%2Fk`);
+    expect(url).not.toContain('secret');
   });
 
-  it('carries the credential a native client presents', () => {
-    expect(mediaUrl(BASE, { deviceId: 'phone', token: 't/k' }, 'abc')).toBe(
-      `${BASE}/media/abc?device=phone&token=t%2Fk`,
+  it('extends the query with an extra parameter', () => {
+    expect(mediaUrl(BASE, { deviceId: 'phone', token: 'tok', ticket: 'tk' }, 'vid', { thumb: '1' })).toBe(
+      `${BASE}/media/vid?ticket=tk&thumb=1`,
     );
   });
 
-  it('opens the query for an extra parameter, and extends an existing one', () => {
-    expect(mediaUrl(BASE, { deviceId: '', token: '' }, 'vid', { thumb: '1' })).toBe(
-      `${BASE}/media/vid?thumb=1`,
-    );
-    expect(mediaUrl(BASE, { deviceId: 'phone', token: 'tok' }, 'vid', { thumb: '1' })).toBe(
-      `${BASE}/media/vid?device=phone&token=tok&thumb=1`,
-    );
-  });
-
-  it('has no URL to give before the identity resolves', () => {
+  it('has no URL to give before the identity or the ticket resolves', () => {
     expect(mediaUrl(BASE, null, 'abc')).toBe('');
+    expect(mediaUrl(BASE, { deviceId: 'phone', token: 'tok' }, 'abc')).toBe('');
   });
 });
 

@@ -1,5 +1,5 @@
 import { deviceBridge } from './nativeBridge';
-import { DEFAULT_SERVER_URL, LEGACY_SERVER_URL } from './serverUrl';
+import { DEFAULT_SERVER_URL } from './serverUrl';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -99,13 +99,6 @@ class PrefsStore {
   async hydrate(): Promise<Prefs> {
     try {
       const raw = await deviceBridge.prefsGetAll();
-      // A phone that has been used (any setting stored) but holds no address ran on the address
-      // older builds had built in: it keeps it, written down now that there is no default. A new
-      // install stores nothing at all and is asked for an address instead.
-      if (!raw.serverUrl?.trim() && LEGACY_SERVER_URL && Object.keys(raw).length > 0) {
-        raw.serverUrl = LEGACY_SERVER_URL;
-        deviceBridge.prefsSet('serverUrl', LEGACY_SERVER_URL).catch(() => {});
-      }
       const themeMode = THEME_MODES.includes(raw.themeMode as ThemeMode) ? (raw.themeMode as ThemeMode) : DEFAULTS.themeMode;
       this.current = {
         themeMode,

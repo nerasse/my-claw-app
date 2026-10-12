@@ -177,7 +177,8 @@ test('releasing the mic stages the note, and sending it is a separate act', asyn
   expect(bridge.uploadFile.mock.calls).toHaveLength(1);
   const [uri, url, filename, type, threadId] = bridge.uploadFile.mock.calls[0];
   expect(uri).toBe('file:///cache/voice.m4a');
-  expect(url).toContain('/media?device=dev-test');
+  // The credential rides the native upload's headers, never the URL.
+  expect(url).toBe('http://server:8080/media');
   expect(filename).toMatch(/^voice-.*\.m4a$/);
   expect(type).toBe('audio/mp4');
   expect(threadId).toBe(THREAD);

@@ -1,4 +1,4 @@
-import { authQuery } from './serverUrl';
+import { authHeaders, authQuery } from './serverUrl';
 import type { AttachmentMeta } from './protocol';
 import type { DeviceInfo } from './device';
 import { deviceBridge, onTransferProgress } from './nativeBridge';
@@ -94,8 +94,8 @@ export async function uploadToFs(
   dir: string,
   files: FsLocalFile[],
 ): Promise<{ path: string; files: FsUploadedFile[] }> {
-  const query = deviceInfo ? authQuery(deviceInfo) : '';
-  const url = `${mediaBase}/fs/upload?path=${encodeURIComponent(dir)}${query ? `&${query}` : ''}`;
+  const url = `${mediaBase}/fs/upload?path=${encodeURIComponent(dir)}`;
+  const headers = deviceInfo ? authHeaders(deviceInfo) : {};
   const attempt = async (): Promise<{ path: string; files: FsUploadedFile[] }> => {
     const form = new FormData();
     for (const file of files) {
@@ -103,7 +103,7 @@ export async function uploadToFs(
       // the cast is only saying so. A string part would be read as the text "[object Object]".
       form.append('file', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
     }
-    const response = await fetch(url, { method: 'POST', body: form });
+    const response = await fetch(url, { method: 'POST', body: form, headers });
     if (!response.ok) {
       throw new UploadRefused(response.status, await response.text().catch(() => ''));
     }
@@ -126,7 +126,8 @@ export async function uploadToFs(
  * arrow and one sheet wherever it is tapped (2026-09-26).
  */
 export function fsDownloadUrl(mediaBase: string, deviceInfo: DeviceInfo | null, path: string): string {
-  const query = deviceInfo ? authQuery(deviceInfo) : '';
+  const query = deviceInfo ? authQuery(deviceInfo) : null;
+  if (query === null) return '';
   return `${mediaBase}/fs/download?path=${encodeURIComponent(path)}${query ? `&${query}` : ''}`;
 }
 
@@ -145,8 +146,8 @@ export async function uploadMedia(
   attachment: PendingAttachment,
   onProgress?: (bytes: number, total: number) => void,
 ): Promise<UploadedAttachment> {
-  const query = authQuery(deviceInfo);
-  const url = `${mediaBase}/media${query ? `?${query}` : ''}`;
+  // The native upload puts the device credential in its headers; a browser's cookie goes on its own.
+  const url = `${mediaBase}/media`;
   const transferId = `upload-${attachment.id}`;
   let unsubscribe: (() => void) | undefined;
   if (onProgress) {

@@ -92,6 +92,8 @@ export interface ServerFrameHandlers {
   setLastRun: (run: string) => void;
   setLocationEnabled: (enabled: boolean) => void;
   setServerVersion: (version: string) => void;
+  /** The server's media ticket, for the URLs views load by themselves (serverUrl.authQuery). */
+  setMediaTicket?: (ticket: string) => void;
   setDiagSnapshot: (text: string) => void;
   setDiagLogs: (text: string) => void;
   setDiagBusy: (busy: boolean) => void;
@@ -156,6 +158,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     setLastRun,
     setLocationEnabled,
     setServerVersion,
+    setMediaTicket,
     setDiagSnapshot,
     setDiagLogs,
     setDiagBusy,
@@ -786,6 +789,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // The server names itself on connect: the settings page labels "connected" with it.
       setServerVersion(frame.version);
       chatStore.setServerReceipts(frame.receipts === true);
+      break;
+    case 'media.ticket':
+      setMediaTicket?.(frame.ticket);
       break;
     case 'chat.cleared':
       chatStore.clearThread(frame.threadId);

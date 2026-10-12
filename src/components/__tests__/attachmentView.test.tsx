@@ -12,12 +12,16 @@ import { Image, StyleSheet } from 'react-native';
 import { AttachmentView } from '../AttachmentView';
 import { recordDiag } from '../../core/diagnostics';
 import type { AttachmentMeta } from '../../core/protocol';
+import type { DeviceInfo } from '../../core/device';
 
 jest.mock('../../core/diagnostics', () => ({ recordDiag: jest.fn() }));
+// The browser's credential rules: the cookie speaks, nothing goes in the URL. The native ones
+// (the media ticket) are pinned in mediaUrl.test.ts.
+jest.mock('../../core/serverUrl', () => jest.requireActual('../../core/serverUrl.web'));
 
 const BASE = 'http://host:8080';
 
-function render(att: AttachmentMeta, deviceInfo: { deviceId: string; token: string } | null) {
+function render(att: AttachmentMeta, deviceInfo: DeviceInfo | null) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
@@ -37,11 +41,6 @@ describe('AttachmentView with a cookie session', () => {
   it('renders an image from the plain media url', () => {
     const tree = render({ id: 'abc', type: 'image', filename: 'shot.png' }, { deviceId: '', token: '' });
     expect(imageUris(tree)).toEqual([`${BASE}/media/abc`]);
-  });
-
-  it('keeps the credential query for a native client', () => {
-    const tree = render({ id: 'abc', type: 'image' }, { deviceId: 'phone', token: 'sec ret' });
-    expect(imageUris(tree)).toEqual([`${BASE}/media/abc?device=phone&token=sec%20ret`]);
   });
 
   it('gives a video its server thumbnail', () => {
@@ -142,7 +141,10 @@ describe('AttachmentView: an attachment with nothing to draw', () => {
   });
 
   it('falls back to the chip when the bytes never come, and names it in the diagnostics', () => {
-    const tree = render({ id: 'abc', type: 'image', filename: 'shot.png' }, { deviceId: '', token: '' });
+    const tree = render(
+      { id: 'abc', type: 'image', filename: 'shot.png' },
+      { deviceId: 'phone', token: 'secret-token', ticket: 'secret-ticket' },
+    );
     expect(imageUris(tree)).toEqual([`${BASE}/media/abc`]);
 
     const image = tree.root.findAllByType(Image)[0]!;
@@ -156,8 +158,8 @@ describe('AttachmentView: an attachment with nothing to draw', () => {
     const report = failed.mock.calls[0]![0] as { message: string; stack: string };
     expect(report.message).toContain('failed to load');
     expect(report.stack).toContain('id=abc');
-    // The token rides the query, and the query never reaches a log.
-    expect(report.stack).not.toContain('token');
+    // No credential reaches a log, neither the device token nor the media ticket.
+    expect(report.stack).not.toContain('secret');
   });
 });
 

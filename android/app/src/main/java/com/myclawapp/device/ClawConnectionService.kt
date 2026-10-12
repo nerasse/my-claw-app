@@ -295,14 +295,12 @@ class ClawConnectionService : Service() {
     state = "connecting"
     Log.i(TAG, "connecting to $url")
     emitState(null, 0)
-    val deviceId = DeviceCredentials.deviceId(this)
-    val token = DeviceCredentials.token(this)
     // OkHttp accepts http/https/ws/wss and throws on anything else, here, on the main thread,
     // inside onStartCommand. An address typed without its scheme killed the process, and it had
     // already been stored, so it killed it again at every launch. The JS side checks too; this
     // is the layer that cannot be bypassed by a stale preference.
     val request = try {
-      Request.Builder().url(DeviceCredentials.appendToUrl(url, deviceId, token)).build()
+      DeviceCredentials.applyTo(Request.Builder().url(url), this).build()
     } catch (e: IllegalArgumentException) {
       Log.w(TAG, "refusing an unusable server address", e)
       state = "disconnected"

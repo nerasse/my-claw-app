@@ -19,7 +19,9 @@ export function mediaUrl(
   extra?: Record<string, string>,
 ): string {
   if (!deviceInfo) return '';
-  const parts = [authQuery(deviceInfo)];
+  const credential = authQuery(deviceInfo);
+  if (credential === null) return '';
+  const parts = [credential];
   for (const [key, value] of Object.entries(extra ?? {})) {
     parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
   }

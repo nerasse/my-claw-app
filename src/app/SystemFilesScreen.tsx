@@ -11,7 +11,7 @@ import { FolderIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useHardwareBack } from '../core/hardwareBack';
 import { useDismissKeyboard } from '../core/keyboard';
-import { getDeviceInfo, type DeviceInfo } from '../core/device';
+import type { DeviceInfo } from '../core/device';
 import { fsStore, sortEntries, useFsStore, type FsOpenFile } from '../core/fsStore';
 import { prefs } from '../core/prefs';
 import { formatBytes, formatDate, httpOrigin } from '../core/utils';
@@ -212,7 +212,17 @@ type ConfirmState = {
   run: () => void;
 };
 
-export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.JSX.Element {
+/**
+ * `deviceInfo` is the shell's: it carries the server's media ticket, which a download link needs and
+ * the bare identity does not hold.
+ */
+export function SystemFilesScreen({
+  deviceInfo,
+  onClose,
+}: {
+  deviceInfo: DeviceInfo | null;
+  onClose: () => void;
+}): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { dark } = useTheme();
   const state = useFsStore();
@@ -224,24 +234,11 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
   const [cursor, setCursor] = useState(1);
   const [sending, setSending] = useState(false);
   const [mediaBase] = useState(() => httpOrigin(prefs.get().serverUrl));
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const { scrollProps, indicator } = useScrollIndicator();
 
   useEffect(() => {
     fsStore.open();
     return () => fsStore.close();
-  }, []);
-
-  useEffect(() => {
-    let live = true;
-    getDeviceInfo()
-      .then(info => {
-        if (live) setDeviceInfo(info);
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
   }, []);
 
   const openEntry = useCallback((entry: FsEntry) => {
@@ -274,13 +271,14 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
   // The same road as the row's arrow: the destinations on a phone, straight down in a browser.
   const download = useCallback(
     (entry: FsEntry) => {
-      if (!deviceInfo) {
-        fsStore.setNotice('the device identity is not ready yet');
+      const url = fsDownloadUrl(mediaBase, deviceInfo, entry.path);
+      if (!url) {
+        fsStore.setNotice('not connected to the server yet: try again in a moment');
         return;
       }
       // A folder goes down as one ZIP named after it: the server writes it as it sends it.
       const filename = isDirEntry(entry) ? `${entry.name}.zip` : entry.name;
-      requestDownload({ targets: [{ url: fsDownloadUrl(mediaBase, deviceInfo, entry.path), filename }] });
+      requestDownload({ targets: [{ url, filename }] });
     },
     [deviceInfo, mediaBase],
   );
@@ -656,11 +654,7 @@ export function SystemFilesScreen({ onClose }: { onClose: () => void }): React.J
               renderItem={({ item }) => (
                 <FileRow
                   entry={item}
-                  downloadUrl={
-                    !isDirEntry(item) && deviceInfo
-                      ? fsDownloadUrl(mediaBase, deviceInfo, item.path)
-                      : undefined
-                  }
+                  downloadUrl={isDirEntry(item) ? undefined : fsDownloadUrl(mediaBase, deviceInfo, item.path) || undefined}
                   onOpen={openEntry}
                   onActions={setSheetEntry}
                 />

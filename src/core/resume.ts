@@ -4,6 +4,7 @@ import {
   encodeModelGet,
   encodeModelList,
   encodeSessionSync,
+  encodeMediaTicketGet,
   encodeSessionList,
   encodeStatusWatch,
   encodeSubAgentsList,
@@ -41,7 +42,8 @@ export function bootFrames(state: string, activeThreadId: string | null): string
 }
 
 export function resumeFrames(activeThreadId: string | null): string[] {
-  const frames = [encodeSessionList(), encodeCommandsList(), encodeModelList(), encodeJobsList()];
+  // The media ticket first: every image of the page waits for it (serverUrl.authQuery).
+  const frames = [encodeMediaTicketGet(), encodeSessionList(), encodeCommandsList(), encodeModelList(), encodeJobsList()];
   // A watch belongs to a socket, and this is a new one: the status page still open would
   // otherwise keep the report of the moment the old socket died, and never hear another.
   const watched = statusStore.getSnapshot().threadId;

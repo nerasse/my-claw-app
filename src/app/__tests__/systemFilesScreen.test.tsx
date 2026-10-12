@@ -22,6 +22,7 @@ import { fsStore } from '../../core/fsStore';
 import { connection } from '../../core/connection';
 import { deviceBridge } from '../../core/nativeBridge';
 import type { FsEntry, FsListResultFrame, FsReadResultFrame, FsWriteResultFrame, ServerFrame } from '../../core/protocol';
+import type { DeviceInfo } from '../../core/device';
 
 // The real singleton owns a socket and its reconnect timers; reaching it from a screen test
 // leaks them past the run.
@@ -161,6 +162,9 @@ function readResult(over: Partial<FsReadResultFrame> = {}): FsReadResultFrame {
   };
 }
 
+/** The shell's identity once the server has handed its media ticket: what a download link carries. */
+const DEVICE = { deviceId: 'dev-test', token: 'token-test', ticket: 'ticket-test' };
+
 describe('SystemFilesScreen', () => {
   let mounted: Tree | null = null;
 
@@ -169,7 +173,7 @@ describe('SystemFilesScreen', () => {
   async function render(onClose: () => void = () => {}): Promise<Tree> {
     let tree!: Tree;
     await ReactTestRenderer.act(async () => {
-      tree = ReactTestRenderer.create(<SystemFilesScreen onClose={onClose} />);
+      tree = ReactTestRenderer.create(<SystemFilesScreen deviceInfo={DEVICE} onClose={onClose} />);
     });
     // The page lands on the remembered directory through the prefs bridge: one promise hop.
     await ReactTestRenderer.act(async () => {
@@ -524,12 +528,12 @@ describe('SystemFilesScreen', () => {
 
   describe('a download', () => {
     /** The screen beside the host, as the shell mounts them: the host last, over everything. */
-    async function renderWithHost(): Promise<Tree> {
+    async function renderWithHost(device: DeviceInfo = DEVICE): Promise<Tree> {
       let tree!: Tree;
       await ReactTestRenderer.act(async () => {
         tree = ReactTestRenderer.create(
           <HostBox>
-            <SystemFilesScreen onClose={() => {}} />
+            <SystemFilesScreen deviceInfo={device} onClose={() => {}} />
             <OverlayHost />
           </HostBox>,
         );
@@ -601,6 +605,18 @@ describe('SystemFilesScreen', () => {
         false,
         expect.any(String),
       );
+    });
+
+    test('before the server has handed its ticket there is no link, and the page says why', async () => {
+      const tree = await renderWithHost({ deviceId: 'dev-test', token: 'token-test' });
+      openSheet(tree, '/home/neras/dev');
+      press(tree, 'Download as ZIP…');
+      await ReactTestRenderer.act(async () => {
+        await flush();
+      });
+      expect(labels(tree)).not.toContain('Save to Downloads');
+      expect(texts(tree).join(' ')).toContain('not connected to the server yet');
+      expect(bridge.downloadFile).not.toHaveBeenCalled();
     });
   });
 

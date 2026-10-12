@@ -2624,7 +2624,18 @@ export interface HelloFrame {
   receipts?: boolean;
 }
 
+/**
+ * The read-only credential for the URLs a view loads by itself (serverUrl.authQuery): sent as
+ * the socket opens, as it renews, and on `media.ticket.get`. Never sent by a server before 0.7.107.
+ */
+export interface MediaTicketFrame {
+  type: 'media.ticket';
+  ticket: string;
+  expiresAt: number;
+}
+
 export type ServerFrame =
+  | MediaTicketFrame
   | BrowserInfoResultFrame
   | BrowserWindowsResultFrame
   | BrowserFrameFrame
@@ -2830,6 +2841,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'subagents.handoff.result',
   'notifications.info',
   'hello',
+  'media.ticket',
   'tags.result',
   'providers.env.result',
   'chat.transcript',
@@ -2983,6 +2995,11 @@ export function encodeUiPrefsSet(prefs: { expandTools?: boolean; expandReasoning
 /** Carries nothing: what to install is the registry's answer, not this device's opinion. */
 export function encodeUpdateRun(): string {
   return JSON.stringify({ type: 'update.run' });
+}
+
+/** Asks the server for the media ticket again: the UI restarted over a socket that stayed open. */
+export function encodeMediaTicketGet(): string {
+  return JSON.stringify({ type: 'media.ticket.get' });
 }
 
 export function encodeSessionList(): string {

@@ -666,7 +666,8 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
         }
       }
     }
-    val request = Request.Builder()
+    // Only ever the server's own /media: the credential goes with it.
+    val request = DeviceCredentials.applyTo(Request.Builder(), reactContext)
       .url(url)
       .post(body)
       // Percent-encoded, like the web client: an OkHttp header value must be ISO-8859-1 and a
@@ -1147,7 +1148,8 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
    */
   @ReactMethod
   fun downloadApk(url: String, transferId: String, version: String, expectedSize: Double, promise: Promise) {
-    val request = Request.Builder().url(url).get().build()
+    // Only ever the server's own /app-update/apk: the credential goes with it.
+    val request = DeviceCredentials.applyTo(Request.Builder().url(url), reactContext).get().build()
     apkClient.newCall(request).enqueue(object : Callback {
       override fun onFailure(call: Call, e: IOException) {
         promise.reject("APK_DOWNLOAD_FAILED", e.message ?: "apk download failed")

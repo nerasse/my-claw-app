@@ -3,6 +3,8 @@ import { deviceBridge } from './nativeBridge';
 export interface DeviceInfo {
   deviceId: string;
   token: string;
+  /** The server's media ticket (hello frame): what goes in a URL instead of the token. */
+  ticket?: string;
 }
 
 /**

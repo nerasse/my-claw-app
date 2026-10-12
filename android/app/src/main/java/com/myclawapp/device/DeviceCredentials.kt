@@ -61,9 +61,13 @@ object DeviceCredentials {
 
   fun info(context: Context): Pair<String, String> = deviceId(context) to token(context)
 
-  fun appendToUrl(url: String, deviceId: String, token: String): String {
-    val separator = if (url.contains("?")) "&" else "?"
-    return "$url$separator" + "device=$deviceId&token=$token"
+  /**
+   * The device credential, in headers: a URL is logged by every proxy on its way, and this token
+   * opens everything. What must sit in a URL carries the server's media ticket instead.
+   */
+  fun applyTo(builder: okhttp3.Request.Builder, context: Context): okhttp3.Request.Builder {
+    val (deviceId, token) = info(context)
+    return builder.header("X-My-Claw-Device", deviceId).header("Authorization", "Bearer $token")
   }
 
   private fun randomToken(): String {

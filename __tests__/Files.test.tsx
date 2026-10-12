@@ -8,6 +8,7 @@ import { deviceBridge } from '../src/core/nativeBridge';
 import type { SessionFileMeta } from '../src/core/protocol';
 import {
   renderApp,
+  TEST_MEDIA_TICKET,
   labelsOf,
   textsOf,
   press,
@@ -17,7 +18,7 @@ import {
 } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
-const MEDIA_URL = 'http://10.10.20.10:8080/media';
+const MEDIA_URL = 'http://server:8080/media';
 
 function file(over: Partial<SessionFileMeta>): SessionFileMeta {
   return {
@@ -151,7 +152,7 @@ test('tapping a markdown file shows its rendered content and offers a download',
   await press(tree, 'Save as…');
   await waitFor(() => bridge.saveFile.mock.calls.length > 0);
   expect(bridge.saveFile).toHaveBeenCalledWith(
-    `${MEDIA_URL}/f1?device=dev-test&token=token-test`,
+    `${MEDIA_URL}/f1?ticket=${TEST_MEDIA_TICKET}`,
     'notes.md',
     expect.any(String),
   );
@@ -197,7 +198,7 @@ test('tapping an image opens the viewer and saves to the gallery', async () => {
   await press(tree, 'Save to the gallery');
   await waitFor(() => bridge.downloadFile.mock.calls.length > 0);
   expect(bridge.downloadFile).toHaveBeenCalledWith(
-    `${MEDIA_URL}/img1?device=dev-test&token=token-test`,
+    `${MEDIA_URL}/img1?ticket=${TEST_MEDIA_TICKET}`,
     'photo.png',
     true,
     expect.any(String),
@@ -433,7 +434,7 @@ test('a file without a preview still offers a download', async () => {
   await press(tree, 'Save as…');
   await waitFor(() => bridge.saveFile.mock.calls.length > 0);
   expect(bridge.saveFile).toHaveBeenCalledWith(
-    `${MEDIA_URL}/a1?device=dev-test&token=token-test`,
+    `${MEDIA_URL}/a1?ticket=${TEST_MEDIA_TICKET}`,
     'clip.mp3',
     expect.any(String),
   );

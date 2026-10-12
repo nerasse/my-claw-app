@@ -121,7 +121,7 @@ describe('the grouping rule', () => {
       { id: 'm1', type: 'image', filename: 'a.png' },
       { id: 'm2', type: 'image', filename: 'b.png', deleted: true },
     ];
-    expect(mediaItemsOf(run, 'http://h', { deviceId: 'd', token: 't' })).toHaveLength(1);
+    expect(mediaItemsOf(run, 'http://h', { deviceId: 'd', token: 't', ticket: 'k' })).toHaveLength(1);
   });
 
   it('draws consecutive pictures as one carousel and the rest as their own rows', () => {
@@ -138,7 +138,7 @@ describe('the grouping rule', () => {
       <Bubble
         item={item}
         mediaBase="http://h"
-        deviceInfo={{ deviceId: 'd', token: 't' }}
+        deviceInfo={{ deviceId: 'd', token: 't', ticket: 'k' }}
         grouped={false}
         showTime={false}
         onMenu={() => {}}
