@@ -1,17 +1,10 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { font, radius, space, useThemedStyles, type Palette } from '../../theme';
 import { shownTab, useLiveFrame } from '../../core/browserLive';
 import type { BrowserLiveWindow } from '../../core/protocol';
+import type { WallLayout } from './wallLayout';
 import { LiveImage } from './LiveImage';
-
-/**
- * Narrow enough for two tiles side by side in the 460pt pane beside a conversation, wide enough
- * for a title to be read: a phone gets one column, a full-screen desktop as many as fit.
- */
-const TILE_MIN_WIDTH = 210;
-/** Every tile the same shape, whatever its page: the browser's own viewport. */
-const PICTURE_RATIO = 16 / 9;
 
 export function stateLabel(window: BrowserLiveWindow): string {
   return window.state === 'working' ? 'agent at work' : window.state === 'waiting' ? 'waiting for you' : 'free';
@@ -37,29 +30,32 @@ export function hostOf(url: string | undefined): string {
 /**
  * Every window of the browser, live, with what is happening in it. A tile opens the window at full
  * size, where the owner acts in it; watching holds nothing, so agents keep working meanwhile.
+ *
+ * The grid is the pane's, not the wall's: `wallLayout` decides the tile width and the room to
+ * leave above. A tile takes the shape of the page it shows, which is the browser's viewport for
+ * every window the agents open, and the shape of the pane's own viewport until its first picture.
  */
 export function BrowserWall({
   windows,
+  layout,
+  ratio,
   onOpen,
   onStage,
 }: {
   windows: BrowserLiveWindow[];
+  layout: WallLayout;
+  /** The shape of a picture, as the frames themselves state it. */
+  ratio: number;
   onOpen: (windowId: number) => void;
   onStage: (windowId: number) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const [width, setWidth] = useState(0);
-  const onLayout = useCallback((e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width), []);
-  const fit = Math.floor((width + space.md) / (TILE_MIN_WIDTH + space.md));
-  const columns = Math.max(1, Math.min(windows.length, fit));
-  // Before the wall is measured, one tile per row: a tile never waits on a layout to exist.
-  const tileWidth: number | '100%' = width > 0 ? (width - space.md * (columns - 1)) / columns : '100%';
 
   return (
-    <View style={styles.wall} onLayout={onLayout}>
+    <View style={[styles.wall, { paddingTop: layout.padTop }]}>
       {windows.length === 0 ? <Text style={styles.empty}>No window open. Open one above, or ask the agent.</Text> : null}
       {wallOrder(windows).map(w => (
-        <WindowTile key={w.windowId} window={w} width={tileWidth} onOpen={onOpen} onStage={onStage} />
+        <WindowTile key={w.windowId} window={w} layout={layout} ratio={ratio} onOpen={onOpen} onStage={onStage} />
       ))}
     </View>
   );
@@ -67,12 +63,14 @@ export function BrowserWall({
 
 function WindowTile({
   window,
-  width,
+  layout,
+  ratio,
   onOpen,
   onStage,
 }: {
   window: BrowserLiveWindow;
-  width: number | '100%';
+  layout: WallLayout;
+  ratio: number;
   onOpen: (windowId: number) => void;
   onStage: (windowId: number) => void;
 }): React.JSX.Element {
@@ -85,12 +83,12 @@ function WindowTile({
     <View
       style={[
         styles.tile,
-        { width },
+        { width: layout.tileWidth },
         window.state === 'working' && styles.tileWorking,
         window.state === 'waiting' && styles.tileWaiting,
       ]}>
       <Pressable onPress={() => onOpen(window.windowId)} accessibilityRole="button" accessibilityLabel={`Open window ${window.alias}`}>
-        <View style={styles.picture}>
+        <View style={[styles.picture, { aspectRatio: picture ? picture.width / picture.height : ratio }]}>
           <LiveImage frame={picture} style={StyleSheet.absoluteFill} label={`Live picture of window ${window.alias}`} />
           {picture ? null : <Text style={styles.noPicture}>{frame === 'gone' ? 'no picture' : 'loading…'}</Text>}
           {window.state === 'free' ? null : (
@@ -132,7 +130,7 @@ function WindowTile({
 }
 
 const createStyles = (palette: Palette) => ({
-  wall: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.md },
+  wall: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.md, justifyContent: 'center' as const },
   empty: { color: palette.textFaint, fontSize: font.body, paddingVertical: space.lg },
   tile: {
     backgroundColor: palette.surface,
@@ -143,7 +141,7 @@ const createStyles = (palette: Palette) => ({
   },
   tileWorking: { borderColor: palette.accent },
   tileWaiting: { borderColor: palette.danger, borderWidth: 2 },
-  picture: { width: '100%' as const, aspectRatio: PICTURE_RATIO, backgroundColor: palette.surfaceAlt },
+  picture: { width: '100%' as const, backgroundColor: palette.surfaceAlt },
   noPicture: { position: 'absolute' as const, top: space.sm, left: space.sm, color: palette.textFaint, fontSize: font.small },
   chip: {
     position: 'absolute' as const,

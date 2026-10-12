@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, PixelRatio, Platform, Pressable, ScrollView, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -15,10 +15,11 @@ import {
   type BrowserInput,
   type BrowserUnblockResultFrame,
 } from '../core/protocol';
-import { BROWSER_HASH, browserLiveStore, shownTab, useLiveNotice, useLiveWindows } from '../core/browserLive';
+import { BROWSER_HASH, browserLiveStore, shownTab, useLiveFrame, useLiveNotice, useLiveWindows } from '../core/browserLive';
 import { CollapseIcon, ExpandIcon, OpenInNewIcon, PlusIcon, RefreshIcon } from '../components/icons';
 import { useTheme } from '../theme';
-import { BrowserWall } from './browser/BrowserWall';
+import { BrowserWall, wallOrder } from './browser/BrowserWall';
+import { DEFAULT_RATIO, wallLayout } from './browser/wallLayout';
 import { LiveWindowView } from './browser/LiveWindowView';
 
 /** How long a "copied" mark stays up. Long enough to be read, short enough not to look stuck. */
@@ -45,11 +46,15 @@ let controlSeq = 0;
 /**
  * What the page watches, as the server takes it: the listing always, and the pictures of what is
  * on screen -- every window's shown tab as a tile, or one window's at full size.
+ *
+ * A tile asks for the size it draws (`tile`, `tile-large`): a picture stretched past its own
+ * resolution reads as a blurry tile, on a wide desk as much as on a phone.
  */
 export function watchFor(
   windows: ReturnType<typeof useLiveWindows>['windows'],
   open: number | null,
-): Array<{ pageId: string; quality: 'tile' | 'focus' }> {
+  quality: 'tile' | 'tile-large',
+): Array<{ pageId: string; quality: 'tile' | 'tile-large' | 'focus' }> {
   if (!windows) return [];
   if (open !== null) {
     const window = windows.find(w => w.windowId === open);
@@ -58,7 +63,7 @@ export function watchFor(
   }
   return windows.flatMap(w => {
     const tab = shownTab(w);
-    return tab ? [{ pageId: tab.pageId, quality: 'tile' as const }] : [];
+    return tab ? [{ pageId: tab.pageId, quality }] : [];
   });
 }
 
@@ -82,13 +87,39 @@ function LivePane({
   const [open, setOpen] = useState<number | null>(initialWindow);
   const [active, setActive] = useState(AppState.currentState !== 'background');
   const [newUrl, setNewUrl] = useState('');
+  // The pane, and the fields above the wall inside it: what is left is the room the grid has.
+  const [pane, setPane] = useState({ width: 0, height: 0 });
+  const [above, setAbove] = useState({ y: 0, height: 0 });
+  const onPane = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setPane(current => (current.width === width && current.height === height ? current : { width, height }));
+  }, []);
+  const onAbove = useCallback((e: LayoutChangeEvent) => {
+    const { y, height } = e.nativeEvent.layout;
+    setAbove(current => (current.y === y && current.height === height ? current : { y, height }));
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => setActive(state === 'active'));
     return () => sub.remove();
   }, []);
 
-  const streams = useMemo(() => watchFor(windows, open), [windows, open]);
+  // The page's shape comes from the browser's own pictures: the tile box is the viewport's, and one
+  // shape serves the whole wall (every window holds the same screen).
+  const first = windows ? wallOrder(windows)[0] : undefined;
+  const firstFrame = useLiveFrame(first ? shownTab(first)?.pageId : undefined);
+  const ratio = firstFrame && firstFrame !== 'gone' && firstFrame.height > 0 ? firstFrame.width / firstFrame.height : DEFAULT_RATIO;
+  // What the body leaves under the fields: its gap, then the padding at the end of the scroll.
+  const room = Math.max(0, pane.height - above.y - above.height - space.md - space.xl);
+  const layout = wallLayout({
+    count: windows?.length ?? 0,
+    width: pane.width,
+    room,
+    ratio,
+    pixelRatio: PixelRatio.get(),
+  });
+
+  const streams = useMemo(() => watchFor(windows, open, layout.quality), [windows, open, layout.quality]);
   const key = JSON.stringify(streams);
   const lastSent = useRef<string | null>(null);
   // Sent again on every change of what is shown, and on every reconnect: the server forgets a
@@ -156,26 +187,30 @@ function LivePane({
     );
   }
   return (
-    <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-      {notices}
-      {windows === null ? (
-        <Text style={styles.empty}>{connected ? 'asking the browser…' : 'offline'}</Text>
-      ) : (
-        <>
-          <View style={styles.newRow}>
-            <TextInputRow
-              value={newUrl}
-              onChange={setNewUrl}
-              onSubmit={() => {
-                control('new_window', newUrl.trim() ? { url: newUrl.trim() } : {});
-                setNewUrl('');
-              }}
-            />
-          </View>
-          <BrowserWall windows={windows} onOpen={setOpen} onStage={windowId => control('stage', { windowId })} />
-        </>
-      )}
-    </ScrollView>
+    <View style={styles.fill} onLayout={onPane} testID="browser-live-pane">
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <View style={styles.above} onLayout={onAbove} testID="browser-live-fields">
+          {notices}
+          {windows === null ? (
+            <Text style={styles.empty}>{connected ? 'asking the browser…' : 'offline'}</Text>
+          ) : (
+            <View style={styles.newRow}>
+              <TextInputRow
+                value={newUrl}
+                onChange={setNewUrl}
+                onSubmit={() => {
+                  control('new_window', newUrl.trim() ? { url: newUrl.trim() } : {});
+                  setNewUrl('');
+                }}
+              />
+            </View>
+          )}
+        </View>
+        {windows === null ? null : (
+          <BrowserWall windows={windows} layout={layout} ratio={ratio} onOpen={setOpen} onStage={windowId => control('stage', { windowId })} />
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -515,6 +550,7 @@ const createStyles = (palette: Palette) => ({
   segmentOnText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   live: { gap: space.md },
   fill: { flex: 1 },
+  above: { gap: space.md },
   error: {
     marginTop: space.md,
     color: palette.danger,

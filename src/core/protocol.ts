@@ -3762,7 +3762,7 @@ export function encodeBrowserInfo(): string {
  * What this device watches: the window listing, and the tabs whose pictures it shows. Replaces the
  * previous watch; `encodeBrowserWatch(false, [])` stops everything. Watching holds no window.
  */
-export function encodeBrowserWatch(windows: boolean, streams: Array<{ pageId: string; quality: 'tile' | 'focus' }>): string {
+export function encodeBrowserWatch(windows: boolean, streams: Array<{ pageId: string; quality: 'tile' | 'tile-large' | 'focus' }>): string {
   return JSON.stringify({ type: 'browser.watch', windows, streams });
 }
 

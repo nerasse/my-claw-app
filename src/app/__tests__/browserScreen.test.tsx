@@ -8,7 +8,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Linking, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Linking, PixelRatio, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { BrowserScreen } from '../BrowserScreen';
 import { browserStore } from '../../core/browser';
@@ -35,6 +35,20 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions');
 const windowIs = (width: number): void => {
   (useWindowDimensions as unknown as jest.Mock).mockReturnValue({ width, height: 900, scale: 2, fontScale: 1 });
 };
+
+// A tile's picture is asked for in device pixels, so what a tile asks for is the device's business:
+// a phone at 3x and a desk at 1x draw the same wall, at different resolutions.
+const pixelRatioIs = (ratio: number): void => {
+  jest.spyOn(PixelRatio, 'get').mockReturnValue(ratio);
+};
+
+/** The pane the wall lives in, and the fields above it: both are measured, never assumed. */
+function measured(tree: ReactTestRenderer.ReactTestRenderer, pane: { width: number; height: number }, fields = 45): void {
+  ReactTestRenderer.act(() => {
+    tree.root.findByProps({ testID: 'browser-live-pane' }).props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, ...pane } } });
+    tree.root.findByProps({ testID: 'browser-live-fields' }).props.onLayout({ nativeEvent: { layout: { x: 0, y: 10, width: pane.width, height: fields } } });
+  });
+}
 
 function info(over: Partial<BrowserInfoResultFrame> = {}): BrowserInfoResultFrame {
   return {
@@ -116,7 +130,10 @@ describe('BrowserScreen', () => {
     return tree;
   }
 
-  beforeEach(() => windowIs(412));
+  beforeEach(() => {
+    windowIs(412);
+    pixelRatioIs(2);
+  });
 
   afterEach(() => {
     if (mounted) ReactTestRenderer.act(() => mounted?.unmount());
@@ -287,6 +304,89 @@ describe('BrowserScreen', () => {
       expect(tree.root.findAllByProps({ accessibilityLabel: 'Show window 1 in VNC' })).toHaveLength(0);
       pressLabelled(tree, 'Show window 2 in VNC');
       expect(sent().at(-1)).toMatchObject({ type: 'browser.control', action: 'stage', windowId: 102 });
+    });
+
+    it('draws a tile in the shape of the page, not 16/9', () => {
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1)] }));
+      const box = (): Record<string, number> =>
+        StyleSheet.flatten(tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.aspectRatio)[0]!.props.style) as Record<string, number>;
+      // Before any picture, and for a pane whose browser is not a desktop: 16/9, roughly.
+      expect(box().aspectRatio).toBeCloseTo(16 / 9);
+
+      // The window is 1920x1080 and the page inside it is 1919x958 (the window's chrome takes the
+      // rest): a 16/9 box draws every picture 13% taller than the page it shows.
+      ReactTestRenderer.act(() =>
+        browserLiveStore.receiveFrame({ type: 'browser.frame', pageId: 'p1', seq: 1, data: 'AA', width: 1919, height: 958 }),
+      );
+      expect(box().aspectRatio).toBeCloseTo(1919 / 958);
+    });
+
+    it('gives a window of another shape its own, so nothing is stretched', () => {
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1), live(2)] }));
+      ReactTestRenderer.act(() => {
+        browserLiveStore.receiveFrame({ type: 'browser.frame', pageId: 'p1', seq: 1, data: 'AA', width: 1919, height: 958 });
+        // A popup a site opened for its own sign-in: its own window, its own shape.
+        browserLiveStore.receiveFrame({ type: 'browser.frame', pageId: 'p2', seq: 1, data: 'AA', width: 500, height: 600 });
+      });
+
+      const boxes = tree.root
+        .findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.aspectRatio)
+        .map(n => StyleSheet.flatten(n.props.style).aspectRatio);
+      expect(boxes).toEqual([expect.closeTo(1919 / 958), expect.closeTo(500 / 600)]);
+    });
+
+    it('asks for the picture size a tile is drawn at, and never past it', () => {
+      pixelRatioIs(1);
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1), live(2)] }));
+      // Before the pane is measured, the small preset: a tile that exists before its size is known.
+      expect(sent().at(-1)).toMatchObject({ streams: [{ quality: 'tile' }, { quality: 'tile' }] });
+
+      // A 2560x1440 window with the browser page to itself: two tiles of 1255pt, which the 640px
+      // picture would be stretched to twice its size to fill.
+      measured(tree, { width: 2521, height: 1285 });
+      expect(sent().at(-1)).toEqual({
+        type: 'browser.watch',
+        windows: true,
+        streams: [
+          { pageId: 'p1', quality: 'tile-large' },
+          { pageId: 'p2', quality: 'tile-large' },
+        ],
+      });
+      const tiles = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.overflow === 'hidden');
+      expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBeCloseTo((2521 - 10) / 2);
+    });
+
+    it('caps a tile at the picture it shows, and sits the grid in a screen-sized pane', () => {
+      pixelRatioIs(2);
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1)] }));
+      measured(tree, { width: 2521, height: 1285 });
+
+      // A 2x desk: 1280 device pixels is 640pt, so the tile is that wide rather than 2521.
+      const tiles = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.overflow === 'hidden');
+      expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBe(640);
+      expect(sent().at(-1)).toMatchObject({ streams: [{ quality: 'tile-large' }] });
+
+      // A pane wider than it is tall is a screen for a wall: the grid sits in it, centred, rather
+      // than hugging the fields with a hole under it.
+      const wall = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.flexWrap === 'wrap')[0]!;
+      expect(StyleSheet.flatten(wall.props.style).paddingTop).toBeGreaterThan(0);
+      expect(StyleSheet.flatten(wall.props.style).justifyContent).toBe('center');
+    });
+
+    it('leaves a phone pane to its own height: one column, starting at the top', () => {
+      pixelRatioIs(2.75);
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1), live(2)] }));
+      measured(tree, { width: 393, height: 851 });
+
+      const tiles = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.overflow === 'hidden');
+      expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBe(393);
+      const wall = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.flexWrap === 'wrap')[0]!;
+      expect(StyleSheet.flatten(wall.props.style).paddingTop).toBe(0);
     });
 
     it('a window opened at full size is watched alone, at full quality, and the page says what it can do', () => {
