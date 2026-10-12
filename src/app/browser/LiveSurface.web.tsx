@@ -145,7 +145,10 @@ export function LiveSurface({
     };
   }, []);
 
-  const width = maxHeight && maxHeight > 0 ? Math.min(measured, maxHeight / aspect) : measured;
+  // Never past the page's own size: a 1919pt page drawn 2400pt wide is a blur of a page that is
+  // sharp at 1:1, which is what the full-size picture is streamed at.
+  const fitted = frame ? Math.min(measured, frame.width) : measured;
+  const width = maxHeight && maxHeight > 0 ? Math.min(fitted, maxHeight / aspect) : fitted;
   const height = width * aspect;
   return (
     <View style={styles.wrap} onLayout={onLayout}>
@@ -158,7 +161,9 @@ export function LiveSurface({
         {frame ? null : <Text style={styles.waiting}>waiting for a picture…</Text>}
       </View>
       {interactive ? (
-        <Text style={styles.hint}>{focused ? 'typing goes to the page' : 'click the page to type into it'}</Text>
+        <Text style={styles.hint}>
+          {focused ? 'every key goes to the page, Esc included: click outside it to get them back' : 'click the page to type into it'}
+        </Text>
       ) : null}
     </View>
   );

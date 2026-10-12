@@ -172,6 +172,23 @@ export function browserFromLocation(): { window: number | null } | null {
   return match ? { window: Number(match[1]) } : null;
 }
 
+/**
+ * A window shown large closes before the page around it: Escape and the back keys return to the
+ * wall first. The live pane says how while one is shown; nothing is registered otherwise.
+ */
+let closeShown: (() => void) | null = null;
+
+export function setShownWindowCloser(close: (() => void) | null): void {
+  closeShown = close;
+}
+
+/** Back to the wall, if a window was shown large; false when there was none. */
+export function closeShownWindow(): boolean {
+  if (!closeShown) return false;
+  closeShown();
+  return true;
+}
+
 /** The tab a window shows, which is the one its tile and its full view draw. */
 export function shownTab(window: BrowserLiveWindow): BrowserLiveWindow['tabs'][number] | undefined {
   return window.tabs.find(t => t.active) ?? window.tabs[window.tabs.length - 1];

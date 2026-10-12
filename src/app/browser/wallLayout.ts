@@ -30,7 +30,9 @@ const TILE_SIZE_SLACK = 0.1;
 export const DEFAULT_RATIO = 16 / 9;
 
 export interface WallLayout {
-  /** A tile's width in points, or '100%' before the pane has been measured. */
+  /** How many tiles a row holds: the wall draws its rows itself rather than let them wrap. */
+  columns: number;
+  /** A tile's width in whole points, or '100%' before the pane has been measured. */
   tileWidth: number | '100%';
   /** The picture size a tile asks the server for: never one drawn past its own size. */
   quality: 'tile' | 'tile-large';
@@ -41,11 +43,14 @@ export interface WallLayout {
 /**
  * The columns, the tile width and the room to leave above, for `count` tiles in a pane.
  *
- * A tile is watched, so a wall takes the biggest tiles that fit the room: that is what makes six
- * windows on a desk take three columns and two rows instead of one row of thumbnails with two
- * thirds of the pane empty under them. Among the grids whose tiles are that big within a tenth,
- * the fewest rows win: a 4K screen has room to stack two windows in a column, which is 2% more
- * tile and a wall nobody expects. No grid fits: the widest, which is the least scrolling.
+ * A tile is watched, so a wall takes the biggest tiles that fit the room, width and height both:
+ * that is what makes six windows on a desk take three columns and two rows instead of one row of
+ * thumbnails, and four take two by two at 1005pt rather than one row at 627. A grid whose rows
+ * are too tall for a screen-shaped pane is drawn narrower than the pane, not cropped and not
+ * scrolled; a phone keeps a list of tiles as wide as it is.
+ * Among the grids whose tiles are that big within a tenth, the fewest rows win: a 4K screen has
+ * room to stack two windows in a column, which is 2% more tile and a wall nobody expects.
+ * No grid fits without its tiles turning into thumbnails: the widest, which is the least scrolling.
  */
 export function wallLayout(input: {
   /** How many windows the wall shows. */
@@ -61,27 +66,37 @@ export function wallLayout(input: {
 }): WallLayout {
   const { count, width, room, ratio, pixelRatio } = input;
   // Before the pane is measured: one tile per row, at the size a device is given anyway.
-  if (count <= 0 || width <= 0) return { tileWidth: '100%', quality: 'tile', padTop: 0 };
+  if (count <= 0 || width <= 0) return { columns: 1, tileWidth: '100%', quality: 'tile', padTop: 0 };
 
   const maxWidth = TILE_MAX_PIXELS / pixelRatio;
-  const grid = (columns: number): { tileWidth: number; rows: number; height: number } => {
-    const tileWidth = Math.min((width - space.md * (columns - 1)) / columns, maxWidth);
+  // A pane wider than it is tall is a screen for a wall: its tiles shrink to fit the height. A tall
+  // pane is a phone's list of tiles: they keep its width, and it scrolls.
+  const screen = width > room;
+  // Whole points: tiles that fill a pane of 2507.7pt to the last fraction wrapped one row in two
+  // once the browser rounded them, which drew two windows in a column on a 2560 screen.
+  const grid = (columns: number): { columns: number; tileWidth: number; rows: number; height: number; fits: boolean } => {
     const rows = Math.ceil(count / columns);
-    return { tileWidth, rows, height: rows * (tileWidth / ratio + CAPTION_HEIGHT) + space.md * (rows - 1) };
+    const byWidth = Math.min((width - space.md * (columns - 1)) / columns, maxWidth);
+    const byHeight = ((room - space.md * (rows - 1)) / rows - CAPTION_HEIGHT) * ratio;
+    const tileWidth = Math.floor(screen && byHeight >= TILE_MIN_WIDTH ? Math.min(byWidth, byHeight) : byWidth);
+    const height = rows * (tileWidth / ratio + CAPTION_HEIGHT) + space.md * (rows - 1);
+    return { columns, tileWidth, rows, height, fits: height <= room };
   };
 
   const most = Math.max(1, Math.min(count, Math.floor((width + space.md) / (TILE_MIN_WIDTH + space.md))));
-  const grids = Array.from({ length: most }, (_, i) => grid(most - i)).filter(g => g.height <= room);
-  const widest = grids.reduce((best, g) => (g.tileWidth > best.tileWidth ? g : best), grid(most));
+  const all = Array.from({ length: most }, (_, i) => grid(most - i));
+  const grids = all.filter(g => g.fits);
+  const widest = grids.reduce((best, g) => (g.tileWidth > best.tileWidth ? g : best), grids[0] ?? all[0]!);
   const chosen = grids
     .filter(g => g.tileWidth >= widest.tileWidth * (1 - TILE_SIZE_SLACK))
     .reduce((best, g) => (g.rows < best.rows || (g.rows === best.rows && g.tileWidth > best.tileWidth) ? g : best), widest);
 
   return {
+    columns: chosen.columns,
     tileWidth: chosen.tileWidth,
     quality: chosen.tileWidth * pixelRatio > TILE_LARGE_PIXELS ? 'tile-large' : 'tile',
-    // A pane wider than it is tall is a screen for a wall, which sits in it rather than hugging the
-    // top edge with a hole under it. A tall pane is a phone's list of tiles: it starts at the top.
-    padTop: width > room ? Math.max(0, (room - chosen.height) / 2) : 0,
+    // A screen's wall sits in it rather than hugging the top edge with a hole under it. A phone's
+    // list starts at the top.
+    padTop: screen ? Math.max(0, (room - chosen.height) / 2) : 0,
   };
 }

@@ -18,6 +18,7 @@
 import { Platform } from 'react-native';
 import { pickerBack, type PickerState } from '../components/ModelSheet';
 import { agentsFileStore } from '../core/agentsFile';
+import { closeShownWindow } from '../core/browserLive';
 import { instructionsStore } from '../core/instructions';
 import { sessionInstructionsStore } from '../core/sessionInstructions';
 import { overlayStore } from '../core/overlay';
@@ -625,6 +626,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     return true;
   }
   if (browserOpen) {
+    if (closeShownWindow()) return true;
     setBrowserOpen(false);
     return true;
   }

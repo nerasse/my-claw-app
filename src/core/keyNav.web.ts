@@ -55,6 +55,11 @@ export function menuOpen(): boolean {
   return openMenus().length > 0;
 }
 
+/** The live browser page has the keyboard: every key is the page's, Escape and shortcuts included. */
+export function keysOwnedByPage(): boolean {
+  return document.activeElement?.closest(`[${ATTR}="off"]`) != null;
+}
+
 /** A text field has the keyboard: shortcuts made of a bare letter would type instead. */
 export function typingInField(): boolean {
   return editable(document.activeElement);

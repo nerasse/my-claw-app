@@ -12,10 +12,19 @@ import {
   encodeBrowserUnblock,
   encodeBrowserWatch,
   type BrowserControlAction,
+  type BrowserWatchQuality,
   type BrowserInput,
   type BrowserUnblockResultFrame,
 } from '../core/protocol';
-import { BROWSER_HASH, browserLiveStore, shownTab, useLiveFrame, useLiveNotice, useLiveWindows } from '../core/browserLive';
+import {
+  BROWSER_HASH,
+  browserLiveStore,
+  setShownWindowCloser,
+  shownTab,
+  useLiveFrame,
+  useLiveNotice,
+  useLiveWindows,
+} from '../core/browserLive';
 import { CollapseIcon, ExpandIcon, OpenInNewIcon, PlusIcon, RefreshIcon } from '../components/icons';
 import { useTheme } from '../theme';
 import { BrowserWall, wallOrder } from './browser/BrowserWall';
@@ -43,23 +52,28 @@ function useCopy(): { copied: string | null; copy: (key: string, value: string) 
 
 let controlSeq = 0;
 
+/** The full-size picture's width (`CAST_PRESETS.focus` on the server): past it, the page's own. */
+const FOCUS_LARGE_PIXELS = 1600;
+
 /**
  * What the page watches, as the server takes it: the listing always, and the pictures of what is
  * on screen -- every window's shown tab as a tile, or one window's at full size.
  *
- * A tile asks for the size it draws (`tile`, `tile-large`): a picture stretched past its own
- * resolution reads as a blurry tile, on a wide desk as much as on a phone.
+ * A tile asks for the size it draws (`tile`, `tile-large`), and so does a window shown large
+ * (`focus`, `focus-large`): a picture stretched past its own resolution reads as a blur, on a wide
+ * desk as much as on a phone.
  */
 export function watchFor(
   windows: ReturnType<typeof useLiveWindows>['windows'],
   open: number | null,
   quality: 'tile' | 'tile-large',
-): Array<{ pageId: string; quality: 'tile' | 'tile-large' | 'focus' }> {
+  focus: 'focus' | 'focus-large' = 'focus',
+): Array<{ pageId: string; quality: BrowserWatchQuality }> {
   if (!windows) return [];
   if (open !== null) {
     const window = windows.find(w => w.windowId === open);
     const tab = window ? shownTab(window) : undefined;
-    return tab ? [{ pageId: tab.pageId, quality: 'focus' }] : [];
+    return tab ? [{ pageId: tab.pageId, quality: focus }] : [];
   }
   return windows.flatMap(w => {
     const tab = shownTab(w);
@@ -89,14 +103,14 @@ function LivePane({
   const [newUrl, setNewUrl] = useState('');
   // The pane, and the fields above the wall inside it: what is left is the room the grid has.
   const [pane, setPane] = useState({ width: 0, height: 0 });
-  const [above, setAbove] = useState({ y: 0, height: 0 });
+  const [above, setAbove] = useState({ y: 0, width: 0, height: 0 });
   const onPane = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setPane(current => (current.width === width && current.height === height ? current : { width, height }));
   }, []);
   const onAbove = useCallback((e: LayoutChangeEvent) => {
-    const { y, height } = e.nativeEvent.layout;
-    setAbove(current => (current.y === y && current.height === height ? current : { y, height }));
+    const { y, width, height } = e.nativeEvent.layout;
+    setAbove(current => (current.y === y && current.width === width && current.height === height ? current : { y, width, height }));
   }, []);
 
   useEffect(() => {
@@ -113,13 +127,21 @@ function LivePane({
   const room = Math.max(0, pane.height - above.y - above.height - space.md - space.xl);
   const layout = wallLayout({
     count: windows?.length ?? 0,
-    width: pane.width,
+    // The fields span the scroll view's content, which is what the rows have: the pane less the
+    // scrollbar a desk browser draws in it.
+    width: above.width || pane.width,
     room,
     ratio,
     pixelRatio: PixelRatio.get(),
   });
 
-  const streams = useMemo(() => watchFor(windows, open, layout.quality), [windows, open, layout.quality]);
+  // A window shown large is drawn at most the pane's width: past 1600 device pixels that is the
+  // page's own 1920, below it the smaller picture a phone has always had.
+  const focusQuality = pane.width * PixelRatio.get() > FOCUS_LARGE_PIXELS ? 'focus-large' : 'focus';
+  const streams = useMemo(
+    () => watchFor(windows, open, layout.quality, focusQuality),
+    [windows, open, layout.quality, focusQuality],
+  );
   const key = JSON.stringify(streams);
   const lastSent = useRef<string | null>(null);
   // Sent again on every change of what is shown, and on every reconnect: the server forgets a
@@ -164,6 +186,13 @@ function LivePane({
   useEffect(() => {
     if (open !== null && windows && !windows.some(w => w.windowId === open)) setOpen(null);
   }, [open, windows]);
+  // Escape and the back keys return to the wall before they leave the page.
+  const shown = focused !== undefined;
+  useEffect(() => {
+    if (!shown) return;
+    setShownWindowCloser(() => setOpen(null));
+    return () => setShownWindowCloser(null);
+  }, [shown]);
 
   const notices = (
     <>
@@ -180,15 +209,24 @@ function LivePane({
   // and a scroll view around it would take the drag for itself.
   if (focused) {
     return (
-      <View style={[styles.body, styles.live, styles.fill]}>
+      <View style={[styles.body, styles.live, styles.fill]} onLayout={onPane}>
         {notices}
-        <LiveWindowView window={focused} vnc={vnc} connected={connected} onBack={() => setOpen(null)} control={control} input={input} />
+        <LiveWindowView
+          window={focused}
+          windows={windows ? [...windows].sort((a, b) => a.alias - b.alias) : [focused]}
+          onSwitch={setOpen}
+          vnc={vnc}
+          connected={connected}
+          onBack={() => setOpen(null)}
+          control={control}
+          input={input}
+        />
       </View>
     );
   }
   return (
     <View style={styles.fill} onLayout={onPane} testID="browser-live-pane">
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.wallScroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <View style={styles.above} onLayout={onAbove} testID="browser-live-fields">
           {notices}
           {windows === null ? (
@@ -550,6 +588,9 @@ const createStyles = (palette: Palette) => ({
   segmentOnText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   live: { gap: space.md },
   fill: { flex: 1 },
+  // The scrollbar's room is kept whether the wall scrolls or not: a wall that grew a scrollbar
+  // would be measured narrower, shrink its tiles, lose the scrollbar, and grow again.
+  wallScroll: Platform.OS === 'web' ? ({ scrollbarGutter: 'stable' } as object) : {},
   above: { gap: space.md },
   error: {
     marginTop: space.md,

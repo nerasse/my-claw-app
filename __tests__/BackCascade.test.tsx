@@ -217,6 +217,33 @@ test('a menu outranks the drawer under it, and a screen outranks the conversatio
   await settleAndUnmount(tree);
 });
 
+// A window shown large is a layer of the Browser page: back returns to the wall of windows, and
+// only the press after that leaves the page.
+test('a window shown large goes back to the wall before the browser page closes', async () => {
+  const tree = await renderApp();
+  await pressLabel(tree, 'More');
+  await pressLabel(tree, 'Browser');
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({
+        type: 'browser.windows.result',
+        windows: [{ alias: 1, windowId: 101, onStage: false, state: 'free', tabs: [{ pageId: 'p1', title: 'Docs', url: 'https://docs.test/', active: true }] }],
+      }),
+    });
+  });
+  await pressLabel(tree, 'Open window 1');
+  await waitFor(() => labelsOf(tree).includes('Back to all windows'));
+
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => !labelsOf(tree).includes('Back to all windows'));
+  expect(labelsOf(tree)).toContain('Open window 1');
+
+  expect(await hardwareBack()).toBe(true);
+  await waitFor(() => !labelsOf(tree).includes('Close browser'));
+
+  await settleAndUnmount(tree);
+});
+
 /**
  * A confirmation is a question, and a back press is an answer to it: "no".
  *

@@ -19,7 +19,7 @@ import {
   type BrowserLiveWindow,
   type BrowserUnblockResultFrame,
 } from '../../core/protocol';
-import { browserLiveStore } from '../../core/browserLive';
+import { browserLiveStore, closeShownWindow } from '../../core/browserLive';
 import { TextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -356,7 +356,39 @@ describe('BrowserScreen', () => {
         ],
       });
       const tiles = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.overflow === 'hidden');
-      expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBeCloseTo((2521 - 10) / 2);
+      expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBe(Math.floor((2521 - 10) / 2));
+    });
+
+    // The rows are the layout's, drawn as they are: a wrap decided by the browser on rounded
+    // pixels stacked two windows meant to sit side by side (2026-10-13, a 2507.7pt pane).
+    it('draws the rows the layout chose, the last one centred', () => {
+      pixelRatioIs(1);
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1), live(2), live(3)] }));
+      measured(tree, { width: 2538, height: 1263 });
+
+      const wall = tree.root.findByProps({ testID: 'browser-wall' });
+      // A row is centred: a last one with fewer tiles sits in the middle, under the others.
+      const rows = wall.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.justifyContent === 'center');
+      const tilesIn = (row: ReactTestRenderer.ReactTestInstance) =>
+        row.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.overflow === 'hidden').length;
+      expect(rows.map(tilesIn).filter(n => n > 0)).toEqual([2, 1]);
+      expect(StyleSheet.flatten(wall.props.style).flexWrap).toBeUndefined();
+    });
+
+    // A desk browser draws its scrollbar inside the pane: the rows get the fields' width, not the
+    // pane's, or the last tile of a row is cut by the scrollbar.
+    it('sizes the rows to the scroll view\'s content, not to the pane around it', () => {
+      pixelRatioIs(1);
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1), live(2)] }));
+      ReactTestRenderer.act(() => {
+        tree.root.findByProps({ testID: 'browser-live-pane' }).props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 2538, height: 1263 } } });
+        tree.root.findByProps({ testID: 'browser-live-fields' }).props.onLayout({ nativeEvent: { layout: { x: 0, y: 10, width: 2528, height: 45 } } });
+      });
+
+      const tiles = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.overflow === 'hidden');
+      expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBe((2528 - 10) / 2);
     });
 
     it('caps a tile at the picture it shows, and sits the grid in a screen-sized pane', () => {
@@ -372,9 +404,10 @@ describe('BrowserScreen', () => {
 
       // A pane wider than it is tall is a screen for a wall: the grid sits in it, centred, rather
       // than hugging the fields with a hole under it.
-      const wall = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.flexWrap === 'wrap')[0]!;
+      const wall = tree.root.findByProps({ testID: 'browser-wall' });
       expect(StyleSheet.flatten(wall.props.style).paddingTop).toBeGreaterThan(0);
-      expect(StyleSheet.flatten(wall.props.style).justifyContent).toBe('center');
+      const row = wall.find(n => n.type === View && StyleSheet.flatten(n.props.style)?.flexDirection === 'row');
+      expect(StyleSheet.flatten(row.props.style).justifyContent).toBe('center');
     });
 
     it('leaves a phone pane to its own height: one column, starting at the top', () => {
@@ -385,7 +418,7 @@ describe('BrowserScreen', () => {
 
       const tiles = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.overflow === 'hidden');
       expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBe(393);
-      const wall = tree.root.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.flexWrap === 'wrap')[0]!;
+      const wall = tree.root.findByProps({ testID: 'browser-wall' });
       expect(StyleSheet.flatten(wall.props.style).paddingTop).toBe(0);
     });
 
@@ -409,6 +442,50 @@ describe('BrowserScreen', () => {
 
       pressLabelled(tree, 'Back to all windows');
       expect(sent().at(-1)).toMatchObject({ type: 'browser.watch', streams: [{ quality: 'tile' }, { quality: 'tile' }] });
+    });
+
+    it('a window shown large switches to another without going back, and Escape returns to the wall', () => {
+      const tree = render();
+      // Window 3 at work: first on the wall, still third in the switcher.
+      ReactTestRenderer.act(() =>
+        browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1), live(2), live(3, { state: 'working' })] }),
+      );
+      expect(closeShownWindow()).toBe(false);
+
+      pressLabelled(tree, 'Show window 2 large');
+      expect(sent().at(-1)).toMatchObject({ streams: [{ pageId: 'p2', quality: 'focus' }] });
+      // The switcher reads in numbers, whatever order the wall put the windows in.
+      const switcher = tree.root
+        .findAll(n => typeof n.props.accessibilityLabel === 'string' && /^Show window \d large$/.test(n.props.accessibilityLabel) && typeof n.props.onPress === 'function')
+        .map(n => n.props.accessibilityLabel);
+      expect(switcher).toEqual(['Show window 1 large', 'Show window 2 large', 'Show window 3 large']);
+
+      pressLabelled(tree, 'Show window 3 large');
+      expect(sent().at(-1)).toMatchObject({ streams: [{ pageId: 'p3', quality: 'focus' }] });
+
+      ReactTestRenderer.act(() => {
+        expect(closeShownWindow()).toBe(true);
+      });
+      expect(sent().at(-1)).toMatchObject({ streams: [{ pageId: 'p1' }, { pageId: 'p2' }, { pageId: 'p3' }] });
+      // Back on the wall, nothing is left to close: the next Escape is the page's.
+      expect(closeShownWindow()).toBe(false);
+    });
+
+    it('a window shown large on a screen wider than the picture asks for the page at its own size', () => {
+      pixelRatioIs(1);
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1)] }));
+      measured(tree, { width: 2538, height: 1263 });
+      pressLabelled(tree, 'Open window 1');
+      expect(sent().at(-1)).toMatchObject({ streams: [{ pageId: 'p1', quality: 'focus-large' }] });
+
+      // A phone is 1080 device pixels wide: the 1600 picture already covers it.
+      ReactTestRenderer.act(() => tree.unmount());
+      pixelRatioIs(2.75);
+      const phone = render();
+      measured(phone, { width: 393, height: 851 });
+      pressLabelled(phone, 'Open window 1');
+      expect(sent().at(-1)).toMatchObject({ streams: [{ pageId: 'p1', quality: 'focus' }] });
     });
 
     it('what is typed in the field reaches the page as text, and a correction as the keys that make it', () => {

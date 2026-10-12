@@ -246,7 +246,7 @@ import { FileViewer } from './FileViewer';
 import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
 import { BrowserScreen } from './BrowserScreen';
-import { browserFromLocation } from '../core/browserLive';
+import { browserFromLocation, closeShownWindow } from '../core/browserLive';
 import { panes } from '../core/panes';
 import { PagePane, PinnedColumn } from './DesktopColumns';
 import { AgentsScreen } from './AgentsScreen';
@@ -1818,9 +1818,11 @@ export function AppShell(): React.JSX.Element {
     escape: () => {
       // A field lets go of the keyboard first: the next press goes back.
       if (leaveField()) return;
-      // Out of full screen first: the page stays open, back in its pane.
-      if (browserFullNow) setBrowserFull(false);
-      else handleBack();
+      // Out of full screen first: the page stays open, back in its pane. A window shown large goes
+      // back to the wall before that.
+      if (browserFullNow) {
+        if (!closeShownWindow()) setBrowserFull(false);
+      } else handleBack();
     },
   };
   for (const entry of SHORTCUTS) {

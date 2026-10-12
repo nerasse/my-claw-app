@@ -33,7 +33,10 @@ what the back key does. In groups, top to bottom:
 10. **The settings stack**, one page at a time: a picker group, then the picker, then the page,
     then the index, then settings itself. A habit press from a subpage can never fall through to
     the launcher.
-11. **Screens over the conversation**: archives, browser, statistics, files.
+11. **Screens over the conversation**: archives, browser, statistics, files. On the browser page,
+    a window shown large goes back to the wall of windows first (`closeShownWindow`, registered
+    by the live pane while one is shown); in full screen Escape does the same before it leaves
+    full screen.
 12. **Where a conversation was reached from**: a sub-agent chat hands back to its parent, a thread
     opened from the archive returns to the archive, a run opened from a job's runs page returns
     there.

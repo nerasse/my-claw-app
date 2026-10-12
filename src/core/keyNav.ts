@@ -19,6 +19,11 @@ export function menuOpen(): boolean {
   return false;
 }
 
+/** Only the web's live page takes the keyboard whole: on Android it types through a field. */
+export function keysOwnedByPage(): boolean {
+  return false;
+}
+
 export function typingInField(): boolean {
   return TextInput.State.currentlyFocusedInput() != null;
 }

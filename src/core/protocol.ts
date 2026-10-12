@@ -3774,11 +3774,14 @@ export function encodeBrowserInfo(): string {
   return JSON.stringify({ type: 'browser.info' });
 }
 
+/** The size a picture is asked for: a tile's, or one window's shown large, each past its threshold. */
+export type BrowserWatchQuality = 'tile' | 'tile-large' | 'focus' | 'focus-large';
+
 /**
  * What this device watches: the window listing, and the tabs whose pictures it shows. Replaces the
  * previous watch; `encodeBrowserWatch(false, [])` stops everything. Watching holds no window.
  */
-export function encodeBrowserWatch(windows: boolean, streams: Array<{ pageId: string; quality: 'tile' | 'tile-large' | 'focus' }>): string {
+export function encodeBrowserWatch(windows: boolean, streams: Array<{ pageId: string; quality: BrowserWatchQuality }>): string {
   return JSON.stringify({ type: 'browser.watch', windows, streams });
 }
 

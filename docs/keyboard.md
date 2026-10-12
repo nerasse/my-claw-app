@@ -15,7 +15,7 @@ of layer it is, with `keyLayerProps(kind)` on its root:
 | `menu` | ActionSheet, the anchored menus, PromptSheet, the update dialog | ↑ ↓ wrap around, Home/End, Tab stays inside, a letter jumps to the row it starts. Opened from the keyboard it takes the focus (its search field, else the option in effect, else the first row) and gives it back to what opened it when it closes. |
 | `page` | the page pane, the jobs, roster and skill layers | ↑ ↓ (no wrap), Home/End, ← → along a row (a header, a grid of tiles). With nothing focused, the first arrow enters the topmost page. |
 | `list` | the conversation list | as a page |
-| `off` | the live browser picture | nothing: it types into the web page |
+| `off` | the live browser picture | nothing: every key is the web page's, Escape and the shortcuts included (`keysOwnedByPage`), until a click outside it |
 
 Enter and Space press the focused button (react-native-web's Pressable). A one-line field lets
 ArrowDown go to the list under it (the model search); a multi-line one keeps its arrows. The

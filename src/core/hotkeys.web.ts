@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { useEffect, useRef } from 'react';
-import { typingInField } from './keyNav';
+import { keysOwnedByPage, typingInField } from './keyNav';
 
 export type HotkeyMap = Record<string, () => void>;
 
@@ -22,6 +22,8 @@ export function useHotkeys(handlers: HotkeyMap): void {
     const onKey = (event: KeyboardEvent): void => {
       // A dead key or a Japanese IME is mid-word: those keystrokes belong to the field.
       if (event.isComposing) return;
+      // A capital typed into the live browser page is not Shift+letter for the app.
+      if (keysOwnedByPage()) return;
       const combo = comboOf(event);
       const run = latest.current[combo];
       if (!run) return;

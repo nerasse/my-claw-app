@@ -34,6 +34,8 @@ const CONFIRM_MS = 3000;
  */
 export function LiveWindowView({
   window,
+  windows,
+  onSwitch,
   vnc,
   connected,
   onBack,
@@ -41,6 +43,9 @@ export function LiveWindowView({
   input,
 }: {
   window: BrowserLiveWindow;
+  /** Every window, by number: one is shown large, the others are a press away. */
+  windows: BrowserLiveWindow[];
+  onSwitch: (windowId: number) => void;
   vnc: { host: string; port: number } | null;
   connected: boolean;
   onBack: () => void;
@@ -118,6 +123,22 @@ export function LiveWindowView({
         <Pressable onPress={onBack} style={styles.button} accessibilityRole="button" accessibilityLabel="Back to all windows">
           <Text style={styles.buttonText}>‹ Windows</Text>
         </Pressable>
+        {windows.length > 1 ? (
+          <View style={styles.switcher}>
+            {windows.map(w => (
+              <Pressable
+                key={w.windowId}
+                onPress={() => onSwitch(w.windowId)}
+                style={[styles.switchItem, w.windowId === window.windowId && styles.switchOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: w.windowId === window.windowId }}
+                accessibilityLabel={`Show window ${w.alias} large`}>
+                <Text style={w.windowId === window.windowId ? styles.switchOnText : styles.switchText}>{w.alias}</Text>
+                {w.state === 'free' ? null : <View style={[styles.switchDot, w.state === 'waiting' ? styles.dotWaiting : styles.dotWorking]} />}
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         <View style={styles.titleBox}>
           <Text style={styles.title} numberOfLines={1}>
             Window {window.alias}
@@ -267,6 +288,23 @@ const createStyles = (palette: Palette) => ({
   room: { flex: 1, minHeight: 120, gap: space.sm },
   below: { gap: space.sm },
   bar: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  switcher: { flexDirection: 'row' as const, padding: 2, gap: 2, borderRadius: radius.md, backgroundColor: palette.surfaceAlt },
+  switchItem: {
+    minWidth: 32,
+    height: 32,
+    paddingHorizontal: space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: space.xs,
+    borderRadius: radius.sm,
+  },
+  switchOn: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.border },
+  switchText: { fontSize: font.small, color: palette.textMuted },
+  switchOnText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
+  switchDot: { width: 6, height: 6, borderRadius: 3 },
+  dotWorking: { backgroundColor: palette.accent },
+  dotWaiting: { backgroundColor: palette.danger },
   titleBox: { flex: 1, minWidth: 0 },
   title: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   sub: { fontSize: font.small, color: palette.textFaint },
