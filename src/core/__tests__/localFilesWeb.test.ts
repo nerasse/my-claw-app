@@ -74,3 +74,5 @@ test('a picked data: URI is staged and uploaded without fetch', async () => {
   expect(requests[0]!.sent!.size).toBe(8);
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+export {};
