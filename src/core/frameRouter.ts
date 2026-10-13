@@ -359,6 +359,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'device.pair.info':
       devicesStore.onPairInfo(frame);
       break;
+    case 'device.invite.result':
+      devicesStore.onInvite(frame);
+      break;
     case 'device.pair.result':
       // A lookup that found nothing answers with a result rather than an info frame; the
       // screen has to leave its spinner and say why.

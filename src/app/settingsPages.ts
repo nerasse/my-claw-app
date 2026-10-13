@@ -28,6 +28,7 @@ export type SettingsPage =
   | 'tags'
   | 'skills'
   | 'devices'
+  | 'servers'
   | 'services'
   | 'setup'
   | 'approvals'
@@ -64,6 +65,7 @@ export const PARENT: Partial<Record<SettingsPage, SettingsPage>> = {
   skills: 'index',
   tools: 'index',
   devices: 'index',
+  servers: 'index',
   approvals: 'tools',
   advanced: 'index',
   mcps: 'tools',

@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
 import { isValidServerUrl } from '../core/serverUrl';
-import { pairingStatus, startPairing, cancelPairing, onPairingStatus, type PairingStatus } from '../core/pairingClient';
+import { pairingStatus, startPairing, cancelPairing, onPairingStatus, requestAccess, type PairingStatus } from '../core/pairingClient';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -17,9 +17,9 @@ function statusText(status: PairingStatus): string {
     case 'connecting':
       return 'Connecting to the server…';
     case 'waiting':
-      return `Waiting for the code ${formatCode(status.code)}…`;
+      return `Joining with the code ${formatCode(status.code)}…`;
     case 'granted':
-      return `Paired as ${status.deviceId}`;
+      return `Joined as ${status.deviceId}`;
     case 'error':
       return status.reason;
     default:
@@ -28,22 +28,26 @@ function statusText(status: PairingStatus): string {
 }
 
 /**
- * Pairs this device with a server-minted credential.
+ * Joins a my-claw server, the one screen a device without a credential sees.
  *
- * The flow: `myclaw setup` (or `myclaw device add --kind app`) prints a code and a QR. The
- * owner scans it (or types it), the server hands this app the minted token, and the app
- * reconnects with it. No copy-paste of credentials, no manual config edit.
+ * Two ways in (docs/web-pairing.md in the server repo). An invitation: a device that already uses
+ * the server shows a QR and a code (Settings, Devices, Add a device; or `myclaw setup` on the
+ * server), and this one scans or types it. A request, when nothing can be shown here: this device
+ * shows a code and three digits, and one that uses the server approves them.
  */
 export function PairingScreen({
   serverUrl,
   onUrlChange,
   pairing,
   onClose,
+  unknownDevice = false,
 }: {
   serverUrl: string;
   onUrlChange: (url: string) => void;
   pairing: PairingStatus;
   onClose: () => void;
+  /** The server refused the credential this device holds: say so, it is why the screen is here. */
+  unknownDevice?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [code, setCode] = useState('');
@@ -66,103 +70,152 @@ export function PairingScreen({
   }, [code, serverUrl, started, hasServer, validCode]);
 
   const busy = pairing.phase === 'connecting' || pairing.phase === 'waiting';
+  const asking = pairing.phase === 'asking' ? pairing : null;
 
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
         <BackButton onPress={onClose} label="Back to settings" />
-        <Text style={styles.title}>{hasServer ? 'Pair device' : 'Connect to your server'}</Text>
+        <Text style={styles.title}>Join a server</Text>
       </View>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{hasServer ? 'Pair this device' : 'Connect this app to your my-claw'}</Text>
-          <Text style={styles.hint}>
-            On the server, run: myclaw setup (the first device), or myclaw device add --kind app --name &quot;Phone&quot;
+        {unknownDevice ? (
+          <Text style={[styles.status, styles.error]} accessibilityLabel="Device unknown to the server">
+            This server does not know this device (any more). Join it again below.
           </Text>
-          <Text style={styles.hint}>The code is single-use and expires after 10 minutes. Your server address stays on this device.</Text>
-          <Text style={styles.hint}>
-            {hasServer
-              ? 'Then scan the QR it prints, or type the eight-character code.'
-              : 'Then scan the QR it prints: it holds the server address and the code. Or type both below.'}
-          </Text>
-        </View>
-
-        {scanning ? (
-          <PairScanner
-            onCode={(scanned, server) => {
-              setScanning(false);
-              setCode(scanned);
-              setStarted(true);
-              // The QR names the server: it wins over whatever the field held.
-              if (server) onUrlChange(server);
-              startPairing(server ?? serverUrl, scanned);
-            }}
-            onClose={() => setScanning(false)}
-          />
-        ) : scannerSupported ? (
-          <Pressable
-            style={styles.button}
-            onPress={() => setScanning(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Scan a pairing code"
-          >
-            <Text style={styles.buttonText}>Scan the code</Text>
-          </Pressable>
         ) : null}
 
-        <Text style={styles.orLabel}>or type the code</Text>
-        <View style={styles.serverCard}>
-          <Text style={styles.cardTitle}>Server address</Text>
-          <TextInput
-            style={styles.input}
-            value={serverUrl}
-            onChangeText={onUrlChange}
-            editable={!busy}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder="https://myclaw.example.com"
-            placeholderTextColor={styles.placeholder.color}
-            accessibilityLabel="Server address"
-          />
-          <Text style={styles.hint}>Use the HTTPS address of your MyClaw instance.</Text>
-        </View>
-        <Text style={styles.cardTitle}>Pairing code</Text>
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.codeInput]}
-            value={code}
-            onChangeText={setCode}
-            placeholder="XXXX-XXXX"
-            placeholderTextColor={styles.placeholder.color}
-            accessibilityLabel="Pairing code"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            editable={!busy}
-            onSubmitEditing={submit}
-            returnKeyType="go"
-          />
-          <Pressable
-            style={[styles.button, styles.approve, (busy || !validCode || !hasServer) && styles.busy]}
-            onPress={submit}
-            disabled={busy || !validCode || !hasServer}
-            accessibilityRole="button"
-            accessibilityLabel="Submit this pairing code"
-          >
-            {busy ? <ActivityIndicator size="small" /> : <Text style={styles.buttonText}>Pair</Text>}
-          </Pressable>
-        </View>
+        {asking ? (
+          <View style={styles.askCard}>
+            <Text style={styles.cardTitle}>Waiting for approval</Text>
+            <Text style={styles.hint}>
+              On a device that already uses this my-claw, open Settings, Devices, Approve a request, and type this code:
+            </Text>
+            <Text style={styles.bigCode} selectable accessibilityLabel="Request code">
+              {formatCode(asking.code)}
+            </Text>
+            <Text style={styles.hint}>It must show the same three digits:</Text>
+            <Text style={styles.digits} accessibilityLabel="Verification digits">
+              {asking.verification}
+            </Text>
+            <View style={styles.waitingRow}>
+              <ActivityIndicator size="small" />
+              <Text style={styles.status} accessibilityLiveRegion="polite">
+                {asking.seen ? 'a device is looking at your request…' : 'waiting for a device to look it up…'}
+              </Text>
+            </View>
+            <Pressable onPress={() => cancelPairing()} style={styles.cancel} accessibilityRole="button" accessibilityLabel="Cancel the request">
+              <Text style={styles.cancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>With an invitation</Text>
+              <Text style={styles.hint}>
+                Ask someone who uses this my-claw to open Settings, Devices, Add a device. Then scan the QR it shows.
+              </Text>
+              <Text style={styles.hint}>On the server itself, `myclaw setup` prints one too.</Text>
+            </View>
 
-        {busy || pairing.phase === 'error' || pairing.phase === 'granted' ? (
-          <Text style={[styles.status, pairing.phase === 'error' && styles.error]} accessibilityLiveRegion="polite">{statusText(pairing)}</Text>
-        ) : null}
+            {scanning ? (
+              <PairScanner
+                onCode={(scanned, server) => {
+                  setScanning(false);
+                  setCode(scanned);
+                  setStarted(true);
+                  // The QR names the server: it wins over whatever the field held.
+                  if (server) onUrlChange(server);
+                  startPairing(server ?? serverUrl, scanned);
+                }}
+                onClose={() => setScanning(false)}
+              />
+            ) : scannerSupported ? (
+              <Pressable
+                style={styles.button}
+                onPress={() => setScanning(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Scan a pairing code">
+                <Text style={styles.buttonText}>Scan the QR</Text>
+              </Pressable>
+            ) : null}
 
-        {started ? (
-          <Pressable onPress={() => { setStarted(false); cancelPairing(); }} style={styles.cancel} accessibilityRole="button" accessibilityLabel="Cancel pairing">
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
-        ) : null}
+            <Text style={styles.orLabel}>or type it</Text>
+            <View style={styles.serverCard}>
+              <Text style={styles.cardTitle}>Server address</Text>
+              <TextInput
+                style={styles.input}
+                value={serverUrl}
+                onChangeText={onUrlChange}
+                editable={!busy}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="https://myclaw.example.com"
+                placeholderTextColor={styles.placeholder.color}
+                accessibilityLabel="Server address"
+              />
+            </View>
+            <Text style={styles.cardTitle}>Invitation code</Text>
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.codeInput]}
+                value={code}
+                onChangeText={setCode}
+                placeholder="XXXX-XXXX"
+                placeholderTextColor={styles.placeholder.color}
+                accessibilityLabel="Pairing code"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!busy}
+                onSubmitEditing={submit}
+                returnKeyType="go"
+              />
+              <Pressable
+                style={[styles.button, styles.approve, (busy || !validCode || !hasServer) && styles.busy]}
+                onPress={submit}
+                disabled={busy || !validCode || !hasServer}
+                accessibilityRole="button"
+                accessibilityLabel="Submit this pairing code">
+                {busy ? <ActivityIndicator size="small" /> : <Text style={styles.buttonText}>Join</Text>}
+              </Pressable>
+            </View>
 
+            {busy || pairing.phase === 'error' || pairing.phase === 'granted' ? (
+              <Text style={[styles.status, pairing.phase === 'error' && styles.error]} accessibilityLiveRegion="polite">
+                {statusText(pairing)}
+              </Text>
+            ) : null}
+
+            {started ? (
+              <Pressable
+                onPress={() => {
+                  setStarted(false);
+                  cancelPairing();
+                }}
+                style={styles.cancel}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel pairing">
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            ) : null}
+
+            <View style={styles.askSection}>
+              <Text style={styles.cardTitle}>No invitation?</Text>
+              <Text style={styles.hint}>
+                Ask for access: this phone shows a code, and someone who uses this my-claw approves it from their device.
+              </Text>
+              <Pressable
+                style={[styles.ghostButton, (busy || !hasServer) && styles.busy]}
+                onPress={() => requestAccess(serverUrl)}
+                disabled={busy || !hasServer}
+                accessibilityRole="button"
+                accessibilityLabel="Ask for access">
+                <Text style={styles.ghostText}>Ask for access</Text>
+              </Pressable>
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -196,4 +249,11 @@ const createStyles = (palette: Palette) => ({
   error: { color: palette.danger },
   cancel: { minHeight: 44, justifyContent: 'center' as const, marginTop: space.sm, alignSelf: 'center' as const, paddingHorizontal: space.md },
   cancelText: { color: palette.textFaint, fontSize: font.small },
+  askCard: { gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface },
+  askSection: { marginTop: space.lg, paddingTop: space.md, borderTopWidth: 1, borderTopColor: palette.border, gap: space.xs },
+  bigCode: { color: palette.text, fontSize: 30, fontWeight: '700' as const, letterSpacing: 3, textAlign: 'center' as const, fontFamily: 'monospace' },
+  digits: { color: palette.accent, fontSize: 34, fontWeight: '700' as const, textAlign: 'center' as const },
+  waitingRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: space.sm },
+  ghostButton: { minHeight: 44, justifyContent: 'center' as const, alignItems: 'center' as const, borderRadius: radius.md, borderWidth: 1, borderColor: palette.border, marginTop: space.xs },
+  ghostText: { color: palette.text, fontWeight: '600' as const },
 });

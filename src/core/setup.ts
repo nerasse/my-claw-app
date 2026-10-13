@@ -184,7 +184,7 @@ export function setupSteps(input: SetupInput): SetupStep[] {
       title: 'Your other devices',
       hint: devicesDone
         ? `${services?.pairedDevices} devices paired`
-        : 'pair a browser or another phone from here',
+        : 'invite a phone or a computer from here',
       state: stateOf(devicesDone, 'devices', skipped),
       page: 'devices',
     },

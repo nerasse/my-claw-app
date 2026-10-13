@@ -10,6 +10,8 @@ import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
 import { CloseButton } from '../components/CloseButton';
 import { useDismissKeyboard } from '../core/keyboard';
+import { SvgXml } from 'react-native-svg';
+import Clipboard from '@react-native-clipboard/clipboard';
 
 /** "3 hours ago" beats an ISO string on a phone: the question is always how stale a device is. */
 function since(iso: string | undefined): string {
@@ -28,15 +30,26 @@ function formatCode(code: string): string {
   return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 }
 
+/** When an invitation stops working, as a clock time: a countdown would redraw the page every second. */
+function until(at: number): string {
+  const date = new Date(at);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * The devices paired to this server, and the two ways to add one (docs/web-pairing.md): an
+ * invitation this device shows and the new one scans or types, or a request the new one shows and
+ * this device approves after comparing three digits.
+ */
 export function DevicesScreen({
   onBack,
-  head,
   connected,
+  serverOrigin,
 }: {
   onBack: () => void;
   connected: boolean;
-  /** This device and its server, above the devices it paired: one page for every device. */
-  head?: React.ReactNode;
+  /** The address this device reaches the server at: what an invitation names unless changed. */
+  serverOrigin: string;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // The server field sits on top: the page must not open with the keyboard over it.
@@ -47,11 +60,26 @@ export function DevicesScreen({
   const [name, setName] = useState('');
   const [confirming, setConfirming] = useState<DeviceRecord | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [mode, setMode] = useState<'none' | 'invite' | 'approve'>('none');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteOrigin, setInviteOrigin] = useState(serverOrigin);
 
   useEffect(() => {
     if (connected) devicesStore.refresh();
   }, [connected]);
-  useEffect(() => () => devicesStore.clearMessages(), []);
+  useEffect(
+    () => () => {
+      devicesStore.clearMessages();
+      devicesStore.clearInvite();
+    },
+    [],
+  );
+  useEffect(() => setInviteOrigin(serverOrigin), [serverOrigin]);
+  // A device added, either way: the card it was added from has done its job.
+  useEffect(() => {
+    if (state.notice === 'device added') setMode('none');
+  }, [state.notice]);
+  const invite = state.invite;
 
   const submitCode = useCallback(() => {
     devicesStore.lookup(code);
@@ -71,17 +99,36 @@ export function DevicesScreen({
       {/* Without this the first tap on Check only dismisses the keyboard: the scroll view eats
           it as a blur and the owner has to press twice. */}
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {head}
+        {candidate ? null : (
+          <View style={styles.actions}>
+            <Pressable
+              style={[styles.button, styles.grow, mode === 'invite' && styles.approve]}
+              onPress={() => setMode(current => (current === 'invite' ? 'none' : 'invite'))}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mode === 'invite' }}
+              accessibilityLabel="Add a device">
+              <Text style={styles.buttonText}>Add a device</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.button, styles.grow, mode === 'approve' && styles.approve]}
+              onPress={() => setMode(current => (current === 'approve' ? 'none' : 'approve'))}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mode === 'approve' }}
+              accessibilityLabel="Approve a request">
+              <Text style={styles.buttonText}>Approve a request</Text>
+            </Pressable>
+          </View>
+        )}
         {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
         {state.notice ? <Text style={styles.notice}>{state.notice}</Text> : null}
 
         {candidate ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Approve this browser?</Text>
+            <Text style={styles.cardTitle}>{candidate.kind === 'native' ? 'Approve this phone?' : 'Approve this browser?'}</Text>
             {/* The digits are the whole defence: without comparing them, someone else's code
                 pairs their browser to this account and the screen looks identical. */}
             <View style={styles.verifyBox}>
-              <Text style={styles.verifyLabel}>the browser must show</Text>
+              <Text style={styles.verifyLabel}>{candidate.kind === 'native' ? 'the phone must show' : 'the browser must show'}</Text>
               <Text style={styles.verify}>{candidate.verification}</Text>
             </View>
             <Text style={styles.detail}>code {formatCode(candidate.code)}</Text>
@@ -115,7 +162,7 @@ export function DevicesScreen({
               <Pressable
                 style={[styles.button, styles.approve, state.busy && styles.busy]}
                 onPress={() => {
-                  devicesStore.approve(name.trim() || 'browser');
+                  devicesStore.approve(name.trim());
                   setName('');
                 }}
                 disabled={state.busy}
@@ -130,13 +177,86 @@ export function DevicesScreen({
               </Pressable>
             </View>
           </View>
-        ) : (
+        ) : mode === 'invite' ? (
+          invite ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Invitation</Text>
+              <Text style={styles.hint}>
+                On the new phone, open my-claw and scan this code. On a computer, open the link, or type the code on its pairing page.
+              </Text>
+              {invite.qrSvg ? (
+                <View style={styles.qr} accessibilityLabel="Invitation QR code">
+                  <SvgXml xml={invite.qrSvg} width="100%" height="100%" />
+                </View>
+              ) : null}
+              <Text style={[styles.verify, styles.centered]} selectable accessibilityLabel="Invitation code">
+                {formatCode(invite.code)}
+              </Text>
+              <Text style={styles.detail} selectable numberOfLines={2}>
+                {invite.url}
+              </Text>
+              <Text style={styles.detail}>{`single use · valid until ${until(invite.expiresAt)}`}</Text>
+              <View style={styles.actions}>
+                <Pressable
+                  style={[styles.button, styles.grow]}
+                  onPress={() => Clipboard.setString(invite.url)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy the invitation link">
+                  <Text style={styles.buttonText}>Copy link</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.button, styles.grow]}
+                  onPress={() => {
+                    devicesStore.clearInvite();
+                    setMode('none');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close the invitation">
+                  <Text style={styles.buttonText}>Done</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Add a device</Text>
+              <Text style={styles.hint}>
+                An invitation shows a QR and a code the new device uses once, within ten minutes. It joins your conversations.
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={inviteName}
+                onChangeText={setInviteName}
+                placeholder="its name, e.g. Papa's phone"
+                autoCorrect={false}
+                accessibilityLabel="Name of the new device"
+              />
+              <Text style={styles.detail}>The address the new device reaches the server at</Text>
+              <TextInput
+                style={styles.input}
+                value={inviteOrigin}
+                onChangeText={setInviteOrigin}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                accessibilityLabel="Address for the new device"
+              />
+              <Pressable
+                style={[styles.button, styles.approve, (state.busy || !connected) && styles.busy]}
+                onPress={() => devicesStore.invite(inviteOrigin.trim(), inviteName)}
+                disabled={state.busy || !connected || inviteOrigin.trim().length === 0}
+                accessibilityRole="button"
+                accessibilityLabel="Create the invitation">
+                {state.busy ? <ActivityIndicator size="small" /> : <Text style={styles.buttonText}>Create the invitation</Text>}
+              </Pressable>
+            </View>
+          )
+        ) : mode !== 'approve' ? null : (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Pair a browser</Text>
+            <Text style={styles.cardTitle}>Approve a request</Text>
             <Text style={styles.hint}>
               {scannerSupported
-                ? 'Scan the code on the browser, or type it.'
-                : 'Open the pairing page on the browser and type the code it shows.'}
+                ? 'The new device shows a code and three digits: scan or type the code, then check the digits.'
+                : 'The new device shows a code and three digits: type the code, then check the digits.'}
             </Text>
             {scanning ? (
               <PairScanner
@@ -290,11 +410,17 @@ const createStyles = (palette: Palette) => ({
     fontSize: font.body,
   },
   codeInput: { flex: 1, letterSpacing: 2 },
+  grow: { flex: 1, alignItems: 'center' as const },
+  centered: { textAlign: 'center' as const },
+  // White whatever the theme: a QR is read by contrast, and every scanner reads dark on light.
+  qr: { alignSelf: 'center' as const, width: 220, height: 220, padding: space.sm, backgroundColor: '#ffffff', borderRadius: radius.sm },
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   actions: { flexDirection: 'row' as const, gap: space.sm },
   button: {
     flex: 1,
+    minHeight: 40,
     alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
     borderRadius: radius.sm,

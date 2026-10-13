@@ -41,14 +41,15 @@ async function holds(tree: Tree, page: string, labels: string[]): Promise<void> 
 test('the index is four groups, one row per subject', async () => {
   const tree = await renderApp();
   await openSettings(tree);
-  expect(textsOf(tree)).toEqual(expect.arrayContaining(['this app', 'the agent', 'what the agent can use', 'security']));
+  expect(textsOf(tree)).toEqual(expect.arrayContaining(['this app', 'the agent', 'what the agent can use', 'connection']));
+  expect(textsOf(tree)).not.toContain('security');
   const rows = labelsOf(tree).filter(label => label.startsWith('Open ') && label !== 'Open conversations');
   expect(rows).toEqual(
     expect.arrayContaining([
       'Open appearance', 'Open notifications', 'Open updates',
       'Open models', 'Open agents', 'Open services',
       'Open workspaces', 'Open skills', 'Open tools',
-      'Open devices', 'Open advanced',
+      'Open server', 'Open devices', 'Open advanced',
     ]),
   );
   // The catch-alls are gone: their settings moved to the page of their subject.
@@ -61,9 +62,12 @@ test('what General and Other held is each on the page of its subject', async () 
   const tree = await renderApp();
   await openSettings(tree);
   await holds(tree, 'Open appearance', ['Theme Dark', 'Message size 100%', 'Always expand tool cards', 'Always expand reasoning']);
-  await holds(tree, 'Open devices', ['Copy device and token', 'Server address', 'Connect']);
+  // The server is its own page; the devices page is about adding and revoking devices; this
+  // device's credential is a value for diagnosing, on Advanced.
+  await holds(tree, 'Open server', ['Server address', 'Connect', 'Join another server']);
+  await holds(tree, 'Open devices', ['Add a device', 'Approve a request']);
   await holds(tree, 'Open updates', ['Update the server now']);
-  await holds(tree, 'Open advanced', ['Open diagnostics', 'Open config', 'Open get started']);
+  await holds(tree, 'Open advanced', ['Open diagnostics', 'Open config', 'Open get started', 'Copy device and token']);
   await holds(tree, 'Open tools', ['Open MCPs', 'Open tool approvals']);
   // The defaults are drawn from the agents snapshot the server answers with.
   await ReactTestRenderer.act(async () => {

@@ -2206,6 +2206,19 @@ export interface DevicePairInfoFrame {
   ip?: string;
   userAgent?: string;
   expiresAt: number;
+  /** A browser on the pairing page, or a phone asking from its Join screen. Older servers omit it. */
+  kind?: 'web' | 'native';
+}
+
+/** "Add a device": the code the new device claims, its claim URL and the QR of it. */
+export interface DeviceInviteResultFrame {
+  type: 'device.invite.result';
+  ok: boolean;
+  code?: string;
+  expiresAt?: number;
+  url?: string;
+  qrSvg?: string;
+  error?: string;
 }
 
 export interface DevicePairResultFrame {
@@ -2744,6 +2757,7 @@ export type ServerFrame =
   | DeviceRevokeResultFrame
   | DevicePairInfoFrame
   | DevicePairResultFrame
+  | DeviceInviteResultFrame
   | TagsResultFrame
   | UpdateResultFrame
   | ProvidersEnvResultFrame
@@ -2763,6 +2777,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'device.revoke.result',
   'device.pair.info',
   'device.pair.result',
+  'device.invite.result',
   'chat.message',
   'chat.user',
   'chat.compaction',

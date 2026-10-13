@@ -62,8 +62,8 @@ test('a new install asks for its server before connecting anywhere', async () =>
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(<App />);
   });
-  await waitFor(() => textsOf(tree).includes('Connect to your server'));
-  expect(textsOf(tree)).toContain('Connect this app to your my-claw');
+  await waitFor(() => textsOf(tree).includes('Join a server'));
+  expect(textsOf(tree)).toContain('With an invitation');
   // Not even asked: an empty address would only be refused one layer down, as an error.
   expect(connect).not.toHaveBeenCalled();
   expect(bridge.connect).not.toHaveBeenCalled();

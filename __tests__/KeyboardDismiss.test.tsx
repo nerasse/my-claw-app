@@ -128,8 +128,8 @@ test('the settings index and every page under it drop the keyboard', async () =>
 
   dismiss.mockClear();
   await pressLabel(tree, 'Back to settings');
-  // The server field moved to Devices with the rest of what this device talks to.
-  await pressLabel(tree, 'Open devices');
+  // The server field has a page of its own, under "connection".
+  await pressLabel(tree, 'Open server');
   await waitFor(() => labelsOf(tree).includes('Server address'));
   expect(dismiss).toHaveBeenCalled();
 

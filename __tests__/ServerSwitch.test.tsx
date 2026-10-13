@@ -27,7 +27,7 @@ async function openSettings(tree: Tree): Promise<void> {
   // Settings are reached from the drawer: connected shows no status control in the header.
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
-  await press(tree, 'Open devices');
+  await press(tree, 'Open server');
   await waitFor(() => labelsOf(tree).includes('Server address'));
 }
 
@@ -87,7 +87,7 @@ test('a disconnected app never claims to be talking to another server', async ()
   await unmount(tree);
 });
 
-test('a failed connection explains itself in Devices instead of leaving the list loading', async () => {
+test('a failed connection explains itself on the Server page, and Devices says why its list is empty', async () => {
   devicesStore.reset();
   const tree = await renderApp();
   await announce('connecting', OLD_URL);
@@ -97,11 +97,12 @@ test('a failed connection explains itself in Devices instead of leaving the list
   });
 
   expect(textsOf(tree)).toContain('Connection failed: connection closed');
-  expect(textsOf(tree)).toContain('Connect to your server to load paired devices.');
+  await press(tree, 'Back to settings');
+  await press(tree, 'Open devices');
+  await waitFor(() => textsOf(tree).includes('Connect to your server to load paired devices.'));
   expect(textsOf(tree)).not.toContain('loading');
 
   await announce('connected', OLD_URL);
-  expect(textsOf(tree)).not.toContain('Connection failed: connection closed');
   expect(textsOf(tree)).not.toContain('Connect to your server to load paired devices.');
   expect(textsOf(tree)).toContain('loading');
   await ReactTestRenderer.act(async () => {

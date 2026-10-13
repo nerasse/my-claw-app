@@ -44,10 +44,13 @@ export const GROUPS: ReadonlyArray<{ title: string; categories: readonly Categor
     ],
   },
   {
-    title: 'security',
+    // Where this app connects and who else may: the server, the devices paired to it, and what
+    // only matters when the connection is wrong (owner, 2026-10-13: "connexion", not "security").
+    title: 'connection',
     categories: [
-      { page: 'devices', title: 'Devices', hint: 'this device, its server, paired devices' },
-      { page: 'advanced', title: 'Advanced', hint: 'connection, diagnostics, raw config, setup' },
+      { page: 'servers', title: 'Server', hint: 'address, connect, join with an invitation' },
+      { page: 'devices', title: 'Devices', hint: 'add a device, approve a request, paired devices' },
+      { page: 'advanced', title: 'Advanced', hint: 'connection state, this device, diagnostics, raw config' },
     ],
   },
 ];

@@ -193,7 +193,7 @@ import { SettingsScreen } from './SettingsScreen';
 import { AppearanceScreen } from './AppearanceScreen';
 import { UpdatesScreen } from './UpdatesScreen';
 import { AdvancedScreen } from './AdvancedScreen';
-import { ServerSection, ThisDeviceSection } from './ConnectionSections';
+import { ServersScreen } from './ServersScreen';
 import { NotificationsScreen } from './NotificationsScreen';
 import { PairingScreen, usePairing } from './PairingScreen';
 import { cancelPairing } from '../core/pairingClient';
@@ -408,17 +408,31 @@ export function AppShell(): React.JSX.Element {
     }
   }, [pairing.phase]);
   useEffect(() => {
-    // First launch, or a server that never saw this device: the socket answered 401. Offer the
-    // pairing screen once; if the owner closes it, the switch back happens through the button.
+    // First launch, or a server that does not know this device: the socket answered 401, and no
+    // Connect will ever get past it. The Join screen opens on every refusal that follows an
+    // attempt; closed by the owner, it stays closed until the next one (Server, Connect or Join).
     // A browser does not pair here: its pairing is the server's /pair page.
     if (Platform.OS === 'web') return;
     if (status.state === 'disconnected' && status.reason === 'unauthorized' && !unauthorizedHandled.current) {
       unauthorizedHandled.current = true;
       invalidateAPNs();
       setDeviceInfo(null);
+      setSettingsOpen(false);
       setPairingOpen(true);
     }
   }, [status]);
+  /** Connect from the Server page: a refusal after it opens the Join screen again. */
+  const connectByHand = useCallback(() => {
+    unauthorizedHandled.current = false;
+    connection.connect(url);
+  }, [url]);
+  const openJoin = useCallback(() => {
+    // A completed attempt is kept at module scope; clear it before starting a new one so the
+    // granted-state auto-close cannot dismiss this screen.
+    if (pairing.phase === 'granted') cancelPairing();
+    setSettingsOpen(false);
+    setPairingOpen(true);
+  }, [pairing.phase]);
   /** The running build's version name, read from the package once at boot. */
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
@@ -3949,6 +3963,8 @@ export function AppShell(): React.JSX.Element {
               />
             ) : settingsPage === 'advanced' ? (
               <AdvancedScreen
+                deviceInfo={deviceInfo}
+                appVersion={appVersion}
                 status={status}
                 serverVersion={serverVersion}
                 pending={pending}
@@ -4408,26 +4424,18 @@ export function AppShell(): React.JSX.Element {
               <DevicesScreen
                 onBack={() => setSettingsPage(parentOf('devices'))}
                 connected={status.state === 'connected'}
-                head={
-                  <>
-                    <ThisDeviceSection deviceInfo={deviceInfo} appVersion={appVersion} />
-                    <ServerSection
-                      url={url}
-                      onUrlChange={changeUrl}
-                      status={status}
-                      serverVersion={serverVersion}
-                      onConnect={() => connection.connect(url)}
-                      onDisconnect={() => connection.disconnect()}
-                      onOpenPairing={() => {
-                        // A completed attempt is kept at module scope; clear it before starting a
-                        // new one so the granted-state auto-close cannot dismiss this screen.
-                        if (pairing.phase === 'granted') cancelPairing();
-                        setSettingsOpen(false);
-                        setPairingOpen(true);
-                      }}
-                    />
-                  </>
-                }
+                serverOrigin={httpOrigin(url)}
+              />
+            ) : settingsPage === 'servers' ? (
+              <ServersScreen
+                url={url}
+                onUrlChange={changeUrl}
+                status={status}
+                serverVersion={serverVersion}
+                onConnect={connectByHand}
+                onDisconnect={() => connection.disconnect()}
+                onJoin={Platform.OS === 'web' ? undefined : openJoin}
+                onBack={() => setSettingsPage(parentOf('servers'))}
               />
             ) : settingsPage === 'services' ? (
               <ServicesScreen onBack={() => setSettingsPage(parentOf('services'))} />
@@ -4633,10 +4641,11 @@ export function AppShell(): React.JSX.Element {
                 serverUrl={url}
                 onUrlChange={changeUrl}
                 pairing={pairing}
+                unknownDevice={status.state === 'disconnected' && status.reason === 'unauthorized'}
                 onClose={() => {
                   setPairingOpen(false);
                   setSettingsOpen(true);
-                  setSettingsPage('devices');
+                  setSettingsPage('servers');
                 }}
               />
             ) : (

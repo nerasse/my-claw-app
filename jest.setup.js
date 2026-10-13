@@ -149,7 +149,7 @@ jest.mock('react-native-svg', () => {
   const React = require('react');
   const { View } = require('react-native');
   const stub = () => props => React.createElement(View, props);
-  return { __esModule: true, default: stub(), Svg: stub(), Path: stub() };
+  return { __esModule: true, default: stub(), Svg: stub(), Path: stub(), SvgXml: stub() };
 });
 
 jest.mock('react-native-image-picker', () => ({

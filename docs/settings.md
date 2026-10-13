@@ -18,9 +18,10 @@ Settings                                   search: "voix", "clé", "thème"...
 │  ├─ Workspaces       folders and their instructions
 │  ├─ Skills
 │  └─ Tools            on/off · ask before running · › MCP servers · › approval history
-└─ SECURITY
-   ├─ Devices          this device · its server · pair a browser · paired devices
-   └─ Advanced         connection · diagnostics · raw config · get started
+└─ CONNECTION
+   ├─ Server           address · connect / disconnect · join with an invitation (phone)
+   ├─ Devices          add a device (invitation) · approve a request · paired devices
+   └─ Advanced         connection state · this device (id, token) · diagnostics · raw config · get started
 ```
 
 ## One parent per page
@@ -56,6 +57,12 @@ nobody can reach.
   Blank restores the server default (512k), 0 lifts it. The row says an agent or tag cap outranks
   it, because that is what made the value look ignored.
 - MCP servers sit under Tools, the raw config under Advanced.
+- "Security" became "connection" (owner, 2026-10-13), and Devices was three subjects in one page.
+  The server has a page of its own; Devices is about adding and revoking devices, with the two
+  ways in (an invitation this device shows, a request it approves; docs/web-pairing.md in the
+  server repo); this device's id and token are values for diagnosing, on Advanced. The Pair button beside Connect is gone:
+  a device that has no credential joins from the Join screen, which opens on every refusal that
+  follows an attempt to connect.
 - The drawer's "Agents" (the shared workers) is "Sub-agents": the orchestrator is the conversation
   itself, and the Agents settings page is where every agent, the orchestrator included, is set.
 

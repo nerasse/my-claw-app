@@ -11,7 +11,7 @@ function maskToken(token: string): string {
   return `${'•'.repeat(Math.max(token.length - 4, 0))}${token.slice(-4)}`;
 }
 
-/** The credential this device talks with, on the Devices page above the ones it paired. */
+/** The credential this device talks with, on the Advanced page: a value for diagnosing, not a setting. */
 export function ThisDeviceSection({
   deviceInfo,
   appVersion,
@@ -74,7 +74,10 @@ export function ThisDeviceSection({
   );
 }
 
-/** Which server this device talks to, and the buttons that change it. */
+/**
+ * Which server this device talks to, and the buttons that change it. Pairing is not here: a device
+ * that has none joins from the Join screen, and one that has one invites others from Devices.
+ */
 export function ServerSection({
   url,
   onUrlChange,
@@ -82,7 +85,7 @@ export function ServerSection({
   serverVersion,
   onConnect,
   onDisconnect,
-  onOpenPairing,
+  onJoin,
 }: {
   url: string;
   onUrlChange: (url: string) => void;
@@ -91,8 +94,8 @@ export function ServerSection({
   serverVersion: string | null;
   onConnect: () => void;
   onDisconnect: () => void;
-  /** Opens the native pairing screen (claim a server-minted device). */
-  onOpenPairing: () => void;
+  /** The Join screen: an invitation, or a request. Absent on the web, which pairs on /pair. */
+  onJoin?: () => void;
 }): React.JSX.Element {
   const styles = useSettingsStyles();
   const { palette } = useTheme();
@@ -101,12 +104,15 @@ export function ServerSection({
   // The socket keeps running on the address it was started with, so editing the field alone would
   // leave the screen showing one server while the app talks to another.
   const elsewhere = busy && Boolean(status.url) && status.url !== url.trim();
+  // Connect alone can never get past this: the server does not know the credential it is shown.
+  const unknown = status.state === 'disconnected' && status.reason === 'unauthorized';
   return (
     <Section title="server">
       <TextInput
         style={styles.input}
         value={url}
         onChangeText={onUrlChange}
+        editable={Platform.OS !== 'web'}
         autoCapitalize="none"
         autoCorrect={false}
         placeholder="wss://server/my-claw-app"
@@ -114,7 +120,11 @@ export function ServerSection({
         accessibilityLabel="Server address"
       />
       <Text style={styles.hint}>{`${status.state}${serverVersion ? ` · my-claw ${serverVersion}` : ''}`}</Text>
-      {status.state === 'disconnected' && status.reason && status.reason !== 'disconnected' && status.reason !== 'background' ? (
+      {unknown ? (
+        <Text style={styles.hint} accessibilityLabel="Device unknown to the server">
+          This server does not know this device. Join it with an invitation from a device that uses it.
+        </Text>
+      ) : status.state === 'disconnected' && status.reason && status.reason !== 'disconnected' && status.reason !== 'background' ? (
         <Text style={styles.hint} accessibilityLabel="Connection failure">
           {`Connection failed: ${status.reason}`}
         </Text>
@@ -125,24 +135,20 @@ export function ServerSection({
         </Text>
       ) : null}
       <View style={styles.row}>
-        <Pressable
-          style={[styles.button, busy && !elsewhere && styles.buttonOff]}
-          onPress={onConnect}
-          disabled={busy && !elsewhere}
-          accessibilityRole="button"
-          accessibilityLabel={elsewhere ? 'Reconnect to the new server' : 'Connect'}>
-          <Text style={styles.buttonText}>{elsewhere ? 'Reconnect' : 'Connect'}</Text>
-        </Pressable>
-        {/* A browser pairs on the server's own /pair page: it cannot store a token. */}
-        {Platform.OS !== 'web' ? (
-          <Pressable
-            style={[styles.button, styles.buttonGhost]}
-            onPress={onOpenPairing}
-            accessibilityRole="button"
-            accessibilityLabel="Pair this device with a server-minted code">
-            <Text style={[styles.buttonText, styles.buttonGhostText]}>Pair</Text>
+        {unknown && onJoin ? (
+          <Pressable style={styles.button} onPress={onJoin} accessibilityRole="button" accessibilityLabel="Join this server">
+            <Text style={styles.buttonText}>Join</Text>
           </Pressable>
-        ) : null}
+        ) : (
+          <Pressable
+            style={[styles.button, busy && !elsewhere && styles.buttonOff]}
+            onPress={onConnect}
+            disabled={busy && !elsewhere}
+            accessibilityRole="button"
+            accessibilityLabel={elsewhere ? 'Reconnect to the new server' : 'Connect'}>
+            <Text style={styles.buttonText}>{elsewhere ? 'Reconnect' : 'Connect'}</Text>
+          </Pressable>
+        )}
         <Pressable
           style={[styles.button, styles.buttonGhost, !busy && styles.buttonOff]}
           onPress={onDisconnect}
@@ -151,6 +157,11 @@ export function ServerSection({
           <Text style={[styles.buttonText, styles.buttonGhostText]}>Disconnect</Text>
         </Pressable>
       </View>
+      {onJoin && !unknown ? (
+        <Pressable style={[styles.button, styles.buttonGhost]} onPress={onJoin} accessibilityRole="button" accessibilityLabel="Join another server">
+          <Text style={[styles.buttonText, styles.buttonGhostText]}>Join with an invitation</Text>
+        </Pressable>
+      ) : null}
     </Section>
   );
 }

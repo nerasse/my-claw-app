@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { connection } from './connection';
 import type {
   DeviceListResultFrame,
+  DeviceInviteResultFrame,
   DevicePairInfoFrame,
   DevicePairResultFrame,
   DeviceRecord,
@@ -17,6 +18,16 @@ export interface PairingCandidate {
   ip?: string;
   userAgent?: string;
   expiresAt: number;
+  /** A phone asking from its Join screen, or a browser on the pairing page. */
+  kind: 'web' | 'native';
+}
+
+/** An invitation on screen: what the new device scans or types. */
+export interface DeviceInvite {
+  code: string;
+  expiresAt: number;
+  url: string;
+  qrSvg?: string;
 }
 
 export interface DevicesState {
@@ -24,6 +35,8 @@ export interface DevicesState {
   devices: DeviceRecord[];
   /** The code being looked at, once the server answered. Null while nothing is pending. */
   candidate: PairingCandidate | null;
+  /** "Add a device": the invitation, once the server made it. */
+  invite: DeviceInvite | null;
   busy: boolean;
   notice: string | null;
   error: string | null;
@@ -33,6 +46,7 @@ const EMPTY: DevicesState = {
   status: 'unknown',
   devices: [],
   candidate: null,
+  invite: null,
   busy: false,
   notice: null,
   error: null,
@@ -78,6 +92,31 @@ class DevicesStoreImpl {
     if (cleaned.length === 0) return;
     this.set({ busy: true, error: null, notice: null, candidate: null });
     connection.send(JSON.stringify({ type: 'device.pair.lookup', code: cleaned })).catch(() => {});
+  }
+
+  /**
+   * "Add a device". `origin` is the address the new device will reach the server at: the one this
+   * device uses unless the owner changed it on the invitation card.
+   */
+  invite(origin: string, name: string): void {
+    this.set({ busy: true, error: null, notice: null, invite: null });
+    connection.send(JSON.stringify({ type: 'device.invite', origin, ...(name.trim() ? { name: name.trim() } : {}) })).catch(() => {});
+  }
+
+  clearInvite(): void {
+    this.set({ invite: null });
+  }
+
+  onInvite(frame: DeviceInviteResultFrame): void {
+    if (!frame.ok || !frame.code || !frame.url) {
+      this.set({ busy: false, invite: null, error: frame.error === 'pairing disabled' ? pairError('disabled') : (frame.error ?? 'the invitation could not be made') });
+      return;
+    }
+    this.set({
+      busy: false,
+      error: null,
+      invite: { code: frame.code, expiresAt: frame.expiresAt ?? 0, url: frame.url, ...(frame.qrSvg ? { qrSvg: frame.qrSvg } : {}) },
+    });
   }
 
   approve(name: string): void {
@@ -126,6 +165,7 @@ class DevicesStoreImpl {
         ip: frame.ip,
         userAgent: frame.userAgent,
         expiresAt: frame.expiresAt,
+        kind: frame.kind ?? 'web',
       },
     });
   }
@@ -136,11 +176,13 @@ class DevicesStoreImpl {
   }
 
   onPairResult(frame: DevicePairResultFrame): void {
+    // A device that joined through an invitation is in the list now: the invitation is spent.
     this.set({
+      invite: frame.ok ? null : this.state.invite,
       busy: false,
       candidate: null,
       error: frame.ok ? null : pairError(frame.error),
-      notice: frame.ok ? 'paired' : null,
+      notice: frame.ok ? 'device added' : null,
     });
     if (frame.ok) this.refresh();
   }

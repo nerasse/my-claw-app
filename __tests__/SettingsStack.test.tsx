@@ -321,10 +321,10 @@ test('only the conversation screen lets a back press fall through to Android', a
   await settleAndUnmount(tree);
 });
 
-test('the devices page labels a connected server with its announced version', async () => {
+test('the server page labels a connected server with its announced version, Advanced the app build', async () => {
   const tree = await boot();
   await openSettings(tree);
-  await pressLabel(tree, 'Open devices');
+  await pressLabel(tree, 'Open server');
   await waitFor(() => labelsOf(tree).includes('Server address'));
 
   await ReactTestRenderer.act(async () => {
@@ -333,21 +333,23 @@ test('the devices page labels a connected server with its announced version', as
   await emit({ type: 'hello', version: '0.1.204' });
 
   await waitFor(() => textsOf(tree).includes('connected · my-claw 0.1.204'));
-  // The device card names the running build alongside the announced server version.
+  await pressLabel(tree, 'Back to settings');
+  await pressLabel(tree, 'Open advanced');
+  // The device card names the running build.
   await waitFor(() => textsOf(tree).includes('0.0.1-test'));
   await settleAndUnmount(tree);
 });
 
-test('Pair can be opened again after a completed pairing attempt', async () => {
+test('Join can be opened again after a completed pairing attempt', async () => {
   const tree = await boot();
   await completePairing();
   await waitFor(() => pairingStatus().phase === 'granted');
 
   await openSettings(tree);
-  await pressLabel(tree, 'Open devices');
-  await pressLabel(tree, 'Pair this device with a server-minted code');
+  await pressLabel(tree, 'Open server');
+  await pressLabel(tree, 'Join another server');
 
-  await waitFor(() => textsOf(tree).includes('Pair this device'));
+  await waitFor(() => textsOf(tree).includes('With an invitation'));
   expect(pairingStatus()).toEqual({ phase: 'idle' });
 
   await settleAndUnmount(tree);

@@ -206,7 +206,9 @@ What that means for this codebase:
   That is the reason the cookie is `HttpOnly` and the reason no third-party script is allowed in.
 
 The Devices screen (list, last seen, revoke) does live here: `device.list` and `device.revoke` are
-plain frames, one more file under `src/app/`, shared with Android.
+plain frames, one more file under `src/app/`, shared with Android. So does "Add a device": a browser
+can invite a phone (`device.invite`, a QR and a code), and `/pair` takes an invitation code typed
+into its field, so a relative is never sent to a shell to get in.
 
 ## Capabilities, not platform guesses
 

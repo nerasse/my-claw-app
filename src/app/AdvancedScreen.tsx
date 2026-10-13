@@ -1,14 +1,17 @@
 import React from 'react';
 import { View } from 'react-native';
 import type { WsStatusPayload } from '../core/types';
-import { ConnectionSection } from './ConnectionSections';
+import type { DeviceInfo } from '../core/device';
+import { ConnectionSection, ThisDeviceSection } from './ConnectionSections';
 import { LinkRow, Section, SettingsPageFrame, useSettingsStyles } from './settingsParts';
 
 /**
  * What only matters when something is wrong, or to someone who edits files: the socket's state,
- * the diagnostics, the raw config, and the setup run again once it is done.
+ * this device's credential, the diagnostics, the raw config, and the setup run again once it is done.
  */
 export function AdvancedScreen({
+  deviceInfo,
+  appVersion,
   status,
   serverVersion,
   pending,
@@ -18,6 +21,8 @@ export function AdvancedScreen({
   onOpenSetup,
   onBack,
 }: {
+  deviceInfo: DeviceInfo | null;
+  appVersion: string | null;
   status: WsStatusPayload;
   serverVersion: string | null;
   pending: number;
@@ -31,6 +36,7 @@ export function AdvancedScreen({
   return (
     <SettingsPageFrame title="Advanced" onBack={onBack}>
       <ConnectionSection status={status} serverVersion={serverVersion} pending={pending} onClearOutbox={onClearOutbox} />
+      <ThisDeviceSection deviceInfo={deviceInfo} appVersion={appVersion} />
       <Section title="maintenance">
         <LinkRow title="Diagnostics" hint="server snapshot and logs, ready to copy" onPress={onOpenDiagnostics} />
         <View style={styles.separator} />
