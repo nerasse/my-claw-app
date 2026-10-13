@@ -22,6 +22,20 @@ export interface ServerProfile {
   name: string;
   url: string;
   lastThreadId: string | null;
+  /**
+   * The get-started steps skipped on this server: a model skipped on the owner's server says
+   * nothing about a relative's, which has none yet.
+   */
+  setupSkipped: string[];
+}
+
+/** What prefs holds for the active profile, which the app edits live. */
+function liveOf(current: { serverUrl: string; lastThreadId: string | null; setupSkipped: string[] }) {
+  return { url: current.serverUrl, lastThreadId: current.lastThreadId, setupSkipped: current.setupSkipped };
+}
+
+function sameList(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i]);
 }
 
 export const multiServerSupported = Platform.OS === 'android';
@@ -47,6 +61,7 @@ function parseList(raw: string | undefined): ServerProfile[] {
         name: typeof entry.name === 'string' ? entry.name : '',
         url: typeof entry.url === 'string' ? entry.url : '',
         lastThreadId: typeof entry.lastThreadId === 'string' && entry.lastThreadId ? entry.lastThreadId : null,
+        setupSkipped: Array.isArray(entry.setupSkipped) ? entry.setupSkipped.filter((key): key is string => typeof key === 'string') : [],
       }));
   } catch {
     return [];
@@ -102,21 +117,23 @@ class ServersStore {
     let list = parseList(raw.servers);
     let active = raw.activeServer?.trim() || DEFAULT_SERVER;
     // A single-server build: one profile, which the line below fills from prefs like any active one.
-    if (list.length === 0) list = [{ id: DEFAULT_SERVER, name: '', url: '', lastThreadId: null }];
+    if (list.length === 0) list = [{ id: DEFAULT_SERVER, name: '', url: '', lastThreadId: null, setupSkipped: [] }];
     if (!list.some(profile => profile.id === active)) active = list[0]!.id;
-    // prefs holds the live address and conversation of the active one: it is what the app edits.
-    list = list.map(profile => (profile.id === active ? { ...profile, url: current.serverUrl, lastThreadId: current.lastThreadId } : profile));
+    // prefs holds the live address, conversation and skipped steps of the active one: it is what
+    // the app edits.
+    list = list.map(profile => (profile.id === active ? { ...profile, ...liveOf(current) } : profile));
     this.state = { list, active };
     this.emit();
     if (multiServerSupported) await deviceBridge.setActiveServer(active).catch(() => {});
     this.markHydrated();
   }
 
-  /** The active profile follows the address and the conversation the app is on. */
-  syncActive(url: string, lastThreadId: string | null): void {
+  /** The active profile follows the address, the conversation and the skipped steps the app is on. */
+  syncActive(current: { serverUrl: string; lastThreadId: string | null; setupSkipped: string[] }): void {
     const active = this.active();
-    if (!active || (active.url === url && active.lastThreadId === lastThreadId)) return;
-    this.write(this.state.list.map(profile => (profile.id === active.id ? { ...profile, url, lastThreadId } : profile)), this.state.active);
+    const live = liveOf(current);
+    if (!active || (active.url === live.url && active.lastThreadId === live.lastThreadId && sameList(active.setupSkipped, live.setupSkipped))) return;
+    this.write(this.state.list.map(profile => (profile.id === active.id ? { ...profile, ...live } : profile)), this.state.active);
   }
 
   rename(id: string, name: string): void {
@@ -133,7 +150,7 @@ class ServersStore {
   /** A new, empty profile, switched to: the app comes back on the Join screen, with no address. */
   async add(): Promise<void> {
     const id = `s-${Math.random().toString(36).slice(2, 10)}`;
-    this.write([...this.state.list, { id, name: '', url: '', lastThreadId: null }], this.state.active);
+    this.write([...this.state.list, { id, name: '', url: '', lastThreadId: null, setupSkipped: [] }], this.state.active);
     await this.switchTo(id);
   }
 
@@ -146,12 +163,11 @@ class ServersStore {
     const target = this.state.list.find(profile => profile.id === id);
     if (!target || id === this.state.active) return;
     const current = prefs.get();
-    const list = this.state.list.map(profile =>
-      profile.id === this.state.active ? { ...profile, url: current.serverUrl, lastThreadId: current.lastThreadId } : profile,
-    );
+    const list = this.state.list.map(profile => (profile.id === this.state.active ? { ...profile, ...liveOf(current) } : profile));
     this.write(list, id);
     prefs.set('serverUrl', target.url);
     prefs.set('lastThreadId', target.lastThreadId);
+    prefs.set('setupSkipped', target.setupSkipped);
     await deviceBridge.setActiveServer(id).catch(() => {});
     if (isValidServerUrl(target.url)) connection.connect(target.url);
     else connection.disconnect();

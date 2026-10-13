@@ -68,7 +68,7 @@ async function boot(): Promise<void> {
 describe('the profiles', () => {
   test('a phone from a single-server build has one profile, `default`, on its address', async () => {
     await boot();
-    expect(serversStore.get()).toEqual({ active: 'default', list: [{ id: 'default', name: '', url: HOME, lastThreadId: 't-default' }] });
+    expect(serversStore.get()).toEqual({ active: 'default', list: [{ id: 'default', name: '', url: HOME, lastThreadId: 't-default', setupSkipped: [] }] });
     expect(bridge.setActiveServer).toHaveBeenCalledWith('default');
     expect(serverName(serversStore.get().list[0]!)).toBe('10.0.0.5:8080');
   });
@@ -104,10 +104,28 @@ describe('the profiles', () => {
 
   test('the active profile follows an edited address: the same server reached another way', async () => {
     await boot();
-    const off = prefs.subscribe(current => serversStore.syncActive(current.serverUrl, current.lastThreadId));
+    const off = prefs.subscribe(current => serversStore.syncActive(current));
     prefs.set('serverUrl', 'ws://100.64.0.7:8080/my-claw-app');
     off();
-    expect(serversStore.get().list).toEqual([{ id: 'default', name: '', url: 'ws://100.64.0.7:8080/my-claw-app', lastThreadId: 't-default' }]);
+    expect(serversStore.get().list).toEqual([{ id: 'default', name: '', url: 'ws://100.64.0.7:8080/my-claw-app', lastThreadId: 't-default', setupSkipped: [] }]);
+  });
+
+  // A model skipped on the owner's server says nothing about a relative's, which has none yet:
+  // the get started of a new server must still open.
+  test('the get-started steps skipped are kept per server', async () => {
+    stored.setupSkipped = 'model,voice';
+    stored.servers = JSON.stringify([
+      { id: 'default', name: 'Home', url: HOME, lastThreadId: null },
+      { id: 's-papa', name: 'Papa', url: PAPA, lastThreadId: null, setupSkipped: ['location'] },
+    ]);
+    await boot();
+    // A list written by 0.6.151 has no skipped steps: the active one takes what prefs held.
+    expect(serversStore.active()?.setupSkipped).toEqual(['model', 'voice']);
+    await serversStore.switchTo('s-papa');
+    expect(prefs.get().setupSkipped).toEqual(['location']);
+    expect(JSON.parse(stored.servers!)[0]).toMatchObject({ id: 'default', setupSkipped: ['model', 'voice'] });
+    await serversStore.add();
+    expect(prefs.get().setupSkipped).toEqual([]);
   });
 
   test('forgetting a server takes its credential and its queue, and never the active one', async () => {

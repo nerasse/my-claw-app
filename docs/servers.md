@@ -26,7 +26,7 @@ his own server the day he switched from the LAN address to the Tailscale one.
 
 | what | where |
 |---|---|
-| list, names, addresses, last conversation | prefs `servers` (JSON) and `activeServer` (`src/core/servers.ts`) |
+| list, names, addresses, last conversation, get-started steps skipped | prefs `servers` (JSON) and `activeServer` (`src/core/servers.ts`) |
 | device id and token | `DeviceCredentials.kt`, keys `device_id@<id>` / `device_token@<id>`, Keystore-encrypted |
 | unsent frames | `ClawConnectionService.kt`, prefs `claw_connection`, key `outbox@<id>` |
 | push registration | UnifiedPush instance named after the profile |
@@ -34,6 +34,11 @@ his own server the day he switched from the LAN address to the Tailscale one.
 The first profile is `default`, and `default` keeps the keys a single-server build wrote
 (`device_id`, `device_token`, `outbox`, UnifiedPush instance `default`): a phone updated from it
 keeps its pair, its queue and its notifications, and is asked nothing.
+
+The skipped get-started steps are the profile's: a model skipped on the owner's server says nothing
+about a relative's, which has none yet, and its get started must still open. prefs holds the
+active profile's live copy (`setupSkipped`), as it does its address and conversation; a list
+written by 0.6.151, which had no such field, takes what prefs held for its active profile.
 
 ## Switching
 

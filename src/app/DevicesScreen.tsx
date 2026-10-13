@@ -45,8 +45,11 @@ export function DevicesScreen({
   onBack,
   connected,
   serverOrigin,
+  startInviting = false,
 }: {
   onBack: () => void;
+  /** Opened from the get started: the invitation card is what the step is for. */
+  startInviting?: boolean;
   connected: boolean;
   /** The address this device reaches the server at: what an invitation names unless changed. */
   serverOrigin: string;
@@ -60,7 +63,7 @@ export function DevicesScreen({
   const [name, setName] = useState('');
   const [confirming, setConfirming] = useState<DeviceRecord | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [mode, setMode] = useState<'none' | 'invite' | 'approve'>('none');
+  const [mode, setMode] = useState<'none' | 'invite' | 'approve'>(startInviting ? 'invite' : 'none');
   const [inviteName, setInviteName] = useState('');
   const [inviteOrigin, setInviteOrigin] = useState(serverOrigin);
 

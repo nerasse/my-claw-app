@@ -176,6 +176,8 @@ export interface BackLayers {
   /** Where the model picker returns when the assistant opened it; null: from the agent pages. */
   modelPickerFrom: 'setup' | 'account' | null;
   setupFrom: SettingsPage;
+  /** The devices page opened from the get started returns to it. */
+  devicesFrom: 'index' | 'setup';
   providerFrom: 'models' | 'account';
   setLayerTarget: (value: null) => void;
   archivesOpen: boolean;
@@ -310,6 +312,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     instructionBack,
     modelPickerFrom,
     setupFrom,
+    devicesFrom,
     providerFrom,
     setLayerTarget,
     archivesOpen,
@@ -615,6 +618,10 @@ export function closeTopLayer(layers: BackLayers): boolean {
     // The setup is reached from the index banner while unfinished, from Advanced after.
     if (settingsPage === 'setup') {
       setSettingsPage(setupFrom);
+      return true;
+    }
+    if (settingsPage === 'devices' && devicesFrom === 'setup') {
+      setSettingsPage('setup');
       return true;
     }
     // Every other page has one parent, written once in settingsPages.ts.

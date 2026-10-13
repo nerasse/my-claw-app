@@ -427,8 +427,8 @@ export function AppShell(): React.JSX.Element {
       setPairingOpen(true);
     }
   }, [status]);
-  // The active server profile follows the address and the conversation the app is on.
-  useEffect(() => prefs.subscribe(current => serversStore.syncActive(current.serverUrl, current.lastThreadId)), []);
+  // The active server profile follows the address, the conversation and the skipped steps.
+  useEffect(() => prefs.subscribe(current => serversStore.syncActive(current)), []);
   /** Connect from the Server page: a refusal after it opens the Join screen again. */
   const connectByHand = useCallback(() => {
     unauthorizedHandled.current = false;
@@ -508,6 +508,8 @@ export function AppShell(): React.JSX.Element {
   const settingsOpen = settingsOpenState || setupGate;
   // Where the default-model picker returns: the agents list, or the assistant that opened it.
   const [modelPickerFrom, setModelPickerFrom] = useState<'setup' | 'account' | null>(null);
+  /** The get started opens Devices on its invitation, and Back returns to it. */
+  const [devicesFrom, setDevicesFrom] = useState<'index' | 'setup'>('index');
   // The setup is reached from the banner on the index while it is unfinished, from Advanced after.
   const [setupFrom, setSetupFrom] = useState<'index' | 'advanced'>('index');
   // The subscription the account page shows (docs: subscription-accounts in the server repo).
@@ -1608,6 +1610,7 @@ export function AppShell(): React.JSX.Element {
         instructionBack,
         modelPickerFrom,
         setupFrom,
+        devicesFrom,
         providerFrom,
         setLayerTarget,
         archivesOpen,
@@ -1651,6 +1654,7 @@ export function AppShell(): React.JSX.Element {
       instructionBack,
       modelPickerFrom,
       setupFrom,
+      devicesFrom,
       providerFrom,
       workspacePicker,
       jobSessions,
@@ -3835,6 +3839,9 @@ export function AppShell(): React.JSX.Element {
           setAgentModelFor('global');
           setModelPickerFrom('setup');
           setSettingsPage('model-picker');
+        } else if (step.page === 'devices') {
+          setDevicesFrom('setup');
+          setSettingsPage('devices');
         } else if (step.page) setSettingsPage(step.page);
       }}
     />
@@ -3960,6 +3967,7 @@ export function AppShell(): React.JSX.Element {
                 onBack={() => setSettingsOpen(false)}
                 onOpen={page => {
                   if (page === 'setup') setSetupFrom('index');
+                  if (page === 'devices') setDevicesFrom('index');
                   setSettingsPage(page);
                 }}
               />
@@ -4452,7 +4460,11 @@ export function AppShell(): React.JSX.Element {
               />
             ) : settingsPage === 'devices' ? (
               <DevicesScreen
-                onBack={() => setSettingsPage(parentOf('devices'))}
+                onBack={() => {
+                  setSettingsPage(devicesFrom === 'setup' ? 'setup' : parentOf('devices'));
+                  setDevicesFrom('index');
+                }}
+                startInviting={devicesFrom === 'setup'}
                 connected={status.state === 'connected'}
                 serverOrigin={httpOrigin(url)}
               />

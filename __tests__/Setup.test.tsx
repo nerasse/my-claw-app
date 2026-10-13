@@ -238,8 +238,10 @@ test('a server with no model: the assistant takes the whole app, Back cannot lea
   // Nor a cross: the setup is not a page of settings to leave, it is the app until it is done.
   expect(labelsOf(tree)).not.toContain('Close settings');
 
-  // Escape (or the hardware back) walks back through settings: the assistant stays.
+  // Escape (or the hardware back) walks back through settings: the assistant stays. The step
+  // opens Devices on its invitation, which is what it is for.
   await press(tree, 'Setup step Your other devices');
+  await waitFor(() => labelsOf(tree).includes('Create the invitation'));
   await press(tree, 'Back to settings');
   await waitFor(() => labelsOf(tree).includes('Setup step Pick a model'));
 
@@ -251,6 +253,38 @@ test('a server with no model: the assistant takes the whole app, Back cannot lea
   // Skipped on this device: another answer with no model does not take the app again.
   await emit({ type: 'model.list.result', models: [], defaultModel: '' });
   expect(labelsOf(tree)).not.toContain('Setup step Pick a model');
+  await unmount(tree);
+});
+
+// Out of the first run too: Devices opened from the get started returns to it, and the same page
+// opened from the index is the plain one, which returns to the index.
+test('Devices opened from the get started starts on the invitation and returns there', async () => {
+  const tree = await renderApp();
+  await press(tree, 'Open conversations');
+  await press(tree, 'Open settings');
+  // A configured server: the get started is under Advanced.
+  await press(tree, 'Open advanced');
+  await press(tree, 'Open get started');
+  await press(tree, 'Setup step Your other devices');
+  await waitFor(() => labelsOf(tree).includes('Create the invitation'));
+  await press(tree, 'Back to settings');
+  await waitFor(() => labelsOf(tree).includes('Setup step Your other devices'));
+  // The back key (and Escape) takes the same way as the page's Back.
+  await press(tree, 'Setup step Your other devices');
+  await waitFor(() => labelsOf(tree).includes('Create the invitation'));
+  await ReactTestRenderer.act(async () => {
+    // eslint-disable-next-line @react-native/no-deep-imports -- the ios stub is what the barrel resolves to under jest
+    const back = require('react-native/Libraries/Utilities/BackHandler.ios').default as { __handlers: Array<() => boolean> };
+    back.__handlers[back.__handlers.length - 1]!();
+  });
+  await waitFor(() => labelsOf(tree).includes('Setup step Your other devices'));
+  await press(tree, 'Back to settings');
+  await press(tree, 'Back to settings');
+  await press(tree, 'Open devices');
+  await waitFor(() => labelsOf(tree).includes('Add a device'));
+  expect(labelsOf(tree)).not.toContain('Create the invitation');
+  await press(tree, 'Back to settings');
+  await waitFor(() => labelsOf(tree).includes('Open devices'));
   await unmount(tree);
 });
 
