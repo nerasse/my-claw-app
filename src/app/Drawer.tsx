@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ServerSwitcher } from './ServerSwitcher';
 import {
   Animated,
   FlatList,
@@ -809,6 +810,7 @@ export function Drawer({
         </View>
 
         <View style={styles.footerRule} />
+        <ServerSwitcher />
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.sm }]}>
           {/* One row: More opens the sheet with the remaining destinations (Archived, Agents,
               Jobs); the gear jumps straight to Settings. The state line stays here because

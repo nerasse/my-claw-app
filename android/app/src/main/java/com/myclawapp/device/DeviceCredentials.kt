@@ -11,20 +11,54 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+/**
+ * This device's credential on each server it uses (docs/servers.md). A credential belongs to a
+ * server profile, not to an address: the same server reached on the LAN and over the VPN is one
+ * profile, two servers are two. The active profile is the one every request presents.
+ *
+ * The first profile is `default`, which is also the UnifiedPush instance name of the registration
+ * made before there were profiles: a phone updated from a single-server build keeps its pair and
+ * its notifications without being asked anything.
+ */
 object DeviceCredentials {
   private const val PREFS = "claw_device"
   private const val KEY_DEVICE_ID = "device_id"
   private const val KEY_TOKEN = "device_token"
+  private const val KEY_ACTIVE = "active_server"
+  const val DEFAULT_SERVER = "default"
   private const val KEYSTORE_ALIAS = "claw_device_key"
   private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
   private const val GCM_IV_BYTES = 12
   private const val GCM_TAG_BITS = 128
 
+  fun active(context: Context): String =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ACTIVE, null) ?: DEFAULT_SERVER
+
+  /** Which profile the next request presents. The connection service swaps its send queue with it. */
+  fun setActive(context: Context, server: String) {
+    if (server.isBlank()) return
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ACTIVE, server).commit()
+  }
+
+  /** The default profile keeps the keys a single-server build wrote: nothing to migrate. */
+  private fun idKey(server: String) = if (server == DEFAULT_SERVER) KEY_DEVICE_ID else "$KEY_DEVICE_ID@$server"
+  private fun tokenKey(server: String) = if (server == DEFAULT_SERVER) KEY_TOKEN else "$KEY_TOKEN@$server"
+
+  /** A server forgotten: its credential goes, so a later profile of the same name starts clean. */
+  fun forget(context: Context, server: String) {
+    if (server.isBlank() || server == active(context)) return
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+      .remove(idKey(server))
+      .remove(tokenKey(server))
+      .apply()
+  }
+
   fun deviceId(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    prefs.getString(KEY_DEVICE_ID, null)?.let { return it }
+    val key = idKey(active(context))
+    prefs.getString(key, null)?.let { return it }
     val id = "dev-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12)
-    prefs.edit().putString(KEY_DEVICE_ID, id).apply()
+    prefs.edit().putString(key, id).apply()
     return id
   }
 
@@ -37,24 +71,26 @@ object DeviceCredentials {
     if (deviceId.isBlank() || token.isBlank()) return false
     val encrypted = encrypt(token) ?: return false
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val server = active(context)
     prefs.edit()
-      .putString(KEY_DEVICE_ID, deviceId)
-      .putString(KEY_TOKEN, encrypted)
-      .apply()
+      .putString(idKey(server), deviceId)
+      .putString(tokenKey(server), encrypted)
+      .commit()
     return true
   }
 
   fun token(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    val stored = prefs.getString(KEY_TOKEN, null)
+    val key = tokenKey(active(context))
+    val stored = prefs.getString(key, null)
     if (stored != null) {
       val decrypted = decrypt(stored)
       if (decrypted != null) return decrypted
-      prefs.edit().remove(KEY_TOKEN).apply()
+      prefs.edit().remove(key).apply()
     }
     val token = randomToken()
     encrypt(token)?.let { encrypted ->
-      prefs.edit().putString(KEY_TOKEN, encrypted).apply()
+      prefs.edit().putString(key, encrypted).apply()
     }
     return token
   }

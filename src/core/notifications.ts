@@ -93,10 +93,20 @@ function autoSelectDistributor(): string | null {
  */
 let registeredThisSession = false;
 
+/**
+ * The UnifiedPush instance of the active server profile, named after it (docs/servers.md): each
+ * server has its own endpoint, so one the app is not on still notifies, and the notification link
+ * says which. `default` is the instance a single-server build registered, kept as it was. Read
+ * from the stored profile at registration, which a switch of server writes before the app restarts.
+ */
+let pushInstance = 'default';
+
 export async function registerForPush(vapidPublicKey: string): Promise<{ ok: boolean; reason?: string }> {
   if (!pushSupported) return { ok: false, reason: 'unsupported platform' };
   if (!vapidPublicKey) return { ok: false, reason: 'no server key' };
   if (registeredThisSession) return { ok: true };
+  const stored = await deviceBridge.prefsGetAll().catch((): Record<string, string> => ({}));
+  pushInstance = stored.activeServer?.trim() || 'default';
 
   const granted = (await checkPermissions()) || (await requestPermissions()) === 'granted';
   if (!granted) return { ok: false, reason: 'notification permission denied' };
@@ -106,7 +116,7 @@ export async function registerForPush(vapidPublicKey: string): Promise<{ ok: boo
   }
 
   try {
-    await ExpoUnifiedPush.registerDevice(vapidPublicKey);
+    await ExpoUnifiedPush.registerDevice(vapidPublicKey, pushInstance);
     registeredThisSession = true;
     return { ok: true };
   } catch (err) {
@@ -122,7 +132,7 @@ export function resetPushRegistration(): void {
 export async function unregisterFromPush(): Promise<void> {
   if (!pushSupported) return;
   try {
-    await ExpoUnifiedPush.unregisterDevice();
+    await ExpoUnifiedPush.unregisterDevice(pushInstance);
   } catch {
     // Already gone on the distributor side; the server-side endpoint is cleared by the caller.
   }
@@ -139,6 +149,9 @@ export function subscribeToPushRegistration(
 ): () => void {
   if (!pushSupported) return () => {};
   return subscribeDistributorMessages(({ action, data }: CallbackData) => {
+    // Another server's registration: it is that server's to hear, on the next visit to it.
+    const instance = (data as { instance?: string }).instance;
+    if (instance && instance !== pushInstance) return;
     if (action === 'registered') {
       const payload = data as { url?: string; pubKey?: string; auth?: string };
       if (payload.url) {

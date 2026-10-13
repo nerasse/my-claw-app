@@ -157,3 +157,20 @@ describe('the connection indicator in the header', () => {
     await settleAndUnmount(tree);
   });
 });
+
+// The Join screen asks for the server's address, and that is what gets stored: connected as it was,
+// it asked for `/`, which answers 401, and the app said the server did not know the device.
+test('a bare server address connects to its socket, and is not taken for another server', async () => {
+  const tree = await renderApp();
+  await announce('connected', OLD_URL);
+  await openSettings(tree);
+  await typeUrl(tree, 'http://10.10.20.10:8080');
+  // Same server: no "still talking to" warning for the socket of the address just typed.
+  expect(labelsOf(tree)).not.toContain('Live server differs');
+  await announce('disconnected', OLD_URL);
+  bridge.connect.mockClear();
+  await waitFor(() => labelsOf(tree).includes('Connect'));
+  await press(tree, 'Connect');
+  expect(bridge.connect).toHaveBeenCalledWith('ws://10.10.20.10:8080/my-claw-app');
+  await settleAndUnmount(tree);
+});

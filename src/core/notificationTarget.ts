@@ -4,8 +4,8 @@
  * is a thread (`cron-<job>-<ts>`), opened as the chat it is.
  */
 export type NotificationTarget =
-  | { kind: 'thread'; threadId: string }
-  | { kind: 'job'; jobId: string };
+  | { kind: 'thread'; threadId: string; server?: string }
+  | { kind: 'job'; jobId: string; server?: string };
 
 /**
  * The id a notification was posted with, derived from its deep link.
@@ -30,9 +30,12 @@ export function notificationIdFor(url: string): number {
 
 export function parseNotificationLink(url: string | null | undefined): NotificationTarget | null {
   if (!url) return null;
-  const match = /^myclaw:\/\/(thread|job)\/(.+)$/.exec(url.trim());
+  const match = /^myclaw:\/\/(thread|job)\/([^?]+)(?:\?(.*))?$/.exec(url.trim());
   if (!match) return null;
   const id = decodeURIComponent(match[2]!).trim();
   if (!id) return null;
-  return match[1] === 'thread' ? { kind: 'thread', threadId: id } : { kind: 'job', jobId: id };
+  // The phone's push renderer names the server profile the notification came from (docs/servers.md).
+  const server = /(?:^|&)server=([^&]+)/.exec(match[3] ?? '')?.[1];
+  const from = server ? { server: decodeURIComponent(server) } : {};
+  return match[1] === 'thread' ? { kind: 'thread', threadId: id, ...from } : { kind: 'job', jobId: id, ...from };
 }

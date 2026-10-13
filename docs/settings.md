@@ -19,7 +19,8 @@ Settings                                   search: "voix", "clé", "thème"...
 │  ├─ Skills
 │  └─ Tools            on/off · ask before running · › MCP servers · › approval history
 └─ CONNECTION
-   ├─ Server           address · connect / disconnect · join with an invitation (phone)
+   ├─ Server(s)        address · connect / disconnect · join with an invitation;
+   │                   on Android: this one, the others, switch, add, rename, forget (docs/servers.md)
    ├─ Devices          add a device (invitation) · approve a request · paired devices
    └─ Advanced         connection state · this device (id, token) · diagnostics · raw config · get started
 ```

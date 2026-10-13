@@ -166,8 +166,8 @@ export function subscribeToPushRegistration(
 }
 
 export type NotificationTarget =
-  | { kind: 'thread'; threadId: string }
-  | { kind: 'job'; jobId: string };
+  | { kind: 'thread'; threadId: string; server?: string }
+  | { kind: 'job'; jobId: string; server?: string };
 
 /* eslint-disable no-bitwise -- FNV-1a is defined in bitwise terms, and the server computes the
    same bits: writing it any other way would be a different hash. */
@@ -190,9 +190,12 @@ export function dismissThreadNotification(): void {}
 
 export function parseNotificationLink(url: string | null | undefined): NotificationTarget | null {
   if (!url) return null;
-  const match = /^myclaw:\/\/(thread|job)\/(.+)$/.exec(url.trim());
+  const match = /^myclaw:\/\/(thread|job)\/([^?]+)(?:\?(.*))?$/.exec(url.trim());
   if (!match) return null;
   const id = decodeURIComponent(match[2]!).trim();
   if (!id) return null;
-  return match[1] === 'thread' ? { kind: 'thread', threadId: id } : { kind: 'job', jobId: id };
+  // The phone's push renderer names the server profile the notification came from (docs/servers.md).
+  const server = /(?:^|&)server=([^&]+)/.exec(match[3] ?? '')?.[1];
+  const from = server ? { server: decodeURIComponent(server) } : {};
+  return match[1] === 'thread' ? { kind: 'thread', threadId: id, ...from } : { kind: 'job', jobId: id, ...from };
 }

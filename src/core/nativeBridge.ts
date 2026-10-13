@@ -171,6 +171,12 @@ export interface DeviceBridgeNative {
   getDeviceInfo(): Promise<DeviceInfoNative>;
   /** Replaces the locally generated credentials with the pair the server minted (CLI pairing). */
   adoptCredentials(deviceId: string, token: string, origin?: string): Promise<boolean>;
+  /** Android: the server profile every request presents from now on (docs/servers.md). */
+  setActiveServer(server: string): Promise<void>;
+  /** Android: a removed server's credential and unsent queue. */
+  forgetServer(server: string): Promise<void>;
+  /** Android: the JS started afresh in this process, after a switch of server. */
+  reloadApp(): void;
   getCapabilities(): Promise<DeviceCapabilities>;
   /** Captures one foreground location, waiting briefly for the best available fix. */
   getCurrentLocation(): Promise<CurrentLocationNative>;
@@ -366,6 +372,11 @@ export const deviceBridge: DeviceBridgeNative = {
   adoptCredentials: (deviceId, token, origin) =>
     (Platform.OS === 'ios' ? native?.adoptCredentials(deviceId, token, origin) : native?.adoptCredentials(deviceId, token)) ??
     Promise.reject(new Error('DeviceBridge unavailable')),
+  setActiveServer: server => (Platform.OS === 'android' ? native?.setActiveServer(server) : undefined) ?? Promise.resolve(),
+  forgetServer: server => (Platform.OS === 'android' ? native?.forgetServer(server) : undefined) ?? Promise.resolve(),
+  reloadApp: () => {
+    if (Platform.OS === 'android') native?.reloadApp();
+  },
   getCapabilities: () =>
     native?.getCapabilities() ??
     Promise.resolve({

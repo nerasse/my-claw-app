@@ -1,7 +1,7 @@
 import { deviceBridge, deviceEvents } from './nativeBridge';
 import type { WsStatusPayload } from './types';
 import { parseServerFrame, type ServerFrame } from './protocol';
-import { isValidServerUrl } from './serverUrl';
+import { isValidServerUrl, socketUrl } from './serverUrl';
 
 type StateListener = (status: WsStatusPayload) => void;
 type MessageListener = (text: string) => void;
@@ -70,7 +70,7 @@ class ClawConnection {
       deviceEvents.emit('claw:ws:state', { state: 'disconnected', reason: 'invalid server address' });
       return;
     }
-    deviceBridge.connect(url);
+    deviceBridge.connect(socketUrl(url));
   }
 
   disconnect(): void {

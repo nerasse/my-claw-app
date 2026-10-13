@@ -31,6 +31,19 @@ export function isValidServerUrl(url: string): boolean {
 }
 
 /**
+ * The socket address of what the owner typed. A bare server address (`http://10.0.0.5:8080`,
+ * which the Join screen asks for) is the server, not its socket: connected as it is, it asked for
+ * `/` and got a 401 that read as "this server does not know this device". With a path, it is
+ * taken as written.
+ */
+export function socketUrl(url: string): string {
+  const match = /^(wss?|https?):\/\/([^\s/?#]+)\/?$/i.exec(url.trim());
+  if (!match) return url.trim();
+  const secure = /^(wss|https)$/i.test(match[1]!);
+  return `${secure ? 'wss' : 'ws'}://${match[2]}/my-claw-app`;
+}
+
+/**
  * The credential of a URL that a view loads by itself (an image, a player, a download): the
  * server's media ticket, which only reads media and expires. Null until the server has sent one,
  * and a URL built without it would be a 401: the caller waits. The device token never goes in a

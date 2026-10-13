@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type { WsStatusPayload } from '../core/types';
+import { socketUrl } from '../core/serverUrl';
 import type { DeviceInfo } from '../core/device';
 import { useTheme } from '../theme';
 import { Section, useSettingsStyles } from './settingsParts';
@@ -103,7 +104,7 @@ export function ServerSection({
   const busy = connected || status.state === 'connecting';
   // The socket keeps running on the address it was started with, so editing the field alone would
   // leave the screen showing one server while the app talks to another.
-  const elsewhere = busy && Boolean(status.url) && status.url !== url.trim();
+  const elsewhere = busy && Boolean(status.url) && status.url !== socketUrl(url);
   // Connect alone can never get past this: the server does not know the credential it is shown.
   const unknown = status.state === 'disconnected' && status.reason === 'unauthorized';
   return (
@@ -158,7 +159,7 @@ export function ServerSection({
         </Pressable>
       </View>
       {onJoin && !unknown ? (
-        <Pressable style={[styles.button, styles.buttonGhost]} onPress={onJoin} accessibilityRole="button" accessibilityLabel="Join another server">
+        <Pressable style={[styles.button, styles.buttonGhost]} onPress={onJoin} accessibilityRole="button" accessibilityLabel="Join with an invitation">
           <Text style={[styles.buttonText, styles.buttonGhostText]}>Join with an invitation</Text>
         </Pressable>
       ) : null}

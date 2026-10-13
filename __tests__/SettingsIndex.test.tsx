@@ -64,7 +64,7 @@ test('what General and Other held is each on the page of its subject', async () 
   await holds(tree, 'Open appearance', ['Theme Dark', 'Message size 100%', 'Always expand tool cards', 'Always expand reasoning']);
   // The server is its own page; the devices page is about adding and revoking devices; this
   // device's credential is a value for diagnosing, on Advanced.
-  await holds(tree, 'Open server', ['Server address', 'Connect', 'Join another server']);
+  await holds(tree, 'Open server', ['Server address', 'Connect', 'Join with an invitation']);
   await holds(tree, 'Open devices', ['Add a device', 'Approve a request']);
   await holds(tree, 'Open updates', ['Update the server now']);
   await holds(tree, 'Open advanced', ['Open diagnostics', 'Open config', 'Open get started', 'Copy device and token']);

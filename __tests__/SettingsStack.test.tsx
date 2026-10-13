@@ -347,7 +347,7 @@ test('Join can be opened again after a completed pairing attempt', async () => {
 
   await openSettings(tree);
   await pressLabel(tree, 'Open server');
-  await pressLabel(tree, 'Join another server');
+  await pressLabel(tree, 'Join with an invitation');
 
   await waitFor(() => textsOf(tree).includes('With an invitation'));
   expect(pairingStatus()).toEqual({ phase: 'idle' });

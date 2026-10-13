@@ -4,6 +4,7 @@ import { font, radius, space, useTheme, useThemedStyles, type Palette } from '..
 import { useDismissKeyboard } from '../core/keyboard';
 import { searchSettings } from '../core/settingsSearch';
 import type { SettingsPage } from './settingsPages';
+import { multiServerSupported } from '../core/servers';
 
 interface Category {
   page: SettingsPage;
@@ -48,7 +49,9 @@ export const GROUPS: ReadonlyArray<{ title: string; categories: readonly Categor
     // only matters when the connection is wrong (owner, 2026-10-13: "connexion", not "security").
     title: 'connection',
     categories: [
-      { page: 'servers', title: 'Server', hint: 'address, connect, join with an invitation' },
+      multiServerSupported
+        ? { page: 'servers', title: 'Servers', hint: 'this one, the others, switch, join with an invitation' }
+        : { page: 'servers', title: 'Server', hint: 'address, connect, join with an invitation' },
       { page: 'devices', title: 'Devices', hint: 'add a device, approve a request, paired devices' },
       { page: 'advanced', title: 'Advanced', hint: 'connection state, this device, diagnostics, raw config' },
     ],

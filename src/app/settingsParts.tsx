@@ -120,6 +120,17 @@ const createStyles = (palette: Palette) => ({
   },
   switchLabel: { flex: 1 },
   switchTitle: { color: palette.text, fontSize: font.body, fontWeight: '600' as const },
+  grow: { flex: 1, minWidth: 0 },
+  // A server of the list: its name and address, and what a press does, on one row.
+  serverRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingVertical: space.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  buttonNarrow: { flex: 0, paddingHorizontal: space.md },
   hint: { fontSize: font.small, color: palette.textFaint },
   input: {
     borderWidth: 1,

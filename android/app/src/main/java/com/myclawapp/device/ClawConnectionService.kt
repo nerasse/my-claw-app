@@ -134,6 +134,22 @@ class ClawConnectionService : Service() {
       return true
     }
 
+    /**
+     * The server profile whose queue is in memory (docs/servers.md). A message typed for one server
+     * is never sent to another: switching profiles puts the queue away under its server and takes
+     * out the new one's.
+     */
+    private var outboxServer: String? = null
+
+    private fun outboxKey(server: String): String =
+      if (server == DeviceCredentials.DEFAULT_SERVER) OUTBOX_KEY else "$OUTBOX_KEY@$server"
+
+    /** A forgotten server's queue goes with it: nobody will ever send it. */
+    fun forgetOutbox(context: Context, server: String) {
+      if (server == outboxServer) return
+      context.getSharedPreferences("claw_connection", Context.MODE_PRIVATE).edit().remove(outboxKey(server)).apply()
+    }
+
     fun clearOutbox() {
       synchronized(outbox) { outbox.clear() }
       instance?.persistOutbox()
@@ -211,13 +227,37 @@ class ClawConnectionService : Service() {
    * the exact case the queue exists for, so it cannot only live in the heap.
    */
   private fun persistOutbox() {
+    val server = outboxServer ?: return
     val snapshot = synchronized(outbox) { JSONArray(outbox.toList()).toString() }
     getSharedPreferences("claw_connection", Context.MODE_PRIVATE)
-      .edit().putString(OUTBOX_KEY, snapshot).apply()
+      .edit().putString(outboxKey(server), snapshot).apply()
+  }
+
+  /**
+   * The active profile's queue in memory, the previous one's put away under its server. What was
+   * in flight goes back to the head of its own queue: the old socket never proved it delivered.
+   */
+  private fun useOutboxOf(server: String) {
+    if (server == outboxServer) return
+    if (outboxServer != null) {
+      synchronized(outbox) {
+        for (frame in inFlight.asReversed()) {
+          if (outbox.size >= OUTBOX_CAPACITY) break
+          outbox.addFirst(frame.text)
+        }
+        inFlight.clear()
+      }
+      persistOutbox()
+      synchronized(outbox) { outbox.clear() }
+    }
+    outboxServer = server
+    restoreOutbox()
+    emitOutboxSize()
   }
 
   private fun restoreOutbox() {
-    val stored = getSharedPreferences("claw_connection", Context.MODE_PRIVATE).getString(OUTBOX_KEY, null)
+    val server = outboxServer ?: return
+    val stored = getSharedPreferences("claw_connection", Context.MODE_PRIVATE).getString(outboxKey(server), null)
       ?: return
     val restored = try {
       val array = JSONArray(stored)
@@ -242,7 +282,7 @@ class ClawConnectionService : Service() {
     super.onCreate()
     instance = this
     createChannel()
-    restoreOutbox()
+    useOutboxOf(DeviceCredentials.active(this))
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -256,6 +296,7 @@ class ClawConnectionService : Service() {
         }
         startForeground(NOTIFICATION_ID, buildNotification())
         stopping = false
+        useOutboxOf(DeviceCredentials.active(this))
         connect()
       }
       ACTION_DISCONNECT -> {

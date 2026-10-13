@@ -10,6 +10,7 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
+import { prefs } from '../src/core/prefs';
 import { connection } from '../src/core/connection';
 import { devicesStore } from '../src/core/devices';
 import { PairingScreen } from '../src/app/PairingScreen';
@@ -71,9 +72,24 @@ describe('asking for access', () => {
 
     await socket.receive({ type: 'pair.granted', deviceId: 'app-123', token: 'tok', owner: 'neras', name: 'phone' });
     expect(bridge.adoptCredentials).toHaveBeenCalledWith('app-123', 'tok', 'http://10.0.0.5:8080');
-    expect(pairingStatus()).toEqual({ phase: 'granted', deviceId: 'app-123' });
+    expect(pairingStatus()).toEqual({ phase: 'granted', deviceId: 'app-123', url: 'ws://10.0.0.5:8080/my-claw-app' });
     expect(connect).toHaveBeenCalledWith('ws://10.0.0.5:8080/my-claw-app');
     connect.mockRestore();
+  });
+
+  // Typed as `http://host:port` or read from a QR, the address becomes the socket the app talks to.
+  test('after joining, the address setting holds the socket address', async () => {
+    bridge.prefsGetAll.mockResolvedValue({ serverUrl: 'ws://10.0.0.5:8080/my-claw-app', themeMode: 'dark' });
+    const tree = await renderAppHome();
+    const connect = jest.spyOn(connection, 'connect').mockImplementation(async () => {});
+    ReactTestRenderer.act(() => requestAccess('http://10.0.0.9:8080'));
+    const socket = Socket.all.at(-1)!;
+    ReactTestRenderer.act(() => socket.open());
+    await socket.receive({ type: 'pair.challenge', code: 'K7QW3M2P', verification: '418', expiresAt: Date.now() + 600_000, resumeToken: 'rt' });
+    await socket.receive({ type: 'pair.granted', deviceId: 'app-9', token: 'tok', owner: 'neras', name: 'phone' });
+    await waitFor(() => prefs.get().serverUrl === 'ws://10.0.0.9:8080/my-claw-app');
+    connect.mockRestore();
+    await unmount(tree);
   });
 
   test('a refused request says so instead of waiting forever', async () => {

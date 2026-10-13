@@ -74,6 +74,12 @@
           android:resource="@xml/file_paths" />
       </provider>
 
+      <!-- Push notifications are drawn by the UnifiedPush module, with the link naming the server
+           they came from: several servers can notify one phone (docs/servers.md). -->
+      <meta-data
+        android:name="dev.djara.expounifiedpush.PAYLOAD_RENDERER"
+        android:value="com.myclawapp.device.ClawPushRenderer" />
+
       <!-- The update install result: PackageInstaller answers a broadcast PendingIntent, and a
            receiver declared here is the one reliable delivery path across API levels. It is
            exported=false because the intent is created by this app only. -->

@@ -22,7 +22,8 @@ export type PairingStatus =
   | { phase: 'waiting'; code: string }
   /** Asking for access: the code and digits a paired device approves, and whether one is looking. */
   | { phase: 'asking'; code: string; verification: string; expiresAt: number; seen: boolean }
-  | { phase: 'granted'; deviceId: string }
+  /** `url` is the socket address the app now talks to, which is what the address setting should hold. */
+  | { phase: 'granted'; deviceId: string; url: string }
   | { phase: 'error'; reason: string };
 
 type Listener = (status: PairingStatus) => void;
@@ -183,9 +184,10 @@ function open(baseUrl: string, start: () => void): void {
       set({ phase: 'error', reason: 'the credentials could not be stored on this device' });
       return;
     }
-    set({ phase: 'granted', deviceId });
+    const chatUrl = pairingUrl.replace('/my-claw-app/pair', '/my-claw-app');
+    set({ phase: 'granted', deviceId, url: chatUrl });
     // Reconnect the chat socket against the same origin with the new, server-minted identity.
-    connection.connect(pairingUrl.replace('/my-claw-app/pair', '/my-claw-app'));
+    connection.connect(chatUrl);
   };
 
   socket.onerror = () => {

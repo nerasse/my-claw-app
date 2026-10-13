@@ -194,6 +194,7 @@ import { AppearanceScreen } from './AppearanceScreen';
 import { UpdatesScreen } from './UpdatesScreen';
 import { AdvancedScreen } from './AdvancedScreen';
 import { ServersScreen } from './ServersScreen';
+import { multiServerSupported, serversStore } from '../core/servers';
 import { NotificationsScreen } from './NotificationsScreen';
 import { PairingScreen, usePairing } from './PairingScreen';
 import { cancelPairing } from '../core/pairingClient';
@@ -398,15 +399,20 @@ export function AppShell(): React.JSX.Element {
   const pairing = usePairing();
   const [pairingOpen, setPairingOpen] = useState(false);
   const unauthorizedHandled = useRef(false);
+  /** The address setting's writer, defined further down, for the pairing effect below. */
+  const changeUrlRef = useRef<(next: string) => void>(() => {});
   useEffect(() => {
     // The server-minted credentials are stored and the chat socket is reconnecting: leave the
     // pairing screen and show the chat.
     if (pairing.phase === 'granted') {
       setPairingOpen(false);
       unauthorizedHandled.current = false;
+      // What was typed (`http://host:port`, or the QR's origin) becomes the socket address the app
+      // now talks to: otherwise the Server page reads "still talking to …" right after joining.
+      changeUrlRef.current(pairing.url);
       getDeviceInfo().then(setDeviceInfo).catch(() => setDeviceInfo(null));
     }
-  }, [pairing.phase]);
+  }, [pairing]);
   useEffect(() => {
     // First launch, or a server that does not know this device: the socket answered 401, and no
     // Connect will ever get past it. The Join screen opens on every refusal that follows an
@@ -421,6 +427,8 @@ export function AppShell(): React.JSX.Element {
       setPairingOpen(true);
     }
   }, [status]);
+  // The active server profile follows the address and the conversation the app is on.
+  useEffect(() => prefs.subscribe(current => serversStore.syncActive(current.serverUrl, current.lastThreadId)), []);
   /** Connect from the Server page: a refusal after it opens the Join screen again. */
   const connectByHand = useCallback(() => {
     unauthorizedHandled.current = false;
@@ -1413,6 +1421,7 @@ export function AppShell(): React.JSX.Element {
     // what the user sees on the first frame.
     prefs.hydrate().then(stored => {
       setUrl(stored.serverUrl);
+      serversStore.hydrate().catch(() => {});
       if (Platform.OS === 'ios') {
         getDeviceInfo().then(storedIdentity => {
           setDeviceInfo(storedIdentity);
@@ -2167,6 +2176,13 @@ export function AppShell(): React.JSX.Element {
     const handle = (link: string | null) => {
       const target = parseNotificationLink(link);
       if (!target) return;
+      // Another server's notification: the app restarts on that server, where the link is opened.
+      if (multiServerSupported && target.server && target.server !== serversStore.get().active) {
+        if (!serversStore.get().list.some(profile => profile.id === target.server)) return;
+        deviceBridge.prefsSet('pendingLink', link).catch(() => {});
+        serversStore.switchTo(target.server).catch(() => {});
+        return;
+      }
       switch (target.kind) {
         case 'thread':
           openThread(target.threadId);
@@ -2188,6 +2204,18 @@ export function AppShell(): React.JSX.Element {
     Linking.getInitialURL()
       .then(handle)
       .catch(() => {});
+    // A link that switched servers is opened once the app is back on the right one.
+    if (multiServerSupported) {
+      serversStore
+        .whenHydrated()
+        .then(() => deviceBridge.prefsGetAll())
+        .then(stored => {
+          if (!stored.pendingLink) return;
+          deviceBridge.prefsSet('pendingLink', null).catch(() => {});
+          handle(stored.pendingLink);
+        })
+        .catch(() => {});
+    }
     const subscription = Linking.addEventListener('url', event => handle(event.url));
     return () => { subscription.remove(); unsubscribeNative(); };
   }, [openThread, openJobs, openJobSessions]);
@@ -2616,6 +2644,8 @@ export function AppShell(): React.JSX.Element {
       if (prefs.get().serverUrl === next) setDeviceInfo(nextIdentity);
     }).catch(() => { if (prefs.get().serverUrl === next) setDeviceInfo(null); });
   }, []);
+
+  changeUrlRef.current = changeUrl;
 
   /** Destroys the conversation: messages, uploads and name all go, here and on the server. */
   const deleteThread = useCallback(

@@ -1013,6 +1013,32 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
     promise.resolve(DeviceCredentials.adopt(reactContext, deviceId, token))
   }
 
+  /** The server profile every request presents from now on (docs/servers.md). */
+  @ReactMethod
+  fun setActiveServer(server: String, promise: Promise) {
+    DeviceCredentials.setActive(reactContext, server)
+    promise.resolve(null)
+  }
+
+  /**
+   * Starts the JS afresh, in this process: what a switch of server needs, since every store of the
+   * shell holds the last server's conversations. DevSettings.reload is a no-op in a release build;
+   * the host reload is not, and the connection service, in the same process, carries on.
+   */
+  @ReactMethod
+  fun reloadApp() {
+    val app = reactContext.applicationContext as? com.facebook.react.ReactApplication ?: return
+    com.facebook.react.bridge.UiThreadUtil.runOnUiThread { app.reactHost?.reload("server switch") }
+  }
+
+  /** A server the owner removed: its credential and its unsent queue. Never the active one. */
+  @ReactMethod
+  fun forgetServer(server: String, promise: Promise) {
+    DeviceCredentials.forget(reactContext, server)
+    ClawConnectionService.forgetOutbox(reactContext, server)
+    promise.resolve(null)
+  }
+
   /** The combos the shell binds: a physical keyboard's keys that are taken for it (HardwareKeys). */
   @ReactMethod
   fun setHotkeys(combos: ReadableArray) {

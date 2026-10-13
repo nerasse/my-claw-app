@@ -163,7 +163,8 @@ test('the VAPID key from the server registers the device with its distributor', 
   await emit({ type: 'notifications.info', vapidPublicKey: 'server-key' });
 
   await waitFor(() => unifiedPush.default.registerDevice.mock.calls.length === 1);
-  expect(unifiedPush.default.registerDevice).toHaveBeenCalledWith('server-key');
+  // The single-server instance: a phone with one profile registers as it always did.
+  expect(unifiedPush.default.registerDevice).toHaveBeenCalledWith('server-key', 'default');
   // No distributor was saved yet: the external one is picked rather than left to chance.
   expect(unifiedPush.default.saveDistributor).toHaveBeenCalledWith('io.heckel.ntfy');
   await unmount(tree);

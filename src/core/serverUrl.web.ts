@@ -39,6 +39,11 @@ export function serverFromClaimUrl(_raw: string): string | null {
 }
 
 /** Twin of the native check. The address is the page's own origin here, so it always holds. */
+/** A browser's socket is the page's own (`DEFAULT_SERVER_URL`): nothing to derive. */
+export function socketUrl(url: string): string {
+  return url.trim();
+}
+
 export function isValidServerUrl(url: string): boolean {
   return /^(wss?|https?):\/\/[^\s/?#]+\S*$/i.test(url.trim());
 }
