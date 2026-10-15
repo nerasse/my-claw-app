@@ -5,6 +5,9 @@ import { isDangerousHtml } from '../core/markdownSafe';
 import { CodeBlockBar } from './CodeBlockBar';
 import { ScrollableBlock } from './ScrollableBlock';
 import { MarkdownTable } from './MarkdownTable';
+import { MarkdownList } from './MarkdownList';
+import { highlighted, tokenColors } from './codeeditor/highlight';
+import { EMPTY_INK, type MarkdownInk } from './markdownInk';
 import { font, lineBoxFor, lineHeightFor, space, useChatFontScale, useTheme, type Palette } from '../theme';
 
 /**
@@ -74,12 +77,20 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
       fontFamily: 'monospace',
       fontStyle: 'normal',
       fontWeight: '400',
-      backgroundColor: palette.surfaceAlt,
+      backgroundColor: palette.codeBg,
     },
-    code: { backgroundColor: palette.codeBg, borderRadius: 6, marginVertical: space.xs, padding: space.sm, flexShrink: 0 },
+    code: {
+      backgroundColor: palette.codeBg,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 6,
+      marginVertical: space.xs,
+      padding: space.sm,
+      flexShrink: 0,
+    },
     blockquote: {
-      borderLeftWidth: 2,
-      borderLeftColor: palette.border,
+      borderLeftWidth: 3,
+      borderLeftColor: palette.accent,
       paddingLeft: space.sm,
       marginVertical: space.xs,
       flexShrink: 0,
@@ -112,6 +123,7 @@ export class WrappingRenderer extends Renderer {
     private codeStyle: TextStyle,
     private typography: TextStyle,
     private tone: MarkdownTone = 'body',
+    private ink: MarkdownInk = EMPTY_INK,
   ) {
     super();
   }
@@ -152,15 +164,39 @@ export class WrappingRenderer extends Renderer {
         <CodeBlockBar value={text} language={language} />
         <ScrollableBlock title={language ? `${language} block` : 'Code block'}>
           <Text style={[textStyle, styles.code, this.codeStyle]}>
-            {text}
+            {highlighted(text, language, this.ink.tokens)}
           </Text>
         </ScrollableBlock>
       </View>
     );
   }
 
+  list(ordered: boolean, li: ReactNode[], listStyle?: ViewStyle, textStyle?: TextStyle, startIndex?: number): ReactNode {
+    return (
+      <MarkdownList
+        key={this.getKey()}
+        ordered={ordered}
+        li={li}
+        listStyle={listStyle}
+        textStyle={textStyle}
+        markerColor={this.ink.marker}
+        startIndex={startIndex}
+      />
+    );
+  }
+
   table(header: ReactNode[][], rows: ReactNode[][][], tableStyle?: ViewStyle, rowStyle?: ViewStyle, cellStyle?: ViewStyle): ReactNode {
-    return <MarkdownTable key={this.getKey()} header={header} rows={rows} tableStyle={tableStyle} rowStyle={rowStyle} cellStyle={cellStyle} />;
+    return (
+      <MarkdownTable
+        key={this.getKey()}
+        header={header}
+        rows={rows}
+        tableStyle={tableStyle}
+        rowStyle={rowStyle}
+        cellStyle={cellStyle}
+        headerRowStyle={this.ink.tableHeader}
+      />
+    );
   }
 }
 
@@ -174,6 +210,12 @@ export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: Ma
   const { palette } = useTheme();
   const scale = useChatFontScale();
   const mdStyles = useMemo(() => markedStyles(palette, text, tone, scale), [palette, text, tone, scale]);
+  // One tint for both surfaces on purpose: a bubble is `surfaceAlt`, so a tint derived from it
+  // would vanish in the chat and only show in documents. The accent's soft wash reads on both.
+  const ink = useMemo<MarkdownInk>(
+    () => ({ tokens: tokenColors(palette), marker: palette.accent, tableHeader: { backgroundColor: palette.accentSoft } }),
+    [palette],
+  );
   const renderer = useMemo(() => {
     const { size, color } = toneOf(palette, tone, scale);
     const codeSize = codeSizeFor(size);
@@ -181,8 +223,9 @@ export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: Ma
       { color, fontSize: codeSize, lineHeight: lineHeightFor(codeSize) },
       { fontSize: size, color, ...lineBoxFor(size, text) },
       tone,
+      ink,
     );
-  }, [palette, text, tone, scale]);
+  }, [palette, text, tone, scale, ink]);
   const elements = useMarkdown(text, { styles: mdStyles, renderer });
   return <View style={styles.wrap}>{elements}</View>;
 }

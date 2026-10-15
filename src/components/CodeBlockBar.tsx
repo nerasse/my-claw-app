@@ -1,7 +1,6 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { CopyButton } from './CopyButton';
-import { blockActionsSupported } from '../core/platform';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -12,8 +11,9 @@ import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme'
  * button sits in a strip of its own rather than floating over the first line, which on a block
  * whose first line is long would cover the code it is offering to copy.
  *
- * On the web the button is gone and the strip keeps the language alone: the browser selects
- * across nodes and copies with a keystroke, so this was a control repeating a shortcut.
+ * The button is on every platform. The strip used to keep the language alone on the web, on the
+ * argument that a browser selects and copies on its own; the owner asked for the button back
+ * (2026-10-15), and one tap beats a drag across the block.
  */
 export function CodeBlockBar({ value, language }: { value: string; language?: string }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -22,9 +22,7 @@ export function CodeBlockBar({ value, language }: { value: string; language?: st
       <Text style={styles.language} numberOfLines={1}>
         {language ?? ''}
       </Text>
-      {blockActionsSupported ? (
-        <CopyButton value={value} accessibilityLabel={language ? `Copy ${language} block` : 'Copy code block'} />
-      ) : null}
+      <CopyButton value={value} accessibilityLabel={language ? `Copy ${language} block` : 'Copy code block'} />
     </View>
   );
 }

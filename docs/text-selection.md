@@ -29,12 +29,13 @@ taking text out of it     -> the selection viewer, one node, raw source
   the bubble carries no long press at all -- right-click and the row's own button lead to the same
   menu.
 - `ToolCard` and `CollapsibleAside` (reasoning, compaction summary) carry `BlockActions`:
-  **copy** takes the block whole, **select** opens the viewer on it. On the web `BlockActions`
-  renders nothing (`blockActionsSupported` in `core/platform`): the browser selects across nodes
-  and copies with a keystroke, so the pair would only repeat, twice per tool card, what the
-  pointer already does. `CodeBlockBar` follows the same flag: on the web its strip keeps the
-  language and loses the button, so no tool render in a browser carries a control that repeats
-  Ctrl+C. The settings pages keep theirs -- they are ordinary scroll views, not the chat list.
+  **copy** takes the block whole, **select** opens the viewer on it -- select only where the
+  platform cannot select in place (`chatSelectable` in `core/platform`). On the web the browser
+  selects across nodes itself, so the pair there is copy alone: the owner brought the button
+  back (2026-10-15), a pointer sweeping a few hundred lines of output not reading as a shortcut.
+  `CodeBlockBar` carries the same copy on every platform; its strip used to lose the button on
+  the web and no longer does. The settings pages keep their own controls -- they are ordinary
+  scroll views, not the chat list.
 - `ScrollableBlock` caps every long block in a conversation at `BLOCK_MAX_HEIGHT` (a tool's content
   argument and its output, a diff, a sub-agent's task and result, a fenced block in an answer) and a `show all`
   bar unfolds it **in place**. One behaviour on every platform, and no block scrolls on its own.

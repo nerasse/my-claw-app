@@ -4,6 +4,9 @@ import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
 import { isDangerousHtml } from '../core/markdownSafe';
 import { CodeBlockBar } from './CodeBlockBar';
 import { MarkdownTable } from './MarkdownTable';
+import { MarkdownList } from './MarkdownList';
+import { highlighted, tokenColors } from './codeeditor/highlight';
+import { EMPTY_INK, type MarkdownInk } from './markdownInk';
 import { font, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
 /** Document body: a fullscreen reader, not a chat bubble, so one size above the chat. */
@@ -48,6 +51,9 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
       color: palette.text,
       marginTop: space.xl,
       marginBottom: space.sm,
+      paddingBottom: space.xs,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
     },
     h3: {
       fontSize: 17,
@@ -83,7 +89,7 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
     },
     blockquote: {
       borderLeftWidth: 3,
-      borderLeftColor: palette.border,
+      borderLeftColor: palette.accent,
       backgroundColor: palette.surfaceAlt,
       borderRadius: 4,
       paddingLeft: space.md,
@@ -97,12 +103,14 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
     codespan: {
       ...body,
       fontFamily: 'monospace',
-      backgroundColor: palette.surfaceAlt,
+      backgroundColor: palette.codeBg,
       fontStyle: 'normal',
       fontWeight: '400',
     },
     code: {
       backgroundColor: palette.codeBg,
+      borderWidth: 1,
+      borderColor: palette.border,
       borderRadius: 8,
       padding: space.md,
       marginVertical: space.sm,
@@ -137,6 +145,7 @@ export class DocumentRenderer extends Renderer {
   constructor(
     private codeColor: string,
     private typography: TextStyle,
+    private ink: MarkdownInk = EMPTY_INK,
   ) {
     super();
   }
@@ -155,14 +164,38 @@ export class DocumentRenderer extends Renderer {
       <View key={this.getKey()} style={containerStyle}>
         <CodeBlockBar value={text} language={language} />
         <Text selectable style={[styles.codeText, { color: this.codeColor }]}>
-          {text}
+          {highlighted(text, language, this.ink.tokens)}
         </Text>
       </View>
     );
   }
 
+  list(ordered: boolean, li: ReactNode[], listStyle?: ViewStyle, textStyle?: TextStyle, startIndex?: number): ReactNode {
+    return (
+      <MarkdownList
+        key={this.getKey()}
+        ordered={ordered}
+        li={li}
+        listStyle={listStyle}
+        textStyle={textStyle}
+        markerColor={this.ink.marker}
+        startIndex={startIndex}
+      />
+    );
+  }
+
   table(header: ReactNode[][], rows: ReactNode[][][], tableStyle?: ViewStyle, rowStyle?: ViewStyle, cellStyle?: ViewStyle): ReactNode {
-    return <MarkdownTable key={this.getKey()} header={header} rows={rows} tableStyle={tableStyle} rowStyle={rowStyle} cellStyle={cellStyle} />;
+    return (
+      <MarkdownTable
+        key={this.getKey()}
+        header={header}
+        rows={rows}
+        tableStyle={tableStyle}
+        rowStyle={rowStyle}
+        cellStyle={cellStyle}
+        headerRowStyle={this.ink.tableHeader}
+      />
+    );
   }
 }
 
@@ -170,14 +203,22 @@ export class DocumentRenderer extends Renderer {
 export function DocumentMarkdown({ value }: { value: string }): React.JSX.Element {
   const { palette } = useTheme();
   const mdStyles = useMemo(() => documentMarkdownStyles(palette), [palette]);
+  const ink = useMemo<MarkdownInk>(
+    () => ({ tokens: tokenColors(palette), marker: palette.accent, tableHeader: { backgroundColor: palette.accentSoft } }),
+    [palette],
+  );
   const renderer = useMemo(
     () =>
-      new DocumentRenderer(palette.text, {
-        fontSize: DOC_FONT_SIZE,
-        color: palette.text,
-        lineHeight: DOC_LINE_HEIGHT,
-      }),
-    [palette.text],
+      new DocumentRenderer(
+        palette.text,
+        {
+          fontSize: DOC_FONT_SIZE,
+          color: palette.text,
+          lineHeight: DOC_LINE_HEIGHT,
+        },
+        ink,
+      ),
+    [palette.text, ink],
   );
   const elements = useMarkdown(value, { styles: mdStyles, renderer });
   return <View>{elements}</View>;

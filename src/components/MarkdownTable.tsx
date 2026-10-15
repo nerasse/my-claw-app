@@ -40,12 +40,15 @@ export function MarkdownTable({
   tableStyle,
   rowStyle,
   cellStyle,
+  headerRowStyle,
 }: {
   header: ReactNode[][];
   rows: ReactNode[][][];
   tableStyle?: ViewStyle;
   rowStyle?: ViewStyle;
   cellStyle?: ViewStyle;
+  /** The header row's tint, chosen by the caller: this sheet draws on a bubble and on a page. */
+  headerRowStyle?: ViewStyle;
 }): React.JSX.Element {
   const weights = columnWeights(header, rows);
   const all = [header, ...rows];
@@ -57,9 +60,10 @@ export function MarkdownTable({
           style={[
             styles.row,
             rowStyle,
-            // The header is told apart by its rule alone: a tint would have to know which
-            // surface the table sits on, and the same sheet serves a bubble and a document.
             rowIndex === 0 ? styles.headerRow : null,
+            // The tint cannot live in the shared sheet: the same renderer draws on a bubble
+            // (`surfaceAlt`) and on a document page (`bg`), so the caller picks it.
+            rowIndex === 0 ? headerRowStyle : null,
             rowIndex === all.length - 1 ? styles.lastRow : null,
           ]}>
           {cells.map((cell, cellIndex) => (

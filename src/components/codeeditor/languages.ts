@@ -98,3 +98,47 @@ export function languageExtension(
   const load = LOADERS[language];
   return load ? load() : [];
 }
+
+/**
+ * Fence info strings, mapped to the ids this table holds: what ```bash and ```ts mean.
+ *
+ * A fence nobody here can parse (```text```, ```output```) maps to null, and plain monospace is
+ * the honest answer there -- colour invented from a guess is worse than none. Ids that are
+ * already loadable need no alias; only the shorthand and the file-name spelling do.
+ */
+const FENCE_ALIASES: Readonly<Record<string, string>> = {
+  bash: 'shell',
+  cjs: 'javascript',
+  console: 'shell',
+  docker: 'dockerfile',
+  htm: 'html',
+  js: 'javascript',
+  jsonc: 'json',
+  md: 'markdown',
+  mjs: 'javascript',
+  ps1: 'powershell',
+  py: 'python',
+  rb: 'ruby',
+  rs: 'rust',
+  sh: 'shell',
+  ts: 'typescript',
+  yml: 'yaml',
+  zsh: 'shell',
+};
+
+function owned(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(LOADERS, id);
+}
+
+/**
+ * The id a fence names, or null. The info string reads like '```ts title="a.ts"': the first word
+ * is the language, the rest is metadata for renderers that decorate the block.
+ */
+export function languageForFence(info: string | null | undefined): string | null {
+  const first = info?.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  if (!first) return null;
+  if (owned(first)) return first;
+  const alias = FENCE_ALIASES[first];
+  return alias && owned(alias) ? alias : null;
+}
+

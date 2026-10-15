@@ -45,6 +45,27 @@ would cover the code it offers to copy. It carries the **source**, not the rende
 Inline code spans get nothing: a strip per span would be noise, and a span is short enough that
 the message-level copy covers it.
 
+## Colouring
+
+A fenced block is parsed with the code editor's own language table (`codeeditor/languages.ts`):
+the block in a message is coloured by the same grammar the editor highlights the same file with,
+so the two surfaces cannot disagree about what a keyword is. The parse runs outside any editor --
+a throwaway `EditorState` whose only job is the syntax tree, which is also what makes a
+stream-mode language (shell, diff...) attach its tags at all -- and the tags map to five classes,
+each one an existing palette ink (keyword = accent, string = ok, number = warn, comment =
+faint italic, invalid = danger). Both bundles carry the parsers, Android included (owner,
+2026-10-15): a block coloured in a browser and grey on the phone is the kind of difference that
+reads as a bug.
+
+The runs never rewrite the text. `codeTokens` holds its output to the source it was given and
+falls back to plain monospace on a mismatch, an unknown fence (```output```, ```text```), or a
+parser failure -- colour is the one thing allowed to disappear. The monospace face and size stay
+the caller's; the tokens only add their ink.
+
+`CodeBlockBar` carries the copy on every platform now. Its strip used to keep the language alone
+in a browser, on the argument that the browser selects and copies on its own; the owner asked for
+the button back (2026-10-15), and `docs/text-selection.md` keeps the why.
+
 ## Testing
 
 `react-native-marked` is mocked for the whole suite (`jest.setup.js` replaces `useMarkdown` with a

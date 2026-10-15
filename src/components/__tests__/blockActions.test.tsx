@@ -1,7 +1,7 @@
 /**
  * `BlockActions` exists because a native chat list cannot lift text out of itself
- * (docs/text-selection.md). A browser can, so there the pair must disappear entirely rather than
- * sit twice on every tool card.
+ * (docs/text-selection.md). A browser can, so there `select` disappears and `copy` stays
+ * (owner, 2026-10-15: the button came back to the web).
  */
 
 import React from 'react';
@@ -16,10 +16,10 @@ jest.mock('../../core/textSelection', () => ({ useOpenSelection: () => jest.fn()
 
 // A getter, not `resetModules`: re-requiring the tree would give the test a second copy of React
 // and every hook call would be invalid. The flag is read at render time, so flipping it is enough.
-let mockSupported = true;
+let mockSelectable = false;
 jest.mock('../../core/platform', () => ({
-  get blockActionsSupported() {
-    return mockSupported;
+  get chatSelectable() {
+    return mockSelectable;
   },
 }));
 
@@ -42,29 +42,29 @@ function labels(tree: ReactTestRenderer.ReactTestRenderer): string[] {
 
 describe('BlockActions', () => {
   it('offers copy and select where the platform cannot select in place', () => {
-    mockSupported = true;
+    mockSelectable = false;
     const tree = render(<BlockActions title="bash output" value="hello" />);
     expect(labels(tree)).toEqual(['copy', 'select']);
   });
 
-  it('renders nothing where the browser already does both', () => {
-    mockSupported = false;
+  it('keeps copy and drops select where the browser selects on its own', () => {
+    mockSelectable = true;
     const tree = render(<BlockActions title="bash output" value="hello" />);
-    expect(labels(tree)).toEqual([]);
+    expect(labels(tree)).toEqual(['copy']);
   });
 });
 
-/** Same rule for the strip over a fenced block: the language stays, the button does not. */
+/** The strip over a fenced block carries the language and the copy, on every platform. */
 describe('CodeBlockBar', () => {
   it('offers the copy where a selection cannot lift the block out', () => {
-    mockSupported = true;
+    mockSelectable = false;
     const tree = render(<CodeBlockBar value="const a = 1" language="ts" />);
     expect(labels(tree)).toEqual(['ts', 'copy']);
   });
 
-  it('keeps the language and drops the button in a browser', () => {
-    mockSupported = false;
+  it('keeps the button in a browser too', () => {
+    mockSelectable = true;
     const tree = render(<CodeBlockBar value="const a = 1" language="ts" />);
-    expect(labels(tree)).toEqual(['ts']);
+    expect(labels(tree)).toEqual(['ts', 'copy']);
   });
 });
