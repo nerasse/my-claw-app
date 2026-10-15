@@ -20,6 +20,8 @@ export function UpdatesScreen({
   onUpdateOnMobileDataChange,
   onUpdateServer,
   onAppUpdate,
+  /** Abandons a stuck download and starts over: cancel, drop the partial file, download again. */
+  onAppUpdateRestart,
   onAppUpdateInstallSettings,
   onBack,
 }: {
@@ -38,6 +40,7 @@ export function UpdatesScreen({
   onUpdateServer: () => void;
   /** Starts the app update: download if needed, then install. */
   onAppUpdate: () => void;
+  onAppUpdateRestart: () => void;
   /** Opens Android's "install unknown apps" settings screen. */
   onAppUpdateInstallSettings: () => void;
   onBack: () => void;
@@ -81,6 +84,20 @@ export function UpdatesScreen({
             <Text style={styles.buttonText}>{appUpdateLabel(appUpdatePhase)}</Text>
           </Pressable>
           <Text style={styles.hint}>{appUpdateHint(appUpdatePhase, connected)}</Text>
+          {/* A stalled transfer holds for the native read timeout, ten minutes of a frozen
+              progress: the restart is the way out, and it is the owner's (2026-10-15). */}
+          {appUpdatePhase.kind === 'downloading' ? (
+            <>
+              <Pressable
+                style={[styles.button, styles.buttonGhost]}
+                onPress={onAppUpdateRestart}
+                accessibilityRole="button"
+                accessibilityLabel="Restart the app download">
+                <Text style={[styles.buttonText, styles.buttonGhostText]}>Restart the download</Text>
+              </Pressable>
+              <Text style={styles.hint}>stuck? restarting drops the partial file and starts over</Text>
+            </>
+          ) : null}
           {appUpdatePhase.kind === 'error' ? (
             <Text style={styles.hint} numberOfLines={3}>
               {appUpdatePhase.message}

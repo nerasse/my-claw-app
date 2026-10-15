@@ -182,6 +182,9 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
       .build()
   }
 
+  /** The APK transfer in flight, so a stuck one can be abandoned instead of waited out. */
+  private var apkDownloadCall: Call? = null
+
   // Storage Access Framework picker, wired like the (removed from RN) GuardedResultAsyncTask
   // flow: launch ACTION_GET_CONTENT, copy the results to the cache, resolve the promise.
   private val filePickListener: ActivityEventListener = object : BaseActivityEventListener() {
@@ -1184,12 +1187,16 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
   fun downloadApk(url: String, transferId: String, version: String, expectedSize: Double, promise: Promise) {
     // Only ever the server's own /app-update/apk: the credential goes with it.
     val request = DeviceCredentials.applyTo(Request.Builder().url(url), reactContext).get().build()
-    apkClient.newCall(request).enqueue(object : Callback {
+    val call = apkClient.newCall(request)
+    apkDownloadCall = call
+    call.enqueue(object : Callback {
       override fun onFailure(call: Call, e: IOException) {
+        if (apkDownloadCall === call) apkDownloadCall = null
         promise.reject("APK_DOWNLOAD_FAILED", e.message ?: "apk download failed")
       }
 
       override fun onResponse(call: Call, response: Response) {
+        if (apkDownloadCall === call) apkDownloadCall = null
         response.use {
           if (!it.isSuccessful) {
             promise.reject("APK_DOWNLOAD_FAILED", "server answered ${it.code}")
@@ -1258,6 +1265,28 @@ class DeviceBridgeModule(private val reactContext: ReactApplicationContext) : Re
         }
       }
     })
+  }
+
+  /**
+   * Abandons an in-flight APK transfer, for a download that looks stuck: a stalled read can hold
+   * the transfer for the 10-minute read timeout, and the settings restart button must not wait it
+   * out. The aborted call's own rejection is ignored by the caller; the partial file is left for
+   * clearStagedApk.
+   */
+  @ReactMethod
+  fun cancelApkDownload(promise: Promise) {
+    val call = apkDownloadCall
+    apkDownloadCall = null
+    if (call == null) {
+      promise.resolve(false)
+      return
+    }
+    try {
+      call.cancel()
+    } catch (_: Exception) {
+      // Already finished.
+    }
+    promise.resolve(true)
   }
 
   /**

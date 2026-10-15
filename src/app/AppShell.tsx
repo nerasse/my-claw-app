@@ -249,7 +249,7 @@ import { ArchivesScreen } from './ArchivesScreen';
 import { BrowserScreen } from './BrowserScreen';
 import { browserFromLocation, closeShownWindow } from '../core/browserLive';
 import { panes } from '../core/panes';
-import { PagePane, PinnedColumn } from './DesktopColumns';
+import { PagePane, PinnedColumn, ViewerPane } from './DesktopColumns';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { StatsScreen } from './StatsScreen';
@@ -647,6 +647,11 @@ export function AppShell(): React.JSX.Element {
   const [appUpdatePhase, setAppUpdatePhase] = useState<AppUpdatePhase>({ kind: 'idle' });
   /** Mirror of appUpdatePhase for async callbacks: a stale closure must not re-download. */
   const appUpdatePhaseRef = useRef<AppUpdatePhase>({ kind: 'idle' });
+  /**
+   * Which download attempt owns the phase. A restart abandons the one in flight; its late answer
+   * (a rejection from the cancel, or a resolved transfer) must never write the new one's state.
+   */
+  const appUpdateAttemptRef = useRef(0);
   useEffect(() => {
     appUpdatePhaseRef.current = appUpdatePhase;
   }, [appUpdatePhase]);
@@ -693,10 +698,6 @@ export function AppShell(): React.JSX.Element {
     images: MediaItem[];
     index: number;
   } | null>(null);
-  const openImage = useCallback(
-    (images: MediaItem[], index: number): void => setImageViewer({ images, index }),
-    [],
-  );
   const [textViewer, setTextViewer] = useState<{
     url: string;
     filename: string;
@@ -734,6 +735,114 @@ export function AppShell(): React.JSX.Element {
     filename: string;
     sizeBytes?: number;
   } | null>(null);
+  /**
+   * Whether the viewer on screen is full screen instead of beside the conversation. Reset on
+   * every open: "it opens on the right" is the promise, the toggle is the exception.
+   */
+  const [viewerExpanded, setViewerExpanded] = useState(false);
+  /**
+   * One viewer at a time.
+   *
+   * Opening a file closes whatever was up. The viewers used to overlap only because an overlay
+   * made every one of them unreachable while open; beside the conversation that stops being
+   * true, and a second tap must replace the pane rather than stack a second reader into it or
+   * leave a hidden state that reopens on the next file.
+   */
+  const closeViewers = useCallback((): void => {
+    setImageViewer(null);
+    setTextViewer(null);
+    setVideoViewer(null);
+    setSvgViewer(null);
+    setPdfViewer(null);
+    setHtmlViewer(null);
+    setOfficeViewer(null);
+    setArchiveViewer(null);
+    setFileViewer(null);
+    setSkillViewer(null);
+  }, []);
+  // The two rules every opener shares, spelled once in each: what was on screen closes, and the
+  // next viewer starts beside the conversation. Stable identities on purpose: the shell hands
+  // these to the memoized chat list, which stops holding when one changes on every render.
+  const openImage = useCallback(
+    (images: MediaItem[], index: number): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setImageViewer({ images, index });
+    },
+    [closeViewers],
+  );
+  const openTextViewer = useCallback(
+    (target: { url: string; filename: string; kind?: FileKind }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setTextViewer(target);
+    },
+    [closeViewers],
+  );
+  const openVideoViewer = useCallback(
+    (target: { url: string; filename: string }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setVideoViewer(target);
+    },
+    [closeViewers],
+  );
+  const openSvgViewer = useCallback(
+    (target: { url: string; filename: string }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setSvgViewer(target);
+    },
+    [closeViewers],
+  );
+  const openPdfViewer = useCallback(
+    (target: { url: string; filename: string }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setPdfViewer(target);
+    },
+    [closeViewers],
+  );
+  const openHtmlViewer = useCallback(
+    (target: { url: string; filename: string }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setHtmlViewer(target);
+    },
+    [closeViewers],
+  );
+  const openOfficeViewer = useCallback(
+    (target: { url: string; filename: string }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setOfficeViewer(target);
+    },
+    [closeViewers],
+  );
+  const openArchiveViewer = useCallback(
+    (target: { url: string; filename: string }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setArchiveViewer(target);
+    },
+    [closeViewers],
+  );
+  const openFileViewer = useCallback(
+    (target: { url: string; filename: string; sizeBytes?: number }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setFileViewer(target);
+    },
+    [closeViewers],
+  );
+  const openSkillViewer = useCallback(
+    (target: { url: string; skill: SkillEntry }): void => {
+      closeViewers();
+      setViewerExpanded(false);
+      setSkillViewer(target);
+    },
+    [closeViewers],
+  );
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
@@ -2352,14 +2461,56 @@ export function AppShell(): React.JSX.Element {
     });
   }, []);
 
-  /** Downloads the APK for `version`, then offers the install. Shared by the tap and the auto path. */
+  /** Commits the staged APK for `version`; the file is the authority, not the phase. */
+  const installAppUpdate = useCallback(async (version: string) => {
+    setAppUpdatePhase({ kind: 'installing', version });
+    // The file is the authority, not the phase: a staged APK the system reclaimed used to leave
+    // Install on screen forever, and every tap flashed back to the same button.
+    const disk = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
+    if (!disk.staged) {
+      setAppUpdatePhase(prev =>
+        reduceAppUpdate(prev, { type: 'failed', message: 'the downloaded file is gone, download it again', staged: false }),
+      );
+      return;
+    }
+    // No permission pre-check: canRequestPackageInstalls() is cached per process, so right after
+    // the owner grants it and comes back it still reads false, and refusing here blocks an install
+    // the system would accept. Android shows its own dialog when the permission is missing; only a
+    // SecurityException coming back means it was really refused.
+    try {
+      await appUpdateRuntime.install();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'install failed';
+      // The file is the authority, not the flow's hope. This used to pass `staged: true` ("the APK
+      // is still on disk"), while the native refusal path deletes a staged APK it will not install
+      // (not newer, unsigned) and a rejected install leaves nothing: the dialog then offered
+      // Install for a file that was gone (owner, 2026-09-15).
+      const afterFailure = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
+      reportUpdateFailure('install', message);
+      setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: afterFailure.staged }));
+      if (/security|permission|unknown/i.test(message)) appUpdateRuntime.openInstallSettings();
+    }
+  }, []);
+
+  /**
+   * Downloads the APK for `version`, then installs when asked. Shared by the tap, the auto path
+   * and the restart; `thenInstall` is the one-tap flow (download, then the system confirmation).
+   */
   const downloadAppUpdate = useCallback(
-    async (version: string, apkSize: number) => {
+    async (version: string, apkSize: number, thenInstall: boolean) => {
+      const attempt = appUpdateAttemptRef.current + 1;
+      appUpdateAttemptRef.current = attempt;
       setAppUpdatePhase({ kind: 'downloading', version, apkSize, progress: 0 });
       try {
         await appUpdateRuntime.download(mediaBase, deviceInfo, `app-update-${version}`, version, apkSize);
+        if (appUpdateAttemptRef.current !== attempt) return;
+        if (thenInstall) {
+          await installAppUpdate(version);
+          return;
+        }
         setAppUpdatePhase({ kind: 'ready', version });
       } catch (err) {
+        if (appUpdateAttemptRef.current !== attempt) return;
         const message = err instanceof Error ? err.message : 'download failed';
         // A download that failed left nothing usable behind: drop it, so the next tap downloads
         // instead of offering an install for a file that is not there.
@@ -2368,8 +2519,22 @@ export function AppShell(): React.JSX.Element {
         setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: false }));
       }
     },
-    [mediaBase, deviceInfo],
+    [mediaBase, deviceInfo, installAppUpdate],
   );
+
+  /** The stuck-download escape: abandon the transfer, drop the partial file, start over. */
+  const restartAppUpdate = useCallback(() => {
+    const state = appUpdatePhaseRef.current;
+    if (state.kind !== 'downloading') return;
+    const { version, apkSize } = state;
+    // Bumped before anything else: the abandoned attempt's late answer must find a different token.
+    appUpdateAttemptRef.current += 1;
+    (async () => {
+      await appUpdateRuntime.cancelDownload().catch(() => {});
+      await appUpdateRuntime.clearStaged().catch(() => {});
+      await downloadAppUpdate(version, apkSize, true);
+    })().catch(() => {});
+  }, [downloadAppUpdate]);
 
   const runAppUpdate = useCallback(() => {
     if (!appUpdateSupported) return;
@@ -2379,39 +2544,12 @@ export function AppShell(): React.JSX.Element {
     if (state.kind === 'downloading' || state.kind === 'installing') return;
     const wanted = state.kind === 'ready' ? state.version : state.kind === 'error' ? state.staged : undefined;
     if (wanted) {
-      setAppUpdatePhase({ kind: 'installing', version: wanted });
-      (async () => {
-        // The file is the authority, not the phase: a staged APK the system reclaimed used to
-        // leave Install on screen forever, and every tap flashed back to the same button.
-        const disk = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
-        if (!disk.staged) {
-          setAppUpdatePhase(prev =>
-            reduceAppUpdate(prev, { type: 'failed', message: 'the downloaded file is gone, download it again', staged: false }),
-          );
-          return;
-        }
-        // No permission pre-check: canRequestPackageInstalls() is cached per process, so right
-        // after the owner grants it and comes back it still reads false, and refusing here blocks
-        // an install the system would accept. Android shows its own dialog when the permission is
-        // missing; only a SecurityException coming back means it was really refused.
-        try {
-          await appUpdateRuntime.install();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'install failed';
-          // The file is the authority, not the flow's hope. This used to pass `staged: true`
-          // ("the APK is still on disk"), while the native refusal path deletes a staged APK it
-          // will not install (not newer, unsigned) and a rejected install leaves nothing: the
-          // dialog then offered Install for a file that was gone (owner, 2026-09-15).
-          const afterFailure = await appUpdateRuntime.staged().catch(() => ({ staged: false, size: 0, version: '' }));
-          reportUpdateFailure('install', message);
-          setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'failed', message, staged: afterFailure.staged }));
-          if (/security|permission|unknown/i.test(message)) appUpdateRuntime.openInstallSettings();
-        }
-      })().catch(() => {});
+      installAppUpdate(wanted).catch(() => {});
       return;
     }
     if (state.kind === 'available') {
-      downloadAppUpdate(state.version, state.apkSize).catch(() => {});
+      // One tap, whole update: the download runs into the system confirmation (owner, 2026-10-15).
+      downloadAppUpdate(state.version, state.apkSize, true).catch(() => {});
       return;
     }
     if (state.kind === 'error') {
@@ -2420,7 +2558,7 @@ export function AppShell(): React.JSX.Element {
       (async () => {
         const result = await appUpdateRuntime.check(mediaBase, deviceInfo);
         const next = reduceAppUpdate({ kind: 'idle' }, { type: 'checked', result, current: appVersion ?? '' });
-        if (next.kind === 'available') await downloadAppUpdate(next.version, next.apkSize);
+        if (next.kind === 'available') await downloadAppUpdate(next.version, next.apkSize, true);
         else setAppUpdatePhase(next);
       })().catch(() => {});
       return;
@@ -2434,7 +2572,7 @@ export function AppShell(): React.JSX.Element {
         setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'checked', result, current }));
       })
       .catch(() => {});
-  }, [mediaBase, deviceInfo, appVersion, downloadAppUpdate]);
+  }, [mediaBase, deviceInfo, appVersion, downloadAppUpdate, installAppUpdate]);
 
   const openAppUpdateInstallSettings = useCallback(() => {
     appUpdateRuntime.openInstallSettings();
@@ -2486,13 +2624,16 @@ export function AppShell(): React.JSX.Element {
       const stillIdle = appUpdatePhaseRef.current;
       if (stillIdle.kind === 'ready' || stillIdle.kind === 'installing' || stillIdle.kind === 'downloading') return;
       transferId = `app-update-${version}`;
+      const attempt = appUpdateAttemptRef.current + 1;
+      appUpdateAttemptRef.current = attempt;
       setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadStarted', version, apkSize }));
       try {
         await appUpdateRuntime.download(mediaBase, deviceInfo, transferId, version, apkSize);
-        if (cancelled) return;
+        if (cancelled || appUpdateAttemptRef.current !== attempt) return;
         setAppUpdatePhase(prev => reduceAppUpdate(prev, { type: 'downloadDone', version }));
       } catch (err) {
-        if (cancelled) return;
+        // A restart abandoned this attempt: its failure must not clear the new download's file.
+        if (cancelled || appUpdateAttemptRef.current !== attempt) return;
         await appUpdateRuntime.clearStaged().catch(() => {});
         reportUpdateFailure('download', err instanceof Error ? err.message : 'download failed');
         setAppUpdatePhase(prev => reduceAppUpdate(prev, {
@@ -3795,14 +3936,14 @@ export function AppShell(): React.JSX.Element {
             onBubbleMenu={openBubbleMenu}
             onResend={resendChat}
             onOpenImage={openImage}
-            onOpenText={setTextViewer}
-            onOpenVideo={setVideoViewer}
-            onOpenSvg={setSvgViewer}
-            onOpenPdf={setPdfViewer}
-            onOpenHtml={setHtmlViewer}
-            onOpenOffice={setOfficeViewer}
-            onOpenArchive={setArchiveViewer}
-            onOpenFile={setFileViewer}
+            onOpenText={openTextViewer}
+            onOpenVideo={openVideoViewer}
+            onOpenSvg={openSvgViewer}
+            onOpenPdf={openPdfViewer}
+            onOpenHtml={openHtmlViewer}
+            onOpenOffice={openOfficeViewer}
+            onOpenArchive={openArchiveViewer}
+            onOpenFile={openFileViewer}
             onOpenMenu={() => setCommandMenuOpen(true)}
             onCommandEntered={dispatchCommand}
             onQuestionReply={replyToQuestion}
@@ -3850,6 +3991,130 @@ export function AppShell(): React.JSX.Element {
   // The browser in full screen, or the first-run setup: the page has the window to itself.
   const fullPage = browserFullNow || setupGate;
   const split = layout.sidePane && !fullPage;
+
+  /**
+   * Where the viewer on screen draws, and the one switch that moves it.
+   *
+   * Beside the conversation on a wide window (the same `split` a page opens under), over the
+   * window everywhere else -- and the toggle exists only when both do, so a phone never shows a
+   * control that changes nothing. `viewerLayers` is built once and mounted in exactly one of
+   * the two places, never both.
+   */
+  const anyViewerOpen = Boolean(
+    imageViewer || textViewer || videoViewer || svgViewer || pdfViewer || htmlViewer || officeViewer || archiveViewer || fileViewer || skillViewer,
+  );
+  const viewerInPane = split && anyViewerOpen && !viewerExpanded;
+  const toggleViewerFullscreen = useCallback((): void => setViewerExpanded(expanded => !expanded), []);
+  const fullscreenToggle = split ? toggleViewerFullscreen : undefined;
+  const viewerLayers = (
+    <>
+      {imageViewer ? (
+        <ImageViewer
+          images={imageViewer.images}
+          index={imageViewer.index}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setImageViewer(null)}
+        />
+      ) : null}
+
+      {textViewer ? (
+        <TextViewer
+          url={textViewer.url}
+          filename={textViewer.filename}
+          kind={textViewer.kind}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setTextViewer(null)}
+        />
+      ) : null}
+
+      {videoViewer ? (
+        <VideoViewer
+          url={videoViewer.url}
+          filename={videoViewer.filename}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setVideoViewer(null)}
+        />
+      ) : null}
+
+      {svgViewer ? (
+        <SvgViewer
+          url={svgViewer.url}
+          filename={svgViewer.filename}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setSvgViewer(null)}
+        />
+      ) : null}
+
+      {pdfViewer ? (
+        <PdfViewer
+          url={pdfViewer.url}
+          filename={pdfViewer.filename}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setPdfViewer(null)}
+        />
+      ) : null}
+
+      {htmlViewer ? (
+        <HtmlViewer
+          url={htmlViewer.url}
+          filename={htmlViewer.filename}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setHtmlViewer(null)}
+        />
+      ) : null}
+
+      {officeViewer ? (
+        <TextViewer
+          url={withView(officeViewer.url, 'text')}
+          downloadUrl={officeViewer.url}
+          filename={officeViewer.filename}
+          kind="text"
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setOfficeViewer(null)}
+        />
+      ) : null}
+
+      {archiveViewer ? (
+        <ArchiveViewer
+          url={withView(archiveViewer.url, 'list')}
+          rawUrl={archiveViewer.url}
+          filename={archiveViewer.filename}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setArchiveViewer(null)}
+        />
+      ) : null}
+
+      {fileViewer ? (
+        <FileViewer
+          filename={fileViewer.filename}
+          url={fileViewer.url}
+          sizeBytes={fileViewer.sizeBytes}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setFileViewer(null)}
+        />
+      ) : null}
+
+      {skillViewer ? (
+        <SkillViewer
+          url={skillViewer.url}
+          skill={skillViewer.skill}
+          embedded={viewerInPane}
+          onToggleFullscreen={fullscreenToggle}
+          onClose={() => setSkillViewer(null)}
+          onActions={() => setSkillMenu(skillViewer.skill)}
+        />
+      ) : null}
+    </>
+  );
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -3948,6 +4213,7 @@ export function AppShell(): React.JSX.Element {
         {split && !pageOpen ? null : (
         <PagePane
           split={split}
+          hidden={viewerInPane}
           style={[
             styles.pageFull,
             // Full screen is the whole window: the cap of a page of controls would undo it.
@@ -3996,6 +4262,7 @@ export function AppShell(): React.JSX.Element {
                 }}
                 onUpdateServer={runServerUpdate}
                 onAppUpdate={runAppUpdate}
+                onAppUpdateRestart={restartAppUpdate}
                 onAppUpdateInstallSettings={openAppUpdateInstallSettings}
                 onBack={() => setSettingsPage(parentOf('updates'))}
               />
@@ -4495,7 +4762,7 @@ export function AppShell(): React.JSX.Element {
                 }}
                 onOpenSkill={skill => {
                   if (!deviceInfo) return;
-                  setSkillViewer({
+                  openSkillViewer({
                     url: skillUrl(mediaBase, deviceInfo, skill.source, skill.name, skill.workspace),
                     skill,
                   });
@@ -4589,13 +4856,13 @@ export function AppShell(): React.JSX.Element {
               error={filesError ?? undefined}
               onDelete={setFileToDelete}
               onOpenImage={openImage}
-              onOpenText={setTextViewer}
-              onOpenVideo={setVideoViewer}
-              onOpenSvg={setSvgViewer}
-              onOpenPdf={setPdfViewer}
-              onOpenHtml={setHtmlViewer}
-              onOpenOffice={setOfficeViewer}
-              onOpenArchive={setArchiveViewer}
+              onOpenText={openTextViewer}
+              onOpenVideo={openVideoViewer}
+              onOpenSvg={openSvgViewer}
+              onOpenPdf={openPdfViewer}
+              onOpenHtml={openHtmlViewer}
+              onOpenOffice={openOfficeViewer}
+              onOpenArchive={openArchiveViewer}
             />
           ) : statusOpen ? (
             <StatusScreen onClose={closeStatus} />
@@ -4706,6 +4973,7 @@ export function AppShell(): React.JSX.Element {
           )}
         </PagePane>
         )}
+        {viewerInPane ? <ViewerPane>{viewerLayers}</ViewerPane> : null}
         </View>
         )}
         </View>
@@ -4742,91 +5010,7 @@ export function AppShell(): React.JSX.Element {
       />
       )}
 
-      {imageViewer ? (
-        <ImageViewer
-          images={imageViewer.images}
-          index={imageViewer.index}
-          onClose={() => setImageViewer(null)}
-        />
-      ) : null}
-
-      {textViewer ? (
-        <TextViewer
-          url={textViewer.url}
-          filename={textViewer.filename}
-          kind={textViewer.kind}
-          onClose={() => setTextViewer(null)}
-        />
-      ) : null}
-
-      {videoViewer ? (
-        <VideoViewer
-          url={videoViewer.url}
-          filename={videoViewer.filename}
-          onClose={() => setVideoViewer(null)}
-        />
-      ) : null}
-
-      {svgViewer ? (
-        <SvgViewer
-          url={svgViewer.url}
-          filename={svgViewer.filename}
-          onClose={() => setSvgViewer(null)}
-        />
-      ) : null}
-
-      {pdfViewer ? (
-        <PdfViewer
-          url={pdfViewer.url}
-          filename={pdfViewer.filename}
-          onClose={() => setPdfViewer(null)}
-        />
-      ) : null}
-
-      {htmlViewer ? (
-        <HtmlViewer
-          url={htmlViewer.url}
-          filename={htmlViewer.filename}
-          onClose={() => setHtmlViewer(null)}
-        />
-      ) : null}
-
-      {officeViewer ? (
-        <TextViewer
-          url={withView(officeViewer.url, 'text')}
-          downloadUrl={officeViewer.url}
-          filename={officeViewer.filename}
-          kind="text"
-          onClose={() => setOfficeViewer(null)}
-        />
-      ) : null}
-
-      {archiveViewer ? (
-        <ArchiveViewer
-          url={withView(archiveViewer.url, 'list')}
-          rawUrl={archiveViewer.url}
-          filename={archiveViewer.filename}
-          onClose={() => setArchiveViewer(null)}
-        />
-      ) : null}
-
-      {fileViewer ? (
-        <FileViewer
-          filename={fileViewer.filename}
-          url={fileViewer.url}
-          sizeBytes={fileViewer.sizeBytes}
-          onClose={() => setFileViewer(null)}
-        />
-      ) : null}
-
-      {skillViewer ? (
-        <SkillViewer
-          url={skillViewer.url}
-          skill={skillViewer.skill}
-          onClose={() => setSkillViewer(null)}
-          onActions={() => setSkillMenu(skillViewer.skill)}
-        />
-      ) : null}
+      {viewerInPane ? null : viewerLayers}
 
       {skillMenu ? (
         <ActionSheet

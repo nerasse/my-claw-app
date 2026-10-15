@@ -206,6 +206,8 @@ export interface DeviceBridgeNative {
    * Resolves when the download has completed; the install is a separate call.
    */
   downloadApk(url: string, transferId: string, version: string, expectedSize: number): Promise<void>;
+  /** Abandons an in-flight APK transfer; the partial file is left for clearStagedApk. */
+  cancelApkDownload(): Promise<boolean>;
   /**
    * Commits the staged APK to PackageInstaller. Resolves when the session is committed;
    * the system confirmation and the outcome arrive via `claw:update:install`.
@@ -397,6 +399,7 @@ export const deviceBridge: DeviceBridgeNative = {
   openUnknownSourcesSettings: () => native?.openUnknownSourcesSettings(),
   downloadApk: (url, transferId, version, expectedSize) =>
     native?.downloadApk(url, transferId, version, expectedSize) ?? Promise.resolve(),
+  cancelApkDownload: () => native?.cancelApkDownload() ?? Promise.resolve(false),
   installStagedApk: () => native?.installStagedApk() ?? Promise.resolve(),
   stagedApkInfo: () =>
     native?.stagedApkInfo() ?? Promise.resolve({ staged: false, size: 0, version: '' }),

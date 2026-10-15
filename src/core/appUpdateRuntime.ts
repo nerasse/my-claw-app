@@ -32,6 +32,8 @@ export interface AppUpdateRuntime {
     /** What the check reported. The relay streams, so the response carries no Content-Length. */
     expectedSize: number,
   ): Promise<void>;
+  /** Abandons an in-flight transfer: the restart path cancels before it clears and downloads. */
+  cancelDownload(): Promise<void>;
   /** What is on disk right now. The UI offers Install from this, never from what it remembers. */
   staged(): Promise<{ staged: boolean; size: number; version: string }>;
   /** Drops a staged APK that is stale or refused, so the next tap downloads instead of looping. */
@@ -73,6 +75,10 @@ export const appUpdateRuntime: AppUpdateRuntime = {
     if (!deviceInfo) throw new Error('no device identity');
     // The native download puts the device credential in its headers.
     await deviceBridge.downloadApk(`${mediaBase}/app-update/apk`, transferId, version, expectedSize);
+  },
+
+  async cancelDownload() {
+    await deviceBridge.cancelApkDownload();
   },
 
   async staged() {
