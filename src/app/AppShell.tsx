@@ -249,7 +249,7 @@ import { ArchivesScreen } from './ArchivesScreen';
 import { BrowserScreen } from './BrowserScreen';
 import { browserFromLocation, closeShownWindow } from '../core/browserLive';
 import { panes } from '../core/panes';
-import { PagePane, PinnedColumn, ViewerPane } from './DesktopColumns';
+import { PagePane, PinnedColumn } from './DesktopColumns';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { StatsScreen } from './StatsScreen';
@@ -698,6 +698,10 @@ export function AppShell(): React.JSX.Element {
     images: MediaItem[];
     index: number;
   } | null>(null);
+  const openImage = useCallback(
+    (images: MediaItem[], index: number): void => setImageViewer({ images, index }),
+    [],
+  );
   const [textViewer, setTextViewer] = useState<{
     url: string;
     filename: string;
@@ -735,114 +739,6 @@ export function AppShell(): React.JSX.Element {
     filename: string;
     sizeBytes?: number;
   } | null>(null);
-  /**
-   * Whether the viewer on screen is full screen instead of beside the conversation. Reset on
-   * every open: "it opens on the right" is the promise, the toggle is the exception.
-   */
-  const [viewerExpanded, setViewerExpanded] = useState(false);
-  /**
-   * One viewer at a time.
-   *
-   * Opening a file closes whatever was up. The viewers used to overlap only because an overlay
-   * made every one of them unreachable while open; beside the conversation that stops being
-   * true, and a second tap must replace the pane rather than stack a second reader into it or
-   * leave a hidden state that reopens on the next file.
-   */
-  const closeViewers = useCallback((): void => {
-    setImageViewer(null);
-    setTextViewer(null);
-    setVideoViewer(null);
-    setSvgViewer(null);
-    setPdfViewer(null);
-    setHtmlViewer(null);
-    setOfficeViewer(null);
-    setArchiveViewer(null);
-    setFileViewer(null);
-    setSkillViewer(null);
-  }, []);
-  // The two rules every opener shares, spelled once in each: what was on screen closes, and the
-  // next viewer starts beside the conversation. Stable identities on purpose: the shell hands
-  // these to the memoized chat list, which stops holding when one changes on every render.
-  const openImage = useCallback(
-    (images: MediaItem[], index: number): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setImageViewer({ images, index });
-    },
-    [closeViewers],
-  );
-  const openTextViewer = useCallback(
-    (target: { url: string; filename: string; kind?: FileKind }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setTextViewer(target);
-    },
-    [closeViewers],
-  );
-  const openVideoViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setVideoViewer(target);
-    },
-    [closeViewers],
-  );
-  const openSvgViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setSvgViewer(target);
-    },
-    [closeViewers],
-  );
-  const openPdfViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setPdfViewer(target);
-    },
-    [closeViewers],
-  );
-  const openHtmlViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setHtmlViewer(target);
-    },
-    [closeViewers],
-  );
-  const openOfficeViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setOfficeViewer(target);
-    },
-    [closeViewers],
-  );
-  const openArchiveViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setArchiveViewer(target);
-    },
-    [closeViewers],
-  );
-  const openFileViewer = useCallback(
-    (target: { url: string; filename: string; sizeBytes?: number }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setFileViewer(target);
-    },
-    [closeViewers],
-  );
-  const openSkillViewer = useCallback(
-    (target: { url: string; skill: SkillEntry }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setSkillViewer(target);
-    },
-    [closeViewers],
-  );
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
@@ -3936,14 +3832,14 @@ export function AppShell(): React.JSX.Element {
             onBubbleMenu={openBubbleMenu}
             onResend={resendChat}
             onOpenImage={openImage}
-            onOpenText={openTextViewer}
-            onOpenVideo={openVideoViewer}
-            onOpenSvg={openSvgViewer}
-            onOpenPdf={openPdfViewer}
-            onOpenHtml={openHtmlViewer}
-            onOpenOffice={openOfficeViewer}
-            onOpenArchive={openArchiveViewer}
-            onOpenFile={openFileViewer}
+            onOpenText={setTextViewer}
+            onOpenVideo={setVideoViewer}
+            onOpenSvg={setSvgViewer}
+            onOpenPdf={setPdfViewer}
+            onOpenHtml={setHtmlViewer}
+            onOpenOffice={setOfficeViewer}
+            onOpenArchive={setArchiveViewer}
+            onOpenFile={setFileViewer}
             onOpenMenu={() => setCommandMenuOpen(true)}
             onCommandEntered={dispatchCommand}
             onQuestionReply={replyToQuestion}
@@ -3991,130 +3887,6 @@ export function AppShell(): React.JSX.Element {
   // The browser in full screen, or the first-run setup: the page has the window to itself.
   const fullPage = browserFullNow || setupGate;
   const split = layout.sidePane && !fullPage;
-
-  /**
-   * Where the viewer on screen draws, and the one switch that moves it.
-   *
-   * Beside the conversation on a wide window (the same `split` a page opens under), over the
-   * window everywhere else -- and the toggle exists only when both do, so a phone never shows a
-   * control that changes nothing. `viewerLayers` is built once and mounted in exactly one of
-   * the two places, never both.
-   */
-  const anyViewerOpen = Boolean(
-    imageViewer || textViewer || videoViewer || svgViewer || pdfViewer || htmlViewer || officeViewer || archiveViewer || fileViewer || skillViewer,
-  );
-  const viewerInPane = split && anyViewerOpen && !viewerExpanded;
-  const toggleViewerFullscreen = useCallback((): void => setViewerExpanded(expanded => !expanded), []);
-  const fullscreenToggle = split ? toggleViewerFullscreen : undefined;
-  const viewerLayers = (
-    <>
-      {imageViewer ? (
-        <ImageViewer
-          images={imageViewer.images}
-          index={imageViewer.index}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setImageViewer(null)}
-        />
-      ) : null}
-
-      {textViewer ? (
-        <TextViewer
-          url={textViewer.url}
-          filename={textViewer.filename}
-          kind={textViewer.kind}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setTextViewer(null)}
-        />
-      ) : null}
-
-      {videoViewer ? (
-        <VideoViewer
-          url={videoViewer.url}
-          filename={videoViewer.filename}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setVideoViewer(null)}
-        />
-      ) : null}
-
-      {svgViewer ? (
-        <SvgViewer
-          url={svgViewer.url}
-          filename={svgViewer.filename}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setSvgViewer(null)}
-        />
-      ) : null}
-
-      {pdfViewer ? (
-        <PdfViewer
-          url={pdfViewer.url}
-          filename={pdfViewer.filename}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setPdfViewer(null)}
-        />
-      ) : null}
-
-      {htmlViewer ? (
-        <HtmlViewer
-          url={htmlViewer.url}
-          filename={htmlViewer.filename}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setHtmlViewer(null)}
-        />
-      ) : null}
-
-      {officeViewer ? (
-        <TextViewer
-          url={withView(officeViewer.url, 'text')}
-          downloadUrl={officeViewer.url}
-          filename={officeViewer.filename}
-          kind="text"
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setOfficeViewer(null)}
-        />
-      ) : null}
-
-      {archiveViewer ? (
-        <ArchiveViewer
-          url={withView(archiveViewer.url, 'list')}
-          rawUrl={archiveViewer.url}
-          filename={archiveViewer.filename}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setArchiveViewer(null)}
-        />
-      ) : null}
-
-      {fileViewer ? (
-        <FileViewer
-          filename={fileViewer.filename}
-          url={fileViewer.url}
-          sizeBytes={fileViewer.sizeBytes}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setFileViewer(null)}
-        />
-      ) : null}
-
-      {skillViewer ? (
-        <SkillViewer
-          url={skillViewer.url}
-          skill={skillViewer.skill}
-          embedded={viewerInPane}
-          onToggleFullscreen={fullscreenToggle}
-          onClose={() => setSkillViewer(null)}
-          onActions={() => setSkillMenu(skillViewer.skill)}
-        />
-      ) : null}
-    </>
-  );
 
   return (
     // Every block inside the thread reaches the selection viewer through here, rather than
@@ -4213,7 +3985,6 @@ export function AppShell(): React.JSX.Element {
         {split && !pageOpen ? null : (
         <PagePane
           split={split}
-          hidden={viewerInPane}
           style={[
             styles.pageFull,
             // Full screen is the whole window: the cap of a page of controls would undo it.
@@ -4762,7 +4533,7 @@ export function AppShell(): React.JSX.Element {
                 }}
                 onOpenSkill={skill => {
                   if (!deviceInfo) return;
-                  openSkillViewer({
+                  setSkillViewer({
                     url: skillUrl(mediaBase, deviceInfo, skill.source, skill.name, skill.workspace),
                     skill,
                   });
@@ -4856,13 +4627,13 @@ export function AppShell(): React.JSX.Element {
               error={filesError ?? undefined}
               onDelete={setFileToDelete}
               onOpenImage={openImage}
-              onOpenText={openTextViewer}
-              onOpenVideo={openVideoViewer}
-              onOpenSvg={openSvgViewer}
-              onOpenPdf={openPdfViewer}
-              onOpenHtml={openHtmlViewer}
-              onOpenOffice={openOfficeViewer}
-              onOpenArchive={openArchiveViewer}
+              onOpenText={setTextViewer}
+              onOpenVideo={setVideoViewer}
+              onOpenSvg={setSvgViewer}
+              onOpenPdf={setPdfViewer}
+              onOpenHtml={setHtmlViewer}
+              onOpenOffice={setOfficeViewer}
+              onOpenArchive={setArchiveViewer}
             />
           ) : statusOpen ? (
             <StatusScreen onClose={closeStatus} />
@@ -4973,7 +4744,6 @@ export function AppShell(): React.JSX.Element {
           )}
         </PagePane>
         )}
-        {viewerInPane ? <ViewerPane>{viewerLayers}</ViewerPane> : null}
         </View>
         )}
         </View>
@@ -5010,7 +4780,91 @@ export function AppShell(): React.JSX.Element {
       />
       )}
 
-      {viewerInPane ? null : viewerLayers}
+      {imageViewer ? (
+        <ImageViewer
+          images={imageViewer.images}
+          index={imageViewer.index}
+          onClose={() => setImageViewer(null)}
+        />
+      ) : null}
+
+      {textViewer ? (
+        <TextViewer
+          url={textViewer.url}
+          filename={textViewer.filename}
+          kind={textViewer.kind}
+          onClose={() => setTextViewer(null)}
+        />
+      ) : null}
+
+      {videoViewer ? (
+        <VideoViewer
+          url={videoViewer.url}
+          filename={videoViewer.filename}
+          onClose={() => setVideoViewer(null)}
+        />
+      ) : null}
+
+      {svgViewer ? (
+        <SvgViewer
+          url={svgViewer.url}
+          filename={svgViewer.filename}
+          onClose={() => setSvgViewer(null)}
+        />
+      ) : null}
+
+      {pdfViewer ? (
+        <PdfViewer
+          url={pdfViewer.url}
+          filename={pdfViewer.filename}
+          onClose={() => setPdfViewer(null)}
+        />
+      ) : null}
+
+      {htmlViewer ? (
+        <HtmlViewer
+          url={htmlViewer.url}
+          filename={htmlViewer.filename}
+          onClose={() => setHtmlViewer(null)}
+        />
+      ) : null}
+
+      {officeViewer ? (
+        <TextViewer
+          url={withView(officeViewer.url, 'text')}
+          downloadUrl={officeViewer.url}
+          filename={officeViewer.filename}
+          kind="text"
+          onClose={() => setOfficeViewer(null)}
+        />
+      ) : null}
+
+      {archiveViewer ? (
+        <ArchiveViewer
+          url={withView(archiveViewer.url, 'list')}
+          rawUrl={archiveViewer.url}
+          filename={archiveViewer.filename}
+          onClose={() => setArchiveViewer(null)}
+        />
+      ) : null}
+
+      {fileViewer ? (
+        <FileViewer
+          filename={fileViewer.filename}
+          url={fileViewer.url}
+          sizeBytes={fileViewer.sizeBytes}
+          onClose={() => setFileViewer(null)}
+        />
+      ) : null}
+
+      {skillViewer ? (
+        <SkillViewer
+          url={skillViewer.url}
+          skill={skillViewer.skill}
+          onClose={() => setSkillViewer(null)}
+          onActions={() => setSkillMenu(skillViewer.skill)}
+        />
+      ) : null}
 
       {skillMenu ? (
         <ActionSheet
