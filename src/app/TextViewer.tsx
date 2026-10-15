@@ -3,15 +3,14 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatBytes } from '../core/utils';
 import type { FileKind } from '../core/fileKind';
 import { CsvTable } from '../components/CsvTable';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { CodeEditor } from '../components/CodeEditor';
 import { languageForFile } from '../components/codeeditor/document';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
@@ -31,6 +30,8 @@ export function TextViewer({
   filename,
   kind,
   downloadUrl,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   url: string;
@@ -38,13 +39,16 @@ export function TextViewer({
   kind?: FileKind;
   /** What Download hands over, when `url` is a rendering of the file and not the file. */
   downloadUrl?: string;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  /** Present on a window wide enough for both columns; absent hides the control. */
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   // opened from a bubble, with the composer's keyboard still up behind it.
   useDismissKeyboard();
   const { palette, dark } = useTheme();
-  const insets = useSafeAreaInsets();
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   /** Announced size from the response headers, so a big file shows what it is loading. */
@@ -83,14 +87,13 @@ export function TextViewer({
   }, [url]);
 
   return (
-    <View
-      style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}
-    >
+    <ViewerStage embedded={embedded} insetTop style={styles.stage}>
       <View style={styles.topBar}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
         <DownloadControl targets={[{ url: downloadUrl ?? url, filename }]} />
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -143,7 +146,7 @@ export function TextViewer({
         </View>
       )}
 
-    </View>
+    </ViewerStage>
   );
 }
 

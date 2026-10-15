@@ -298,8 +298,15 @@ landscape is a small desktop, and a browser dragged narrow is a phone.
 | --- | --- |
 | < 720 | The layout the app was written for: slide-over drawer, bottom sheets, one screen. |
 | >= 1080 | The conversation list is a pinned column, the hamburger disappears, menus become centred dialogs, hit targets shrink to mouse size (`pointer: fine` only). |
-| >= 1440 | A page (settings, files, archives) opens *beside* the conversation instead of over it. |
+| >= 1440 | A page (settings, files, archives) and an attachment (a file, a picture, a film) open *beside* the conversation instead of over it. |
 | any | The conversation is capped at 860pt and centred: past ~90 characters a line stops being readable, whatever the window does. |
+
+An attachment beside the conversation reuses the page column exactly: same handle, same stored
+width, same bounds -- and its bars carry one extra control that hands the viewer the whole window
+and back (owner, 2026-10-15: it opens on the right, and still proposes full screen). Opening a
+file while a page stands covers it; the page stays mounted, scroll and all, and closing the file
+brings it back. Below 1440 the viewers are the full-screen layers they always were, and the
+control is absent rather than inert.
 
 `dense` is gated on `pointer: fine`, not on width: a touchscreen laptop keeps its tap targets.
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -15,15 +15,19 @@ import { useDismissKeyboard } from '../core/keyboard';
 export function SvgViewer({
   url,
   filename,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   url: string;
   filename: string;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
-  const insets = useSafeAreaInsets();
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
 
@@ -54,12 +58,13 @@ export function SvgViewer({
   }, [url]);
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}>
+    <ViewerStage embedded={embedded} insetTop style={styles.stage}>
       <View style={styles.topBar}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
         <DownloadControl targets={[{ url, filename }]} />
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -87,7 +92,7 @@ export function SvgViewer({
         </View>
       )}
 
-    </View>
+    </ViewerStage>
   );
 }
 

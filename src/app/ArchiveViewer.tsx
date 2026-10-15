@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatBytes } from '../core/utils';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -20,6 +20,8 @@ export function ArchiveViewer({
   url,
   filename,
   rawUrl,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   /** The listing URL (`?view=list`). */
@@ -27,11 +29,13 @@ export function ArchiveViewer({
   filename: string;
   /** The file itself, so Download hands over the archive and not its entry list. */
   rawUrl?: string;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
-  const insets = useSafeAreaInsets();
   const [entries, setEntries] = useState<ArchiveEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +61,7 @@ export function ArchiveViewer({
   const total = entries?.reduce((sum, entry) => sum + entry.size, 0) ?? 0;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}>
+    <ViewerStage embedded={embedded} insetTop style={styles.stage}>
       <View style={styles.topBar}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
@@ -68,6 +72,7 @@ export function ArchiveViewer({
           </Text>
         ) : null}
         <DownloadControl targets={[{ url: rawUrl ?? url, filename }]} />
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -103,7 +108,7 @@ export function ArchiveViewer({
           )}
         </View>
       )}
-    </View>
+    </ViewerStage>
   );
 }
 

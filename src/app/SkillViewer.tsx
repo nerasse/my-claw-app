@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { splitSkillDoc } from '../core/skills';
 import type { SkillEntry } from '../core/protocol';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useLayerFrame } from '../core/layout';
-import { keyLayerProps } from '../core/keyNav';
 
 /**
  * Full-screen reader for one skill's SKILL.md: frontmatter stripped into a meta header, the
@@ -24,11 +23,16 @@ function locationOf(skill: SkillEntry): string {
 export function SkillViewer({
   url,
   skill,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
   onActions,
 }: {
   url: string;
   skill: SkillEntry;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
   /** Opens the transfer menu. Absent while the shell has no catalog to move the skill into. */
   onActions?: () => void;
@@ -38,7 +42,6 @@ export function SkillViewer({
   // nothing to type into: the keyboard would cover the document.
   useDismissKeyboard();
   const { palette } = useTheme();
-  const insets = useSafeAreaInsets();
   const { scrollProps, indicator } = useScrollIndicator();
   const [doc, setDoc] = useState<ReturnType<typeof splitSkillDoc> | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -68,7 +71,7 @@ export function SkillViewer({
   const metaName = doc?.meta.name ?? skill.name;
 
   return (
-    <View {...keyLayerProps('page')} style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }, layerFrame]}>
+    <ViewerStage embedded={embedded} insetTop style={[styles.stage, embedded ? null : layerFrame]}>
       <View style={styles.topBar}>
         <Pressable
           onPress={onClose}
@@ -88,6 +91,7 @@ export function SkillViewer({
             {skill.version ? ` · v${skill.version}` : ''}
           </Text>
         </View>
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         {onActions ? (
           <Pressable
             onPress={onActions}
@@ -135,7 +139,7 @@ export function SkillViewer({
           )}
         </View>
       )}
-    </View>
+    </ViewerStage>
   );
 }
 

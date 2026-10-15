@@ -10,10 +10,10 @@
  * iOS is not a target of this app, so the asset URI is the Android one and nothing branches.
  */
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -25,15 +25,19 @@ type HostMessage = { type: 'ready' | 'progress' | 'done' | 'error'; pages?: numb
 export function PdfViewer({
   url,
   filename,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   url: string;
   filename: string;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
-  const insets = useSafeAreaInsets();
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [pages, setPages] = useState(0);
   const [drawn, setDrawn] = useState(0);
@@ -64,7 +68,7 @@ export function PdfViewer({
   };
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}>
+    <ViewerStage embedded={embedded} insetTop style={styles.stage}>
       <View style={styles.topBar}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
@@ -75,6 +79,7 @@ export function PdfViewer({
           </Text>
         ) : null}
         <DownloadControl targets={[{ url, filename }]} />
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -109,7 +114,7 @@ export function PdfViewer({
           </View>
         ) : null}
       </View>
-    </View>
+    </ViewerStage>
   );
 }
 

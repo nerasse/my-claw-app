@@ -1,8 +1,9 @@
 import React from 'react';
-import { Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StatusBar, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -15,10 +16,15 @@ import { useDismissKeyboard } from '../core/keyboard';
 export function VideoViewer({
   url,
   filename,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   url: string;
   filename: string;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -29,13 +35,14 @@ export function VideoViewer({
     p.play();
   });
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage]}>
+    <ViewerStage embedded={embedded} style={styles.stage}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      <View style={[styles.topBar, Platform.OS === 'ios' && styles.iosTopBar, { paddingTop: insets.top + space.md }]}>
+      <View style={[styles.topBar, Platform.OS === 'ios' && styles.iosTopBar, { paddingTop: embedded ? space.md : insets.top + space.md }]}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
         <DownloadControl targets={[{ url, filename }]} gallery tone="light" />
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} tone="light" /> : null}
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -52,7 +59,7 @@ export function VideoViewer({
         nativeControls
         contentFit="contain"
       />
-    </View>
+    </ViewerStage>
   );
 }
 

@@ -7,9 +7,10 @@ import { radius, space, useTheme, useThemedStyles, type Palette } from '../theme
 import { keyLayerProps } from '../core/keyNav';
 
 /**
- * The two desktop columns the owner sizes by hand: the conversation list on the left, the page
- * beside the conversation on the right. Each reads its own width from `panes` and nothing else,
- * so a drag re-renders the column and not its contents (the same element, handed back unchanged).
+ * The desktop columns the owner sizes by hand: the conversation list on the left, and the column
+ * beside the conversation on the right -- a page (files, settings...) or a viewer (a file, a
+ * picture, a film). Each reads its own width from `panes` and nothing else, so a drag re-renders
+ * the column and not its contents (the same element, handed back unchanged).
  */
 
 /**
@@ -56,12 +57,39 @@ export function PinnedColumn({
  * Where a page is drawn: beside the conversation (`split`: files, the browser, status...), its
  * left border a handle; or in the whole column, styled by the shell.
  */
-export function PagePane({ split, style, children }: { split: boolean; style: StyleProp<ViewStyle>; children: React.ReactNode }): React.JSX.Element {
+export function PagePane({ split, hidden = false, style, children }: { split: boolean; hidden?: boolean; style: StyleProp<ViewStyle>; children: React.ReactNode }): React.JSX.Element {
   if (!split) return <View {...keyLayerProps('page')} style={style}>{children}</View>;
-  return <SidePagePane>{children}</SidePagePane>;
+  return (
+    <SideColumn pane="page" hidden={hidden}>
+      {children}
+    </SideColumn>
+  );
 }
 
-function SidePagePane({ children }: { children: React.ReactNode }): React.JSX.Element {
+/**
+ * Where a viewer draws on a wide window: the same column, the same handle and the same stored
+ * width as a page. Opening a file while a page stands covers the page (which stays mounted,
+ * scroll and all) and closing the file brings it back.
+ */
+export function ViewerPane({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <SideColumn pane="viewer">{children}</SideColumn>;
+}
+
+/**
+ * One column, two lives. `pane` (not a passed-in testID) names the handle and the testID: a
+ * `testID` reaching this component as a prop would put it on the composite as well, and a test
+ * that looks the pane up by testID would then find the wrapper -- which carries no style --
+ * before the view that does.
+ */
+function SideColumn({
+  pane,
+  hidden = false,
+  children,
+}: {
+  pane: 'page' | 'viewer';
+  hidden?: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { width: windowWidth } = useWindowDimensions();
   const asked = usePanes(p => p.pagePaneWidth);
@@ -69,13 +97,16 @@ function SidePagePane({ children }: { children: React.ReactNode }): React.JSX.El
   // Clamped on the way out too: a window made narrower must not push the conversation off it.
   const width = Math.min(asked, pagePaneMax(windowWidth, drawerColumn));
   return (
-    <View {...keyLayerProps('page')} testID="page-pane" style={[styles.pagePane, { width }]}>
+    <View
+      {...keyLayerProps('page')}
+      testID={pane === 'page' ? 'page-pane' : 'viewer-pane'}
+      style={[styles.pagePane, { width }, hidden && styles.hidden]}>
       <ResizeHandle
         edge="left"
         width={width}
         onResize={next => panes.resizePagePane(next, windowWidth)}
         onReset={panes.resetPagePane}
-        label="Resize the page beside the conversation"
+        label={pane === 'page' ? 'Resize the page beside the conversation' : 'Resize the viewer beside the conversation'}
       />
       {children}
     </View>
@@ -85,6 +116,7 @@ function SidePagePane({ children }: { children: React.ReactNode }): React.JSX.El
 const createStyles = (palette: Palette) => ({
   column: { position: 'relative' as const },
   fill: { flex: 1 },
+  // Kept mounted, out of the layout: a page under a viewer holds its scroll for the way back.
   hidden: { display: 'none' as const },
   rail: {
     flex: 1,

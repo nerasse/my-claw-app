@@ -7,9 +7,10 @@
  */
 
 import ReactTestRenderer from 'react-test-renderer';
-import { useWindowDimensions } from 'react-native';
+import { DeviceEventEmitter, useWindowDimensions } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
+import type { SessionFileMeta } from '../src/core/protocol';
 import {
   DRAWER_DEFAULT,
   DRAWER_MAX,
@@ -134,6 +135,49 @@ describe('on a desktop', () => {
     await press(tree, 'Browser');
     await waitFor(() => labelsOf(tree).includes('Full screen'));
     expect(labelsOf(tree)).toContain('Message to send');
+    await unmount(tree);
+  });
+
+  test('an attachment opens beside the conversation, and the toggle gives it the window', async () => {
+    const file: SessionFileMeta = {
+      id: 'f-viewer',
+      filename: 'notes.md',
+      type: 'file',
+      mimeType: 'text/markdown',
+      sizeBytes: 42,
+      ts: '2026-08-06T10:00:00.000Z',
+    };
+    const tree = await renderApp();
+    await ReactTestRenderer.act(async () => {
+      DeviceEventEmitter.emit('claw:ws:message', {
+        text: JSON.stringify({ type: 'files.list.result', files: [file], totalBytes: 0 }),
+      });
+    });
+    await press(tree, 'Commands');
+    await press(tree, 'Session files');
+    await waitFor(() => labelsOf(tree).includes('Open file notes.md'));
+
+    await press(tree, 'Open file notes.md');
+    // Beside the conversation: the viewer's own column, at the page pane's default width, and
+    // the files page it covered stays mounted for the way back.
+    await waitFor(() => labelsOf(tree).includes('Read it full screen'));
+    expect(widthOf(tree, 'viewer-pane')).toBe(PAGE_PANE_DEFAULT);
+    expect(widthOf(tree, 'page-pane')).toBe(PAGE_PANE_DEFAULT);
+    expect(labelsOf(tree)).toContain('Open file notes.md');
+    expect(labelsOf(tree)).toContain('Message to send');
+
+    await press(tree, 'Read it full screen');
+    await waitFor(() => labelsOf(tree).includes('Read it beside the conversation'));
+    expect(widthOf(tree, 'viewer-pane')).toBeUndefined();
+
+    await press(tree, 'Read it beside the conversation');
+    await waitFor(() => labelsOf(tree).includes('Read it full screen'));
+    expect(widthOf(tree, 'viewer-pane')).toBe(PAGE_PANE_DEFAULT);
+
+    await press(tree, 'Close file view');
+    await waitFor(() => !labelsOf(tree).includes('Read it full screen'));
+    // The page it covered is what comes back, with its rows and its scroll.
+    expect(labelsOf(tree)).toContain('Open file notes.md');
     await unmount(tree);
   });
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatBytes } from '../core/utils';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -10,19 +11,52 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
  * The media URL carries the auth token, so saving runs through the native bridge instead of
  * the JS heap. Absolute layer, like the image and text viewers: a React-Native Modal lives
  * outside the gesture root on Android and drops touches meant for it.
+ *
+ * Beside the conversation it loses the dimmed backdrop and fills the pane: the pane *is* the
+ * focus there, and a card floating on a dark backdrop inside a narrow column was a phone shape.
  */
 export function FileViewer({
   filename,
   url,
   sizeBytes,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   filename: string;
   url: string;
   sizeBytes?: number;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const card = (
+    <View style={embedded ? styles.paneCard : styles.modalCard}>
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalTitle} numberOfLines={1}>
+          {filename}
+        </Text>
+        <DownloadControl targets={[{ url, filename }]} />
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
+        <Pressable
+          onPress={onClose}
+          style={styles.closeButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close file view">
+          <Text style={styles.closeGlyph}>✕</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.imageStage}>
+        <Text style={styles.empty}>no preview for this file type</Text>
+        {sizeBytes ? <Text style={styles.size}>{formatBytes(sizeBytes)}</Text> : null}
+      </View>
+    </View>
+  );
+
+  if (embedded) return <ViewerStage embedded style={styles.pane}>{card}</ViewerStage>;
   return (
     <View style={StyleSheet.absoluteFill}>
       <Pressable
@@ -30,37 +64,18 @@ export function FileViewer({
         onPress={onClose}
         accessibilityLabel="Close file view"
       />
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle} numberOfLines={1}>
-              {filename}
-            </Text>
-            <DownloadControl targets={[{ url, filename }]} />
-            <Pressable
-              onPress={onClose}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close file view"
-            >
-              <Text style={styles.closeGlyph}>✕</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.imageStage}>
-            <Text style={styles.empty}>no preview for this file type</Text>
-            {sizeBytes ? (
-              <Text style={styles.size}>{formatBytes(sizeBytes)}</Text>
-            ) : null}
-          </View>
-
-        </View>
-      </View>
+      <View style={styles.modalBackdrop}>{card}</View>
     </View>
   );
 }
 
 const createStyles = (palette: Palette) => ({
+  pane: { flex: 1, backgroundColor: palette.bg },
+  paneCard: {
+    flex: 1,
+    backgroundColor: palette.surface,
+    padding: space.md,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',

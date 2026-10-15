@@ -6,9 +6,9 @@
  * neither host, and a remote image or font never loads.
  */
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, Text, View } from 'react-native';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -18,24 +18,29 @@ const IFRAME_STYLE = { flex: 1, width: '100%', border: 'none', background: '#fff
 export function HtmlViewer({
   url,
   filename,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   url: string;
   filename: string;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
-  const insets = useSafeAreaInsets();
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage, { top: insets.top }]}>
+    <ViewerStage embedded={embedded} insetTop style={styles.stage}>
       <View style={styles.topBar}>
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
         <Text style={styles.note}>no scripts</Text>
         <DownloadControl targets={[{ url, filename }]} />
+        {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         <Pressable
           onPress={onClose}
           hitSlop={12}
@@ -49,7 +54,7 @@ export function HtmlViewer({
       <View style={styles.body}>
         <iframe src={url} title={filename} sandbox="" style={IFRAME_STYLE} />
       </View>
-    </View>
+    </ViewerStage>
   );
 }
 

@@ -16,6 +16,7 @@ import { ImageZoom } from '@likashefqet/react-native-image-zoom';
 import { deviceBridge, useTransferProgress } from '../core/nativeBridge';
 import { pointerActivityProps, pointerHoverProps } from '../core/webProps';
 import { DownloadControl } from '../components/DownloadControl';
+import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import type { MediaItem } from '../components/MediaCarousel';
 import { font, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -44,12 +45,17 @@ const CACHE_THRESHOLD = 2 * 1024 * 1024;
 export function ImageViewer({
   images,
   index,
+  embedded = false,
+  onToggleFullscreen,
   onClose,
 }: {
   /** The run of pictures this visit belongs to, in the order the thread showed them. */
   images: MediaItem[];
   /** Which one was tapped: the gallery opens there, not on the first. */
   index: number;
+  /** Drawn inside the right-hand pane instead of over the window. See ViewerChrome. */
+  embedded?: boolean;
+  onToggleFullscreen?: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -59,7 +65,11 @@ export function ImageViewer({
   // already spans the status bar: the photo owns the screen at top 0, and only the bars have
   // to keep clear of it. Offsetting the stage instead pushed them under the status bar.
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  // One window wide, or one pane wide when the gallery lives beside the conversation: the pane's
+  // width is whatever layout hands the stage, and a measured 0 keeps the window's until then.
+  const [paneWidth, setPaneWidth] = useState(0);
+  const width = embedded && paneWidth > 0 ? paneWidth : windowWidth;
   const [at, setAt] = useState(Math.max(0, Math.min(index, images.length - 1)));
   const [controlsVisible, setControlsVisible] = useState(true);
   const [hovering, setHovering] = useState(false);
@@ -68,6 +78,16 @@ export function ImageViewer({
   // Dense on web -- a mouse crossing the screen -- so it is a ref: no render per event.
   const lastActivityAt = useRef(Date.now());
   const pager = useRef<ScrollView>(null);
+
+  // A width that changes under a live gallery (the pane opening, or a drag through the
+  // breakpoint) re-lands the pager on the same picture: `contentOffset` only covers the first
+  // mount, and its x was computed for the old width.
+  const lastWidth = useRef(width);
+  useEffect(() => {
+    if (lastWidth.current === width) return;
+    lastWidth.current = width;
+    pager.current?.scrollTo({ x: at * width, animated: false });
+  }, [at, width]);
 
   const current = images[at];
   const url = current?.url ?? '';
@@ -140,8 +160,23 @@ export function ImageViewer({
     ? Math.round((cacheProgress.bytes / cacheProgress.total) * 100)
     : null;
 
+  // Embedded, the bars stay: their idle-hide is the phone's full-screen convention, and a pane
+  // whose controls vanish under a motionless mouse is a pane you have to wake up before using.
+  const barsUp = embedded || controlsVisible;
+
   return (
-    <View style={[StyleSheet.absoluteFill, styles.stage]} {...pointerActivityProps(activity)}>
+    <ViewerStage
+      embedded={embedded}
+      style={styles.stage}
+      {...pointerActivityProps(activity)}
+      onLayout={
+        embedded
+          ? event => {
+              const measured = Math.round(event.nativeEvent.layout.width);
+              if (measured > 0 && measured !== paneWidth) setPaneWidth(measured);
+            }
+          : undefined
+      }>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
       <ScrollView
         ref={pager}
@@ -193,7 +228,7 @@ export function ImageViewer({
         ))}
       </ScrollView>
 
-      {images.length > 1 && controlsVisible ? (
+      {images.length > 1 && barsUp ? (
         <>
           <Pressable
             style={[styles.nav, styles.navLeft, at === 0 ? styles.navOff : null]}
@@ -224,7 +259,7 @@ export function ImageViewer({
         </>
       ) : null}
 
-      {controlsVisible ? (
+      {barsUp ? (
         <>
           <View
             style={[styles.topBar, { paddingTop: insets.top + space.md }]}
@@ -242,6 +277,7 @@ export function ImageViewer({
               gallery
               tone="light"
             />
+            {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} tone="light" /> : null}
             <Pressable
               onPress={onClose}
               hitSlop={12}
@@ -255,7 +291,7 @@ export function ImageViewer({
 
         </>
       ) : null}
-    </View>
+    </ViewerStage>
   );
 }
 
