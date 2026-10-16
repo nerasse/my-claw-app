@@ -45,6 +45,23 @@ would cover the code it offers to copy. It carries the **source**, not the rende
 Inline code spans get nothing: a strip per span would be noise, and a span is short enough that
 the message-level copy covers it.
 
+## Quotes: a bar, because a quote is meant to leave too
+
+A quote is read to be pasted somewhere else, and a selection cannot lift it out of the chat list
+any more than it can a fenced block, so the same idiom applies, quieter: one `copy` as the
+quote's first row, right-aligned, inside the box (`QuoteBar`) -- not floating over the text,
+where a long first line would sit under it.
+
+What it takes is the quote's **text**, not its source: the `>` prefixes are syntax, never what
+the reader saw, so the rendered tree is walked instead (`quoteText` in `markdownText.ts`).
+Paragraphs keep their break, so a two-block quote does not paste as one run-on line; a soft wrap
+(the source lines a `>`-quoted sentence was carried over) pastes as the space it reads as, not
+as the break it was written with; a list's items keep their lines with their markers restored
+(the list library draws markers from its own props rather than into the tree). Code and tool
+output keep their line breaks -- a fold (`ScrollableBlock`) marks its subtree verbatim. A quote
+that yields no text (it held only a table, say) offers no bar rather than an empty one. Both
+sheets carry it: the chat and the document.
+
 ## Colouring
 
 A fenced block is parsed with the code editor's own language table (`codeeditor/languages.ts`):

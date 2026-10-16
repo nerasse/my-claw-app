@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { plainText } from './markdownText';
 
 /**
  * A markdown table that fits the width it is given.
@@ -17,19 +18,11 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 const MIN_WEIGHT = 4;
 const MAX_WEIGHT = 24;
 
-/** The text a cell will draw, whatever nesting the inline renderer wrapped it in. */
-function textOf(node: ReactNode): string {
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(textOf).join('');
-  if (React.isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children);
-  return '';
-}
-
 /** How wide each column wants to be, relative to the others. */
 export function columnWeights(header: ReactNode[][], rows: ReactNode[][][]): number[] {
   const columns = [header, ...rows].reduce((max, row) => Math.max(max, row.length), 0);
   return Array.from({ length: columns }, (_unused, index) => {
-    const longest = [header, ...rows].reduce((max, row) => Math.max(max, textOf(row[index]).length), 0);
+    const longest = [header, ...rows].reduce((max, row) => Math.max(max, plainText(row[index]).length), 0);
     return Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, longest));
   });
 }

@@ -1,18 +1,19 @@
 /**
- * Tables that fit, and code blocks you can take with you.
+ * Tables that fit, code blocks and quotes you can take with you.
  *
  * react-native-marked gives every column a hard `windowWidth * 1.3 / 3` and wraps the table in a
  * horizontal ScrollView (`utils/table.ts`): a two-column table was 86% of the screen of mostly
  * whitespace, and a four-column one had to be dragged sideways inside the inverted chat list.
- * Both renderers override that table, and both are guarded here.
+ * Both renderers override that table, the copy strip and the quote bar, and all three are
+ * guarded here.
  *
- * The library is mocked for the whole suite (jest.setup.js), so a fenced block never reaches the
- * renderer through `useMarkdown`. The overrides are therefore called directly, which is also the
- * only thing worth asserting about them: what they hand the strip and the table.
+ * The library is mocked for the whole suite (jest.setup.js), so none of it reaches a renderer
+ * through `useMarkdown`. The overrides are therefore called directly, which is also the only
+ * thing worth asserting about them: what they hand the strip, the bar and the table.
  */
 
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { WrappingRenderer } from '../AgentMarkdown';
@@ -106,5 +107,25 @@ test('a fence with no language still offers the button', () => {
   const tree = render(<CodeBlockBar value="plain" />);
   press(tree, 'Copy code block');
   expect(Clipboard.setString).toHaveBeenCalledWith('plain');
+  ReactTestRenderer.act(() => tree.unmount());
+});
+
+test.each([
+  ['the bubble', () => new WrappingRenderer({}, {})],
+  ['the document', () => new DocumentRenderer('#ffffff', {})],
+])('%s puts a copy on a quote, carrying its text', (_name, make) => {
+  const tree = render(
+    make().blockquote([<Text key="a">Une pièce jointe ne couvre plus le chat</Text>], {}),
+  );
+  press(tree, 'Copy quote');
+  // The words as read, not the markdown: no `>` prefix in what lands on the clipboard.
+  expect(Clipboard.setString).toHaveBeenCalledWith('Une pièce jointe ne couvre plus le chat');
+  ReactTestRenderer.act(() => tree.unmount());
+});
+
+test('a quote that yields no text offers nothing to copy', () => {
+  const empty = <View key="empty" />;
+  const tree = render(new WrappingRenderer({}, {}).blockquote([empty], {}));
+  expect(tree.root.findAll(n => n.props?.accessibilityLabel === 'Copy quote')).toHaveLength(0);
   ReactTestRenderer.act(() => tree.unmount());
 });

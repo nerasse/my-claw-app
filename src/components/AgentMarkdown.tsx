@@ -6,6 +6,8 @@ import { CodeBlockBar } from './CodeBlockBar';
 import { ScrollableBlock } from './ScrollableBlock';
 import { MarkdownTable } from './MarkdownTable';
 import { MarkdownList } from './MarkdownList';
+import { QuoteBar } from './QuoteBar';
+import { quoteText } from './markdownText';
 import { highlighted, tokenColors } from './codeeditor/highlight';
 import { EMPTY_INK, type MarkdownInk } from './markdownInk';
 import { font, lineBoxFor, lineHeightFor, space, useChatFontScale, useTheme, type Palette } from '../theme';
@@ -167,6 +169,20 @@ export class WrappingRenderer extends Renderer {
             {highlighted(text, language, this.ink.tokens)}
           </Text>
         </ScrollableBlock>
+      </View>
+    );
+  }
+
+  /**
+   * The library's `getBlockquoteNode`, plus the way out of the quote: its text, one tap.
+   * The bar is the box's first row, not a floating button (it would cover a long first line).
+   */
+  blockquote(children: ReactNode[], styles?: ViewStyle): ReactNode {
+    const text = quoteText(children);
+    return (
+      <View key={this.getKey()} style={styles}>
+        {text ? <QuoteBar value={text} /> : null}
+        {children}
       </View>
     );
   }
