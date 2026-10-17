@@ -2196,6 +2196,46 @@ export interface DeviceRevokeResultFrame {
   error?: string;
 }
 
+/** One remote node, as the server lists it -- docs/remote-nodes.md in the my-claw repo. */
+export interface NodeRecord {
+  nodeId: string;
+  name: string;
+  online: boolean;
+  createdAt: string;
+  lastSeenAt?: string;
+  os?: string;
+  arch?: string;
+  hostname?: string;
+  user?: string;
+  mode?: 'admin' | 'user';
+  version?: string;
+  /** The tools the machine announced, by name. What runs there, never here. */
+  tools: string[];
+  /** The agent file its sub-agent lives in: the description is written there, under Agents. */
+  agent?: string;
+}
+
+export interface NodesListResultFrame {
+  type: 'nodes.list.result';
+  nodes: NodeRecord[];
+}
+
+/** The claim code a new machine pairs with, and when it stops working. */
+export interface NodesAddResultFrame {
+  type: 'nodes.add.result';
+  ok: boolean;
+  code?: string;
+  expiresAt?: number;
+  error?: string;
+}
+
+export interface NodesRevokeResultFrame {
+  type: 'nodes.revoke.result';
+  ok: boolean;
+  nodeId: string;
+  error?: string;
+}
+
 /** What a pairing code stands for, shown before the owner approves. Carries no credential. */
 export interface DevicePairInfoFrame {
   type: 'device.pair.info';
@@ -2758,6 +2798,9 @@ export type ServerFrame =
   | DevicePairInfoFrame
   | DevicePairResultFrame
   | DeviceInviteResultFrame
+  | NodesListResultFrame
+  | NodesAddResultFrame
+  | NodesRevokeResultFrame
   | TagsResultFrame
   | UpdateResultFrame
   | ProvidersEnvResultFrame
@@ -2778,6 +2821,9 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'device.pair.info',
   'device.pair.result',
   'device.invite.result',
+  'nodes.list.result',
+  'nodes.add.result',
+  'nodes.revoke.result',
   'chat.message',
   'chat.user',
   'chat.compaction',

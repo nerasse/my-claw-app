@@ -10,6 +10,7 @@ import { questionStore } from './questionStore';
 import { undoStore } from './undoStore';
 import { acknowledgeDiagnostics } from './diagnostics';
 import { devicesStore } from './devices';
+import { nodesStore } from './nodes';
 import { modelStore } from './model';
 import { jobsStore } from './jobs';
 import { browserStore } from './browser';
@@ -367,6 +368,15 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // screen has to leave its spinner and say why.
       if (!frame.ok && !frame.deviceId) devicesStore.onPairError(frame.error ?? 'unknown');
       else devicesStore.onPairResult(frame);
+      break;
+    case 'nodes.list.result':
+      nodesStore.onList(frame);
+      break;
+    case 'nodes.add.result':
+      nodesStore.onAdd(frame);
+      break;
+    case 'nodes.revoke.result':
+      nodesStore.onRevoked(frame);
       break;
     case 'chat.stream.start':
       // The agent is answering, so no command result is coming: a placeholder left by a

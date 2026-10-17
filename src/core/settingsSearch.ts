@@ -50,6 +50,8 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
   { page: 'devices', where: 'Devices', title: 'Paired devices', terms: 'phone browser appareils appairés revoke révoquer' },
   { page: 'devices', where: 'Devices', title: 'Add a device', terms: 'invite invitation inviter ajouter appareil pair pairing appairer associer qr code' },
   { page: 'devices', where: 'Devices', title: 'Approve a request', terms: 'approve approuver demande request pairing code chiffres digits' },
+  { page: 'nodes', where: 'Nodes', title: 'Nodes', terms: 'node remote distant machine server serveur arm bras ssh revoke révoquer tools outils' },
+  { page: 'nodes', where: 'Nodes', title: 'Add a node', terms: 'add node ajouter machine installer install appairer pair remote distant serveur' },
   { page: 'tools', where: 'Tools', title: 'Ask before running a tool', terms: 'confirm approval ask permission autoriser demander confirmer avant' },
   { page: 'approvals', where: 'Tools', title: 'Approval history', terms: 'approval allowed refused autorisations refusé permission historique' },
   { page: 'advanced', where: 'Advanced', title: 'Connection and send queue', terms: 'state queue file d\'attente état connexion' },

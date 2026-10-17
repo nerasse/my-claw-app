@@ -222,6 +222,7 @@ import { providersEnvStore, useProvidersEnv } from '../core/providers';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
+import { NodesScreen } from './NodesScreen';
 import { ServicesScreen } from './ServicesScreen';
 import { SETUP_WIDTH, SetupScreen, setupBanner, toggleSkip, useSetupSteps } from './SetupScreen';
 import { AccountScreen } from './AccountScreen';
@@ -4732,6 +4733,12 @@ export function AppShell(): React.JSX.Element {
                   setDevicesFrom('index');
                 }}
                 startInviting={devicesFrom === 'setup'}
+                connected={status.state === 'connected'}
+                serverOrigin={httpOrigin(url)}
+              />
+            ) : settingsPage === 'nodes' ? (
+              <NodesScreen
+                onBack={() => setSettingsPage(parentOf('nodes'))}
                 connected={status.state === 'connected'}
                 serverOrigin={httpOrigin(url)}
               />

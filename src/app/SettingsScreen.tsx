@@ -53,6 +53,9 @@ export const GROUPS: ReadonlyArray<{ title: string; categories: readonly Categor
         ? { page: 'servers', title: 'Servers', hint: 'this one, the others, switch, join with an invitation' }
         : { page: 'servers', title: 'Server', hint: 'address, connect, join with an invitation' },
       { page: 'devices', title: 'Devices', hint: 'add a device, approve a request, paired devices' },
+      // The other side of "who reaches this server": machines it reaches, through the client they
+      // install themselves. Kept beside Devices because both are the connection, not the agent.
+      { page: 'nodes', title: 'Nodes', hint: 'remote machines: add one, its tools, revoke' },
       { page: 'advanced', title: 'Advanced', hint: 'connection state, this device, diagnostics, raw config' },
     ],
   },
