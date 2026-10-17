@@ -223,6 +223,7 @@ import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
 import { NodesScreen } from './NodesScreen';
+import { NodeScreen } from './NodeScreen';
 import { ServicesScreen } from './ServicesScreen';
 import { SETUP_WIDTH, SetupScreen, setupBanner, toggleSkip, useSetupSteps } from './SetupScreen';
 import { AccountScreen } from './AccountScreen';
@@ -543,6 +544,7 @@ export function AppShell(): React.JSX.Element {
   const [settingsPage, setSettingsPage] = useState<SettingsPage>('index');
   /** The agent detail page shows this key, taken from the last agents.config.result. */
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   /** The provider page shows this key's models, filtered from the shared catalog. */
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   /** The provider form: create (no key yet) or edit (the key being renamed). */
@@ -4739,8 +4741,18 @@ export function AppShell(): React.JSX.Element {
             ) : settingsPage === 'nodes' ? (
               <NodesScreen
                 onBack={() => setSettingsPage(parentOf('nodes'))}
+                onOpenNode={nodeId => {
+                  setSelectedNode(nodeId);
+                  setSettingsPage('node');
+                }}
                 connected={status.state === 'connected'}
                 serverOrigin={httpOrigin(url)}
+              />
+            ) : settingsPage === 'node' && selectedNode ? (
+              <NodeScreen
+                nodeId={selectedNode}
+                onBack={() => setSettingsPage('nodes')}
+                connected={status.state === 'connected'}
               />
             ) : settingsPage === 'servers' ? (
               <ServersScreen

@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { nodesStore, nodeInstallCommands, useNodes } from '../core/nodes';
+import { nodeInstallCommand, nodeServerUrl, nodesStore, useNodes, type NodeInstallMode, type NodePlatform } from '../core/nodes';
 import type { NodeRecord } from '../core/protocol';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import { ActionSheet } from '../components/ActionSheet';
 import { CloseButton } from '../components/CloseButton';
 import { useDismissKeyboard } from '../core/keyboard';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -34,6 +33,15 @@ function describe(node: NodeRecord): string {
   return parts.length > 0 ? parts.join(' · ') : 'no facts yet';
 }
 
+/** "2 of 3 tools: bash, read" -- what the agent actually holds, and what the machine offers. */
+function toolLine(node: NodeRecord): string {
+  if (node.tools.length === 0) return 'no tools';
+  const exposed = node.exposed ?? node.tools;
+  const names = exposed.join(', ') || 'none';
+  const count = node.exposed ? `${exposed.length} of ${node.tools.length} tools` : `${node.tools.length} tools`;
+  return `${count}: ${names}`;
+}
+
 /**
  * The remote nodes: machines my-claw reaches over the connection they dial out themselves. Each
  * one is a sub-agent whose tools run there, never here -- docs/remote-nodes.md on the server.
@@ -44,10 +52,12 @@ function describe(node: NodeRecord): string {
  */
 export function NodesScreen({
   onBack,
+  onOpenNode,
   connected,
   serverOrigin,
 }: {
   onBack: () => void;
+  onOpenNode: (nodeId: string) => void;
   connected: boolean;
   /** The address this device reaches the server at: what the install lines name. */
   serverOrigin: string;
@@ -58,7 +68,12 @@ export function NodesScreen({
   const state = useNodes();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
-  const [confirming, setConfirming] = useState<NodeRecord | null>(null);
+  // What the machine is, and how it installs: the command is generated from the two, so the
+  // card shows one line to copy instead of four.
+  const [platform, setPlatform] = useState<NodePlatform>('unix');
+  const [mode, setMode] = useState<NodeInstallMode>('admin');
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (connected) nodesStore.refresh();
@@ -67,12 +82,13 @@ export function NodesScreen({
     () => () => {
       nodesStore.clearMessages();
       nodesStore.clearClaim();
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
     },
     [],
   );
 
   const claim = state.claim;
-  const commands = claim ? nodeInstallCommands(serverOrigin, claim.code) : null;
+  const command = claim ? nodeInstallCommand(serverOrigin, claim.code, platform, mode) : '';
 
   const copy = useCallback((text: string) => {
     Clipboard.setString(text);
@@ -100,13 +116,9 @@ export function NodesScreen({
         {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
         {state.notice ? <Text style={styles.notice}>{state.notice}</Text> : null}
 
-        {!adding ? null : claim && commands ? (
+        {!adding ? null : claim ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Pair a node</Text>
-            <Text style={styles.hint}>
-              On the machine to add, run one of these. With sudo it installs as a service (root, its own user
-              account); without, it runs as you and does what you can do.
-            </Text>
             <View style={styles.codeBox}>
               <Text style={styles.codeLabel}>code</Text>
               <Text style={styles.code} selectable accessibilityLabel="Claim code">
@@ -114,31 +126,74 @@ export function NodesScreen({
               </Text>
               <Text style={styles.detail}>{`single use · valid until ${until(claim.expiresAt)}`}</Text>
             </View>
+
+            <Text style={styles.commandLabel}>the machine</Text>
+            <View style={styles.segment}>
+              <Pressable
+                style={[styles.segmentItem, platform === 'unix' ? styles.segmentItemActive : null]}
+                onPress={() => setPlatform('unix')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: platform === 'unix' }}
+                accessibilityLabel="Linux or macOS">
+                <Text style={[styles.segmentText, platform === 'unix' ? styles.segmentTextActive : null]}>Linux / macOS</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.segmentItem, platform === 'windows' ? styles.segmentItemActive : null]}
+                onPress={() => setPlatform('windows')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: platform === 'windows' }}
+                accessibilityLabel="Windows">
+                <Text style={[styles.segmentText, platform === 'windows' ? styles.segmentTextActive : null]}>Windows</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.commandLabel}>how it installs</Text>
+            <View style={styles.segment}>
+              <Pressable
+                style={[styles.segmentItem, mode === 'admin' ? styles.segmentItemActive : null]}
+                onPress={() => setMode('admin')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mode === 'admin' }}
+                accessibilityLabel="Install as a service">
+                <Text style={[styles.segmentText, mode === 'admin' ? styles.segmentTextActive : null]}>Service (admin)</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.segmentItem, mode === 'user' ? styles.segmentItemActive : null]}
+                onPress={() => setMode('user')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mode === 'user' }}
+                accessibilityLabel="Install as this user">
+                <Text style={[styles.segmentText, mode === 'user' ? styles.segmentTextActive : null]}>As you (user)</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.hint}>
+              {mode === 'admin'
+                ? 'a system service, started at boot, with its own account and the rights you grant it'
+                : 'runs as you, with your rights, started at logon'}
+            </Text>
+
+            <Text style={styles.commandLabel}>
+              {platform === 'windows' ? 'run this in PowerShell on it (elevated for the service)' : 'run this in a terminal on it'}
+            </Text>
+            <Text style={styles.command} selectable>
+              {command}
+            </Text>
+            <Pressable
+              style={[styles.button, styles.approve]}
+              onPress={() => {
+                copy(command);
+                setCopied(true);
+                if (copiedTimer.current) clearTimeout(copiedTimer.current);
+                copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Copy the install command">
+              <Text style={styles.buttonText}>{copied ? 'Copied' : 'Copy the command'}</Text>
+            </Pressable>
             <Text style={styles.detail} selectable numberOfLines={2}>
-              {commands.server}
+              {nodeServerUrl(serverOrigin)}
             </Text>
-            <Text style={styles.commandLabel}>Linux / macOS</Text>
-            <Text style={styles.command} selectable>
-              {commands.unix}
-            </Text>
-            <Pressable
-              style={styles.button}
-              onPress={() => copy(commands.unix)}
-              accessibilityRole="button"
-              accessibilityLabel="Copy the Linux and macOS command">
-              <Text style={styles.buttonText}>Copy</Text>
-            </Pressable>
-            <Text style={styles.commandLabel}>Windows (PowerShell)</Text>
-            <Text style={styles.command} selectable>
-              {commands.windows}
-            </Text>
-            <Pressable
-              style={styles.button}
-              onPress={() => copy(commands.windows)}
-              accessibilityRole="button"
-              accessibilityLabel="Copy the Windows command">
-              <Text style={styles.buttonText}>Copy</Text>
-            </Pressable>
+
             <View style={styles.actions}>
               <Pressable
                 style={[styles.button, styles.grow, state.busy && styles.busy]}
@@ -196,7 +251,12 @@ export function NodesScreen({
         ) : null}
 
         {state.nodes.map(node => (
-          <View key={node.nodeId} style={styles.nodeRow}>
+          <Pressable
+            key={node.nodeId}
+            style={styles.nodeRow}
+            onPress={() => onOpenNode(node.nodeId)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${node.name}`}>
             <View style={styles.nodeMain}>
               <View style={styles.nodeTitleLine}>
                 <View style={[styles.dot, node.online ? styles.dotOnline : null]} />
@@ -204,43 +264,26 @@ export function NodesScreen({
                   {node.name}
                 </Text>
                 {node.mode ? <Text style={styles.badge}>{node.mode}</Text> : null}
+                {node.approval ? <Text style={styles.badge}>ask</Text> : null}
                 {node.version ? <Text style={styles.badge}>{node.version}</Text> : null}
               </View>
               <Text style={styles.detail}>{describe(node)}</Text>
-              <Text style={styles.detail}>
+              <Text style={styles.detail} numberOfLines={1}>
                 {node.online ? 'online now' : since(node.lastSeenAt)}
-                {node.tools.length > 0 ? ` · ${node.tools.length} tools: ${node.tools.join(', ')}` : ' · no tools'}
+                {` · ${toolLine(node)}`}
               </Text>
+              {node.description ? (
+                <Text style={styles.detail} numberOfLines={1}>
+                  {node.description}
+                </Text>
+              ) : null}
               {node.agent ? <Text style={styles.detail}>{`agent ${node.agent}`}</Text> : null}
             </View>
-            <Pressable
-              style={styles.revoke}
-              onPress={() => setConfirming(node)}
-              accessibilityRole="button"
-              accessibilityLabel={`Revoke ${node.name}`}>
-              <Text style={styles.buttonText}>Revoke</Text>
-            </Pressable>
-          </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
         ))}
       </ScrollView>
       {indicator}
-
-      {confirming ? (
-        <ActionSheet
-          preview={`Revoke "${confirming.name}"? Its socket closes at once, its credential stops working, and its agent file is removed. The client stays installed on that machine.`}
-          options={[
-            {
-              label: 'Revoke',
-              danger: true,
-              onPress: () => {
-                nodesStore.revoke(confirming.nodeId);
-                setConfirming(null);
-              },
-            },
-          ]}
-          onClose={() => setConfirming(null)}
-        />
-      ) : null}
     </View>
   );
 }
@@ -303,6 +346,17 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.sm,
     padding: space.sm,
   },
+  segment: {
+    flexDirection: 'row' as const,
+    backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.sm,
+    padding: 2,
+    gap: 2,
+  },
+  segmentItem: { flex: 1, alignItems: 'center' as const, paddingVertical: 8, borderRadius: radius.sm - 1 },
+  segmentItemActive: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.accent },
+  segmentText: { fontSize: font.meta, color: palette.textMuted },
+  segmentTextActive: { color: palette.text, fontWeight: '600' as const },
   grow: { flex: 1, alignItems: 'center' as const },
   actions: { flexDirection: 'row' as const, gap: space.sm },
   button: {
@@ -326,6 +380,7 @@ const createStyles = (palette: Palette) => ({
     borderWidth: 1,
     borderColor: palette.border,
   },
+  chevron: { fontSize: font.title, color: palette.textFaint, paddingHorizontal: space.xs },
   buttonText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   sectionLabel: {
     marginTop: space.md,

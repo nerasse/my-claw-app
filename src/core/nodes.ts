@@ -1,6 +1,14 @@
 import { useSyncExternalStore } from 'react';
 import { connection } from './connection';
-import type { NodeRecord, NodesAddResultFrame, NodesListResultFrame, NodesRevokeResultFrame } from './protocol';
+import type {
+  NodeRecord,
+  NodesAccessSetResultFrame,
+  NodesAddResultFrame,
+  NodesDescribeResultFrame,
+  NodesListResultFrame,
+  NodesRenameResultFrame,
+  NodesRevokeResultFrame,
+} from './protocol';
 
 type Listener = () => void;
 
@@ -68,6 +76,27 @@ class NodesStoreImpl {
     connection.send(JSON.stringify({ type: 'nodes.revoke', nodeId })).catch(() => {});
   }
 
+  /** The roster's label, and the agent file follows it. */
+  rename(nodeId: string, name: string): void {
+    this.set({ busy: true, error: null, notice: null });
+    connection.send(JSON.stringify({ type: 'nodes.rename', nodeId, name })).catch(() => {});
+  }
+
+  /** The description the orchestrator reads when it picks this node's agent. */
+  describe(nodeId: string, description: string): void {
+    this.set({ busy: true, error: null, notice: null });
+    connection.send(JSON.stringify({ type: 'nodes.describe', nodeId, description })).catch(() => {});
+  }
+
+  /**
+   * What the node's agent may run there, and whether running it asks first. `tools: null`
+   * removes the narrowing; the caller leaves a field out to keep it as it is.
+   */
+  setAccess(nodeId: string, access: { tools?: string[] | null; approval?: boolean }): void {
+    this.set({ busy: true, error: null, notice: null });
+    connection.send(JSON.stringify({ type: 'nodes.access.set', nodeId, ...access })).catch(() => {});
+  }
+
   clearClaim(): void {
     this.set({ claim: null });
   }
@@ -98,6 +127,33 @@ class NodesStoreImpl {
     if (frame.ok) this.refresh();
   }
 
+  onRenamed(frame: NodesRenameResultFrame): void {
+    this.set({
+      busy: false,
+      error: frame.ok ? null : (frame.error ?? 'the node could not be renamed'),
+      notice: frame.ok ? `renamed to ${frame.name ?? ''}${frame.agent ? ` (agent ${frame.agent})` : ''}` : null,
+    });
+    if (frame.ok) this.refresh();
+  }
+
+  onDescribed(frame: NodesDescribeResultFrame): void {
+    this.set({
+      busy: false,
+      error: frame.ok ? null : (frame.error ?? 'the description could not be written'),
+      notice: frame.ok ? 'description saved' : null,
+    });
+    if (frame.ok) this.refresh();
+  }
+
+  onAccessSet(frame: NodesAccessSetResultFrame): void {
+    this.set({
+      busy: false,
+      error: frame.ok ? null : (frame.error ?? 'the access could not be set'),
+      notice: frame.ok ? 'saved' : null,
+    });
+    if (frame.ok) this.refresh();
+  }
+
   /** Only tests need it: the store outlives a screen, on purpose. */
   reset(): void {
     this.state = EMPTY;
@@ -116,26 +172,30 @@ export function formatClaimCode(code: string): string {
   return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 }
 
-export interface NodeInstallCommands {
-  /** What the node dials, `wss://<host>/node`. */
-  server: string;
-  unix: string;
-  windows: string;
+export type NodePlatform = 'unix' | 'windows';
+/** `admin` installs a system service; `user` runs with the account's own rights. */
+export type NodeInstallMode = 'admin' | 'user';
+
+/** What the node dials: `wss://<host>/node`. */
+export function nodeServerUrl(origin: string): string {
+  const base = origin.replace(/\/+$/, '');
+  return `${base.replace(/^http/, 'ws')}/node`;
 }
 
 /**
- * The two one-liners the add card shows, built from the address this app reaches the server at.
+ * The one line a machine runs to install and pair. It fetches the installer from this server,
+ * which relays the binary with its own release key, and hands it the code and the address to
+ * dial -- so the machine needs nothing else.
  *
  * The same rule as `myclaw node add`: whoever knows the address says it, because the daemon only
  * ever sees the Host it was asked on. Here that is the address this device is connected to.
  */
-export function nodeInstallCommands(origin: string, code: string): NodeInstallCommands {
+export function nodeInstallCommand(origin: string, code: string, platform: NodePlatform, mode: NodeInstallMode): string {
   const base = origin.replace(/\/+$/, '');
-  const server = `${base.replace(/^http/, 'ws')}/node`;
+  const server = nodeServerUrl(origin);
   const shown = formatClaimCode(code);
-  return {
-    server,
-    unix: `curl -fsSL '${base}/node/install.sh' | sudo sh -s -- --pair ${shown} --server ${server}`,
-    windows: `iwr -UseBasicParsing '${base}/node/install.ps1' -OutFile $env:TEMP\\install-node.ps1; & $env:TEMP\\install-node.ps1 -Pair ${shown} -Server ${server}`,
-  };
+  if (platform === 'windows') {
+    return `iwr -UseBasicParsing '${base}/node/install.ps1' -OutFile $env:TEMP\\install-node.ps1; & $env:TEMP\\install-node.ps1 -Pair ${shown} -Server ${server} -Mode ${mode}`;
+  }
+  return `curl -fsSL '${base}/node/install.sh' | ${mode === 'admin' ? 'sudo ' : ''}sh -s -- --pair ${shown} --server ${server} --mode ${mode}`;
 }

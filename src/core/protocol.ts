@@ -2213,6 +2213,12 @@ export interface NodeRecord {
   tools: string[];
   /** The agent file its sub-agent lives in: the description is written there, under Agents. */
   agent?: string;
+  /** What that file tells the orchestrator this machine is for. */
+  description?: string;
+  /** The subset of `tools` the server exposes; absent means all of them. */
+  exposed?: string[];
+  /** Ask before running anything on that machine. */
+  approval?: boolean;
 }
 
 export interface NodesListResultFrame {
@@ -2231,6 +2237,30 @@ export interface NodesAddResultFrame {
 
 export interface NodesRevokeResultFrame {
   type: 'nodes.revoke.result';
+  ok: boolean;
+  nodeId: string;
+  error?: string;
+}
+
+export interface NodesRenameResultFrame {
+  type: 'nodes.rename.result';
+  ok: boolean;
+  nodeId: string;
+  name?: string;
+  /** The agent file after the rename: it follows the node. */
+  agent?: string;
+  error?: string;
+}
+
+export interface NodesDescribeResultFrame {
+  type: 'nodes.describe.result';
+  ok: boolean;
+  nodeId: string;
+  error?: string;
+}
+
+export interface NodesAccessSetResultFrame {
+  type: 'nodes.access.set.result';
   ok: boolean;
   nodeId: string;
   error?: string;
@@ -2801,6 +2831,9 @@ export type ServerFrame =
   | NodesListResultFrame
   | NodesAddResultFrame
   | NodesRevokeResultFrame
+  | NodesRenameResultFrame
+  | NodesDescribeResultFrame
+  | NodesAccessSetResultFrame
   | TagsResultFrame
   | UpdateResultFrame
   | ProvidersEnvResultFrame
@@ -2824,6 +2857,9 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'nodes.list.result',
   'nodes.add.result',
   'nodes.revoke.result',
+  'nodes.rename.result',
+  'nodes.describe.result',
+  'nodes.access.set.result',
   'chat.message',
   'chat.user',
   'chat.compaction',

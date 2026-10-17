@@ -1,4 +1,4 @@
-import { nodesStore, formatClaimCode, nodeInstallCommands } from '../nodes';
+import { nodesStore, formatClaimCode, nodeInstallCommand, nodeServerUrl } from '../nodes';
 
 /**
  * The store is the whole client side of the Nodes page: what it holds is what the owner decides
@@ -48,19 +48,33 @@ describe('node install lines', () => {
     expect(formatClaimCode('SHORT')).toBe('SHORT');
   });
 
-  test('both commands name the address this device reaches the server at', () => {
-    const commands = nodeInstallCommands('https://myclaw.kssimi.fr', 'ABCD1234');
-    expect(commands.server).toBe('wss://myclaw.kssimi.fr/node');
-    expect(commands.unix).toBe(
-      "curl -fsSL 'https://myclaw.kssimi.fr/node/install.sh' | sudo sh -s -- --pair ABCD-1234 --server wss://myclaw.kssimi.fr/node",
+  test('the server line is the address this device reaches the server at', () => {
+    expect(nodeServerUrl('https://myclaw.kssimi.fr')).toBe('wss://myclaw.kssimi.fr/node');
+    expect(nodeServerUrl('http://10.0.0.5:8080/')).toBe('ws://10.0.0.5:8080/node');
+  });
+
+  test('Linux and macOS: sudo for the service, no sudo for the user install', () => {
+    const admin = nodeInstallCommand('https://myclaw.kssimi.fr', 'ABCD1234', 'unix', 'admin');
+    expect(admin).toBe(
+      "curl -fsSL 'https://myclaw.kssimi.fr/node/install.sh' | sudo sh -s -- --pair ABCD-1234 --server wss://myclaw.kssimi.fr/node --mode admin",
     );
-    expect(commands.windows).toContain("iwr -UseBasicParsing 'https://myclaw.kssimi.fr/node/install.ps1'");
-    expect(commands.windows).toContain('-Pair ABCD-1234 -Server wss://myclaw.kssimi.fr/node');
+    const user = nodeInstallCommand('https://myclaw.kssimi.fr', 'ABCD1234', 'unix', 'user');
+    expect(user).toBe(
+      "curl -fsSL 'https://myclaw.kssimi.fr/node/install.sh' | sh -s -- --pair ABCD-1234 --server wss://myclaw.kssimi.fr/node --mode user",
+    );
+  });
+
+  test('Windows: the same two modes, told apart by -Mode', () => {
+    const command = nodeInstallCommand('https://myclaw.kssimi.fr', 'ABCD1234', 'windows', 'admin');
+    expect(command).toBe(
+      "iwr -UseBasicParsing 'https://myclaw.kssimi.fr/node/install.ps1' -OutFile $env:TEMP\\install-node.ps1; & $env:TEMP\\install-node.ps1 -Pair ABCD-1234 -Server wss://myclaw.kssimi.fr/node -Mode admin",
+    );
+    expect(nodeInstallCommand('https://myclaw.kssimi.fr', 'ABCD1234', 'windows', 'user')).toContain('-Mode user');
   });
 
   test('a trailing slash does not double up, and http stays http', () => {
-    const commands = nodeInstallCommands('http://10.0.0.5:8080/', 'ABCD1234');
-    expect(commands.server).toBe('ws://10.0.0.5:8080/node');
-    expect(commands.unix).toContain("'http://10.0.0.5:8080/node/install.sh'");
+    const command = nodeInstallCommand('http://10.0.0.5:8080/', 'ABCD1234', 'unix', 'admin');
+    expect(command).toContain("'http://10.0.0.5:8080/node/install.sh'");
+    expect(command).toContain('--server ws://10.0.0.5:8080/node');
   });
 });
