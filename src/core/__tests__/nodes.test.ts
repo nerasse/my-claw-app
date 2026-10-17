@@ -1,4 +1,4 @@
-import { nodesStore, formatClaimCode, nodeInstallCommand, nodeServerUrl } from '../nodes';
+import { composeNodeDescription, nodesStore, formatClaimCode, nodeInstallCommand, nodeServerUrl } from '../nodes';
 
 /**
  * The store is the whole client side of the Nodes page: what it holds is what the owner decides
@@ -76,5 +76,18 @@ describe('node install lines', () => {
     const command = nodeInstallCommand('http://10.0.0.5:8080/', 'ABCD1234', 'unix', 'admin');
     expect(command).toContain("'http://10.0.0.5:8080/node/install.sh'");
     expect(command).toContain('--server ws://10.0.0.5:8080/node');
+  });
+});
+
+describe('composing a description', () => {
+  test('the three answers become one line, empty ones dropped', () => {
+    expect(composeNodeDescription({ purpose: 'The build box', reaches: 'the LAN and the staging DB', never: '/etc' })).toBe(
+      'The build box. Reaches the LAN and the staging DB. Never touch /etc.',
+    );
+    expect(composeNodeDescription({ purpose: 'The build box.', reaches: '', never: '' })).toBe('The build box.');
+    expect(composeNodeDescription({ purpose: '  two\nlines  ', reaches: '', never: 'the root fs' })).toBe(
+      'two lines. Never touch the root fs.',
+    );
+    expect(composeNodeDescription({ purpose: '', reaches: '', never: '' })).toBe('');
   });
 });

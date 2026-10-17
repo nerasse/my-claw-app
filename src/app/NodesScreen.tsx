@@ -264,6 +264,7 @@ export function NodesScreen({
                   {node.name}
                 </Text>
                 {node.mode ? <Text style={styles.badge}>{node.mode}</Text> : null}
+                {node.disabled ? <Text style={styles.badge}>off</Text> : null}
                 {node.approval ? <Text style={styles.badge}>ask</Text> : null}
                 {node.version ? <Text style={styles.badge}>{node.version}</Text> : null}
               </View>

@@ -4753,6 +4753,7 @@ export function AppShell(): React.JSX.Element {
                 nodeId={selectedNode}
                 onBack={() => setSettingsPage('nodes')}
                 connected={status.state === 'connected'}
+                serverVersion={serverVersion ?? undefined}
               />
             ) : settingsPage === 'servers' ? (
               <ServersScreen

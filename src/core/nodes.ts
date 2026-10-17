@@ -8,6 +8,7 @@ import type {
   NodesListResultFrame,
   NodesRenameResultFrame,
   NodesRevokeResultFrame,
+  NodesUpdateResultFrame,
 } from './protocol';
 
 type Listener = () => void;
@@ -92,9 +93,15 @@ class NodesStoreImpl {
    * What the node's agent may run there, and whether running it asks first. `tools: null`
    * removes the narrowing; the caller leaves a field out to keep it as it is.
    */
-  setAccess(nodeId: string, access: { tools?: string[] | null; approval?: boolean }): void {
+  setAccess(nodeId: string, access: { tools?: string[] | null; approval?: boolean; disabled?: boolean }): void {
     this.set({ busy: true, error: null, notice: null });
     connection.send(JSON.stringify({ type: 'nodes.access.set', nodeId, ...access })).catch(() => {});
+  }
+
+  /** Asks a connected node to take the server's build now, window or no window. */
+  update(nodeId: string): void {
+    this.set({ busy: true, error: null, notice: null });
+    connection.send(JSON.stringify({ type: 'nodes.update', nodeId })).catch(() => {});
   }
 
   clearClaim(): void {
@@ -154,6 +161,14 @@ class NodesStoreImpl {
     if (frame.ok) this.refresh();
   }
 
+  onUpdated(frame: NodesUpdateResultFrame): void {
+    this.set({
+      busy: false,
+      error: frame.ok ? null : (frame.error ?? 'the update could not be offered'),
+      notice: frame.ok ? 'update offered; the node restarts on the new build' : null,
+    });
+  }
+
   /** Only tests need it: the store outlives a screen, on purpose. */
   reset(): void {
     this.state = EMPTY;
@@ -170,6 +185,25 @@ export function useNodes(): NodesState {
 /** The code as the machine must type it, in the form both installers normalise back. */
 export function formatClaimCode(code: string): string {
   return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
+}
+
+/**
+ * The three questions the generated description asks, joined into the one line the agent file
+ * carries. Empty answers are dropped; a sentence that already ends in punctuation keeps it.
+ */
+export function composeNodeDescription(fields: { purpose: string; reaches: string; never: string }): string {
+  const sentence = (text: string): string => {
+    const trimmed = text.trim().replace(/\s+/g, ' ');
+    if (!trimmed) return '';
+    return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  };
+  return [
+    sentence(fields.purpose),
+    fields.reaches.trim() ? `Reaches ${sentence(fields.reaches)}` : '',
+    fields.never.trim() ? `Never touch ${sentence(fields.never)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 export type NodePlatform = 'unix' | 'windows';

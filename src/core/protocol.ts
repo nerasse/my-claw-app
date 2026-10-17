@@ -2219,6 +2219,8 @@ export interface NodeRecord {
   exposed?: string[];
   /** Ask before running anything on that machine. */
   approval?: boolean;
+  /** Its agent does not run; the machine stays connected. */
+  disabled?: boolean;
 }
 
 export interface NodesListResultFrame {
@@ -2261,6 +2263,14 @@ export interface NodesDescribeResultFrame {
 
 export interface NodesAccessSetResultFrame {
   type: 'nodes.access.set.result';
+  ok: boolean;
+  nodeId: string;
+  error?: string;
+}
+
+/** The owner asking a connected node to take the server's build now, window or no window. */
+export interface NodesUpdateResultFrame {
+  type: 'nodes.update.result';
   ok: boolean;
   nodeId: string;
   error?: string;
@@ -2834,6 +2844,7 @@ export type ServerFrame =
   | NodesRenameResultFrame
   | NodesDescribeResultFrame
   | NodesAccessSetResultFrame
+  | NodesUpdateResultFrame
   | TagsResultFrame
   | UpdateResultFrame
   | ProvidersEnvResultFrame
@@ -2860,6 +2871,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'nodes.rename.result',
   'nodes.describe.result',
   'nodes.access.set.result',
+  'nodes.update.result',
   'chat.message',
   'chat.user',
   'chat.compaction',

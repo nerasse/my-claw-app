@@ -133,3 +133,60 @@ describe('NodeScreen', () => {
     expect(texts(render())).toContain('This node is no longer paired.');
   });
 });
+
+describe('NodeScreen, the rest of the page', () => {
+  beforeEach(() => nodesStore.reset());
+  afterEach(() => jest.restoreAllMocks());
+
+  it('the Enabled switch is on unless the record says off, and turning it off sends the frame', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [NODE] });
+    const setAccess = jest.spyOn(nodesStore, 'setAccess').mockImplementation(() => {});
+    const tree = render();
+    const toggle = byLabel(tree, 'Enabled')[0]!;
+    expect(toggle.props.value).toBe(true);
+    ReactTestRenderer.act(() => {
+      toggle.props.onValueChange(false);
+    });
+    expect(setAccess).toHaveBeenCalledWith('n1', { disabled: true });
+  });
+
+  it('a disabled node reads off, and the switch says so', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [{ ...NODE, disabled: true }] });
+    const tree = render();
+    expect(byLabel(tree, 'Enabled')[0]!.props.value).toBe(false);
+    expect(texts(tree).join('\n')).toContain('its agent is off');
+  });
+
+  it('Update now is offered only for a connected node behind the server', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [NODE] });
+    const behind = render();
+    expect(byLabel(behind, 'Update now')).toHaveLength(0);
+    ReactTestRenderer.act(() => {
+      behind.update(<NodeScreen nodeId="n1" onBack={() => {}} connected serverVersion="0.7.200" />);
+    });
+    const update = jest.spyOn(nodesStore, 'update').mockImplementation(() => {});
+    ReactTestRenderer.act(() => {
+      byLabel(behind, 'Update now')[0]!.props.onPress();
+    });
+    expect(update).toHaveBeenCalledWith('n1');
+  });
+
+  it('the guided fields compose into the description, which stays editable', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [NODE] });
+    const tree = render();
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Guided fields')[0]!.props.onPress();
+    });
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'What it is for')[0]!.props.onChangeText('The build box');
+      byLabel(tree, 'What it reaches')[0]!.props.onChangeText('the staging DB');
+      byLabel(tree, 'What must never be touched')[0]!.props.onChangeText('/etc');
+    });
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Compose the description')[0]!.props.onPress();
+    });
+    expect(byLabel(tree, 'Node description')[0]!.props.value).toBe(
+      'The build box. Reaches the staging DB. Never touch /etc.',
+    );
+  });
+});

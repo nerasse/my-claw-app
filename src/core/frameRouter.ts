@@ -387,6 +387,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'nodes.access.set.result':
       nodesStore.onAccessSet(frame);
       break;
+    case 'nodes.update.result':
+      nodesStore.onUpdated(frame);
+      break;
     case 'chat.stream.start':
       // The agent is answering, so no command result is coming: a placeholder left by a
       // command this server does not know would sit there forever.

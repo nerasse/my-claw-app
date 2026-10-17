@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
-import { nodesStore, useNodes } from '../core/nodes';
+import { composeNodeDescription, nodesStore, useNodes } from '../core/nodes';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
@@ -37,10 +37,13 @@ export function NodeScreen({
   nodeId,
   onBack,
   connected,
+  serverVersion,
 }: {
   nodeId: string;
   onBack: () => void;
   connected: boolean;
+  /** The server's own version: a node behind it is offered the update, here on demand. */
+  serverVersion?: string;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   useDismissKeyboard();
@@ -51,6 +54,10 @@ export function NodeScreen({
   const [description, setDescription] = useState(node?.description ?? '');
   const [seededFor, setSeededFor] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [guided, setGuided] = useState(false);
+  const [purpose, setPurpose] = useState('');
+  const [reaches, setReaches] = useState('');
+  const [never, setNever] = useState('');
 
   // Seeded once per node, when the roster has it: a refresh must not clobber what is being typed.
   useEffect(() => {
@@ -101,6 +108,43 @@ export function NodeScreen({
             {state.notice ? <Text style={styles.notice}>{state.notice}</Text> : null}
 
             <View style={styles.card}>
+              <View style={styles.switchRow}>
+                <View style={styles.switchLabel}>
+                  <Text style={styles.switchTitle}>Enabled</Text>
+                  <Text style={styles.hint}>
+                    off: its agent does not run. The machine stays paired and connected, and nothing else changes.
+                  </Text>
+                </View>
+                <Switch
+                  value={node.disabled !== true}
+                  onValueChange={value => nodesStore.setAccess(node.nodeId, { disabled: !value })}
+                  disabled={busy}
+                  accessibilityLabel="Enabled"
+                  accessibilityRole="switch"
+                />
+              </View>
+              {node.disabled ? <Text style={styles.detail}>its agent is off; a spawn says so</Text> : null}
+            </View>
+
+            {node.online && serverVersion && node.version && node.version !== serverVersion ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Update</Text>
+                <Text style={styles.hint}>
+                  {`this machine runs ${node.version}, the server runs ${serverVersion}. Its own retry waits half an
+                  hour between attempts; this asks it now.`}
+                </Text>
+                <Pressable
+                  style={[styles.button, styles.approve, busy && styles.busy]}
+                  onPress={() => nodesStore.update(node.nodeId)}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Update now">
+                  <Text style={styles.buttonText}>Update now</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            <View style={styles.card}>
               <Text style={styles.cardTitle}>Name</Text>
               <Text style={styles.hint}>Its agent file follows it, so node-{'{name}'} stays recognisable.</Text>
               <TextInput
@@ -139,6 +183,49 @@ export function NodeScreen({
                 accessibilityLabel="Save the description">
                 <Text style={styles.buttonText}>Save</Text>
               </Pressable>
+              <Pressable
+                onPress={() => setGuided(current => !current)}
+                accessibilityRole="button"
+                accessibilityLabel="Guided fields">
+                <Text style={styles.link}>{guided ? 'hide the guided fields' : 'guided fields'}</Text>
+              </Pressable>
+              {guided ? (
+                <View style={styles.guided}>
+                  <Text style={styles.hint}>
+                    Three answers, one line: they are joined into the description above, which stays editable before
+                    you save it.
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={purpose}
+                    onChangeText={setPurpose}
+                    placeholder="what it is for"
+                    accessibilityLabel="What it is for"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={reaches}
+                    onChangeText={setReaches}
+                    placeholder="what it reaches (network, services, data)"
+                    accessibilityLabel="What it reaches"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={never}
+                    onChangeText={setNever}
+                    placeholder="what must never be touched"
+                    accessibilityLabel="What must never be touched"
+                  />
+                  <Pressable
+                    style={[styles.button, (!purpose.trim() && !reaches.trim() && !never.trim()) && styles.busy]}
+                    onPress={() => setDescription(composeNodeDescription({ purpose, reaches, never }))}
+                    disabled={!purpose.trim() && !reaches.trim() && !never.trim()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Compose the description">
+                    <Text style={styles.buttonText}>Compose</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {node.agent ? <Text style={styles.detail}>{`agent ${node.agent}`}</Text> : <Text style={styles.detail}>no agent file</Text>}
             </View>
 
@@ -281,4 +368,6 @@ const createStyles = (palette: Palette) => ({
   switchLabel: { flex: 1 },
   switchTitle: { color: palette.text, fontSize: font.body, fontWeight: '600' as const },
   toolName: { color: palette.text, fontSize: font.body },
+  link: { fontSize: font.small, color: palette.accent },
+  guided: { gap: space.sm, paddingTop: space.xs },
 });

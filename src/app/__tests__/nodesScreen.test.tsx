@@ -56,6 +56,7 @@ describe('NodesScreen', () => {
           tools: ['bash', 'read'],
           exposed: ['read'],
           approval: true,
+          disabled: true,
           description: 'The build box.',
           agent: 'node-web01',
         },
@@ -68,6 +69,7 @@ describe('NodesScreen', () => {
     expect(shown).toContain('The build box.');
     expect(shown).toContain('agent node-web01');
     expect(shown).toContain('ask');
+    expect(shown).toContain('off');
   });
 
   it('a row opens the node', () => {
