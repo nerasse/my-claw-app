@@ -21,9 +21,18 @@ const MAX_HEIGHT = 124;
 export function StagedVoiceList({
   attachments,
   onRemove,
+  failed,
+  progress,
+  onRetry,
 }: {
   attachments: PendingAttachment[];
   onRemove?: (id: string) => void;
+  /** Recordings whose bytes never reached the server, keyed by chip id. */
+  failed?: Record<string, true>;
+  /** Percent already on the server, keyed by chip id. */
+  progress?: Record<string, number>;
+  /** Sends one take again instead of throwing it away. */
+  onRetry?: (attachment: PendingAttachment) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return (
@@ -34,26 +43,48 @@ export function StagedVoiceList({
       scrollEnabled={attachments.length > 2}
       keyboardShouldPersistTaps="handled"
       nestedScrollEnabled>
-      {attachments.map(attachment => (
-        <View key={attachment.id} style={styles.row}>
-          <VoicePlayer
-            id={attachment.id}
-            uri={attachment.uri}
-            durationMs={attachment.durationMs}
-            trailing={
-              onRemove ? (
-                <Pressable
-                  onPress={() => onRemove(attachment.id)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Remove voice message">
-                  <Text style={styles.remove}>✕</Text>
-                </Pressable>
-              ) : undefined
-            }
-          />
-        </View>
-      ))}
+      {attachments.map(attachment => {
+        const broken = failed?.[attachment.id] === true;
+        const percent = progress?.[attachment.id];
+        return (
+          <View key={attachment.id} style={styles.row}>
+            <VoicePlayer
+              id={attachment.id}
+              uri={attachment.uri}
+              durationMs={attachment.durationMs}
+              trailing={
+                onRemove ? (
+                  <Pressable
+                    onPress={() => onRemove(attachment.id)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove voice message">
+                    <Text style={styles.remove}>✕</Text>
+                  </Pressable>
+                ) : undefined
+              }
+            />
+            {/* A take that never arrived is still here: saying so is what keeps it from being
+                thrown away and re-recorded, and the retry is the way back. */}
+            {broken ? (
+              <View style={styles.status}>
+                <Text style={styles.failed}>upload failed</Text>
+                {onRetry ? (
+                  <Pressable
+                    onPress={() => onRetry(attachment)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry voice upload">
+                    <Text style={styles.retry}>Retry</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : percent !== undefined && percent < 100 ? (
+              <Text style={styles.progress}>{`${percent}%`}</Text>
+            ) : null}
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -70,4 +101,8 @@ const createStyles = (palette: Palette) => ({
     paddingVertical: 4,
   },
   remove: { fontSize: font.meta, lineHeight: 15, color: palette.textMuted },
+  status: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, paddingBottom: 2 },
+  failed: { fontSize: font.meta, color: palette.danger },
+  retry: { fontSize: font.meta, fontWeight: '600' as const, color: palette.accent },
+  progress: { fontSize: font.meta, color: palette.textMuted, paddingBottom: 2 },
 });

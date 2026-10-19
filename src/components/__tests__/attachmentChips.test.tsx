@@ -38,6 +38,7 @@ function render(
     onOpenAttachment?: (attachment: PendingAttachment) => void;
     onRemoveAttachment?: (id: string) => void;
     uploadFailed?: Record<string, true>;
+    onRetryAttachment?: (attachment: PendingAttachment) => void;
   } = {},
 ): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
@@ -118,11 +119,56 @@ test('the cross removes the chip, and its file with it', () => {
   expect(removed).toEqual(['a-2']);
 });
 
-test('a chip whose bytes never arrived says so, and the send is its retry', () => {
-  const tree = render([photo], { uploadFailed: { 'a-1': true }, attachmentThumb: att => att.uri });
+test('a chip whose bytes never arrived says so, and offers its own retry', () => {
+  const retried: string[] = [];
+  const tree = render([photo], {
+    uploadFailed: { 'a-1': true },
+    onRetryAttachment: att => retried.push(att.id),
+    attachmentThumb: att => att.uri,
+  });
 
-
-  // The failure is on the chip, not in a banner: it is one file out of many, and the send
-  // uploads it again.
+  // The failure is on the chip, not in a banner: it is one file out of many. And the chip is not
+  // thrown away for it -- the retry sends the same take again.
   expect(drawn(tree)).toContain('failed');
+  const retry = pressableWith(tree, 'Retry upload of photo.jpg');
+  expect(retry.length).toBeGreaterThan(0);
+  ReactTestRenderer.act(() => retry[0]!.props.onPress());
+  expect(retried).toEqual(['a-1']);
+});
+
+test('a voice take that never arrived keeps its row and offers a retry', () => {
+  const voice: PendingAttachment = {
+    id: 'v-1',
+    uri: 'file:///cache/take.m4a',
+    filename: 'voice-note.m4a',
+    type: 'audio',
+    mimeType: 'audio/mp4',
+    sizeBytes: 900,
+    audioAsVoice: true,
+    durationMs: 4200,
+  };
+  const retried: string[] = [];
+  // The player's waveform is a gesture: the tree needs the root the app provides for real.
+  const { GestureHandlerRootView } = require('react-native-gesture-handler');
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Composer
+          value=""
+          onChange={() => {}}
+          onSend={() => {}}
+          attachments={[voice]}
+          uploadFailed={{ 'v-1': true }}
+          onRetryAttachment={att => retried.push(att.id)}
+        />
+      </GestureHandlerRootView>,
+    );
+  });
+
+  expect(drawn(tree)).toContain('upload failed');
+  const retry = pressableWith(tree, 'Retry voice upload');
+  expect(retry.length).toBeGreaterThan(0);
+  ReactTestRenderer.act(() => retry[0]!.props.onPress());
+  expect(retried).toEqual(['v-1']);
 });

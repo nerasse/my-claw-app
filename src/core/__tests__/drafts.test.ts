@@ -2,9 +2,11 @@ import { connection } from '../connection';
 import {
   applyRemoteDraft,
   applyServerDraft,
+  applyServerFiles,
   clearAllDrafts,
   clearDraft,
   discardDraft,
+  draftAttachmentsOf,
   draftTextOf,
   draftScope,
   setDraftScope,
@@ -179,6 +181,55 @@ describe('draft sync', () => {
     jest.advanceTimersByTime(500);
 
     expect(typed()[1]).toEqual({ type: 'draft.set', threadId: THREAD, text: '' });
+    expect(draftTextOf(THREAD)).toBe('');
+  });
+});
+
+describe('files in a draft', () => {
+  const FILE = { id: 'media-1', filename: 'photo.png', type: 'image' as const, mimeType: 'image/png', sizeBytes: 3, ts: '2026-01-01T00:00:00.000Z' };
+
+  beforeEach(() => {
+    clearAllDrafts();
+  });
+
+  test('a chip the server knows arrives without a local copy', () => {
+    applyServerFiles(THREAD, [FILE], 'replace');
+    const [chip] = draftAttachmentsOf(THREAD);
+    expect(chip).toMatchObject({ id: 'media-1', mediaId: 'media-1', uri: '', filename: 'photo.png', type: 'image' });
+  });
+
+  test('a page adds what this device did not know and removes nothing', () => {
+    // A chip uploaded here left before the page was built: the page must not take it away.
+    saveDraft(THREAD, '', [{ id: 'local', uri: 'file:///p.jpg', filename: 'p.jpg', type: 'image', mimeType: 'image/jpeg' }]);
+    applyServerFiles(THREAD, [FILE], 'merge');
+    expect(draftAttachmentsOf(THREAD).map(chip => chip.mediaId ?? chip.id)).toEqual(['local', 'media-1']);
+  });
+
+  test('the server list is authoritative, and keeps an upload that has no id yet', () => {
+    saveDraft(THREAD, '', [
+      { id: 'local-uploading', uri: 'file:///p.jpg', filename: 'p.jpg', type: 'image', mimeType: 'image/jpeg' },
+      { id: 'gone', mediaId: 'gone', uri: '', filename: 'gone.png', type: 'image', mimeType: 'image/png' },
+    ]);
+    applyServerFiles(THREAD, [FILE], 'replace');
+    expect(draftAttachmentsOf(THREAD).map(chip => chip.mediaId ?? chip.id)).toEqual(['media-1', 'local-uploading']);
+    // The one the server kept from this device keeps its local uri: the thumb is already here.
+    expect(draftAttachmentsOf(THREAD)[0]?.uri).toBe('');
+  });
+
+  test('a chip already known keeps its local uri when the server sends it back', () => {
+    saveDraft(THREAD, 'legende', [
+      { id: 'local', mediaId: 'media-1', uri: 'file:///p.jpg', filename: 'photo.png', type: 'image', mimeType: 'image/png' },
+    ]);
+    applyServerFiles(THREAD, [FILE], 'replace');
+    const [chip] = draftAttachmentsOf(THREAD);
+    expect(chip?.uri).toBe('file:///p.jpg');
+    expect(chip?.id).toBe('local');
+  });
+
+  test('the drawer bit counts a file with no text', () => {
+    applyServerFiles(THREAD, [FILE], 'replace');
+    // setHasDraft is called by the store itself; the map is what the badge reads through it.
+    expect(draftAttachmentsOf(THREAD)).toHaveLength(1);
     expect(draftTextOf(THREAD)).toBe('');
   });
 });

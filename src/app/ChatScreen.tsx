@@ -27,7 +27,7 @@ import { useCommands } from '../core/commands';
 import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
-import { clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
+import { announceDraftFile, clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, forgetDraftFile, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid, viewerFor, type ViewerKind } from '../core/utils';
@@ -311,6 +311,15 @@ export function ChatScreen({
     return () => saveDraft(threadId, draftRef.current, attachmentsRef.current, scope);
   }, [threadId]);
 
+  /**
+   * The chips on screen are the composer's truth while it is open, so the store stays level with
+   * them: it is what another window's list is merged into, and an upload still running has no
+   * server id yet -- a `draft.files.changed` landing now must keep that chip, not drop it.
+   */
+  useEffect(() => {
+    saveDraft(threadId, draftRef.current, attachments);
+  }, [attachments, threadId]);
+
   /** Every change, so the owner's other devices see it. Debounced and deduped by the store. */
   const changeDraft = useCallback(
     (text: string) => {
@@ -351,6 +360,9 @@ export function ChatScreen({
     () =>
       onRemoteDraft(changed => {
         if (changed !== threadId) return;
+        // The chips follow the server's list even while the owner is typing: unlike the text,
+        // there is no caret to protect, and a removal made elsewhere has to take effect here.
+        setAttachments(draftAttachmentsOf(threadId));
         if (draftRef.current.trim() && focusedRef.current) return;
         setDraft(draftTextOf(threadId));
       }),
@@ -385,6 +397,12 @@ export function ChatScreen({
           setAttachments(current =>
             current.map(item => (item.id === pending.id ? { ...item, mediaId: uploaded.id } : item)),
           );
+          // The bytes are on the server and belong to an unsent message: say so, so the chip
+          // follows the owner to another device and survives this one being killed.
+          announceDraftFile(threadId, uploaded.id, {
+            ...(pending.audioAsVoice ? { audioAsVoice: true } : {}),
+            ...(pending.durationMs === undefined ? {} : { durationMs: pending.durationMs }),
+          });
           return uploaded.id;
         })
         .catch((err: unknown) => {
@@ -800,6 +818,8 @@ export function ChatScreen({
       if (!threadId) return;
       const drop = (mediaId: string): void => {
         if (mediaBaseRef.current !== mediaBase) return;
+        // Two separate facts: the composer no longer holds it, and the bytes are thrown away.
+        forgetDraftFile(threadId, mediaId);
         connection.send(encodeFileDelete(threadId, mediaId)).catch(() => {});
       };
       if (staged?.mediaId) drop(staged.mediaId);
@@ -807,6 +827,19 @@ export function ChatScreen({
     },
     [threadId, mediaBase],
   );
+
+  /**
+   * A failed upload is retried here, on the chip that failed: the bytes were local, the take is
+   * still local, and re-recording a voice note because one request failed is the wrong price.
+   * The chip stays either way -- a retry that fails again only says so again.
+   */
+  const retryAttachment = useCallback((attachment: PendingAttachment): void => {
+    if (uploadsRef.current.has(attachment.id)) return;
+    setUploadError(null);
+    setUploadFailed(current => without(current, attachment.id));
+    setUploadProgress(current => ({ ...current, [attachment.id]: 0 }));
+    startUpload(attachment);
+  }, [startUpload]);
 
   /**
    * A staged chip opens what the conversation's files page would open: same viewers, same url.
@@ -1386,6 +1419,7 @@ export function ChatScreen({
           onOpenAttachment={openStaged}
           attachmentThumb={attachmentThumb}
           uploadFailed={uploadFailed}
+          onRetryAttachment={retryAttachment}
             onRemoveLocation={removeLocation}
             onPressLocation={openLocationSheet}
             locationBusy={locationBusy}
@@ -1509,6 +1543,7 @@ export function ChatScreen({
           onOpenAttachment={openStaged}
           attachmentThumb={attachmentThumb}
           uploadFailed={uploadFailed}
+          onRetryAttachment={retryAttachment}
           onRemoveLocation={removeLocation}
           onPressLocation={openLocationSheet}
           locationBusy={locationBusy}

@@ -1,5 +1,5 @@
 import { connection } from './connection';
-import { encodeDraftSet } from './protocol';
+import { encodeDraftFileAdd, encodeDraftFileRemove, encodeDraftSet, type PendingFileFrame } from './protocol';
 import type { PendingAttachment } from './upload';
 import { sessionStore } from './sessions';
 
@@ -68,10 +68,11 @@ export function saveDraft(threadId: string, text: string, attachments: PendingAt
  */
 export function queueDraftSync(threadId: string, text: string): void {
   if (!threadId) return;
-  // The drawer's one bit follows the text itself, not the last listing: the server only knows
-  // about a draft after the debounced frame, and the badge used to wait for a reconnect. A
-  // thread with no row is a no-op, so a sub-agent's composer costs nothing here.
-  sessionStore.setHasDraft(threadId, text !== '');
+  // The drawer's one bit follows the composer itself, not the last listing: the server only knows
+  // about a draft after the debounced frame, and the badge used to wait for a reconnect. A thread
+  // with no row is a no-op, so a sub-agent's composer costs nothing here. A staged file counts:
+  // three photos and no word is an unsent message too.
+  sessionStore.setHasDraft(threadId, text !== '' || (drafts.get(threadId)?.attachments.length ?? 0) > 0);
   if (text.length > SYNC_TEXT_LIMIT) return;
   if ((synced.get(threadId) ?? '') === text) {
     pending.delete(threadId);
@@ -149,6 +150,57 @@ export function applyServerDraft(threadId: string, text: string): void {
   const local = drafts.get(threadId)?.text ?? '';
   if (local && local !== (synced.get(threadId) ?? '')) return;
   applyRemoteDraft(threadId, text);
+}
+
+/** A chip built from the server's own copy: no local uri, and the server's thumb draws it. */
+function chipOf(file: PendingFileFrame): PendingAttachment {
+  return {
+    id: file.id,
+    mediaId: file.id,
+    uri: '',
+    filename: file.filename,
+    type: file.type,
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    ...(file.audioAsVoice ? { audioAsVoice: true } : {}),
+    ...(file.durationMs === undefined ? {} : { durationMs: file.durationMs }),
+  };
+}
+
+/**
+ * The files of a composer, as the server holds them.
+ *
+ * `merge` is for a page: it adds what this device did not know, and never removes -- a chip
+ * uploaded here may simply have left before the page was built. `replace` is for the server's own
+ * broadcast of the list, which is authoritative in both directions, and keeps only the chips whose
+ * upload has not finished (no id yet, so the server has never heard of them).
+ */
+export function applyServerFiles(threadId: string, files: PendingFileFrame[], mode: 'merge' | 'replace'): void {
+  if (!threadId) return;
+  if (mode === 'merge' && pending.has(threadId)) return;
+  const current = drafts.get(threadId)?.attachments ?? [];
+  const known = new Set(current.map((chip) => chip.mediaId).filter((id): id is string => Boolean(id)));
+  const next = mode === 'merge'
+    ? [...current, ...files.filter((file) => !known.has(file.id)).map(chipOf)]
+    : [
+        ...files.map((file) => current.find((chip) => chip.mediaId === file.id) ?? chipOf(file)),
+        ...current.filter((chip) => !chip.mediaId),
+      ];
+  const text = drafts.get(threadId)?.text ?? '';
+  if (!text && next.length === 0) drafts.delete(threadId);
+  else drafts.set(threadId, { text, attachments: next });
+  sessionStore.setHasDraft(threadId, text !== '' || next.length > 0);
+  for (const listener of listeners) listener(threadId);
+}
+
+/** Stages an uploaded file on the server, so the chip follows the owner to another device. */
+export function announceDraftFile(threadId: string, mediaId: string, voice?: { audioAsVoice?: boolean; durationMs?: number }): void {
+  connection.send(encodeDraftFileAdd(threadId, mediaId, voice)).catch(() => {});
+}
+
+/** The chip left this composer: the server forgets it, the bytes are removed separately. */
+export function forgetDraftFile(threadId: string, mediaId: string): void {
+  connection.send(encodeDraftFileRemove(threadId, mediaId)).catch(() => {});
 }
 
 export function onRemoteDraft(listener: Listener): () => void {

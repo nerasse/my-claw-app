@@ -53,6 +53,7 @@ export function Composer({
   onOpenAttachment,
   attachmentThumb,
   uploadFailed,
+  onRetryAttachment,
   onRemoveLocation,
   onPressLocation,
   locationBusy,
@@ -104,6 +105,8 @@ export function Composer({
   attachmentThumb?: (attachment: PendingAttachment) => string | undefined;
   /** Staged files whose bytes never reached the server, keyed by attachment id. */
   uploadFailed?: Record<string, true>;
+  /** Sends one failed file again, keeping its chip: a refusal is not a reason to lose the take. */
+  onRetryAttachment?: (attachment: PendingAttachment) => void;
   onRemoveLocation?: () => void;
   /** Opens the staged location editor: address preview, edit and removal. */
   onPressLocation?: () => void;
@@ -307,7 +310,13 @@ export function Composer({
       {/* Recordings get a full row each; anything else is a chip: a square, so a glance says what
           it is, then the name, because twenty pictures have to stay tellable apart. */}
       {recordings.length > 0 ? (
-        <StagedVoiceList attachments={recordings} onRemove={onRemoveAttachment} />
+        <StagedVoiceList
+          attachments={recordings}
+          onRemove={onRemoveAttachment}
+          failed={uploadFailed}
+          progress={uploadProgress}
+          onRetry={onRetryAttachment}
+        />
       ) : null}
       {files.length > 0 ? (
         <View style={styles.chips}>
@@ -345,6 +354,15 @@ export function Composer({
                       ? ` · ${percent}%`
                       : ''}
                 </Text>
+                {failed && onRetryAttachment ? (
+                  <Pressable
+                    onPress={() => onRetryAttachment(attachment)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Retry upload of ${attachment.filename}`}>
+                    <Text style={styles.chipRetry}>retry</Text>
+                  </Pressable>
+                ) : null}
                 {onRemoveAttachment ? (
                   <Pressable
                     onPress={() => onRemoveAttachment(attachment.id)}
@@ -523,6 +541,7 @@ const createStyles = (palette: Palette) => ({
   chipGlyphText: { fontSize: 9, fontWeight: '600' as const, color: palette.textMuted },
   chipText: { flexShrink: 1, fontSize: font.small, color: palette.text },
   chipRemove: { fontSize: font.meta, lineHeight: 15, color: palette.textMuted },
+  chipRetry: { fontSize: font.meta, lineHeight: 15, fontWeight: '600' as const, color: palette.accent },
   chipTrack: {
     position: 'absolute' as const,
     left: 2,

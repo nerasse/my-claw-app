@@ -27,7 +27,7 @@ import { servicesStore } from './services';
 import { accountsStore } from './accounts';
 import { fsStore } from './fsStore';
 import { locationPreview } from './locationPreview';
-import { applyRemoteDraft, applyServerDraft } from './drafts';
+import { applyRemoteDraft, applyServerDraft, applyServerFiles } from './drafts';
 import { configureAPNs, handleAPNsResult } from './apns';
 import { notificationPermission, registerForPush } from './notifications';
 
@@ -542,6 +542,8 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // which must not wipe text typed here and not yet synced: losing what is written is worse
       // than keeping a draft one beat longer than the device that cleared it.
       if (!frame.before && frame.draft) applyServerDraft(frame.threadId, frame.draft);
+      // A page adds the chips this device did not know; the server's own broadcast is what removes.
+      if (!frame.before && frame.files) applyServerFiles(frame.threadId, frame.files, 'merge');
       if (!frame.before) chatStore.markRead(frame.threadId);
       break;
     case 'session.sync.result': {
@@ -576,6 +578,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Opening a thread syncs; the answer that replaces it carries the draft, a delta carries
       // none. Same rule as a history page: it fills a gap, it never regresses this device.
       if (frame.draft) applyServerDraft(frame.threadId, frame.draft);
+      if (frame.files) applyServerFiles(frame.threadId, frame.files, 'merge');
       // If truncated, the server has more entries. Request the rest.
       if (frame.truncated) {
         const { since, leaf } = chatStore.getSyncState(frame.threadId);
@@ -588,6 +591,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     }
     case 'draft.changed':
       applyRemoteDraft(frame.threadId, frame.text);
+      break;
+    case 'draft.files.changed':
+      // The list as the server holds it, removals included: this is what a chip deleted on another
+      // device travels on. Uploads still running here have no id and are kept.
+      applyServerFiles(frame.threadId, frame.files, 'replace');
       break;
     case 'voice.mode.result':
       // Nothing shows it any more: speech-to-text is chosen on the Services page, from the

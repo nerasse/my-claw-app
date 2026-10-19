@@ -1,6 +1,6 @@
 import { routeServerFrame, type ServerFrameHandlers } from '../frameRouter';
 import { parseServerFrame } from '../protocol';
-import { clearAllDrafts, clearDraft, draftTextOf } from '../drafts';
+import { clearAllDrafts, clearDraft, draftAttachmentsOf, draftTextOf } from '../drafts';
 import { sessionStore } from '../sessions';
 
 /**
@@ -80,4 +80,23 @@ test('a sent message clears the badge that advertised its draft', () => {
   listed(true);
   clearDraft(THREAD);
   expect(sessionStore.getActiveSnapshot()[0]?.hasDraft).toBeUndefined();
+});
+
+test('the files of a composer ride the sync that opens it, and the server list is what removes them', () => {
+  listed(true);
+  route({
+    type: 'session.sync.result',
+    threadId: THREAD,
+    entries: [],
+    leaf: null,
+    head: null,
+    files: [
+      { id: 'media-1', filename: 'photo.png', type: 'image', mimeType: 'image/png', sizeBytes: 3, ts: '2026-01-01T00:00:00.000Z' },
+    ],
+  });
+  expect(draftAttachmentsOf(THREAD).map(chip => [chip.mediaId, chip.uri])).toEqual([['media-1', '']]);
+
+  // A chip removed on another device travels as the authoritative list, empty included.
+  route({ type: 'draft.files.changed', threadId: THREAD, files: [], ts: 2 });
+  expect(draftAttachmentsOf(THREAD)).toEqual([]);
 });

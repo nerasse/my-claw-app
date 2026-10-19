@@ -553,6 +553,8 @@ export interface ChatHistoryFrame {
   nextBefore?: number;
   /** The conversation's unsent draft, on the newest page only. Absent means there is none. */
   draft?: string;
+  /** The files the composer holds, on the newest page only. Same rule as `draft`. */
+  files?: PendingFileFrame[];
   /**
    * A run is in flight for this conversation, as of this page. Read instead of the store's own
    * run flags, which are seeded by `session.list`: that is a separate round trip, and when it
@@ -570,6 +572,34 @@ export interface DraftChangedFrame {
   threadId: string;
   text: string;
   /** The server's clock, so two devices order their writes the same way. */
+  ts: number;
+}
+
+/** One file a composer holds and has not sent, as the server resolves it from its file store. */
+export interface PendingFileFrame {
+  /** The upload's id: what the send references, and what the chip is keyed by on every device. */
+  id: string;
+  filename: string;
+  type: 'image' | 'audio' | 'video' | 'file';
+  mimeType: string;
+  sizeBytes: number;
+  ts: string;
+  audioAsVoice?: boolean;
+  durationMs?: number;
+}
+
+/**
+ * The files one composer holds, authoritative and idempotent.
+ *
+ * Replaces the local list, keeping the chips whose upload this device has not finished (they have
+ * no id yet, so the server has never heard of them). Broadcast to every window, the one that asked
+ * included, unlike the text: there is no keystroke to protect here, and ordering is what settles an
+ * upload finishing while another device removes the same chip.
+ */
+export interface DraftFilesChangedFrame {
+  type: 'draft.files.changed';
+  threadId: string;
+  files: PendingFileFrame[];
   ts: number;
 }
 
@@ -2780,6 +2810,7 @@ export type ServerFrame =
   | ChatHistoryFrame
   | SessionSyncResultFrame
   | DraftChangedFrame
+  | DraftFilesChangedFrame
   | SessionListResultFrame
   | SessionWorkspaceSetResultFrame
   | CommandsListResultFrame
@@ -2909,6 +2940,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.history',
   'session.sync.result',
   'draft.changed',
+  'draft.files.changed',
   'chat.command.pending',
   'chat.command.result',
   'chat.send.received',
@@ -3309,6 +3341,22 @@ export function encodeSessionFolder(threadId: string, folderId: string | null): 
 /** What is typed and not sent, for the owner's other devices. Empty text clears it. */
 export function encodeDraftSet(threadId: string, text: string): string {
   return JSON.stringify({ type: 'draft.set', threadId, text });
+}
+
+/** A file that just landed in the thread's store belongs to the unsent message, on every device. */
+export function encodeDraftFileAdd(threadId: string, id: string, voice?: { audioAsVoice?: boolean; durationMs?: number }): string {
+  return JSON.stringify({
+    type: 'draft.file.add',
+    threadId,
+    id,
+    ...(voice?.audioAsVoice ? { audioAsVoice: true } : {}),
+    ...(voice?.durationMs === undefined ? {} : { durationMs: voice.durationMs }),
+  });
+}
+
+/** The chip goes: the bytes are removed separately (`files.delete`). */
+export function encodeDraftFileRemove(threadId: string, id: string): string {
+  return JSON.stringify({ type: 'draft.file.remove', threadId, id });
 }
 
 export function encodeApprovalResponse(id: string, decision: ApprovalDecision): string {
@@ -4075,6 +4123,8 @@ export interface SessionSyncResultFrame {
    * page, and must never overwrite what is typed here -- `applyServerDraft`.
    */
   draft?: string;
+  /** The files the composer holds, on the same answer as `draft`. */
+  files?: PendingFileFrame[];
   /**
    * The branch's last run as the server reads it now. A delta often carries none of its entries (a
    * run killed with the server wrote nothing more), so this is what settles a run still held as

@@ -276,6 +276,9 @@ test('a picked file is on the server before the send, which does not push it aga
 
   const uploads = photoUploads();
   // An id of its own: the bridge mock's call history is shared with every test before this one.
+  const framesBefore = bridge.sendMessage.mock.calls.length;
+  const sentSince = (): string[] =>
+    bridge.sendMessage.mock.calls.slice(framesBefore).map(([frame]) => String(frame));
   bridge.uploadFile.mockResolvedValue({ status: 200, body: JSON.stringify({ id: 'media-staged' }) });
   await pressLabel(tree, 'Add attachment');
   await waitFor(
@@ -293,16 +296,53 @@ test('a picked file is on the server before the send, which does not push it aga
   // Nothing has been sent, and the bytes are already on the machine: that is what puts the file
   // in the conversation's files and lets another device open it before anything is written.
   await waitFor(() => photoUploads() === uploads + 1);
-  expect(bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('media-staged'))).toBe(false);
+  expect(sentSince().some(frame => frame.includes('"chat.send"'))).toBe(false);
+  // The id does cross the wire, as a staged file: that is what makes the chip follow the owner to
+  // another device. What must not happen is a message carrying it before the send.
+  expect(sentSince().some(frame => frame.includes('"draft.file.add"') && frame.includes('media-staged'))).toBe(true);
 
   await typeInto(tree, 'look at this');
   await pressLabel(tree, 'Send message');
-  await waitFor(() => bridge.sendMessage.mock.calls.some(([frame]) => String(frame).includes('media-staged')));
+  await waitFor(
+    () => sentSince().some(frame => frame.includes('"chat.send"') && frame.includes('media-staged')),
+  );
 
   // One upload, not two: the message carries the id the staging already paid for.
   expect(photoUploads()).toBe(uploads + 1);
 
   bridge.uploadFile.mockResolvedValue({ status: 200, body: JSON.stringify({ id: 'media-1' }) });
+  await unmount(tree);
+});
+
+test('an upload that fails keeps its chip, and the retry sends it again', async () => {
+  const { launchImageLibrary } = require('react-native-image-picker');
+  const tree = await renderWithHistory();
+  const uploads = photoUploads();
+
+  // A refusal, not a transport fault: the latter is retried once by `uploadMedia` itself.
+  bridge.uploadFile.mockResolvedValueOnce({ status: 500, body: 'storage full' });
+  await pressLabel(tree, 'Add attachment');
+  await waitFor(() => textsOf(tree).includes('Photo from gallery'));
+  await pressText(tree, 'Photo from gallery');
+  const callback = launchImageLibrary.mock.calls.at(-1)[1];
+  await ReactTestRenderer.act(async () => {
+    callback({
+      didCancel: false,
+      assets: [{ uri: 'content://media/external/images/42', fileName: 'photo.jpg', type: 'image/jpeg', fileSize: 1234 }],
+    });
+  });
+
+  // The take is not thrown away because one request failed: the chip stays, says so, and the
+  // retry is on the chip itself -- re-recording a voice note would be the wrong price.
+  // The chip says so on itself -- the retry control only exists on a failed chip -- and it
+  // stays there: one refused request is not a reason to lose the take.
+  await waitFor(() => labelsOf(tree).includes('Retry upload of photo.jpg'));
+  expect(photoUploads()).toBe(uploads + 1);
+
+  await pressLabel(tree, 'Retry upload of photo.jpg');
+  await waitFor(() => photoUploads() === uploads + 2);
+  await waitFor(() => !labelsOf(tree).includes('Retry upload of photo.jpg'));
+
   await unmount(tree);
 });
 
