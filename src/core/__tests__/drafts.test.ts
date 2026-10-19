@@ -124,6 +124,18 @@ describe('draft sync', () => {
     expect(draftTextOf(THREAD)).toBe('ce qu il sait maintenant');
   });
 
+  test('a page that lands while a change of ours is in flight is ignored', () => {
+    applyRemoteDraft(THREAD, 'texte que je viens d effacer');
+    const seen: string[] = [];
+    const stop = onRemoteDraft(threadId => seen.push(threadId));
+    // Emptying the field is a change of ours waiting for its debounce; the page was built before.
+    queueDraftSync(THREAD, '');
+    applyServerDraft(THREAD, 'texte que je viens d effacer');
+    stop();
+
+    expect(seen).toEqual([]);
+  });
+
   test('a draft consumed without a send is cleared on the server too', () => {
     // /new and /tag: no message reaches the server, so nothing in the send path clears its copy.
     saveDraft(THREAD, '/new', []);

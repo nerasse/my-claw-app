@@ -142,6 +142,10 @@ export function applyRemoteDraft(threadId: string, text: string): void {
  */
 export function applyServerDraft(threadId: string, text: string): void {
   if (!threadId || !text) return;
+  // A change of ours has not left yet: the page was built before it, whatever it says is older.
+  // Without this, emptying the composer and reopening it within the debounce handed the deleted
+  // text back -- the map still held it, and the copy on the page matched what the server knew.
+  if (pending.has(threadId)) return;
   const local = drafts.get(threadId)?.text ?? '';
   if (local && local !== (synced.get(threadId) ?? '')) return;
   applyRemoteDraft(threadId, text);
