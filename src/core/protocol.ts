@@ -1864,7 +1864,7 @@ export interface FsSessionRootResultFrame {
  * prompt files carry an origin and an `edit` target; the derived layers carry neither.
  */
 export interface SessionInstructionLayer {
-  /** CORE, SOUL, AGENTS, USER, agent, skills, tools, platform, runtime, suggested. */
+  /** CORE, SOUL, AGENTS, USER, agent, skills, platform, runtime. */
   id: string;
   label: string;
   bytes: number;
@@ -1903,7 +1903,8 @@ export interface SessionInstructionsPayload {
   totalBytes: number;
   layers: SessionInstructionLayer[];
   nested: SessionInstructionNested[];
-  /** Layer ids the session turned off (agent, skills, tools, platform, runtime, suggested). */
+  /** Layer ids the session turned off (agent, skills, platform, runtime; `tools` and `suggested`
+   *  remain accepted on sessions that were switched off before those layers left the prompt). */
   layersOff: string[];
   /** Skill names the session filtered out of the catalog. */
   skillsOff: string[];

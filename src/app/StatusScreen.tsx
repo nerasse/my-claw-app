@@ -5,6 +5,7 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { useStatus } from '../core/status';
 import { withoutEndpoint } from '../core/model';
 import { subAgentsUsage } from '../core/usage';
+import { cacheShareLabel } from '../core/cache';
 import type {
   StatusPayload,
   UsageAgent,
@@ -119,7 +120,7 @@ function totalsLine(t: UsageTotals): string {
 /** A model's line: tokens in, cached and out, with the errors when there are any. */
 function rowLine(row: UsageModelRow): string {
   return `${row.calls}× · ${short(row.promptTokens)} in${
-    row.cacheReadTokens > 0 ? ` · ${short(row.cacheReadTokens)} cached` : ''
+    row.cacheReadTokens > 0 ? ` · ${short(row.cacheReadTokens)} cached (${cacheShareLabel(row.cacheReadTokens, row.promptTokens)})` : ''
   } · ${short(row.completionTokens)} out${row.errors > 0 ? ` · ${row.errors} err` : ''}`;
 }
 
@@ -366,6 +367,9 @@ function UsageCard({ payload }: { payload: StatusPayload }): React.JSX.Element {
         {`${short(tokens)} tokens · ${short(t.promptTokens)} in · ${short(t.cacheReadTokens)} cached · ${short(
           t.completionTokens,
         )} out · ${t.calls} calls${t.errors > 0 ? ` · ${t.errors} errors` : ''}`}
+      </Text>
+      <Text style={styles.cardNote}>
+        {`${cacheShareLabel(t.cacheReadTokens, t.promptTokens)} of prompt tokens served from cache`}
       </Text>
       {split ? (
         <Text style={styles.cardNote}>{`billed ${money(t.billedUsd)} · reference ${money(t.referenceUsd)}`}</Text>

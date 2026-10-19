@@ -4,6 +4,7 @@ import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { connection } from '../core/connection';
 import { statsStore, useStats, DEFAULT_STATS_PERIOD } from '../core/stats';
+import { cacheShareLabel } from '../core/cache';
 import { encodeStatsGet } from '../core/protocol';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import {
@@ -331,7 +332,7 @@ function volumeLine(t: StatsTotals): string {
   return [
     `${t.calls}x`,
     `${shortTokens(t.promptTokens)} in`,
-    t.cacheReadTokens > 0 ? `${shortTokens(t.cacheReadTokens)} cached` : null,
+    t.cacheReadTokens > 0 ? `${shortTokens(t.cacheReadTokens)} cached (${cacheShareLabel(t.cacheReadTokens, t.promptTokens)})` : null,
     `${shortTokens(t.completionTokens)} out`,
     t.errors > 0 ? `${t.errors} err` : null,
     t.durationMs > 0 ? duration(t.durationMs) : null,
@@ -667,9 +668,10 @@ function Overview({ stats }: { stats: StatsPayload }): React.JSX.Element {
           </Text>
         ))}
         <Text style={[styles.cardNote, styles.spacer]}>
-          {`${shortTokens(t.promptTokens)} in · ${shortTokens(t.completionTokens)} out · ${shortTokens(t.cacheReadTokens)} cache read · ${shortTokens(
-            t.cacheWriteTokens,
-          )} cache written`}
+          {`${shortTokens(t.promptTokens)} in · ${shortTokens(t.completionTokens)} out · ${shortTokens(t.cacheReadTokens)} cached (${cacheShareLabel(
+            t.cacheReadTokens,
+            t.promptTokens,
+          )}) · ${shortTokens(t.cacheWriteTokens)} written (${cacheShareLabel(t.cacheWriteTokens, t.promptTokens)})`}
         </Text>
         <Text style={styles.cardNote}>
           {`${duration(t.durationMs)} inside the API${t.errors > 0 ? ` · ${t.errors} errors` : ' · no errors'}`}
