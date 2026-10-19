@@ -1,8 +1,10 @@
 import { connection } from '../connection';
 import {
   applyRemoteDraft,
+  applyServerDraft,
   clearAllDrafts,
   clearDraft,
+  discardDraft,
   draftTextOf,
   draftScope,
   setDraftScope,
@@ -101,6 +103,35 @@ describe('draft sync', () => {
     queueDraftSync(THREAD, 'ecrit ailleurs, complete ici');
     jest.advanceTimersByTime(500);
     expect(typed()).toEqual([{ type: 'draft.set', threadId: THREAD, text: 'ecrit ailleurs, complete ici' }]);
+  });
+
+  test('the page that replaces a thread fills an empty device', () => {
+    // The bug this exists for: the app opened a conversation and asked for a sync, not a history
+    // page, so the drawer said draft and the composer stayed empty -- forever.
+    applyServerDraft(THREAD, 'ce que j ecrivais hier');
+    expect(draftTextOf(THREAD)).toBe('ce que j ecrivais hier');
+  });
+
+  test('a page never overwrites text typed here and not yet acknowledged', () => {
+    saveDraft(THREAD, 'frappe ici, pas encore partie', []);
+    applyServerDraft(THREAD, 'la version d hier');
+    expect(draftTextOf(THREAD)).toBe('frappe ici, pas encore partie');
+  });
+
+  test('a page does replace a copy that came from the server', () => {
+    applyRemoteDraft(THREAD, 'ce que le serveur savait');
+    applyServerDraft(THREAD, 'ce qu il sait maintenant');
+    expect(draftTextOf(THREAD)).toBe('ce qu il sait maintenant');
+  });
+
+  test('a draft consumed without a send is cleared on the server too', () => {
+    // /new and /tag: no message reaches the server, so nothing in the send path clears its copy.
+    saveDraft(THREAD, '/new', []);
+    jest.advanceTimersByTime(500);
+    discardDraft(THREAD);
+
+    expect(draftTextOf(THREAD)).toBe('');
+    expect(typed().at(-1)).toEqual({ type: 'draft.set', threadId: THREAD, text: '' });
   });
 
   test('an empty remote draft clears the local one', () => {

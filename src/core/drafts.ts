@@ -1,6 +1,7 @@
 import { connection } from './connection';
 import { encodeDraftSet } from './protocol';
 import type { PendingAttachment } from './upload';
+import { sessionStore } from './sessions';
 
 /**
  * What is typed but not sent yet, per conversation.
@@ -67,6 +68,10 @@ export function saveDraft(threadId: string, text: string, attachments: PendingAt
  */
 export function queueDraftSync(threadId: string, text: string): void {
   if (!threadId) return;
+  // The drawer's one bit follows the text itself, not the last listing: the server only knows
+  // about a draft after the debounced frame, and the badge used to wait for a reconnect. A
+  // thread with no row is a no-op, so a sub-agent's composer costs nothing here.
+  sessionStore.setHasDraft(threadId, text !== '');
   if (text.length > SYNC_TEXT_LIMIT) return;
   if ((synced.get(threadId) ?? '') === text) {
     pending.delete(threadId);
@@ -97,6 +102,18 @@ export function clearDraft(threadId: string): void {
   drafts.delete(threadId);
   pending.delete(threadId);
   synced.set(threadId, '');
+  sessionStore.setHasDraft(threadId, false);
+}
+
+/**
+ * The draft is abandoned without being sent: a slash command opened a page, or `/new` left the
+ * thread. `clearDraft` cannot say so -- the server drops a draft when it accepts a message, and a
+ * frame racing that clear would put the text back -- but nothing accepts a command.
+ */
+export function discardDraft(threadId: string): void {
+  if (!threadId) return;
+  clearDraft(threadId);
+  connection.send(encodeDraftSet(threadId, '')).catch(() => {});
 }
 
 /**
@@ -111,7 +128,23 @@ export function applyRemoteDraft(threadId: string, text: string): void {
   const existing = drafts.get(threadId);
   if (!text) drafts.delete(threadId);
   else drafts.set(threadId, { text, attachments: existing?.attachments ?? [] });
+  sessionStore.setHasDraft(threadId, text !== '');
   for (const listener of listeners) listener(threadId);
+}
+
+/**
+ * A draft carried by the frame that replaces a thread: a fresh open, or a reset.
+ *
+ * The page is authoritative over what the server holds, which is exactly why it must not win
+ * over text typed here and not yet acknowledged: reopening a conversation would hand back
+ * yesterday's sentence over the one being written. The local map is filled only when it is empty
+ * or still holds what the server last knew -- a page never regresses this device.
+ */
+export function applyServerDraft(threadId: string, text: string): void {
+  if (!threadId || !text) return;
+  const local = drafts.get(threadId)?.text ?? '';
+  if (local && local !== (synced.get(threadId) ?? '')) return;
+  applyRemoteDraft(threadId, text);
 }
 
 export function onRemoteDraft(listener: Listener): () => void {

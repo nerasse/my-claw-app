@@ -139,6 +139,27 @@ class SessionStoreImpl {
     this.emit();
   }
 
+  /**
+   * The unsent-text bit, kept in step with the draft store rather than with the last listing.
+   *
+   * The listing is a snapshot from a round trip ago: a message just sent, or a draft typed a
+   * second after it arrived, leaves the badge claiming text that is not there -- and the other
+   * way round, hiding text that is. Absent rather than false when cleared: that is how the
+   * server sends the bit, and the row reads both the same.
+   */
+  setHasDraft(threadId: string, has: boolean): void {
+    const existing = this.list.find(summary => summary.threadId === threadId);
+    if (!existing || (existing.hasDraft === true) === has) return;
+    this.list = this.list.map(summary => {
+      if (summary.threadId !== threadId) return summary;
+      if (has) return { ...summary, hasDraft: true };
+      const cleared = { ...summary };
+      delete cleared.hasDraft;
+      return cleared;
+    });
+    this.emit();
+  }
+
   private emit(): void {
     const active = this.list.filter(summary => !summary.archived);
     const archived = this.list.filter(summary => summary.archived);

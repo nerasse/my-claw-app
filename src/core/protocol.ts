@@ -4070,6 +4070,12 @@ export interface SessionSyncResultFrame {
   /** Count of entries before that window; where the next older page starts. */
   nextBefore?: number;
   /**
+   * The conversation's unsent draft, on the answer that replaces the client's thread (a fresh
+   * open or a reset). A delta carries none: it is work arriving under the owner's eyes, not a
+   * page, and must never overwrite what is typed here -- `applyServerDraft`.
+   */
+  draft?: string;
+  /**
    * The branch's last run as the server reads it now. A delta often carries none of its entries (a
    * run killed with the server wrote nothing more), so this is what settles a run still held as
    * running -- `interrupted` included, which is what offers Continue.

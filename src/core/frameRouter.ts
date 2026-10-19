@@ -27,7 +27,7 @@ import { servicesStore } from './services';
 import { accountsStore } from './accounts';
 import { fsStore } from './fsStore';
 import { locationPreview } from './locationPreview';
-import { applyRemoteDraft } from './drafts';
+import { applyRemoteDraft, applyServerDraft } from './drafts';
 import { configureAPNs, handleAPNsResult } from './apns';
 import { notificationPermission, registerForPush } from './notifications';
 
@@ -541,7 +541,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Only a draft the server actually holds is applied. An absent one means "no draft there",
       // which must not wipe text typed here and not yet synced: losing what is written is worse
       // than keeping a draft one beat longer than the device that cleared it.
-      if (!frame.before && frame.draft) applyRemoteDraft(frame.threadId, frame.draft);
+      if (!frame.before && frame.draft) applyServerDraft(frame.threadId, frame.draft);
       if (!frame.before) chatStore.markRead(frame.threadId);
       break;
     case 'session.sync.result': {
@@ -573,6 +573,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       const rosterSync = subAgentStore.get(frame.threadId);
       if (rosterSync.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, rosterSync.agents);
       chatStore.markRead(frame.threadId);
+      // Opening a thread syncs; the answer that replaces it carries the draft, a delta carries
+      // none. Same rule as a history page: it fills a gap, it never regresses this device.
+      if (frame.draft) applyServerDraft(frame.threadId, frame.draft);
       // If truncated, the server has more entries. Request the rest.
       if (frame.truncated) {
         const { since, leaf } = chatStore.getSyncState(frame.threadId);

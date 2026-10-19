@@ -1084,8 +1084,10 @@ test('a draft does not follow the reader into another conversation', async () =>
   // Sending it here would have put a private message in the wrong conversation.
   await waitFor(() => inputOf(tree).props.value === '');
 
-  // And it is not lost either: it waited in the conversation it was written for.
-  await pressLabel(tree, 'Conversation here');
+  // And it is not lost either: the drawer points at the conversation holding it, so the reader
+  // can find it again, and opening that one gives the text back.
+  await waitFor(() => labelsOf(tree).includes('Conversation here, unsent draft'));
+  await pressLabel(tree, 'Conversation here, unsent draft');
   await waitFor(() => inputOf(tree).props.value === 'meant for this one');
 
   await unmount(tree);

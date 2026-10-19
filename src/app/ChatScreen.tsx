@@ -27,7 +27,7 @@ import { useCommands } from '../core/commands';
 import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
-import { clearDraft, draftAttachmentsOf, draftScope, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
+import { clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid, viewerFor, type ViewerKind } from '../core/utils';
@@ -332,6 +332,16 @@ export function ChatScreen({
   }, [threadId]);
 
   /**
+   * Consumed without being sent: a slash command opened a page, or `/new` left the thread. No
+   * message reaches the server to clear its copy, so the clear is said out loud.
+   */
+  const discardComposer = useCallback(() => {
+    draftRef.current = '';
+    setDraft('');
+    discardDraft(threadId);
+  }, [threadId]);
+
+  /**
    * A draft written on another device. Applied only into a composer that is empty, or that the
    * owner is not typing in: replacing live text loses characters and throws the caret to the end,
    * and the phone in a pocket is exactly the surface that should catch up.
@@ -629,7 +639,7 @@ export function ChatScreen({
     // /tag is app-owned: it opens the tags page or the tag editor, never a message to the
     // model. Intercepted here so it works even when the slash-menu is closed.
     if (!stagedLocation && attachments.length === 0 && onTagCommand?.(text) === true) {
-      consumeDraft();
+      discardComposer();
       return;
     }
     // /new is the wire form of the + button: a fresh conversation, not a reset of this one.
@@ -637,7 +647,7 @@ export function ChatScreen({
     // server as a command about a conversation the user is leaving.
     if (!stagedLocation && attachments.length === 0 && text.toLowerCase() === '/new') {
       onNewThread();
-      consumeDraft();
+      discardComposer();
       return;
     }
     if (attachments.length > 0) {
@@ -700,7 +710,7 @@ export function ChatScreen({
       onSend(text, undefined, locationToSend);
     }
     consumeDraft();
-  }, [attachments, consumeDraft, deviceInfo, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
+  }, [attachments, consumeDraft, deviceInfo, discardComposer, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 
   /** Up arrow on an empty composer: the last thing sent, back in the field. */
   const recallLast = useCallback(() => {
