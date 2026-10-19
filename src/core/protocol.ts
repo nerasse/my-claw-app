@@ -864,6 +864,8 @@ export interface AccountView {
   connected: boolean;
   email?: string;
   plan?: string;
+  /** Claude: the organization the account belongs to, when the server read one (0.7.118+). */
+  org?: string;
   /** Claude: a sign-in that renews itself, or a long-lived token. */
   source?: 'oauth' | 'token';
   /** A sign-in in flight: the page to open and, for ChatGPT, the code to enter there. */
@@ -973,7 +975,7 @@ export interface UnavailableModel {
   declared?: boolean;
   discovered?: boolean;
   /** The server's availability verdict. */
-  state: 'stale' | 'no-key' | 'no-auth';
+  state: 'stale' | 'no-key' | 'no-auth' | 'disabled';
   /** Ready to print: "litellm no longer lists it", "LITELLM_API_KEY is not set". */
   reason: string;
 }
@@ -2469,6 +2471,8 @@ export interface ProviderInfo {
   keyEnv?: string;
   /** A ChatGPT or Claude plan: signed in rather than keyed, and `keyPresent` says it is signed in. */
   account?: AccountKind;
+  /** Switched off from its page (server 0.7.118+): hidden from the picker, skipped by routing. */
+  disabled?: boolean;
   keyPresent: boolean;
 }
 
@@ -2559,6 +2563,8 @@ export interface ProviderPatch {
   reasoningReplay?: boolean;
   pricingProvider?: string;
   fallbackModel?: string;
+  /** true switches the provider off, false (or absent) leaves it on. Server 0.7.118+. */
+  disabled?: boolean;
 }
 
 /** Where the content of a prompt file comes from. See docs/instructions-page.md on the server. */
@@ -2808,6 +2814,7 @@ export type ServerFrame =
   | UndoPromptFrame
   | UndoResolvedFrame
   | AgentsConfigResultFrame
+  | ProviderRenamePreviewResultFrame
   | InstructionsListResultFrame
   | InstructionsFileFrame
   | InstructionsSavedFrame
@@ -2964,6 +2971,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'media.ticket',
   'tags.result',
   'providers.env.result',
+  'providers.rename.preview.result',
   'chat.transcript',
   'approval.request',
   'approval.pending',
@@ -3504,6 +3512,33 @@ export function encodeProvidersRemove(key: string, withModels = false): string {
 
 export function encodeProvidersRename(from: string, to: string): string {
   return JSON.stringify({ type: 'providers.rename', from, to });
+}
+
+/**
+ * What a rename would touch, read-only (server 0.7.118+). The answer is
+ * `providers.rename.preview.result`; an older server never answers, and the caller falls through
+ * to the rename itself.
+ */
+export function encodeProvidersRenamePreview(from: string, to: string): string {
+  return JSON.stringify({ type: 'providers.rename.preview', from, to });
+}
+
+/** The references a provider rename rewrites, per store. */
+export interface ProviderRenameRefs {
+  models: string[];
+  tags: string[];
+  agents: string[];
+  sessions: string[];
+  cron: string[];
+  files: string[];
+  account: boolean;
+}
+
+export interface ProviderRenamePreviewResultFrame {
+  type: 'providers.rename.preview.result';
+  from: string;
+  to: string;
+  refs: ProviderRenameRefs;
 }
 
 /** The one frame that carries a secret value; it is never logged or echoed anywhere. */

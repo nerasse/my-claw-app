@@ -152,7 +152,9 @@ import {
   encodeProvidersEnvSet,
   encodeProvidersRemove,
   encodeProvidersRename,
+  encodeProvidersRenamePreview,
   encodeProvidersUpsert,
+  type ProviderRenameRefs,
 } from '../core/protocol';
 import {
   dismissThreadNotification,
@@ -167,7 +169,7 @@ import { catalogAnswered, declareModel, modelStore, undeclareModel, useModelCata
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
-import { deleteProviderCascadeLabel, deleteProviderPreview, tagRoutesSuffix, tagRoutesThroughProvider } from '../core/providerRefs';
+import { deleteProviderCascadeLabel, deleteProviderPreview, renamePreviewText, tagRoutesSuffix, tagRoutesThroughProvider } from '../core/providerRefs';
 import { agentsFileStore, useAgentsFile } from '../core/agentsFile';
 import { instructionsStore, useInstructions } from '../core/instructions';
 import { sessionInstructionsStore, useSessionInstructions } from '../core/sessionInstructions';
@@ -218,7 +220,7 @@ import { ProviderEditScreen, type ProviderPatch } from './ProviderEditScreen';
 import { ProviderAddScreen } from './ProviderAddScreen';
 import { NAME_TAKEN, nameTaken, type ProviderService } from '../core/providerServices';
 import { ProviderEnvScreen } from './ProviderEnvScreen';
-import { providersEnvStore, useProvidersEnv } from '../core/providers';
+import { providerRenameStore, providersEnvStore, useProviderRenamePreview, useProvidersEnv } from '../core/providers';
 import { EmptyCategoryScreen } from './EmptyCategoryScreen';
 import { SkillsScreen } from './SkillsScreen';
 import { DevicesScreen } from './DevicesScreen';
@@ -569,6 +571,20 @@ export function AppShell(): React.JSX.Element {
      */
     tagRoutes: Array<{ tag: string; model: string }>;
   } | null>(null);
+  /**
+   * A provider key rename, staged until the server says what it touches. The sheet only opens on
+   * the preview's answer; the rename itself runs when the owner confirms.
+   */
+  const [providerRename, setProviderRename] = useState<{
+    from: string;
+    to: string;
+    patch: ProviderPatch;
+    refs: ProviderRenameRefs | null;
+  } | null>(null);
+  const renamePreview = useProviderRenamePreview();
+  /** The staged rename and its fallback timer: the answer, and an old server's silence, race them. */
+  const renameStaged = useRef<{ from: string; to: string } | null>(null);
+  const renameFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Which workspace the workspace page shows. The instruction editor and the layer screen hang
    *  under it, so it outlives them: back walks down to this page, not to a list. */
   const [selectedWorkspace, setSelectedWorkspace] = useState<string>('default');
@@ -3700,9 +3716,9 @@ export function AppShell(): React.JSX.Element {
     setSettingsPage('agent');
     setNumberEditor(null);
   };
-  const saveProviderEdit = (patch: ProviderPatch): void => {
-    if (!providerEdit || providerBusy) return;
-    const from = providerEdit.key;
+  /** Sends everything a save does, once the rename it carries (if any) has been agreed to. */
+  const commitProviderEdit = (patch: ProviderPatch): void => {
+    const from = providerEdit?.key ?? null;
     setProviderBusy(true);
     if (from !== null && from !== patch.key) {
       connection.send(encodeProvidersRename(from, patch.key)).catch(() => {});
@@ -3729,7 +3745,7 @@ export function AppShell(): React.JSX.Element {
     setProviderEdit(null);
     // Added: its page, where the models it lists (or the reason it lists none) appear once the
     // server has asked it. Edited: back to that same page.
-    if (providerEdit.mode === 'create') {
+    if (providerEdit?.mode === 'create') {
       setAddedProvider({
         key: patch.key,
         type: patch.providerType,
@@ -3746,6 +3762,61 @@ export function AppShell(): React.JSX.Element {
     setSelectedProvider(patch.key);
     setSettingsPage('provider');
   };
+  const cancelProviderRename = (): void => {
+    if (renameFallback.current) {
+      clearTimeout(renameFallback.current);
+      renameFallback.current = null;
+    }
+    renameStaged.current = null;
+    providerRenameStore.reset();
+    setProviderRename(null);
+    setProviderBusy(false);
+  };
+  const confirmProviderRename = (): void => {
+    if (!providerRename) return;
+    const { patch } = providerRename;
+    if (renameFallback.current) {
+      clearTimeout(renameFallback.current);
+      renameFallback.current = null;
+    }
+    renameStaged.current = null;
+    providerRenameStore.reset();
+    setProviderRename(null);
+    commitProviderEdit(patch);
+  };
+  const saveProviderEdit = (patch: ProviderPatch): void => {
+    if (!providerEdit || providerBusy) return;
+    const from = providerEdit.key;
+    if (from !== null && from !== patch.key) {
+      // A key is an address: tags, agent pins, cron jobs, conversations and the sign-in file all
+      // carry it. The server answers what a rename would touch (0.7.118+), and the sheet says it
+      // before anything is written. A server that never answers falls back to committing after a
+      // beat, exactly like before this existed.
+      setProviderBusy(true);
+      renameStaged.current = { from, to: patch.key };
+      providerRenameStore.expect(from, patch.key);
+      connection.send(encodeProvidersRenamePreview(from, patch.key)).catch(() => {});
+      setProviderRename({ from, to: patch.key, patch, refs: null });
+      if (renameFallback.current) clearTimeout(renameFallback.current);
+      renameFallback.current = setTimeout(() => {
+        const staged = renameStaged.current;
+        if (!staged || staged.from !== from || staged.to !== patch.key) return;
+        const answered = providerRenameStore.getSnapshot().refs;
+        if (answered && answered.from === from && answered.to === patch.key) return;
+        cancelProviderRename();
+        commitProviderEdit(patch);
+      }, 2500);
+      return;
+    }
+    commitProviderEdit(patch);
+  };
+  // The preview's answer, once it lands: it can only fill the sheet for the rename still staged.
+  useEffect(() => {
+    const refs = renamePreview.refs;
+    const staged = renameStaged.current;
+    if (!refs || !staged || staged.from !== refs.from || staged.to !== refs.to) return;
+    setProviderRename(current => (current ? { ...current, refs: refs.refs } : current));
+  }, [renamePreview]);
   const deleteProviderConfirmed = (removeKeyToo: boolean, withModels: boolean): void => {
     if (!providerToDelete) return;
     const { key, keyEnv } = providerToDelete;
@@ -4448,6 +4519,11 @@ export function AppShell(): React.JSX.Element {
                   onAddModel={() => {
                     setModelEdit({ mode: 'create', provider: selectedProviderInfo.key, model: null });
                     setSettingsPage('model-edit');
+                  }}
+                  onToggleDisabled={disabled => {
+                    // One tap, like every switch on the settings pages. A refusal (the provider
+                    // carrying the global default) lands on the providers list's error row.
+                    connection.send(encodeProvidersUpsert(selectedProviderInfo.key, { disabled })).catch(() => {});
                   }}
                   onBack={() => setSettingsPage(providerFrom === 'account' ? 'account' : 'models')}
                 />
@@ -5556,6 +5632,19 @@ export function AppShell(): React.JSX.Element {
               : []),
           ]}
           onClose={() => setProviderToDelete(null)}
+        />
+      ) : null}
+
+      {providerRename && providerRename.refs ? (
+        <ActionSheet
+          preview={renamePreviewText(providerRename.from, providerRename.to, providerRename.refs)}
+          options={[
+            {
+              label: `Rename to "${providerRename.to}"`,
+              onPress: confirmProviderRename,
+            },
+          ]}
+          onClose={cancelProviderRename}
         />
       ) : null}
 

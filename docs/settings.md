@@ -133,3 +133,21 @@ The form (`ProviderEditScreen`), for adding and editing alike:
 - Custom asks for an address; a key is optional (a local endpoint needs none), and with none it gets
   no variable at all.
 
+
+## Switching a provider off, and renaming its key (2026-10-19, server 0.7.118)
+
+The provider page carries an **Active** switch, one tap, no confirmation: off stops discovery,
+hides its models from every picker, and makes tags, sessions and jobs route past it. The key and
+the sign-in stay -- off is not a delete, and the server refuses to switch off the provider that
+carries the global default (the error lands on the providers list).
+
+The key field (Advanced) is an address, not a label: tags, agent pins, cron jobs, conversations
+and the sign-in file all carry it. Saving with a changed key therefore does not rename at once:
+the app asks `providers.rename.preview` first and opens a sheet naming what follows ("It follows
+1 tag, 2 conversations, its sign-in"), and the rename itself -- one write everywhere -- runs only
+on the confirm. A server older than 0.7.118 never answers the preview; the save then commits
+after a short fallback, exactly like before the sheet existed.
+
+The Claude account page now shows **who** is signed in (the email the server read at sign-in),
+because two Claude plans are otherwise the same page: the PKCE flow alone cannot say which
+account was approved, and the server refuses connecting one identity on two providers.

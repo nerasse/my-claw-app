@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { ProvidersEnvResultFrame } from './protocol';
+import type { ProviderRenamePreviewResultFrame, ProviderRenameRefs, ProvidersEnvResultFrame } from './protocol';
 
 type Listener = () => void;
 
@@ -89,4 +89,68 @@ const subscribe = (listener: Listener): (() => void) => providersEnvStore.subscr
 
 export function useProvidersEnv(): ProvidersEnvState {
   return useSyncExternalStore(subscribe, () => providersEnvStore.getSnapshot());
+}
+
+/**
+ * The read-only answer a key rename asks for before it runs (server 0.7.118+).
+ *
+ * The app cannot count these references itself: sessions, cron jobs and agent files live on the
+ * server, and counting only what this device holds would promise a smaller cascade than the one
+ * the rename performs. `expect()` names the pair being asked about, so a late answer to an
+ * abandoned attempt cannot open a sheet for a rename that is no longer staged.
+ */
+interface RenamePreviewState {
+  pending: { from: string; to: string } | null;
+  refs: { from: string; to: string; refs: ProviderRenameRefs } | null;
+}
+
+const RENAME_EMPTY: RenamePreviewState = { pending: null, refs: null };
+
+class ProviderRenameStoreImpl {
+  private state: RenamePreviewState = RENAME_EMPTY;
+  private listeners = new Set<Listener>();
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  getSnapshot(): RenamePreviewState {
+    return this.state;
+  }
+
+  /** Drops everything. Only tests need it: the store outlives a screen, on purpose. */
+  reset(): void {
+    this.state = RENAME_EMPTY;
+    this.emit();
+  }
+
+  expect(from: string, to: string): void {
+    this.state = { pending: { from, to }, refs: null };
+    this.emit();
+  }
+
+  receive(frame: ProviderRenamePreviewResultFrame): void {
+    if (!this.state.pending || this.state.pending.from !== frame.from || this.state.pending.to !== frame.to) {
+      return;
+    }
+    this.state = { pending: this.state.pending, refs: { from: frame.from, to: frame.to, refs: frame.refs } };
+    this.emit();
+  }
+
+  private emit(): void {
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+}
+
+export const providerRenameStore = new ProviderRenameStoreImpl();
+
+const subscribeRename = (listener: Listener): (() => void) => providerRenameStore.subscribe(listener);
+
+export function useProviderRenamePreview(): RenamePreviewState {
+  return useSyncExternalStore(subscribeRename, () => providerRenameStore.getSnapshot());
 }

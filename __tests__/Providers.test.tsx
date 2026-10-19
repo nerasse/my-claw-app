@@ -331,6 +331,20 @@ test('the edit form sends the changed fields and a rename when the key changes',
 
   const before = sentFrames().length;
   await pressLabel(tree, 'Save provider');
+  // The key is an address tags, agents and conversations all carry: the save first asks the
+  // server what the rename would touch (0.7.118+), and nothing is renamed until the sheet's
+  // answer lands and is confirmed.
+  await waitFor(() => sentFrames().some(f => f.type === 'providers.rename.preview' && f.from === 'litellm' && f.to === 'llm-gateway'), 60);
+  expect(sentFrames().some(f => f.type === 'providers.rename')).toBe(false);
+  await emit({
+    type: 'providers.rename.preview.result',
+    from: 'litellm',
+    to: 'llm-gateway',
+    refs: { models: [], tags: ['Cheap'], agents: [], sessions: ['s1'], cron: [], files: [], account: false },
+  });
+  await waitFor(() => labelsOf(tree).includes('Rename to "llm-gateway"'), 60);
+  expect(textsOf(tree).join(' ')).toContain('It follows 1 tag, 1 conversation.');
+  await pressLabel(tree, 'Rename to "llm-gateway"');
   await waitFor(() => sentFrames().length > before, 60);
   expect(sentFrames()).toEqual(
     expect.arrayContaining([
@@ -341,6 +355,24 @@ test('the edit form sends the changed fields and a rename when the key changes',
   // The server answers with the snapshot it stored: the models page of the renamed key opens.
   await emit({ ...providersConfig(), providers: [{ ...(providersConfig().providers as Array<Record<string, unknown>>)[0], key: 'llm-gateway' }] });
   await waitFor(() => labelsOf(tree).includes('Edit provider'), 60);
+
+  await settleAndUnmount(tree);
+});
+
+test('the Active switch switches a provider off in one tap', async () => {
+  const tree = await bootToProviders();
+
+  await pressLabel(tree, 'Open provider litellm');
+  await waitFor(() => labelsOf(tree).includes('Edit provider'));
+  const off = tree.root.findAll(node => node.props.accessibilityLabel === 'Switch this provider off', { deep: true })[0];
+  expect(off).toBeTruthy();
+  await ReactTestRenderer.act(async () => {
+    off!.props.onValueChange(false);
+  });
+  await waitFor(
+    () => sentFrames().some(f => f.type === 'providers.upsert' && f.key === 'litellm' && f.disabled === true),
+    60,
+  );
 
   await settleAndUnmount(tree);
 });

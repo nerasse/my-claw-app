@@ -151,6 +151,10 @@ test('Claude: the code its page shows is pasted back; a token goes through its o
   // The token that came from .env is the account's own now: Sign out is there, as for ChatGPT.
   await emit(accounts([chatgpt(), claude({ connected: true, source: 'token' })]));
   expect(labelsOf(tree)).toContain('Account status Connected · long-lived token');
+  // Who is signed in, when the server read an identity (0.7.118+): two Claude plans are the same
+  // account page without it.
+  await emit(accounts([chatgpt(), claude({ connected: true, source: 'token', email: 'perso@example.com' })]));
+  expect(labelsOf(tree)).toContain('Account status Connected · perso@example.com · long-lived token');
   await press(tree, 'Sign out');
   await press(tree, 'Confirm sign out');
   expect(sent()).toContainEqual({ type: 'accounts.logout', provider: 'anthropic' });

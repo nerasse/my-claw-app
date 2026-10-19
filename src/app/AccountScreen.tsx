@@ -17,8 +17,16 @@ export const ACCOUNT_LABELS: Record<AccountKind, { title: string; plan: string; 
 /** One line under the account's name: who is signed in, or what signing in gives. */
 export function accountSummary(kind: AccountKind, view: AccountView | undefined): string {
   if (!view?.connected) return view?.login ? 'Sign-in in progress' : 'Not signed in';
-  if (kind === 'codex') return ['Connected', view.email, view.plan && `${view.plan[0]!.toUpperCase()}${view.plan.slice(1)}`].filter(Boolean).join(' · ');
-  return view.source === 'token' ? 'Connected · long-lived token' : 'Connected';
+  if (kind === 'codex') {
+    return ['Connected', view.email, view.plan && `${view.plan[0]!.toUpperCase()}${view.plan.slice(1)}`]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  // The account's identity is what tells two Claude plans apart: the email read at sign-in
+  // (server 0.7.118+). Without it the line said the same thing for both accounts.
+  return ['Connected', view.email, view.source === 'token' ? 'long-lived token' : undefined]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /** How long a second tap on Sign out stays armed. */

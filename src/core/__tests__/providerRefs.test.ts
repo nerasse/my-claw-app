@@ -11,6 +11,7 @@ import {
   deleteProviderCascadeLabel,
   deleteProviderPreview,
   providerOfRef,
+  renamePreviewText,
   routeOf,
   tagRoutesSuffix,
   tagRoutesThroughProvider,
@@ -78,18 +79,43 @@ describe('what the sheet says', () => {
     expect(tagRoutesSuffix([])).toBe('');
   });
 
-  it('spells out the tags that would fall back silently', () => {
+  it('spells out the tags the cascade would repoint', () => {
     const suffix = tagRoutesSuffix([{ tag: 'Cheap', model: 'opencode_go/deepseek-flash' }]);
     expect(suffix).toContain('Cheap');
     expect(suffix).toContain('opencode_go/deepseek-flash');
-    expect(suffix).toContain('falls back to the global default');
+    expect(suffix).toContain('repoints it at the default model');
+    expect(tagRoutesSuffix([{ tag: 'Cheap', model: 'a/b' }, { tag: 'Smart', model: 'a/c' }])).toContain(
+      'repoints them at the default model',
+    );
   });
 
   it('names both halves of the cascade in the button', () => {
     expect(deleteProviderCascadeLabel({ declaredModels: ['a', 'b'], tagRoutes: [{ tag: 'Cheap' }] }))
-      .toBe('Delete and remove 2 declared models and the tag route Cheap');
+      .toBe('Delete, then remove 2 declared models and repoint the tag route Cheap');
     // A provider with no declared model of its own is still not deletable while a tag routes to it.
     expect(deleteProviderCascadeLabel({ declaredModels: [], tagRoutes: [{ tag: 'Cheap' }, { tag: 'Smart' }] }))
-      .toBe('Delete and remove the tag routes Cheap, Smart');
+      .toBe('Delete, then repoint the tag routes Cheap, Smart');
+  });
+});
+
+describe('renamePreviewText', () => {
+  it('names what follows the key, by store, in one line', () => {
+    expect(
+      renamePreviewText('claude-abo', 'claude-2', {
+        models: [],
+        tags: ['Cheap'],
+        agents: [],
+        sessions: ['s1', 's2'],
+        cron: [],
+        files: [],
+        account: true,
+      }),
+    ).toBe('Rename "claude-abo" to "claude-2"? It follows 1 tag, 2 conversations, its sign-in.');
+  });
+
+  it('says so when nothing else names it', () => {
+    expect(
+      renamePreviewText('a', 'b', { models: [], tags: [], agents: [], sessions: [], cron: [], files: [], account: false }),
+    ).toBe('Rename "a" to "b"? Nothing new names it.'.replace('new ', 'else '));
   });
 });

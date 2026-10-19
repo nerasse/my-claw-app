@@ -11,7 +11,7 @@
  * agrees to a cascade he was not shown.
  */
 
-import type { TagInfo } from './protocol';
+import type { ProviderRenameRefs, TagInfo } from './protocol';
 
 /** The route of a tag, whichever shape the server sent: ordered route, or the legacy single model. */
 export function routeOf(tag: TagInfo): Array<{ model: string; effort?: string; contextCap?: number }> {
@@ -49,26 +49,48 @@ export function tagRoutesThroughProvider(
  */
 export function deleteProviderPreview(provider: { key: string; declaredModels: string[] }): string {
   if (provider.declaredModels.length > 0) {
-    return `Delete the provider "${provider.key}"? It still declares ${provider.declaredModels.length} model${provider.declaredModels.length === 1 ? '' : 's'}, which cannot run without it: ${provider.declaredModels.join(', ')}.`;
+    return `Delete the provider "${provider.key}"? It still declares ${provider.declaredModels.length} model${provider.declaredModels.length === 1 ? '' : 's'}, removed with it: ${provider.declaredModels.join(', ')}.`;
   }
   return `Delete the provider "${provider.key}"? Its discovered models leave with the catalog refresh, and a re-auth recreates the SDK providers.`;
 }
 
-/** The tag routes that die with it: deleting the provider without them falls back silently. */
+/** The tag routes that would be repointed: the cascade points them at the default model. */
 export function tagRoutesSuffix(routes: Array<{ tag: string; model: string }>): string {
   if (routes.length === 0) return '';
   const named = routes.map(route => `${route.tag} (${route.model})`).join(', ');
-  return ` The tag${routes.length === 1 ? '' : 's'} ${named} route${routes.length === 1 ? 's' : ''} through it, and a route that loses its model falls back to the global default without saying so.`;
+  const many = routes.length !== 1;
+  return ` The tag${many ? 's' : ''} ${named} route${many ? 's' : ''} through it: the delete below repoints ${many ? 'them' : 'it'} at the default model.`;
 }
 
 export function deleteProviderCascadeLabel(provider: { declaredModels: string[]; tagRoutes: Array<{ tag: string }> }): string {
   const parts: string[] = [];
   if (provider.declaredModels.length > 0) {
-    parts.push(`${provider.declaredModels.length} declared model${provider.declaredModels.length === 1 ? '' : 's'}`);
+    parts.push(`remove ${provider.declaredModels.length} declared model${provider.declaredModels.length === 1 ? '' : 's'}`);
   }
   if (provider.tagRoutes.length > 0) {
-    parts.push(`the tag route${provider.tagRoutes.length === 1 ? '' : 's'} ${provider.tagRoutes.map(route => route.tag).join(', ')}`);
+    parts.push(`repoint the tag route${provider.tagRoutes.length === 1 ? '' : 's'} ${provider.tagRoutes.map(route => route.tag).join(', ')}`);
   }
-  return `Delete and remove ${parts.join(' and ')}`;
+  return `Delete, then ${parts.join(' and ')}`;
+}
+
+/**
+ * The rename sheet's one line: what follows the key, named by store, then the promise that the
+ * rename writes them all. Nothing is offered per reference -- they all land on the new key, and
+ * the sizes are what makes the promise checkable (server 0.7.118+).
+ */
+export function renamePreviewText(from: string, to: string, refs: ProviderRenameRefs): string {
+  const parts: string[] = [];
+  const count = (n: number, what: string): void => {
+    if (n > 0) parts.push(`${n} ${what}${n === 1 ? '' : 's'}`);
+  };
+  count(refs.models.length, 'declared model');
+  count(refs.tags.length, 'tag');
+  count(refs.agents.length, 'agent');
+  count(refs.sessions.length, 'conversation');
+  count(refs.cron.length, 'cron job');
+  count(refs.files.length, 'agent file');
+  if (refs.account) parts.push('its sign-in');
+  const tail = parts.length > 0 ? ` It follows ${parts.join(', ')}.` : ' Nothing else names it.';
+  return `Rename "${from}" to "${to}"?${tail}`;
 }
 

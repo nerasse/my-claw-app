@@ -35,6 +35,7 @@ function PlanRow({
         <View style={styles.linkTitleLine}>
           <Text style={styles.linkTitle}>{name}</Text>
           <Text style={styles.badge}>{`${ACCOUNT_LABELS[kind].title} plan`}</Text>
+          {provider.disabled ? <Text style={styles.badgeOff}>off</Text> : null}
         </View>
         <Text style={[styles.hint, connected && styles.connected]} numberOfLines={1}>
           {`${summary} · ${provider.models} model${provider.models === 1 ? '' : 's'}`}
@@ -274,6 +275,7 @@ export function ModelsScreen({
                     <Text style={styles.linkTitle}>{provider.group || provider.key}</Text>
                     <Text style={styles.badge}>{provider.type}</Text>
                     {provider.discover ? <Text style={styles.badge}>discovery</Text> : null}
+                    {provider.disabled ? <Text style={styles.badgeOff}>off</Text> : null}
                   </View>
                   {/* A refused key is said here too: "0 models · key set" read as fine. */}
                   {provider.discovery?.state === 'failed' ? (
@@ -388,6 +390,18 @@ const createStyles = (palette: Palette) => ({
     color: palette.textFaint,
     borderWidth: 1,
     borderColor: palette.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  /** "off": the same chip shape as a badge, in the muted tone a switched-off thing reads as. */
+  badgeOff: {
+    fontSize: font.micro,
+    color: palette.textFaint,
+    borderWidth: 1,
+    borderColor: palette.textFaint,
     borderRadius: radius.sm,
     paddingHorizontal: 4,
     paddingVertical: 1,

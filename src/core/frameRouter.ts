@@ -20,7 +20,7 @@ import { tagsStore } from './tags';
 import { agentsFileStore } from './agentsFile';
 import { instructionsStore } from './instructions';
 import { sessionInstructionsStore } from './sessionInstructions';
-import { providersEnvStore } from './providers';
+import { providersEnvStore, providerRenameStore } from './providers';
 import { statusStore } from './status';
 import { statsStore } from './stats';
 import { servicesStore } from './services';
@@ -643,6 +643,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'providers.env.result':
       providersEnvStore.receive(frame);
       setProviderBusy(false);
+      break;
+    case 'providers.rename.preview.result':
+      providerRenameStore.receive(frame);
       break;
     case 'agents.file.result':
       agentsFileStore.receive(frame);

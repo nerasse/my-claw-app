@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { FlatList, Platform, Pressable, Switch, Text, TextInput, View } from 'react-native';
 import type { ModelOption, ProviderInfo, UnavailableModel } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -124,6 +124,7 @@ export function ProviderScreen({
   onEditProvider,
   onEditModel,
   onAddModel,
+  onToggleDisabled,
   onBack,
 }: {
   provider: ProviderInfo;
@@ -139,6 +140,8 @@ export function ProviderScreen({
   onEditProvider: () => void;
   onEditModel: (model: ModelOption | UnavailableModel) => void;
   onAddModel: () => void;
+  /** The Active switch: false switches the provider off (server 0.7.118+). */
+  onToggleDisabled: (disabled: boolean) => void;
   onBack: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -246,6 +249,23 @@ export function ProviderScreen({
           {error}
         </Text>
       ) : null}
+      {/* Off is a switch, not a delete: the sign-in and the key stay, discovery stops asking,
+          and the picker and every route naming one of its models skip it. */}
+      <View style={styles.activeRow}>
+        <View style={styles.activeText}>
+          <Text style={styles.activeLabel}>{provider.disabled ? 'Switched off' : 'Active'}</Text>
+          <Text style={styles.activeHint} numberOfLines={2}>
+            {provider.disabled
+              ? 'hidden from the picker; tags and sessions route past its models'
+              : 'off keeps everything, and stops every route until it is back on'}
+          </Text>
+        </View>
+        <Switch
+          value={provider.disabled !== true}
+          onValueChange={value => onToggleDisabled(!value)}
+          accessibilityLabel={provider.disabled ? 'Switch this provider on' : 'Switch this provider off'}
+        />
+      </View>
       <DiscoveryNote />
       {/* This provider's own last pass: what a provider just added reads while it is asked, and
           the reason it lists nothing when its key was refused. A pass that went well says
@@ -320,6 +340,17 @@ const createStyles = (palette: Palette) => ({
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   editGlyph: { fontSize: 18, lineHeight: 20, color: palette.text },
+  activeRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.md,
+    paddingVertical: space.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  activeText: { flex: 1, gap: 1 },
+  activeLabel: { fontSize: font.body, color: palette.text },
+  activeHint: { fontSize: font.small, color: palette.textFaint },
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
