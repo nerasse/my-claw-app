@@ -91,3 +91,28 @@ describe('composing a description', () => {
     expect(composeNodeDescription({ purpose: '', reaches: '', never: '' })).toBe('');
   });
 });
+
+describe('presence', () => {
+  beforeEach(() => nodesStore.reset());
+
+  test('a node coming or going patches its row in place, without a list round-trip', () => {
+    nodesStore.onList({
+      type: 'nodes.list.result',
+      nodes: [
+        { nodeId: 'n1', name: 'web01', online: false, createdAt: '2026-10-15T10:00:00.000Z', tools: [] },
+        { nodeId: 'n2', name: 'build', online: true, createdAt: '2026-10-15T11:00:00.000Z', tools: [] },
+      ],
+    });
+    nodesStore.onPresence({ type: 'nodes.presence', nodeId: 'n1', online: true });
+    nodesStore.onPresence({ type: 'nodes.presence', nodeId: 'n2', online: false });
+    expect(nodesStore.get().nodes.map(node => [node.nodeId, node.online])).toEqual([
+      ['n1', true],
+      ['n2', false],
+    ]);
+  });
+
+  test('before the list is known, presence is ignored rather than inventing a row', () => {
+    nodesStore.onPresence({ type: 'nodes.presence', nodeId: 'n1', online: true });
+    expect(nodesStore.get().nodes).toEqual([]);
+  });
+});

@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { nodeInstallCommand, nodeServerUrl, nodesStore, useNodes, type NodeInstallMode, type NodePlatform } from '../core/nodes';
+import { formatClaimCode, nodeInstallCommand, nodeServerUrl, nodesStore, useNodes, type NodeInstallMode, type NodePlatform } from '../core/nodes';
 import type { NodeRecord } from '../core/protocol';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -90,10 +90,6 @@ export function NodesScreen({
   const claim = state.claim;
   const command = claim ? nodeInstallCommand(serverOrigin, claim.code, platform, mode) : '';
 
-  const copy = useCallback((text: string) => {
-    Clipboard.setString(text);
-  }, []);
-
   return (
     <View style={styles.root}>
       <View style={styles.header}>
@@ -122,7 +118,7 @@ export function NodesScreen({
             <View style={styles.codeBox}>
               <Text style={styles.codeLabel}>code</Text>
               <Text style={styles.code} selectable accessibilityLabel="Claim code">
-                {claim.code.length === 8 ? `${claim.code.slice(0, 4)}-${claim.code.slice(4)}` : claim.code}
+                {formatClaimCode(claim.code)}
               </Text>
               <Text style={styles.detail}>{`single use · valid until ${until(claim.expiresAt)}`}</Text>
             </View>
@@ -181,7 +177,7 @@ export function NodesScreen({
             <Pressable
               style={[styles.button, styles.approve]}
               onPress={() => {
-                copy(command);
+                Clipboard.setString(command);
                 setCopied(true);
                 if (copiedTimer.current) clearTimeout(copiedTimer.current);
                 copiedTimer.current = setTimeout(() => setCopied(false), 2000);
@@ -373,14 +369,6 @@ const createStyles = (palette: Palette) => ({
   },
   approve: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
   busy: { opacity: 0.7 },
-  revoke: {
-    alignItems: 'center' as const,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
   chevron: { fontSize: font.title, color: palette.textFaint, paddingHorizontal: space.xs },
   buttonText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   sectionLabel: {

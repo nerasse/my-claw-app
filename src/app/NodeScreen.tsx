@@ -101,7 +101,13 @@ export function NodeScreen({
 
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!node ? (
-          <Text style={styles.hint}>{connected ? 'This node is no longer paired.' : 'Connect to your server to load the node.'}</Text>
+          <Text style={styles.hint}>
+            {state.status === 'unknown'
+              ? connected
+                ? 'loading'
+                : 'Connect to your server to load the node.'
+              : 'This node is no longer paired.'}
+          </Text>
         ) : (
           <>
             {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
@@ -130,8 +136,7 @@ export function NodeScreen({
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Update</Text>
                 <Text style={styles.hint}>
-                  {`this machine runs ${node.version}, the server runs ${serverVersion}. Its own retry waits half an
-                  hour between attempts; this asks it now.`}
+                  {`This machine runs ${node.version}, the server runs ${serverVersion}. Its own retry waits half an hour between attempts; this asks it now.`}
                 </Text>
                 <Pressable
                   style={[styles.button, styles.approve, busy && styles.busy]}
@@ -176,14 +181,6 @@ export function NodeScreen({
                 accessibilityLabel="Node description"
               />
               <Pressable
-                style={[styles.button, styles.approve, (busy || !description.trim() || description.trim() === (node.description ?? '')) && styles.busy]}
-                onPress={() => nodesStore.describe(node.nodeId, description)}
-                disabled={busy || !description.trim() || description.trim() === (node.description ?? '')}
-                accessibilityRole="button"
-                accessibilityLabel="Save the description">
-                <Text style={styles.buttonText}>Save</Text>
-              </Pressable>
-              <Pressable
                 onPress={() => setGuided(current => !current)}
                 accessibilityRole="button"
                 accessibilityLabel="Guided fields">
@@ -226,6 +223,14 @@ export function NodeScreen({
                   </Pressable>
                 </View>
               ) : null}
+              <Pressable
+                style={[styles.button, styles.approve, (busy || !description.trim() || description.trim() === (node.description ?? '')) && styles.busy]}
+                onPress={() => nodesStore.describe(node.nodeId, description)}
+                disabled={busy || !description.trim() || description.trim() === (node.description ?? '')}
+                accessibilityRole="button"
+                accessibilityLabel="Save the description">
+                <Text style={styles.buttonText}>Save</Text>
+              </Pressable>
               {node.agent ? <Text style={styles.detail}>{`agent ${node.agent}`}</Text> : <Text style={styles.detail}>no agent file</Text>}
             </View>
 

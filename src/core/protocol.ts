@@ -2309,6 +2309,13 @@ export interface NodesUpdateResultFrame {
   error?: string;
 }
 
+/** A node came or went. Pushed to every screen, so the roster's dot is never stale. */
+export interface NodesPresenceFrame {
+  type: 'nodes.presence';
+  nodeId: string;
+  online: boolean;
+}
+
 /** What a pairing code stands for, shown before the owner approves. Carries no credential. */
 export interface DevicePairInfoFrame {
   type: 'device.pair.info';
@@ -2884,6 +2891,7 @@ export type ServerFrame =
   | NodesDescribeResultFrame
   | NodesAccessSetResultFrame
   | NodesUpdateResultFrame
+  | NodesPresenceFrame
   | TagsResultFrame
   | UpdateResultFrame
   | ProvidersEnvResultFrame
@@ -2911,6 +2919,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'nodes.describe.result',
   'nodes.access.set.result',
   'nodes.update.result',
+  'nodes.presence',
   'chat.message',
   'chat.user',
   'chat.compaction',

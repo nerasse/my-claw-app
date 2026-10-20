@@ -190,3 +190,11 @@ describe('NodeScreen, the rest of the page', () => {
     );
   });
 });
+
+describe('NodeScreen, while the roster is loading', () => {
+  beforeEach(() => nodesStore.reset());
+
+  it('says loading, not "no longer paired", before the list arrives', () => {
+    expect(texts(render())).toContain('loading');
+  });
+});

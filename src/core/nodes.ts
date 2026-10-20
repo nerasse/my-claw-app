@@ -6,6 +6,7 @@ import type {
   NodesAddResultFrame,
   NodesDescribeResultFrame,
   NodesListResultFrame,
+  NodesPresenceFrame,
   NodesRenameResultFrame,
   NodesRevokeResultFrame,
   NodesUpdateResultFrame,
@@ -167,6 +168,16 @@ class NodesStoreImpl {
       error: frame.ok ? null : (frame.error ?? 'the update could not be offered'),
       notice: frame.ok ? 'update offered; the node restarts on the new build' : null,
     });
+  }
+
+  /**
+   * A node came or went. Patched in place rather than refreshed: the machine state is the only
+   * thing that changed, and a list round-trip for it would blank the screen on a flapping node.
+   */
+  onPresence(frame: NodesPresenceFrame): void {
+    if (this.state.status !== 'ready') return;
+    const nodes = this.state.nodes.map(node => (node.nodeId === frame.nodeId ? { ...node, online: frame.online } : node));
+    this.set({ nodes });
   }
 
   /** Only tests need it: the store outlives a screen, on purpose. */
