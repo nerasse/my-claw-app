@@ -198,3 +198,87 @@ describe('NodeScreen, while the roster is loading', () => {
     expect(texts(render())).toContain('loading');
   });
 });
+
+describe('NodeScreen, MCP servers', () => {
+  const WITH_MCP = {
+    ...NODE,
+    mcp: [
+      { name: 'godot', transport: 'stdio', target: 'godot-mcp --headless', ok: true, tools: 3, config: { transport: 'stdio' as const, command: 'godot-mcp', args: ['--headless'] } },
+      { name: 'blender', transport: 'http', target: 'http://127.0.0.1:8000/mcp', ok: false, tools: 0, error: 'refused', config: { transport: 'http' as const, url: 'http://127.0.0.1:8000/mcp' } },
+      { name: 'local', transport: 'stdio', target: '', external: true, ok: true, tools: 1 },
+    ],
+  };
+
+  beforeEach(() => nodesStore.reset());
+  afterEach(() => jest.restoreAllMocks());
+
+  it('lists the servers with what came up, and marks the ones the machine runs alone', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [WITH_MCP] });
+    const shown = texts(render());
+    expect(shown).toContain('godot');
+    expect(shown).toContain('stdio · godot-mcp --headless');
+    expect(shown).toContain('3 tools');
+    expect(shown).toContain('failed: refused');
+    expect(shown).toContain('not managed here');
+    // Nothing to edit or remove for a server this server did not configure.
+    expect(byLabel(render(), 'Edit local')).toHaveLength(0);
+  });
+
+  it('adds a stdio server: the whole list goes back, with the new entry', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [WITH_MCP] });
+    const setMcp = jest.spyOn(nodesStore, 'setMcp').mockImplementation(() => {});
+    const tree = render();
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Add an MCP server')[0]!.props.onPress();
+    });
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'MCP name')[0]!.props.onChangeText('unity');
+      byLabel(tree, 'MCP command')[0]!.props.onChangeText('unity-mcp');
+      byLabel(tree, 'MCP arguments')[0]!.props.onChangeText('--port 9000');
+    });
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Save the MCP server')[0]!.props.onPress();
+    });
+    expect(setMcp).toHaveBeenCalledWith('n1', {
+      godot: { transport: 'stdio', command: 'godot-mcp', args: ['--headless'] },
+      blender: { transport: 'http', url: 'http://127.0.0.1:8000/mcp' },
+      unity: { transport: 'stdio', command: 'unity-mcp', args: ['--port', '9000'] },
+    });
+  });
+
+  it('editing an http server keeps its transport', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [WITH_MCP] });
+    const setMcp = jest.spyOn(nodesStore, 'setMcp').mockImplementation(() => {});
+    const tree = render();
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Edit blender')[0]!.props.onPress();
+    });
+    expect(byLabel(tree, 'MCP URL')[0]!.props.value).toBe('http://127.0.0.1:8000/mcp');
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'MCP URL')[0]!.props.onChangeText('http://127.0.0.1:8100/mcp');
+    });
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Save the MCP server')[0]!.props.onPress();
+    });
+    expect(setMcp).toHaveBeenCalledWith('n1', {
+      godot: { transport: 'stdio', command: 'godot-mcp', args: ['--headless'] },
+      blender: { transport: 'http', url: 'http://127.0.0.1:8100/mcp' },
+    });
+  });
+
+  it('removing asks first, then sends the list without it', () => {
+    nodesStore.onList({ type: 'nodes.list.result', nodes: [WITH_MCP] });
+    const setMcp = jest.spyOn(nodesStore, 'setMcp').mockImplementation(() => {});
+    const tree = render();
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Remove godot')[0]!.props.onPress();
+    });
+    expect(texts(tree).join('\n')).toContain('Stop "godot"');
+    ReactTestRenderer.act(() => {
+      byLabel(tree, 'Remove')[0]!.props.onPress();
+    });
+    expect(setMcp).toHaveBeenCalledWith('n1', {
+      blender: { transport: 'http', url: 'http://127.0.0.1:8000/mcp' },
+    });
+  });
+});

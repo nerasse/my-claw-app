@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { composeNodeDescription, nodesStore, useNodes } from '../core/nodes';
+import type { NodeMcpConfig, NodeMcpEntry } from '../core/protocol';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
@@ -58,6 +59,8 @@ export function NodeScreen({
   const [purpose, setPurpose] = useState('');
   const [reaches, setReaches] = useState('');
   const [never, setNever] = useState('');
+  const [mcpEditor, setMcpEditor] = useState<McpEditor | null>(null);
+  const [removingMcp, setRemovingMcp] = useState<NodeMcpEntry | null>(null);
 
   // Seeded once per node, when the roster has it: a refresh must not clobber what is being typed.
   useEffect(() => {
@@ -79,6 +82,45 @@ export function NodeScreen({
 
   const exposed = node?.exposed ?? node?.tools ?? [];
   const busy = state.busy;
+
+  const configuredMcp = (): Record<string, NodeMcpConfig> =>
+    Object.fromEntries(
+      (node?.mcp ?? []).filter(entry => !entry.external && entry.config).map(entry => [entry.name, entry.config as NodeMcpConfig]),
+    );
+
+  const editMcp = (entry: NodeMcpEntry): void => {
+    const config = entry.config;
+    setMcpEditor({
+      original: entry.name,
+      name: entry.name,
+      transport: config?.transport === "http" || config?.transport === "sse" ? config.transport : "stdio",
+      command: config?.command ?? "",
+      args: (config?.args ?? []).join(" "),
+      url: config?.url ?? "",
+    });
+  };
+
+  const saveMcp = (): void => {
+    if (!node || !mcpEditor) return;
+    const server = mcpEditor.name.trim();
+    if (!server) return;
+    const next = configuredMcp();
+    if (mcpEditor.original && mcpEditor.original !== server) delete next[mcpEditor.original];
+    next[server] =
+      mcpEditor.transport === "stdio"
+        ? { transport: "stdio", command: mcpEditor.command.trim(), ...(mcpEditor.args.trim() ? { args: mcpEditor.args.trim().split(/\s+/) } : {}) }
+        : { transport: mcpEditor.transport, url: mcpEditor.url.trim() };
+    nodesStore.setMcp(node.nodeId, next);
+    setMcpEditor(null);
+  };
+
+  const removeMcp = (): void => {
+    if (!node || !removingMcp) return;
+    const next = configuredMcp();
+    delete next[removingMcp.name];
+    nodesStore.setMcp(node.nodeId, next);
+    setRemovingMcp(null);
+  };
 
   const toggleTool = (tool: string, on: boolean): void => {
     if (!node) return;
@@ -235,6 +277,129 @@ export function NodeScreen({
             </View>
 
             <View style={styles.card}>
+              <Text style={styles.cardTitle}>MCP servers</Text>
+              <Text style={styles.hint}>
+                Servers this machine runs for my-claw. It starts them itself; its own config stays the ceiling for what
+                they may reach.
+              </Text>
+              {(node.mcp ?? []).length === 0 ? <Text style={styles.hint}>none</Text> : null}
+              {(node.mcp ?? []).map(entry => (
+                <View key={entry.name} style={styles.mcpRow}>
+                  <View style={styles.mcpMain}>
+                    <Text style={styles.toolName}>{entry.name}</Text>
+                    <Text style={styles.detail} numberOfLines={2}>
+                      {`${entry.transport}${entry.target ? ` · ${entry.target}` : ""}`}
+                    </Text>
+                    <Text style={styles.detail}>
+                      {entry.external
+                        ? "not managed here"
+                        : entry.ok === undefined
+                          ? "waiting for the machine"
+                          : entry.ok
+                            ? `${entry.tools ?? 0} tool${entry.tools === 1 ? "" : "s"}`
+                            : `failed: ${entry.error ?? "unknown"}`}
+                    </Text>
+                  </View>
+                  {entry.external ? null : (
+                    <View style={styles.mcpActions}>
+                      <Pressable onPress={() => editMcp(entry)} accessibilityRole="button" accessibilityLabel={`Edit ${entry.name}`}>
+                        <Text style={styles.link}>edit</Text>
+                      </Pressable>
+                      <Pressable onPress={() => setRemovingMcp(entry)} accessibilityRole="button" accessibilityLabel={`Remove ${entry.name}`}>
+                        <Text style={styles.removeLink}>remove</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              ))}
+              {mcpEditor ? (
+                <View style={styles.guided}>
+                  <TextInput
+                    style={styles.input}
+                    value={mcpEditor.name}
+                    onChangeText={value => setMcpEditor(current => (current ? { ...current, name: value } : current))}
+                    placeholder="name, e.g. godot"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    accessibilityLabel="MCP name"
+                  />
+                  <View style={styles.segment}>
+                    {(["stdio", "http"] as const).map(transport => (
+                      <Pressable
+                        key={transport}
+                        style={[styles.segmentItem, mcpEditor.transport === transport ? styles.segmentItemActive : null]}
+                        onPress={() => setMcpEditor(current => (current ? { ...current, transport } : current))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: mcpEditor.transport === transport }}
+                        accessibilityLabel={`Transport ${transport}`}>
+                        <Text style={[styles.segmentText, mcpEditor.transport === transport ? styles.segmentTextActive : null]}>
+                          {transport === "stdio" ? "command (stdio)" : "URL (http)"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {mcpEditor.transport === "stdio" ? (
+                    <>
+                      <TextInput
+                        style={styles.input}
+                        value={mcpEditor.command}
+                        onChangeText={value => setMcpEditor(current => (current ? { ...current, command: value } : current))}
+                        placeholder="command, e.g. godot-mcp"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        accessibilityLabel="MCP command"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={mcpEditor.args}
+                        onChangeText={value => setMcpEditor(current => (current ? { ...current, args: value } : current))}
+                        placeholder="arguments, separated by spaces"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        accessibilityLabel="MCP arguments"
+                      />
+                    </>
+                  ) : (
+                    <TextInput
+                      style={styles.input}
+                      value={mcpEditor.url}
+                      onChangeText={value => setMcpEditor(current => (current ? { ...current, url: value } : current))}
+                      placeholder="http://127.0.0.1:8000/mcp"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      accessibilityLabel="MCP URL"
+                    />
+                  )}
+                  <View style={styles.actions}>
+                    <Pressable
+                      style={[styles.button, styles.grow, styles.approve, (busy || !mcpEditor.name.trim() || !(mcpEditor.transport === "stdio" ? mcpEditor.command.trim() : mcpEditor.url.trim())) && styles.busy]}
+                      onPress={saveMcp}
+                      disabled={busy || !mcpEditor.name.trim() || !(mcpEditor.transport === "stdio" ? mcpEditor.command.trim() : mcpEditor.url.trim())}
+                      accessibilityRole="button"
+                      accessibilityLabel="Save the MCP server">
+                      <Text style={styles.buttonText}>Save</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.button, styles.grow]}
+                      onPress={() => setMcpEditor(null)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel the MCP server">
+                      <Text style={styles.buttonText}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.button}
+                  onPress={() => setMcpEditor({ original: null, name: "", transport: "stdio", command: "", args: "", url: "" })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add an MCP server">
+                  <Text style={styles.buttonText}>Add a server</Text>
+                </Pressable>
+              )}
+            </View>
+
+            <View style={styles.card}>
               <Text style={styles.cardTitle}>What it may run</Text>
               <Text style={styles.hint}>
                 A tool left off is absent from the agent's set. The machine's own config is the ceiling: a tool it does
@@ -298,6 +463,14 @@ export function NodeScreen({
       </ScrollView>
       {indicator}
 
+      {removingMcp && node ? (
+        <ActionSheet
+          preview={`Stop "${removingMcp.name}" on "${node.name}"? The machine closes the server and drops its tools; nothing else changes.`}
+          options={[{ label: "Remove", danger: true, onPress: removeMcp }]}
+          onClose={() => setRemovingMcp(null)}
+        />
+      ) : null}
+
       {confirming && node ? (
         <ActionSheet
           preview={`Revoke "${node.name}"? Its socket closes at once, its credential stops working, and its agent file is removed. The client stays installed on that machine.`}
@@ -317,6 +490,16 @@ export function NodeScreen({
       ) : null}
     </View>
   );
+}
+
+interface McpEditor {
+  /** The name it had before the edit, absent for a new server. */
+  original: string | null;
+  name: string;
+  transport: "stdio" | "http" | "sse";
+  command: string;
+  args: string;
+  url: string;
 }
 
 const createStyles = (palette: Palette) => ({
@@ -374,5 +557,29 @@ const createStyles = (palette: Palette) => ({
   switchTitle: { color: palette.text, fontSize: font.body, fontWeight: '600' as const },
   toolName: { color: palette.text, fontSize: font.body },
   link: { fontSize: font.small, color: palette.accent },
+  removeLink: { fontSize: font.small, color: palette.danger },
+  segment: {
+    flexDirection: 'row' as const,
+    backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.sm,
+    padding: 2,
+    gap: 2,
+  },
+  segmentItem: { flex: 1, alignItems: 'center' as const, paddingVertical: 8, borderRadius: radius.sm - 1 },
+  segmentItemActive: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.accent },
+  segmentText: { fontSize: font.meta, color: palette.textMuted },
+  segmentTextActive: { color: palette.text, fontWeight: '600' as const },
+  actions: { flexDirection: 'row' as const, gap: space.sm },
+  grow: { flex: 1, alignItems: 'center' as const },
+  mcpRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingVertical: space.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  mcpMain: { flex: 1, gap: 2 },
+  mcpActions: { gap: space.sm, alignItems: 'flex-end' as const },
   guided: { gap: space.sm, paddingTop: space.xs },
 });

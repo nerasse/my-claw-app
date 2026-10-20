@@ -390,6 +390,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
     case 'nodes.update.result':
       nodesStore.onUpdated(frame);
       break;
+    case 'nodes.mcp.set.result':
+      nodesStore.onMcpSet(frame);
+      break;
     case 'nodes.presence':
       nodesStore.onPresence(frame);
       break;

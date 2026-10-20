@@ -2254,6 +2254,33 @@ export interface NodeRecord {
   approval?: boolean;
   /** Its agent does not run; the machine stays connected. */
   disabled?: boolean;
+  /** The MCP servers it runs: the configured ones, and how each came up. */
+  mcp?: NodeMcpEntry[];
+}
+
+/** One MCP server a node runs, as the server reports it: configured here or only on the machine. */
+export interface NodeMcpEntry {
+  name: string;
+  transport: string;
+  /** The command line (stdio) or the URL (http/sse); empty for a server the machine runs on its own. */
+  target: string;
+  external?: boolean;
+  ok?: boolean;
+  tools?: number;
+  error?: string;
+  /** What the server configured, so the editor works on fields and not on a command line. */
+  config?: NodeMcpConfig;
+}
+
+/** What the app sends for the machine to run: the same shape the server's own MCP uses. */
+export interface NodeMcpConfig {
+  transport: 'stdio' | 'http' | 'sse';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  enabled?: boolean;
 }
 
 export interface NodesListResultFrame {
@@ -2304,6 +2331,14 @@ export interface NodesAccessSetResultFrame {
 /** The owner asking a connected node to take the server's build now, window or no window. */
 export interface NodesUpdateResultFrame {
   type: 'nodes.update.result';
+  ok: boolean;
+  nodeId: string;
+  error?: string;
+}
+
+/** The MCP servers a node should run: stored here, handed to the machine. */
+export interface NodesMcpSetResultFrame {
+  type: 'nodes.mcp.set.result';
   ok: boolean;
   nodeId: string;
   error?: string;
@@ -2891,6 +2926,7 @@ export type ServerFrame =
   | NodesDescribeResultFrame
   | NodesAccessSetResultFrame
   | NodesUpdateResultFrame
+  | NodesMcpSetResultFrame
   | NodesPresenceFrame
   | TagsResultFrame
   | UpdateResultFrame
@@ -2919,6 +2955,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'nodes.describe.result',
   'nodes.access.set.result',
   'nodes.update.result',
+  'nodes.mcp.set.result',
   'nodes.presence',
   'chat.message',
   'chat.user',

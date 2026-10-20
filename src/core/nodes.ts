@@ -6,6 +6,8 @@ import type {
   NodesAddResultFrame,
   NodesDescribeResultFrame,
   NodesListResultFrame,
+  NodeMcpConfig,
+  NodesMcpSetResultFrame,
   NodesPresenceFrame,
   NodesRenameResultFrame,
   NodesRevokeResultFrame,
@@ -99,6 +101,12 @@ class NodesStoreImpl {
     connection.send(JSON.stringify({ type: 'nodes.access.set', nodeId, ...access })).catch(() => {});
   }
 
+  /** The MCP servers this node should run: the whole list, stored here and handed to it. */
+  setMcp(nodeId: string, mcp: Record<string, NodeMcpConfig>): void {
+    this.set({ busy: true, error: null, notice: null });
+    connection.send(JSON.stringify({ type: 'nodes.mcp.set', nodeId, mcp })).catch(() => {});
+  }
+
   /** Asks a connected node to take the server's build now, window or no window. */
   update(nodeId: string): void {
     this.set({ busy: true, error: null, notice: null });
@@ -158,6 +166,15 @@ class NodesStoreImpl {
       busy: false,
       error: frame.ok ? null : (frame.error ?? 'the access could not be set'),
       notice: frame.ok ? 'saved' : null,
+    });
+    if (frame.ok) this.refresh();
+  }
+
+  onMcpSet(frame: NodesMcpSetResultFrame): void {
+    this.set({
+      busy: false,
+      error: frame.ok ? null : (frame.error ?? 'the MCP list could not be set'),
+      notice: frame.ok ? 'MCP list saved' : null,
     });
     if (frame.ok) this.refresh();
   }
