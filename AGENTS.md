@@ -103,7 +103,7 @@ fj release view v<v>                             # APK + dist-web.tar.gz
 Traps:
 - **Push main before `release.sh`.** It has no tag step: `--create-tag` tags whatever the remote's main is. On unpushed work the tag points at the previous commit while the APK holds the new one — which breaks "Symbolicating a release stack" above, and only the sha256 check would catch it.
 - `release.sh` refuses a version that disagrees with `versionName`. Nothing else enforces it: no CI job sees this release.
-- `release.sh` renames the APK to `my-claw-app-v<v>.apk` and keeps the 5 most recent. Delete a wrongly-named or duplicate asset first via `fj release asset delete`.
+- `release.sh` renames the APK to `my-claw-app-v<v>.apk` and keeps the 5 most recent, and keeps the 5 most recent `dist-web.tar.gz` too (`scripts/cleanup-assets.sh`). Delete a wrongly-named or duplicate asset first via `fj release asset delete`.
 - `fj release view v<v>` works here (release named after the tag). In the **server** repo it does not — the release is named `my-claw <version>`.
 - Release assets answer HEAD (a fresh one can briefly 404 behind the proxy). The server's generic **package** registry does not: it answers 405, use `curl --range 0-0`.
 - The server installs the web bundle itself (`~/.my-claw/web/current`). Never flip `current` or restart by hand.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-command release flow: create a tagged release with the APK, then prune old APKs.
+# One-command release flow: create a tagged release with the APK, then prune old release assets
+# (the 5 most recent APKs and the 5 most recent web bundles stay).
 # The attachment is named after the version (my-claw-app-<version>.apk) so a build can
 # always be told apart from the next one without looking at metadata.
 # The web bundle rides along when it is built: the server pulls it with `myclaw web install`,
@@ -128,4 +129,4 @@ if [[ -n "$WEB_TARBALL" ]]; then
   fi
 fi
 
-bash scripts/cleanup-apks.sh
+bash scripts/cleanup-assets.sh
