@@ -233,3 +233,65 @@ describe('files in a draft', () => {
     expect(draftTextOf(THREAD)).toBe('');
   });
 });
+
+describe('a draft from another window', () => {
+  const FILE = { id: 'media-1', filename: 'photo.png', type: 'image' as const, mimeType: 'image/png', sizeBytes: 3, ts: '2026-01-01T00:00:00.000Z' };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    clearAllDrafts();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('the clear that follows a send empties this copy, even though it was typed here', () => {
+    // How the phone kept a message the web had sent: its composer was focused, refused the clear,
+    // and the next save wrote the sent text back to the server.
+    queueDraftSync(THREAD, 'Re: la question');
+    jest.advanceTimersByTime(500);
+    applyRemoteDraft(THREAD, '');
+    expect(draftTextOf(THREAD)).toBe('');
+  });
+
+  test('a clear does not take text typed after the last sync', () => {
+    queueDraftSync(THREAD, 'la question');
+    jest.advanceTimersByTime(500);
+    queueDraftSync(THREAD, 'la question, encore');
+    applyRemoteDraft(THREAD, '');
+    expect(draftTextOf(THREAD)).toBe('la question, encore');
+  });
+
+  test('text from another window replaces an unmodified copy', () => {
+    queueDraftSync(THREAD, 'un debut');
+    jest.advanceTimersByTime(500);
+    applyRemoteDraft(THREAD, 'un debut, continue ailleurs');
+    expect(draftTextOf(THREAD)).toBe('un debut, continue ailleurs');
+  });
+
+  test('text from another window never overwrites newer typing here', () => {
+    queueDraftSync(THREAD, 'un debut');
+    jest.advanceTimersByTime(500);
+    queueDraftSync(THREAD, 'un debut, plus loin');
+    applyRemoteDraft(THREAD, 'la version d ailleurs');
+    expect(draftTextOf(THREAD)).toBe('un debut, plus loin');
+  });
+
+  test('a clear keeps the files the composer holds', () => {
+    applyServerFiles(THREAD, [FILE], 'replace');
+    queueDraftSync(THREAD, 'legende');
+    jest.advanceTimersByTime(500);
+    applyRemoteDraft(THREAD, '');
+    expect(draftTextOf(THREAD)).toBe('');
+    expect(draftAttachmentsOf(THREAD)).toHaveLength(1);
+  });
+
+  test('a page applies the same rule as a live change', () => {
+    queueDraftSync(THREAD, 'ecrit ici');
+    jest.advanceTimersByTime(500);
+    queueDraftSync(THREAD, 'ecrit ici, pas parti');
+    applyServerDraft(THREAD, 'la page du serveur');
+    expect(draftTextOf(THREAD)).toBe('ecrit ici, pas parti');
+  });
+});

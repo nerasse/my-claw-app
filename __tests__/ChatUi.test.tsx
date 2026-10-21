@@ -1133,6 +1133,87 @@ test('a draft does not follow the reader into another conversation', async () =>
   await unmount(tree);
 });
 
+test('a draft sent on another window empties this composer, focused or not', async () => {
+  const tree = await renderWithHistory();
+  const framesBefore = bridge.sendMessage.mock.calls.length;
+  await typeInto(tree, 'Re: la question');
+  // The debounce flushed: this device is not ahead of the server, so the clear is news.
+  await waitFor(() =>
+    bridge.sendMessage.mock.calls
+      .slice(framesBefore)
+      .some(([frame]) => String(frame).includes('"draft.set"')),
+  );
+
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'draft.changed', threadId: THREAD, text: '', ts: 1 }),
+    });
+  });
+
+  await waitFor(() => inputOf(tree).props.value === '');
+  await unmount(tree);
+});
+
+test('a clear from another window does not take newer typing here', async () => {
+  const tree = await renderWithHistory();
+  const framesBefore = bridge.sendMessage.mock.calls.length;
+  await typeInto(tree, 'la question');
+  await waitFor(() =>
+    bridge.sendMessage.mock.calls
+      .slice(framesBefore)
+      .some(([frame]) => String(frame).includes('"draft.set"')),
+  );
+
+  // Typed just now, not acknowledged: the clear was decided before it and must lose.
+  await typeInto(tree, 'la question, encore');
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'draft.changed', threadId: THREAD, text: '', ts: 2 }),
+    });
+  });
+
+  expect(inputOf(tree).props.value).toBe('la question, encore');
+  await unmount(tree);
+});
+
+test('a file whose upload lands during the send never comes back as a chip', async () => {
+  const { launchImageLibrary } = require('react-native-image-picker');
+  const tree = await renderWithHistory();
+  const framesBefore = bridge.sendMessage.mock.calls.length;
+  const sent = (): string[] =>
+    bridge.sendMessage.mock.calls.slice(framesBefore).map(([frame]) => String(frame));
+
+  // The bytes land after Send was pressed: the send waits for this promise.
+  let release!: () => void;
+  bridge.uploadFile.mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        release = () => resolve({ status: 200, body: JSON.stringify({ id: 'media-late' }) });
+      }),
+  );
+  await pressLabel(tree, 'Add attachment');
+  await waitFor(() => textsOf(tree).includes('Photo from gallery'));
+  await pressText(tree, 'Photo from gallery');
+  const callback = launchImageLibrary.mock.calls.at(-1)[1];
+  await ReactTestRenderer.act(async () => {
+    callback({
+      didCancel: false,
+      assets: [{ uri: 'content://media/external/images/42', fileName: 'photo.jpg', type: 'image/jpeg', fileSize: 1234 }],
+    });
+  });
+
+  await typeInto(tree, 'regarde');
+  await pressLabel(tree, 'Send message');
+  await ReactTestRenderer.act(async () => release());
+
+  await waitFor(() => sent().some(frame => frame.includes('"chat.send"') && frame.includes('media-late')));
+  // The message carries the id; staging it again after the send put the chip back on every
+  // device, which is the bug this pins.
+  expect(sent().some(frame => frame.includes('"draft.file.add"') && frame.includes('media-late'))).toBe(false);
+  await waitFor(() => !labelsOf(tree).some(label => label.startsWith('Preview attachment')));
+  await unmount(tree);
+});
+
 test('a send waits for the server receipt, and one that never got it can be sent again under the same id', async () => {
   const tree = await renderWithHistory();
   // The server says it receipts sends: from here every send is waited for.

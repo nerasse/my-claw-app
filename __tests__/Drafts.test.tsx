@@ -7,7 +7,7 @@ import { chatStore } from '../src/core/chat';
 import { connection } from '../src/core/connection';
 import { applyRemoteDraft, clearAllDrafts } from '../src/core/drafts';
 import { deviceBridge } from '../src/core/nativeBridge';
-import { renderApp, unmount, type Tree } from '../test-utils/render';
+import { renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-drafts';
@@ -82,6 +82,13 @@ describe('a draft written on another device', () => {
       await focus(tree, true);
       await typeInto(tree, 'texte de hier');
       await focus(tree, false);
+
+      // Left alone means the debounce flushed: the server knows this text, so the device is not
+      // ahead of it and the other window's newer draft wins. Text typed and not yet acknowledged
+      // is a different case -- that one is never overwritten (the test above).
+      await waitFor(() =>
+        (connection.send as jest.Mock).mock.calls.some(([frame]) => String(frame).includes('"draft.set"')),
+      );
 
       await arrive('la suite, ecrite au bureau');
 

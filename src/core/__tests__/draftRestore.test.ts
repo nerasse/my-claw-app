@@ -1,6 +1,6 @@
 import { routeServerFrame, type ServerFrameHandlers } from '../frameRouter';
 import { parseServerFrame } from '../protocol';
-import { clearAllDrafts, clearDraft, draftAttachmentsOf, draftTextOf } from '../drafts';
+import { applyServerDraft, clearAllDrafts, clearDraft, draftAttachmentsOf, draftTextOf, queueDraftSync } from '../drafts';
 import { sessionStore } from '../sessions';
 
 /**
@@ -99,4 +99,18 @@ test('the files of a composer ride the sync that opens it, and the server list i
   // A chip removed on another device travels as the authoritative list, empty included.
   route({ type: 'draft.files.changed', threadId: THREAD, files: [], ts: 2 });
   expect(draftAttachmentsOf(THREAD)).toEqual([]);
+});
+
+test('the clear that follows a send empties the draft here too', () => {
+  // This device had the text and had synced it: it is not ahead, so the clear is news.
+  applyServerDraft(THREAD, 'Re: la question');
+  route({ type: 'draft.changed', threadId: THREAD, text: '', ts: 3 });
+  expect(draftTextOf(THREAD)).toBe('');
+});
+
+test('a clear does not take text typed after the last sync', () => {
+  applyServerDraft(THREAD, 'la question');
+  queueDraftSync(THREAD, 'la question, encore');
+  route({ type: 'draft.changed', threadId: THREAD, text: '', ts: 4 });
+  expect(draftTextOf(THREAD)).toBe('la question, encore');
 });

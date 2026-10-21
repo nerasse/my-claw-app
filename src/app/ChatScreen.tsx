@@ -271,6 +271,12 @@ export function ChatScreen({
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   /** A staged upload that failed. The chip says which one, and the send tries it again. */
   const [uploadFailed, setUploadFailed] = useState<Record<string, true>>({});
+  /**
+   * Stages consumed by a send, by local chip id. The upload finishes after the message has left
+   * when it was in flight, and announcing it then put the file back on the composer of every
+   * device -- the send had already pruned the id, the announce added it again.
+   */
+  const consumedRef = useRef(new Set<string>());
   /** The upload running for each staged file, so a send waits for it instead of pushing twice. */
   const uploadsRef = useRef(new Map<string, Promise<string>>());
   const mediaBaseRef = useRef(mediaBase);
@@ -360,11 +366,12 @@ export function ChatScreen({
     () =>
       onRemoteDraft(changed => {
         if (changed !== threadId) return;
-        // The chips follow the server's list even while the owner is typing: unlike the text,
-        // there is no caret to protect, and a removal made elsewhere has to take effect here.
-        setAttachments(draftAttachmentsOf(threadId));
-        if (draftRef.current.trim() && focusedRef.current) return;
+        // The store only adopts a remote draft when this composer is not ahead of the server, so
+        // what it holds is always what the screen should show -- a clear that follows a send
+        // included, even while the field has the caret. The old guard here ("not while focused")
+        // kept a sent message on screen and then saved it back, which is how it kept coming back.
         setDraft(draftTextOf(threadId));
+        setAttachments(draftAttachmentsOf(threadId));
       }),
     [threadId],
   );
@@ -398,11 +405,15 @@ export function ChatScreen({
             current.map(item => (item.id === pending.id ? { ...item, mediaId: uploaded.id } : item)),
           );
           // The bytes are on the server and belong to an unsent message: say so, so the chip
-          // follows the owner to another device and survives this one being killed.
-          announceDraftFile(threadId, uploaded.id, {
-            ...(pending.audioAsVoice ? { audioAsVoice: true } : {}),
-            ...(pending.durationMs === undefined ? {} : { durationMs: pending.durationMs }),
-          });
+          // follows the owner to another device and survives this one being killed. Not when the
+          // send already took this chip: the message carries the id, and the pending list must
+          // not grow it back.
+          if (!consumedRef.current.has(pending.id)) {
+            announceDraftFile(threadId, uploaded.id, {
+              ...(pending.audioAsVoice ? { audioAsVoice: true } : {}),
+              ...(pending.durationMs === undefined ? {} : { durationMs: pending.durationMs }),
+            });
+          }
           return uploaded.id;
         })
         .catch((err: unknown) => {
@@ -640,6 +651,9 @@ export function ChatScreen({
     if (uploadingRef.current) return;
     const text = draft.trim();
     if (!text && attachments.length === 0 && !location) return;
+    // From here on the message owns these chips: an upload that lands later must not announce
+    // them back into the pending list after the send pruned them.
+    for (const attachment of attachmentsRef.current) consumedRef.current.add(attachment.id);
     const stagedLocation = location;
     // The wire carries coordinates and the owner's address decision, never the provider text.
     const locationToSend: LocationInput | undefined = stagedLocation

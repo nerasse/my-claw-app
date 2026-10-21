@@ -68,6 +68,14 @@ export function saveDraft(threadId: string, text: string, attachments: PendingAt
  */
 export function queueDraftSync(threadId: string, text: string): void {
   if (!threadId) return;
+  // The store holds the composer's live text, not a copy from the last unmount: every later
+  // decision -- a page, a remote change, a remote clear -- compares against what is actually in
+  // the field. Written on every keystroke, and it is one Map write with no IO.
+  const existing = drafts.get(threadId);
+  if (existing?.text !== text) {
+    if (!text && !existing?.attachments.length) drafts.delete(threadId);
+    else drafts.set(threadId, { text, attachments: existing?.attachments ?? [] });
+  }
   // The drawer's one bit follows the composer itself, not the last listing: the server only knows
   // about a draft after the debounced frame, and the badge used to wait for a reconnect. A thread
   // with no row is a no-op, so a sub-agent's composer costs nothing here. A staged file counts:
@@ -118,37 +126,41 @@ export function discardDraft(threadId: string): void {
 }
 
 /**
- * A draft that arrived from the server. Recorded as synced so this device does not echo it back,
- * and announced to whoever is showing that conversation. Whether it reaches the composer is the
- * screen's call: it is the only one that knows if the owner is typing in it right now.
+ * A draft that arrived from the server -- a keystroke elsewhere, or the clear that follows a send.
+ *
+ * It replaces a local copy that is **not ahead** of the server, and nothing else. The local copy is
+ * ahead when it holds text this device typed and the server has not acknowledged: the debounce is
+ * still armed, or the text differs from what was last sent. Adopting then loses characters, and
+ * adopting a clear then is worse: it either wiped newer typing or, refused by the screen while the
+ * map believed it, let this device write the sent message back on the next save. That is how a
+ * message sent from the web kept reappearing in the phone's composer.
+ *
+ * A clear (`text === ''`) of a copy that is not ahead is news and is adopted: the draft was sent or
+ * thrown away somewhere else, and the owner is looking at a message that no longer exists.
  */
 export function applyRemoteDraft(threadId: string, text: string): void {
   if (!threadId) return;
+  // A change of ours has not left yet: whatever the page or the other window says was decided
+  // before it, so it cannot be newer.
+  if (pending.has(threadId)) return;
+  const local = drafts.get(threadId)?.text ?? '';
+  if (local && local !== (synced.get(threadId) ?? '')) return;
   synced.set(threadId, text);
   pending.delete(threadId);
   const existing = drafts.get(threadId);
-  if (!text) drafts.delete(threadId);
+  if (!text && !existing?.attachments.length) drafts.delete(threadId);
   else drafts.set(threadId, { text, attachments: existing?.attachments ?? [] });
-  sessionStore.setHasDraft(threadId, text !== '');
+  sessionStore.setHasDraft(threadId, text !== '' || (existing?.attachments.length ?? 0) > 0);
   for (const listener of listeners) listener(threadId);
 }
 
 /**
- * A draft carried by the frame that replaces a thread: a fresh open, or a reset.
- *
- * The page is authoritative over what the server holds, which is exactly why it must not win
- * over text typed here and not yet acknowledged: reopening a conversation would hand back
- * yesterday's sentence over the one being written. The local map is filled only when it is empty
- * or still holds what the server last knew -- a page never regresses this device.
+ * A draft carried by the frame that replaces a thread: a fresh open, or a reset. Same rule as a
+ * live change -- a page is authoritative over what the server holds, never over text typed here
+ * and not yet acknowledged.
  */
 export function applyServerDraft(threadId: string, text: string): void {
   if (!threadId || !text) return;
-  // A change of ours has not left yet: the page was built before it, whatever it says is older.
-  // Without this, emptying the composer and reopening it within the debounce handed the deleted
-  // text back -- the map still held it, and the copy on the page matched what the server knew.
-  if (pending.has(threadId)) return;
-  const local = drafts.get(threadId)?.text ?? '';
-  if (local && local !== (synced.get(threadId) ?? '')) return;
   applyRemoteDraft(threadId, text);
 }
 
@@ -177,7 +189,6 @@ function chipOf(file: PendingFileFrame): PendingAttachment {
  */
 export function applyServerFiles(threadId: string, files: PendingFileFrame[], mode: 'merge' | 'replace'): void {
   if (!threadId) return;
-  if (mode === 'merge' && pending.has(threadId)) return;
   const current = drafts.get(threadId)?.attachments ?? [];
   const known = new Set(current.map((chip) => chip.mediaId).filter((id): id is string => Boolean(id)));
   const next = mode === 'merge'
