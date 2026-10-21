@@ -245,13 +245,19 @@ export function Composer({
   // The height depends on where the text wraps, which is the field's width as much as its text: a
   // field measured while a column folded or a page opened beside it kept that height until the
   // next keystroke. Only a new width measures again; the height this sets moves the layout too.
+  // A take unmounts the field for the length of the recording, and what comes back is a new
+  // textarea with no inline height: the node is the other half of "nothing changed", or a
+  // cancel left the empty composer two rows tall until the next keystroke.
   const fieldWidth = useRef(0);
+  const measuredNode = useRef<unknown>(null);
   const onFieldLayout = useCallback(
     (e: LayoutChangeEvent) => {
       const width = e.nativeEvent.layout.width;
-      if (width === fieldWidth.current) return;
+      const node = inputRef.current;
+      if (width === fieldWidth.current && node === measuredNode.current) return;
       fieldWidth.current = width;
-      autoGrow(inputRef.current, maxTextHeight);
+      measuredNode.current = node;
+      autoGrow(node, maxTextHeight);
     },
     [maxTextHeight],
   );

@@ -11,6 +11,7 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { Composer } from '../Composer';
+import { VoiceRecorder } from '../VoiceRecorder';
 import { autoGrow } from '../../core/webProps';
 
 jest.mock('../../core/webProps', () => ({
@@ -23,7 +24,9 @@ const grown = autoGrow as jest.Mock;
 function render(props: { questionPending?: boolean } = {}): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
-    tree = ReactTestRenderer.create(<Composer value="" onChange={() => {}} onSend={() => {}} {...props} />);
+    tree = ReactTestRenderer.create(
+      <Composer value="" onChange={() => {}} onSend={() => {}} onRecorded={() => {}} {...props} />,
+    );
   });
   return tree;
 }
@@ -68,6 +71,24 @@ test('a new placeholder measures the field again', () => {
   ReactTestRenderer.act(() => tree?.update(<Composer value="" onChange={() => {}} onSend={() => {}} questionPending />));
 
   expect(tree.root.findByType(TextInput).props.placeholder).toBe('Answer the pending questions');
+  expect(grown).toHaveBeenCalledTimes(1);
+});
+
+// A take owns the row while it records: the field unmounts, and the one that comes back is a new
+// textarea with no inline height. The frame lays it out at the same width as before, so the only
+// thing that changed is the node -- a cancel used to leave the empty composer two rows tall.
+test('the field is measured again when a take gives it back', () => {
+  tree = render();
+  laidOut(tree, 130);
+  grown.mockClear();
+
+  const recorder = tree.root.findAllByType(VoiceRecorder).at(0)!;
+  ReactTestRenderer.act(() => recorder.props.onActiveChange(true));
+  expect(tree.root.findAllByType(TextInput)).toHaveLength(0);
+
+  ReactTestRenderer.act(() => recorder.props.onActiveChange(false));
+  laidOut(tree, 130);
+
   expect(grown).toHaveBeenCalledTimes(1);
 });
 
