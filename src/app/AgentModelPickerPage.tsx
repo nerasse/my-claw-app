@@ -23,8 +23,14 @@ import { ModelPickerPage, type PickerState } from '../components/ModelSheet';
  * cap, which is how it returns to the standing policy.
  *
  * The fallback target is the reverse of the default: it exists so image runs have somewhere
- * to go when the resolved model cannot take images, so only vision-capable models are on
- * offer, and the root option removes the pin (image runs then stay on the resolved model).
+ * to go when the resolved model cannot take images, so plain models are offered only when they
+ * are vision-capable. Tags are all offered: a tag names a route, and the resolver reads the
+ * capability of the model it lands on at run time, so an image tag is a valid pin and a route
+ * that later moves to a text-only model simply stops applying.
+ *
+ * An agent's window is chosen under the global cap, which is the ceiling it inherits when it has
+ * none of its own: passing it to the flow keeps the number the owner set on the list instead of
+ * hiding it behind Custom.
  *
  * Rendered as a full settings page: the picker replaces the agents list entirely, and its own
  * back entry walks the flow before leaving the page, so no config ever peeks over the list.
@@ -54,12 +60,13 @@ export function AgentModelPickerPage({
     'global default';
   const orchestratorLabel =
     config?.agents.find(entry => entry.key === 'orchestrator')?.model ?? defaultLabel;
+  const globalCap = config?.contextCap ? config.contextCap.value ?? config.contextCap.default : undefined;
 
   return (
     <ModelPickerPage
       title={agent ? `Model for ${agent.label}` : isFallback ? 'Fallback model' : 'Default model'}
       backLabel={agent ? 'Back to the agent' : 'Back to the agents list'}
-      models={isFallback ? catalog.models.filter(model => model.vision === true) : catalog.models}
+      models={isFallback ? catalog.models.filter(model => model.id.startsWith('tag:') || model.vision === true) : catalog.models}
       activeId={activeId}
       state={state}
       onStateChange={onStateChange}
@@ -109,6 +116,7 @@ export function AgentModelPickerPage({
               ...(agent.contextCap === null || agent.contextCap === undefined || agent.contextCap === 0
                 ? {}
                 : { current: agent.contextCap }),
+              ...(globalCap === undefined || globalCap <= 0 ? {} : { cap: globalCap }),
             }
           : null
       }

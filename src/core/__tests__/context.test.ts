@@ -26,6 +26,29 @@ test('the choice in force is the one marked', () => {
   expect(contextTiers(1_048_576, 256_000, 128_000).find(tier => tier.selected)?.label).toBe('128k');
 });
 
+test('the standing cap is on the list even when it is not one of the graduations', () => {
+  // The owner's setup: a 720k global cap under a 1M window. It used to be absent, so the number
+  // set in the config could only be reached again by opening Custom.
+  expect(labels(contextTiers(1_048_576, 720_000, undefined))).toEqual([
+    'Full: 1.0M',
+    '720k (cap)',
+    '512k',
+    '256k',
+    '128k',
+    '64k',
+  ]);
+});
+
+test('a ceiling this subject set itself stays on the list, and is the one marked', () => {
+  const tiers = contextTiers(1_048_576, 720_000, 900_000);
+  expect(labels(tiers)).toEqual(['Full: 1.0M', '900k', '720k (cap)', '512k', '256k', '128k', '64k']);
+  expect(tiers.find(tier => tier.selected)?.label).toBe('900k');
+});
+
+test('a stored zero means no ceiling, which is the full window', () => {
+  expect(contextTiers(1_048_576, 720_000, 0).find(tier => tier.selected)?.label).toBe('Full: 1.0M');
+});
+
 test('a window with nothing under it is not a choice at all', () => {
   expect(contextTiers(40_000, undefined, undefined)).toEqual([]);
   expect(contextTiers(undefined, undefined, undefined)).toEqual([]);

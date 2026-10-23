@@ -28,6 +28,7 @@ export function TagEditorPage({
   onBack,
   onDelete,
   onDirtyChange,
+  defaultCap,
 }: {
   name: string;
   picker: PickerState | null;
@@ -38,6 +39,8 @@ export function TagEditorPage({
   onBack: () => void;
   onDelete: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  /** The global context cap, the ceiling a route candidate inherits when it pins none. */
+  defaultCap?: number;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const catalog = useModelCatalog();
@@ -94,7 +97,10 @@ export function TagEditorPage({
           onBack();
         }}
         effort={{ current: tag.effort ?? '' }}
-        context={{ ...(tag.contextCap === undefined ? {} : { current: tag.contextCap }) }}
+        context={{
+          ...(defaultCap === undefined || defaultCap <= 0 ? {} : { cap: defaultCap }),
+          ...(tag.contextCap === undefined ? {} : { current: tag.contextCap }),
+        }}
       />
     );
   }
@@ -125,7 +131,10 @@ export function TagEditorPage({
           onClosePicker();
         }}
         effort={{ current: candidate?.effort ?? '' }}
-        context={{ ...(candidate?.contextCap === undefined ? {} : { current: candidate.contextCap }) }}
+        context={{
+          ...(defaultCap === undefined || defaultCap <= 0 ? {} : { cap: defaultCap }),
+          ...(candidate?.contextCap === undefined ? {} : { current: candidate.contextCap }),
+        }}
       />
     );
   }

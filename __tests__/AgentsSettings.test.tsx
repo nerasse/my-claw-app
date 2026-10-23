@@ -339,6 +339,65 @@ test('the fallback row opens a picker limited to vision models, and the pick pin
   await settleAndUnmount(tree);
 });
 
+test('a tag is offered as the image fallback even when it is not marked vision', async () => {
+  // A tag names a route, and the resolver reads the capability of the model it lands on at run
+  // time: the pin is legitimate whatever the tag claims here, and refusing it would leave tags
+  // out of the one place the owner wanted them (owner, 2026-10-23).
+  const tree = await bootModels();
+  await emit(
+    agentsConfig({
+      fallback: '',
+    }),
+  );
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'] },
+      { id: 'opus', label: 'Opus', group: 'Claude', vision: true },
+      { id: 'tag:Image', label: 'Image', group: 'Tags' },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await pressLabel(tree, 'Fallback model');
+  await waitFor(() => labelsOf(tree).includes('Tags ›'));
+  await pressLabel(tree, 'Tags ›');
+  await waitFor(() => labelsOf(tree).includes('Image'));
+  await pressLabel(tree, 'Image');
+
+  expect(sentFrames()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'agents.fallback.set', model: 'tag:Image' })]),
+  );
+  await settleAndUnmount(tree);
+});
+
+test('an agent window is chosen under the global cap, and the cap is on the list', async () => {
+  // The owner's setup: 720k in context.cap. The flow offered only the four graduations and
+  // Custom, so the value set in the config could not be picked back (owner, 2026-10-23).
+  const tree = await boot();
+  await emit(agentsConfig({ contextCap: { value: 720_000, default: 512_000 } }));
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'] },
+      { id: 'opus', label: 'Opus', group: 'Claude', effortLevels: ['low', 'medium', 'high'], context: 1_000_000 },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await pressLabel(tree, 'Open agent General sub-agent');
+  await waitFor(() => labelsOf(tree).includes('Change model'));
+  await pressLabel(tree, 'Change model');
+  await waitFor(() => labelsOf(tree).includes('Claude ›'));
+  await pressLabel(tree, 'Claude ›');
+  await waitFor(() => labelsOf(tree).includes('Opus'));
+  await pressLabel(tree, 'Opus');
+  await waitFor(() => labelsOf(tree).includes('medium'));
+  await pressLabel(tree, 'medium');
+
+  await waitFor(() => labelsOf(tree).includes('Full: 1.0M'));
+  expect(labelsOf(tree)).toEqual(expect.arrayContaining(['720k (cap)', '512k', '256k', '128k', '64k']));
+  await settleAndUnmount(tree);
+});
+
 test('the fallback root option removes the pin with an empty frame', async () => {
   const tree = await bootModels();
   await emit(

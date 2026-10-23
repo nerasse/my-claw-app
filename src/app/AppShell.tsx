@@ -4427,6 +4427,11 @@ export function AppShell(): React.JSX.Element {
                   onBack={leaveTagEditor}
                   onDelete={() => setTagToDelete(tagEditor.name)}
                   onDirtyChange={setTagEditorDirty}
+                  defaultCap={
+                    agentsConfig?.contextCap
+                      ? agentsConfig.contextCap.value ?? agentsConfig.contextCap.default
+                      : undefined
+                  }
                 />
               ) : (
                 tagsPage

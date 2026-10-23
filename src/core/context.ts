@@ -24,6 +24,8 @@ export function shortTokens(tokens: number): string {
 /**
  * `window` is the model's full window, `cap` the standing agent/global ceiling when there is one,
  * and `choice` what this subject already picked (a ceiling, 'full', or nothing = follows policy).
+ * The subject's own ceiling is offered too: a value set from Custom must still be on the list the
+ * next time the picker opens, or the only way to read it back would be to open Custom again.
  * Returns an empty list when there is nothing to arbitrate: one option is not a choice.
  */
 export function contextTiers(
@@ -32,11 +34,25 @@ export function contextTiers(
   choice: number | 'full' | undefined,
 ): ContextTier[] {
   if (window === undefined || !Number.isFinite(window) || window <= 0) return [];
-  const ceilings = [...new Set([...(cap !== undefined && cap > 0 ? [cap] : []), ...LOWER_TIERS])]
+  const ceilings = [
+    ...new Set([
+      ...(cap !== undefined && cap > 0 ? [cap] : []),
+      ...(typeof choice === 'number' && choice > 0 ? [choice] : []),
+      ...LOWER_TIERS,
+    ]),
+  ]
     .filter(ceiling => ceiling < window)
     .sort((a, b) => b - a);
   // No session choice means policy decides: the cap is what is in force, else the full window.
-  const inForce = choice ?? (cap !== undefined && cap > 0 && cap < window ? cap : 'full');
+  // A stored 0 is "no ceiling", which is the full window rather than a ceiling of zero.
+  const inForce =
+    choice === undefined
+      ? cap !== undefined && cap > 0 && cap < window
+        ? cap
+        : 'full'
+      : choice === 0
+        ? 'full'
+        : choice;
   const tiers: ContextTier[] = [
     { label: `Full: ${shortTokens(window)}`, selected: inForce === 'full' },
   ];
