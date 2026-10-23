@@ -157,7 +157,7 @@ test('the model picker lists models with the current one checked and applies on 
   await settleAndUnmount(tree);
 });
 
-test('the chat picker walks model, effort and window, and applies the combo on confirm', async () => {
+test('the chat picker walks model, effort and window, and the last decision applies the combo', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
@@ -195,12 +195,11 @@ test('the chat picker walks model, effort and window, and applies the combo on c
   // Then the window, graduated under the staged model's own full window.
   await waitFor(() => labelsOf(tree).includes('Full: 1.0M'), 60);
   expect(labelsOf(tree)).toEqual(expect.arrayContaining(['512k', '256k (cap)', '128k', '64k']));
-  await pressLabel(tree, '512k');
 
-  // Nothing is sent before the confirmation.
+  // Nothing is sent while staging: the window is the last decision, so picking it applies the
+  // whole combo. There is no Apply screen left to press.
   expect(sentFrames().length).toBe(sentBeforeStaging);
-  await waitFor(() => labelsOf(tree).includes('Apply'), 60);
-  await pressLabel(tree, 'Apply');
+  await pressLabel(tree, '512k');
 
   await waitFor(() => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'strong-2' })), 60);
   expect(sentFrames()).toContain(JSON.stringify({ type: 'model.effort.set', threadId: THREAD, level: 'high' }));
@@ -245,10 +244,9 @@ test('the level that turns reasoning off is not read as the row that inherits it
   expect(labelsOf(tree)).toContain('default (inherit)');
   expect(labelsOf(tree)).not.toContain('none');
 
-  // And it is still the level `none` that goes on the wire, not the label.
+  // And it is still the level `none` that goes on the wire, not the label. The model publishes no
+  // window, so the effort is the last decision and applies straight away.
   await pressLabel(tree, 'none (no reasoning)');
-  await waitFor(() => labelsOf(tree).includes('Apply'), 60);
-  await pressLabel(tree, 'Apply');
   await waitFor(
     () => sentFrames().includes(JSON.stringify({ type: 'model.effort.set', threadId: THREAD, level: 'none' })),
     60,
@@ -314,8 +312,6 @@ test('the search reaches a model inside a group without browsing to it, and stag
   expect(allTexts(tree)).toContain('1 match for "nemo"');
 
   await pressLabel(tree, 'nvidia/nemotron');
-  await waitFor(() => labelsOf(tree).includes('Apply'), 60);
-  await pressLabel(tree, 'Apply');
   await waitFor(
     () => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'nvidia/nemotron' })),
     60,

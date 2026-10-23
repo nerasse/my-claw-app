@@ -202,11 +202,10 @@ test('a new job saves and the fresh listing closes the editor', async () => {
   await pressLabel(tree, 'Edit job model');
   await waitFor(() => labelsOf(tree).includes('Use default (Fast)') || labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
-  // The effort step is part of the flow now; the job carries its pick on the save.
+  // The effort step is part of the flow now; the job carries its pick on the save. The effort is
+  // the last decision, so it closes the picker and there is no Apply screen to press.
   await waitFor(() => labelsOf(tree).includes('medium'));
   await pressLabel(tree, 'medium');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
 
   await pressLabel(tree, 'Save job');
   const saves = sentOfType('jobs.save');
@@ -277,12 +276,10 @@ test('the model picker offers the live catalog and “Inherit” clears the over
   await pressLabel(tree, 'Edit job model');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Strong');
-  // A job pins its effort next to its model, like every other scope: model, then effort, then
-  // the confirmation. The picked effort rides on the jobs.save.
+  // A job pins its effort next to its model, like every other scope: model, then effort, and the
+  // effort is the last decision. The picked effort rides on the jobs.save.
   await waitFor(() => labelsOf(tree).includes('high'));
   await pressLabel(tree, 'high');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
   await waitFor(() => labelsOf(tree).includes('Edit job model'));
   expect(textsOf(tree).join('\n')).toContain('strong-2');
 
@@ -309,8 +306,6 @@ test('a job pins its effort and “default (inherit)” clears it again', async 
   await pressLabel(tree, 'Strong');
   await waitFor(() => labelsOf(tree).includes('default (inherit)'));
   await pressLabel(tree, 'medium');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
 
   await typeInto(tree, 'Job prompt', 'do things');
   await pressLabel(tree, 'Save job');

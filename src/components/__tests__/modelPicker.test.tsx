@@ -155,9 +155,7 @@ test('the picked route rides inside the reference the server is asked to run', (
   picker.press('gpt-5.6-luna');
   picker.press('Azure (azure)');
 
-  expect(picker.state.stage).toBe('confirm');
-  expect(picker.preview()).toBe('model: gpt-5.6-luna · route: azure');
-  picker.press('Apply');
+  // The last decision applies: there is no Apply screen between the pick and the server.
   expect(picker.committed).toEqual([{ model: 'openrouter/openai/gpt-5.6-luna@azure' }]);
   picker.unmount();
 });
@@ -176,17 +174,16 @@ test('automatic is a choice of its own, and it is the one marked when nothing is
   picker.press('gpt-5.6-luna');
   expect(picker.selected()).toEqual(['Azure (azure)']);
   picker.press('Automatic');
-  expect(picker.preview()).toBe('model: gpt-5.6-luna');
-  picker.press('Apply');
   expect(picker.committed).toEqual([{ model: 'openrouter/openai/gpt-5.6-luna' }]);
   picker.unmount();
 });
 
-test('a model with a single route never shows the step', () => {
+test('a model with a single route never shows the step, and picking it applies at once', () => {
   const picker = mount('openrouter/openai/gpt-5.6-luna');
   picker.press('OpenCode Go ›');
   picker.press('gpt-5.6-luna');
-  expect(picker.state.stage).toBe('confirm');
+  expect(picker.committed).toEqual([{ model: 'zen/gpt-5.6-luna' }]);
+  expect(picker.labels()).not.toContain('Apply');
   expect(send).not.toHaveBeenCalled();
   picker.unmount();
 });
@@ -202,7 +199,7 @@ test('back walks out of the routing step the way it walked in', () => {
   picker.unmount();
 });
 
-test('a custom context ceiling is validated, confirmed, and committed', () => {
+test('a custom context ceiling is validated, and the last step applies it', () => {
   const picker = mount('context/model', [CONTEXT_MODEL], { current: 'full' });
   picker.press('Context model');
   expect(picker.state.stage).toBe('context');
@@ -217,9 +214,6 @@ test('a custom context ceiling is validated, confirmed, and committed', () => {
   expect(picker.labels()).toContain('Use 128k tokens');
 
   picker.press('Use 128k tokens');
-  expect(picker.state.stage).toBe('confirm');
-  expect(picker.preview()).toContain('context: 128000 tokens');
-  picker.press('Apply');
   expect(picker.committed).toEqual([{ model: 'context/model', context: 128_000 }]);
   picker.unmount();
 });
@@ -242,7 +236,7 @@ test('a pinned reference is named by its model and its route, never by the raw s
   expect(modelStore.catalogModel('unknown/model')).toBe('unknown/model');
 });
 
-test('a tag is indivisible: no effort step, no context step, straight to confirm', () => {
+test('a tag is indivisible: no effort step, no context step, and it applies on the tap', () => {
   const TAG_MODELS: ModelOption[] = [
     { id: 'tag:opus', label: 'opus', group: 'Tags' },
     { id: 'tag:fast', label: 'fast', group: 'Tags' },
@@ -253,12 +247,8 @@ test('a tag is indivisible: no effort step, no context step, straight to confirm
   picker.press('Tags ›');
   picker.press('opus');
 
-  expect(picker.state.stage).toBe('confirm');
-  expect(picker.labels()).toContain('Apply');
-  expect(picker.labels()).not.toContain('Effort for opus');
-  expect(picker.labels()).not.toContain('Context for opus');
-  picker.press('Apply');
   expect(picker.committed).toEqual([{ model: 'tag:opus' }]);
+  expect(picker.labels()).not.toContain('Apply');
   picker.unmount();
 });
 
@@ -269,27 +259,25 @@ test('a tag drops any effort or window staged for the previous model', () => {
   ];
   const picker = mount('context/model', TAG_MODELS, {}, { current: '' });
 
-  // The step picks both pins for the staged model: effort first, then the window.
+  // The step picks both pins for the staged model: effort first, then the window, and the window
+  // is the last decision, so it applies as it is picked.
   picker.press('Context model');
   expect(picker.state.stage).toBe('effort');
   picker.press('high');
   expect(picker.state.stage).toBe('context');
   picker.press('64k');
-  expect(picker.state.stage).toBe('confirm');
-  expect(picker.preview()).toContain('effort: high');
-  expect(picker.preview()).toContain('context: 64000 tokens');
+  expect(picker.committed).toEqual([{ model: 'context/model', effort: 'high', context: 64_000 }]);
 
-  picker.press('< Back');
+  // Back to the model list (the harness keeps the flow open where the app would have closed it),
+  // then the tag: the pins staged for the previous model must not ride along.
   picker.press('< Back');
   picker.press('< Back');
 
   picker.press('Tags ›');
   picker.press('opus');
-  expect(picker.state.stage).toBe('confirm');
-  expect(picker.preview()).not.toContain('effort:');
-  expect(picker.preview()).not.toContain('context:');
-  expect(picker.committed).toEqual([]);
-  picker.press('Apply');
-  expect(picker.committed).toEqual([{ model: 'tag:opus' }]);
+  expect(picker.committed).toEqual([
+    { model: 'context/model', effort: 'high', context: 64_000 },
+    { model: 'tag:opus' },
+  ]);
   picker.unmount();
 });

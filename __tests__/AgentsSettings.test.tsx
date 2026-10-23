@@ -184,11 +184,10 @@ test('picking a model for an agent sends agents.model.set and the page follows',
   await pressLabel(tree, 'Claude ›');
   await waitFor(() => labelsOf(tree).includes('Opus'));
   await pressLabel(tree, 'Opus');
-  // The flow continues: model, then effort, then the confirmation applies both in one frame.
+  // The flow continues: model, then effort, and the effort is the last decision, so it applies
+  // both in one frame.
   await waitFor(() => labelsOf(tree).includes('medium'));
   await pressLabel(tree, 'medium');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
 
   expect(sentFrames()).toEqual(
     expect.arrayContaining([
@@ -228,14 +227,8 @@ test('staging a tag for an agent asks for neither effort nor window, and writes 
   await waitFor(() => labelsOf(tree).includes('Cheap'));
   await pressLabel(tree, 'Cheap');
 
-  // Straight to the confirmation: no effort screen, and above all no window screen offering a
-  // ceiling that the tag's own cap would outrank anyway.
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  const labels = labelsOf(tree);
-  expect(labels).not.toEqual(expect.arrayContaining(['max']));
-  expect(labels).not.toEqual(expect.arrayContaining(['Full: 1.0M', '512k', '256k', '128k', '64k']));
-  await pressLabel(tree, 'Apply');
-
+  // A tag is indivisible, so the pick applies it on the spot: no effort screen, and above all no
+  // window screen offering a ceiling that the tag's own cap would outrank anyway.
   const frames = sentFrames();
   expect(frames).toEqual(
     expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set', agent: 'cron', model: 'tag:Cheap' })]),
@@ -309,15 +302,13 @@ test('a refused write shows the reason on the page that asked for it', async () 
   await settleAndUnmount(tree);
 });
 
-test('the default model flow walks model then effort, and Apply sends both in one frame', async () => {
+test('the default model flow walks model then effort, and the last step sends both in one frame', async () => {
   const tree = await bootModels();
   await pressLabel(tree, 'Default model');
   await waitFor(() => labelsOf(tree).includes('Fast'));
   await pressLabel(tree, 'Fast');
   await waitFor(() => labelsOf(tree).includes('medium'));
   await pressLabel(tree, 'medium');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
 
   expect(sentFrames()).toEqual(
     expect.arrayContaining([
@@ -327,7 +318,7 @@ test('the default model flow walks model then effort, and Apply sends both in on
   await settleAndUnmount(tree);
 });
 
-test('the fallback row opens a picker limited to vision models and Apply pins it', async () => {
+test('the fallback row opens a picker limited to vision models, and the pick pins it', async () => {
   const tree = await bootModels();
   await emit(
     agentsConfig({
@@ -341,8 +332,6 @@ test('the fallback row opens a picker limited to vision models and Apply pins it
   await pressLabel(tree, 'Claude ›');
   await waitFor(() => labelsOf(tree).includes('Opus'));
   await pressLabel(tree, 'Opus');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
 
   expect(sentFrames()).toEqual(
     expect.arrayContaining([expect.objectContaining({ type: 'agents.fallback.set', model: 'opus' })]),

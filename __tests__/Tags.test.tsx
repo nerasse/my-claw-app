@@ -190,10 +190,8 @@ test('the tag flow walks model, effort and window, then applies one upsert', asy
   await waitFor(() => labelsOf(tree).includes('Full: 400k'));
   expect(labelsOf(tree)).toEqual(expect.arrayContaining(['256k', '128k', '64k']));
   await pressLabel(tree, '128k');
-  // Nothing was sent while staging: the whole combo goes on Apply.
-  expect(sentFrames().some(frame => frame.type === 'tags.upsert')).toBe(false);
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
+  // Nothing was sent while staging: the window is the last decision, and it applies the whole
+  // combo in one upsert.
   await waitFor(() =>
     sentFrames().some(
       frame =>
@@ -261,8 +259,6 @@ test('a pinned effort can go back to default from the effort step', async () => 
   // The window step follows the effort step, as in any other run of the flow.
   await waitFor(() => labelsOf(tree).includes('Full: 400k'));
   await pressLabel(tree, '128k');
-  await waitFor(() => labelsOf(tree).includes('Apply'));
-  await pressLabel(tree, 'Apply');
   await waitFor(() =>
     sentFrames().some(
       frame => frame.type === 'tags.upsert' && frame.name === 'opus' && frame.effort === undefined,

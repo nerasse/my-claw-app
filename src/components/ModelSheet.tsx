@@ -103,8 +103,8 @@ function searchHint(model: ModelOption): string | undefined {
 }
 
 /** Which screen of the flow is showing. The flow is always model -> [route] -> [effort] ->
- *  [context] -> confirm. */
-export type PickerStage = 'model' | 'endpoint' | 'effort' | 'context' | 'context-custom' | 'confirm';
+ *  [context], and the last screen is a decision like the others: picking there applies it. */
+export type PickerStage = 'model' | 'endpoint' | 'effort' | 'context' | 'context-custom';
 
 /**
  * The whole state of one picker run, owned by the shell so the hardware back key can walk it.
@@ -181,8 +181,8 @@ export interface PickerContext {
 
 /**
  * The model picker flow, presentation-only and sequential: one screen per decision (model,
- * then effort, then context ceiling), each with a back entry, and a last screen that applies
- * the whole combo at once. Nothing is sent while staging, so leaving the flow changes nothing.
+ * then effort, then context ceiling), and the last decision applies the whole combo at once.
+ * Nothing is sent while staging, so leaving the flow changes nothing.
  * The same flow renders as a bottom sheet (chat, jobs) or as a full settings page (agents,
  * tags): every surface that pins a model uses it, so the flow cannot diverge between them.
  */
@@ -205,7 +205,7 @@ export function useModelPickerFlow({
   activeId: string;
   state: PickerState;
   onStateChange: (state: PickerState) => void;
-  /** The staged combo, applied in one go from the confirm step. `effort: null` is a deliberate
+  /** The staged combo, applied at the last decision. `effort: null` is a deliberate
    *  "back to default", distinct from an effort step never visited. */
   onCommit: (choice: {
     model: string;
@@ -308,7 +308,21 @@ export function useModelPickerFlow({
     return { visible, subgroups: subgroupNames };
   }, [models, path]);
 
-  /** Moves to the next screen that has something to decide, else straight to the confirmation. */
+  /** Applies the combo and closes: the last decision of the flow is also the commit, so there is
+   *  no Apply screen to walk back from. */
+  const apply = useCallback(
+    (staged: Pick<PickerState, 'model' | 'effort' | 'context'>): void => {
+      onCommit({
+        model: staged.model ?? activeId,
+        ...(staged.effort === undefined ? {} : { effort: staged.effort }),
+        ...(staged.context === undefined ? {} : { context: staged.context }),
+      });
+      onClose();
+    },
+    [activeId, onClose, onCommit],
+  );
+
+  /** Moves to the next screen that has something to decide, else applies the staged combo. */
   const advance = useCallback(
     (from: PickerStage, staged: Partial<PickerState>): void => {
       const next = { ...state, ...staged, trail: [...state.trail, from] };
@@ -347,14 +361,15 @@ export function useModelPickerFlow({
         onStateChange({ ...next, stage: 'effort' });
         return;
       }
-      if (from !== 'context' && from !== 'context-custom' && from !== 'confirm' && ceilings.length > 0) {
+      if (from !== 'context' && from !== 'context-custom' && ceilings.length > 0) {
         onStateChange({ ...next, stage: 'context' });
         return;
       }
-      onStateChange({ ...next, stage: 'confirm' });
+      apply(next);
     },
     [
       activeId,
+      apply,
       byId,
       context,
       effort,
@@ -537,36 +552,6 @@ export function useModelPickerFlow({
         },
       });
       rows.push(...backRow);
-    } else {
-      const effortLine =
-        state.effort === null
-          ? 'effort: default'
-          : state.effort !== undefined
-            ? `effort: ${effortLabel(state.effort)}`
-            : stagedIsTag && stagedEntry?.effort
-              ? `effort: ${effortLabel(stagedEntry.effort)} (tag pin)`
-              : null;
-      const parts = [
-        `model: ${stagedLabel}`,
-        stagedRoute === undefined ? null : `route: ${stagedRoute}`,
-        effortLine,
-        state.context === undefined
-          ? null
-          : `context: ${state.context === 'full' ? 'full window' : `${state.context} tokens`}`,
-      ].filter(Boolean);
-      head = parts.join(' · ');
-      rows.push({
-        label: 'Apply',
-        onPress: () => {
-          onCommit({
-            model: stagedModel,
-            ...(state.effort === undefined ? {} : { effort: state.effort }),
-            ...(state.context === undefined ? {} : { context: state.context }),
-          });
-          onClose();
-        },
-      });
-      rows.push(...backRow);
     }
 
     return { options: rows, preview: head };
@@ -583,8 +568,6 @@ export function useModelPickerFlow({
     list,
     matches,
     needle,
-    onClose,
-    onCommit,
     onStateChange,
     page,
     path,
@@ -595,7 +578,6 @@ export function useModelPickerFlow({
     stagedBare,
     stagedRoute,
     stagedEntry,
-    stagedIsTag,
     stagedLabel,
     stagedModel,
     stage,
