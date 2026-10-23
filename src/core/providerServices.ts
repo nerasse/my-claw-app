@@ -150,6 +150,18 @@ export const PROVIDER_SERVICES: readonly ProviderService[] = [
     pricingProvider: 'xai',
     keyUrl: 'https://console.x.ai',
   },
+  {
+    id: 'synthetic',
+    label: 'Synthetic',
+    hint: 'one plan, open models with a weekly credit bar',
+    name: 'Synthetic',
+    key: 'synthetic',
+    env: 'SYNTHETIC_API_KEY',
+    type: 'openai',
+    baseUrl: 'https://api.synthetic.new/openai/v1',
+    pricingProvider: 'synthetic',
+    keyUrl: 'https://synthetic.new/settings/api',
+  },
 ];
 
 const trimSlash = (url: string): string => url.replace(/\/+$/, '').toLowerCase();

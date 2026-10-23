@@ -11,9 +11,10 @@ import {
 const service = (id: string) => PROVIDER_SERVICES.find(s => s.id === id)!;
 
 describe('the table', () => {
-  it('holds the ten services, each with its address, its variable and its key page', () => {
+  it('holds the eleven services, each with its address, its variable and its key page', () => {
     expect(PROVIDER_SERVICES.map(s => s.id)).toEqual([
       'openrouter', 'opencode-go', 'opencode-zen', 'claude-api', 'openai', 'groq', 'mistral', 'deepseek', 'gemini', 'xai',
+      'synthetic',
     ]);
     for (const s of PROVIDER_SERVICES) {
       expect(s.keyUrl).toMatch(/^https:\/\//);

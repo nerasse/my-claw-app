@@ -631,7 +631,7 @@ export interface SessionSummary {
  * The percentages are **used**, and a balance is money or a count of credits; the two never mix.
  * See docs/quota.md in the server repo.
  */
-export type QuotaSource = 'claude' | 'codex' | 'opencode-go' | 'openrouter';
+export type QuotaSource = 'claude' | 'codex' | 'opencode-go' | 'openrouter' | 'synthetic';
 
 export interface QuotaWindow {
   id: string;
