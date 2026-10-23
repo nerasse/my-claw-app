@@ -1,9 +1,9 @@
 # The model picker: what each step is offered for
 
 `ModelSheet` (chat), `AgentModelPickerPage` (agents, fallback) and `TagEditorPage` all render the
-same flow: model, then route, then effort, then context window, then a confirmation. Only the
-steps that have something to decide appear, and what decides them is not the same subject for each
-step.
+same flow: model, then route, then effort, then context window. Only the steps that have
+something to decide appear, and the last one applies the combo: there is no confirmation screen
+(owner, 2026-10-23). What decides each step is not the same subject for every step.
 
 ## The ladder belongs to the subject, the pin belongs to the session
 
@@ -13,8 +13,12 @@ step.
   "Keep current" mean. A pin stays reachable on a model with no ladder of its own, because a dead
   pin must stay removable.
 - **Context window.** Same shape: `context` on the picked entry, the ceiling of the thread for the
-  current value.
+  current value. The standing cap (`context.cap`) is offered on the list even when it is not one of
+  the graduations, and so is a ceiling the subject already pinned: a value set from Custom has to
+  stay reachable without opening Custom again.
 - **Route.** Only on a model served by several providers.
+- **Fallback.** The image fallback offers the vision-capable models, and every tag: a tag names a
+  route, and the resolver reads the capability of the leaf at run time.
 
 ## `effort` is a contract, not a derived flag
 
