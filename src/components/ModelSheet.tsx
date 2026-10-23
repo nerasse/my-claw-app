@@ -767,8 +767,8 @@ const createPageStyles = (palette: Palette) => ({
 
 /**
  * The model picker of the chat, built from the same list as /model on the other channels: the
- * model, then its effort, then the window this conversation may use. The staged combo is sent
- * on Apply and the server answers with the state it stored. A tag is indivisible: picking one
+ * model, then its effort, then the window this conversation may use. The last decision applies
+ * the combo and the server answers with the state it stored. A tag is indivisible: picking one
  * applies it as it stands, so the effort and window steps are skipped for it, exactly like the
  * config flows (agent, global, job).
  */

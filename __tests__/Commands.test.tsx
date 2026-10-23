@@ -320,6 +320,28 @@ test('the search reaches a model inside a group without browsing to it, and stag
   await settleAndUnmount(tree);
 });
 
+test('a tag picked from the chat sheet applies on the tap, with no Apply screen', async () => {
+  const tree = await renderApp();
+  await openChatPicker(tree, [
+    { id: 'fast-1', label: 'Fast', effortLevels: ['low', 'medium', 'high'], context: 1_000_000 },
+    { id: 'tag:Cheap', label: 'Cheap', group: 'Tags', context: 1_000_000 },
+  ]);
+
+  await pressLabel(tree, 'Tags ›');
+  await waitFor(() => labelsOf(tree).includes('Cheap'), 60);
+  await pressLabel(tree, 'Cheap');
+
+  // The tag carries its own pins: nothing left to decide, so the tap is the commit and the sheet
+  // closes. An Apply row here was the last one left (owner, 2026-10-23).
+  await waitFor(
+    () => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'tag:Cheap' })),
+    60,
+  );
+  expect(labelsOf(tree)).not.toContain('Apply');
+
+  await settleAndUnmount(tree);
+});
+
 test('back clears the search before it closes the picker', async () => {
   const tree = await renderApp();
   await openChatPicker(tree, bigCatalog());
