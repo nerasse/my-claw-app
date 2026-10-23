@@ -163,7 +163,7 @@ export function QuotaCard({
   const { snapshot, stale } = outcome;
   const reset = snapshot.resets;
   const spend = (): void => {
-    if (!reset?.usable || redeem?.busy) return;
+    if (!reset || redeem?.busy) return;
     if (!confirming) {
       setConfirming(true);
       if (confirmTimer.current) clearTimeout(confirmTimer.current);
@@ -233,25 +233,21 @@ export function QuotaCard({
               {`${reset.available} banked reset${reset.available === 1 ? '' : 's'}${reset.clears ? ` · ${reset.clears}` : ''}`}
             </Text>
             <Text style={styles.resetHint} numberOfLines={2}>
-              {!reset.usable
-                ? (reset.blocked ?? 'not usable right now')
-                : reset.nextExpiresAt
-                  ? `one expires ${formatReset(reset.nextExpiresAt)}`
-                  : 'can be used now'}
+              {reset.nextExpiresAt ? `one expires ${formatReset(reset.nextExpiresAt)}` : 'ready to use'}
             </Text>
           </View>
           <Pressable
             onPress={spend}
-            disabled={!reset.usable || redeem?.busy === true}
+            disabled={redeem?.busy === true}
             style={({ pressed }) => [
               styles.resetButton,
-              (!reset.usable || redeem?.busy) && styles.resetButtonOff,
+              redeem?.busy === true && styles.resetButtonOff,
               pressed && styles.resetButtonPressed,
             ]}
             accessibilityRole="button"
-            accessibilityState={{ disabled: !reset.usable || redeem?.busy === true }}
+            accessibilityState={{ disabled: redeem?.busy === true }}
             accessibilityLabel={confirming ? 'Confirm spending one reset' : 'Use a reset'}>
-            <Text style={[styles.resetButtonText, (!reset.usable || redeem?.busy) && styles.resetButtonTextOff]}>
+            <Text style={[styles.resetButtonText, redeem?.busy === true && styles.resetButtonTextOff]}>
               {redeem?.busy ? 'Redeeming…' : confirming ? 'Tap again' : 'Use a reset'}
             </Text>
           </Pressable>

@@ -658,8 +658,6 @@ export interface QuotaExtra {
 export interface QuotaResetCredits {
   available: number;
   nextExpiresAt?: string;
-  usable: boolean;
-  blocked?: string;
   clears?: string;
 }
 

@@ -17,7 +17,7 @@ function outcome(usedPercent: number): QuotaOutcome {
       windows: [{ id: '18000', label: '5 h', usedPercent }],
       balances: [],
       extras: [],
-      resets: { available: 2, nextExpiresAt: '2026-10-29T16:22:45.000Z', usable: usedPercent >= 99, ...(usedPercent >= 99 ? {} : { blocked: 'no window is full' }) },
+      resets: { available: 2, nextExpiresAt: '2026-10-29T16:22:45.000Z' },
       fetchedAt: new Date().toISOString(),
     },
   };
@@ -65,10 +65,10 @@ describe('a banked reset on the quota card', () => {
     expect(button(tree).props.accessibilityState.disabled).toBe(false);
   });
 
-  test('is refused while nothing is full: a reset would be ineligible anyway', () => {
-    const tree = show(40);
-    expect(texts(tree)).toContain('no window is full');
-    expect(button(tree).props.accessibilityState.disabled).toBe(true);
+  test('is offered below the wall: spending a reset at 80% is the owner\'s call', () => {
+    const tree = show(80);
+    expect(texts(tree)).not.toContain('no window is full');
+    expect(button(tree).props.accessibilityState.disabled).toBe(false);
   });
 
   test('asks twice before spending a credit', () => {
