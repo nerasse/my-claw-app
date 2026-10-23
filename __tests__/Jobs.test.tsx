@@ -314,6 +314,38 @@ test('a job pins its effort and “default (inherit)” clears it again', async 
   await unmount(tree);
 });
 
+test('a job pinned on an effort hands it to the tag it picks, on the save', async () => {
+  const tree = await renderApp();
+  await openJobs(tree);
+  await emitCatalogs(tree);
+  // A tag among the catalog entries, carrying its own effort and ceiling.
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'fast-1', label: 'Fast', provider: 'openai', effortLevels: ['low', 'medium', 'high'] },
+      { id: 'tag:Cheap', label: 'Cheap', group: 'Tags', effort: 'low', context: 700_000 },
+    ],
+    defaultModel: 'fast-1',
+  });
+  await emit({ type: 'jobs.list.result', jobs: [job({ effort: 'medium' })] });
+  await pressLabel(tree, 'Edit job Morning report');
+  await waitFor(() => labelsOf(tree).includes('Edit job model'));
+
+  await pressLabel(tree, 'Edit job model');
+  await waitFor(() => labelsOf(tree).includes('Tags ›'));
+  await pressLabel(tree, 'Tags ›');
+  await pressLabel(tree, 'Cheap');
+
+  // The tag is indivisible: no effort screen, and the job's own pin goes instead of riding along
+  // above the tag's. The save carries the clear, which is the only value the server reads as none.
+  await waitFor(() => labelsOf(tree).includes('Edit job model'));
+  await pressLabel(tree, 'Save job');
+  const saves = sentOfType('jobs.save');
+  expect(saves.length).toBe(1);
+  expect(saves[0]).toMatchObject({ model: 'tag:Cheap', effort: '' });
+  await unmount(tree);
+});
+
 test('the workspace picker lists the dynamic workspaces and the default', async () => {
   const tree = await renderApp();
   await openJobs(tree);

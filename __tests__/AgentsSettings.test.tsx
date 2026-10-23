@@ -228,10 +228,14 @@ test('staging a tag for an agent asks for neither effort nor window, and writes 
   await pressLabel(tree, 'Cheap');
 
   // A tag is indivisible, so the pick applies it on the spot: no effort screen, and above all no
-  // window screen offering a ceiling that the tag's own cap would outrank anyway.
+  // window screen offering a ceiling that the tag's own cap would outrank anyway. The effort rides
+  // along as a deliberate clear: an agent pin set before would outrank nothing but the tag's own,
+  // and the tag is what the agent now runs.
   const frames = sentFrames();
   expect(frames).toEqual(
-    expect.arrayContaining([expect.objectContaining({ type: 'agents.model.set', agent: 'cron', model: 'tag:Cheap' })]),
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'agents.model.set', agent: 'cron', model: 'tag:Cheap', effort: '' }),
+    ]),
   );
   expect(frames.some(frame => frame.type === 'agents.contextcap.set')).toBe(false);
   await settleAndUnmount(tree);

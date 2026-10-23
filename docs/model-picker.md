@@ -42,3 +42,18 @@ and `model.list` with `effortLevels` per model.
 
 The sheet now always hands the pin over (`effort={{ current }}`), which is the whole fix. The
 caller's `null` keeps meaning what it says.
+
+## A tag is indivisible
+
+Every surface offers tags under one `Tags` group. Picking one is the whole decision: neither the
+effort step nor the window step is drawn over it, and the tap is the commit (it was the last Apply
+row left, owner 2026-10-23). The tag's route candidate pins both values, and the resolver reads
+them per attempt, so anything staged on top would be dead config.
+
+The flow sends the effort as an explicit clear (`effort: null` → `''` on the wire), not as "step
+never visited": with the chat, a session's own effort sits *above* the tag's
+(`docs/context-window.md` server side), so a pin set on the previous model would silently win.
+The window needs no frame at all: the server drops the session's ceiling itself when a tag is
+picked, since `'full'` would be a lift rather than a clear. What a conversation pins afterwards
+is the tune sheet (effort and window, its own two rows), which shows the tag's cap as the one in
+force because the server reports `context.cap` from the model, tag included.

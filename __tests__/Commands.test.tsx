@@ -332,10 +332,14 @@ test('a tag picked from the chat sheet applies on the tap, with no Apply screen'
   await pressLabel(tree, 'Cheap');
 
   // The tag carries its own pins: nothing left to decide, so the tap is the commit and the sheet
-  // closes. An Apply row here was the last one left (owner, 2026-10-23).
+  // closes. An Apply row here was the last one left (owner, 2026-10-23). The effort goes as a
+  // clear, so a session pin set on the previous model cannot outrank the tag's own.
   await waitFor(
     () => sentFrames().includes(JSON.stringify({ type: 'model.set', threadId: THREAD, model: 'tag:Cheap' })),
     60,
+  );
+  expect(sentFrames()).toContain(
+    JSON.stringify({ type: 'model.effort.set', threadId: THREAD, level: '' }),
   );
   expect(labelsOf(tree)).not.toContain('Apply');
 

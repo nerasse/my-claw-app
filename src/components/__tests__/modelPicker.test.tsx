@@ -247,7 +247,9 @@ test('a tag is indivisible: no effort step, no context step, and it applies on t
   picker.press('Tags ›');
   picker.press('opus');
 
-  expect(picker.committed).toEqual([{ model: 'tag:opus' }]);
+  // `effort: null` is the deliberate clear, not a step never visited: a pin the subject already
+  // held would outrank the tag's own, so picking a tag hands both pins to it.
+  expect(picker.committed).toEqual([{ model: 'tag:opus', effort: null }]);
   expect(picker.labels()).not.toContain('Apply');
   picker.unmount();
 });
@@ -277,7 +279,7 @@ test('a tag drops any effort or window staged for the previous model', () => {
   picker.press('opus');
   expect(picker.committed).toEqual([
     { model: 'context/model', effort: 'high', context: 64_000 },
-    { model: 'tag:opus' },
+    { model: 'tag:opus', effort: null },
   ]);
   picker.unmount();
 });

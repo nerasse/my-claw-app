@@ -335,10 +335,13 @@ export function useModelPickerFlow({
       const effortStep = effort && (levels.length > 0 || effortCurrent !== '');
       // A tag is indivisible: both pins belong to it, so neither step is offered on top of one,
       // and any effort or window staged for the previous model is dropped so the tag applies as
-      // it stands rather than carrying a leftover the confirmation would silently commit.
+      // it stands rather than carrying a leftover the confirmation would silently commit. The
+      // effort goes as a deliberate clear, not "unvisited": a pin the subject already had would
+      // outrank the tag's own (a session's effort sits above it, docs/context-window.md), and the
+      // flow may not write dead config on the way in either.
       const tagPins = bare.startsWith('tag:');
       if (tagPins) {
-        next.effort = undefined;
+        next.effort = null;
         next.context = undefined;
         next.contextDraft = undefined;
       }
@@ -827,8 +830,8 @@ export function ModelSheet({
         }
       }}
       // The default is the one option that exists even when no session does: picking it clears
-      // the override and the session effort, which is how a conversation is handed back to the
-      // server config as a whole rather than model and effort one at a time.
+      // the override, and the server drops the session's effort and window with it, so the
+      // conversation is handed back to the server config as a whole rather than one pin at a time.
       rootOption={
         state.stage === 'model' && state.path.length === 0
           ? {
