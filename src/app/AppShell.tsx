@@ -61,6 +61,8 @@ import {
   encodeChatSend,
   encodeChatStop,
   encodeChatContinue,
+  encodeSessionQuotaRetrySet,
+  encodeSessionQuotaRetryNow,
   encodeSessionInstructionsGet,
   encodeSessionInstructionsSet,
   encodeInstructionsSetNested,
@@ -214,6 +216,8 @@ import { McpsScreen } from './McpsScreen';
 import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
 import { ModelsScreen } from './ModelsScreen';
 import { useAccounts } from '../core/accounts';
+import { useQuotaRetry } from '../core/quota';
+import { formatReset } from '../components/QuotaCard';
 import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ModelEditScreen } from './ModelEditScreen';
 import { ProviderEditScreen, type ProviderPatch } from './ProviderEditScreen';
@@ -894,6 +898,10 @@ export function AppShell(): React.JSX.Element {
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
   const openSelection = useCallback((target: SelectionTarget) => setSelection(target), []);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
+  // The conversation menu's switch and the waiting pill read the server's own state: both fields
+  // are pushed when they change, so two devices never disagree on whether a wait is armed.
+  const threadMenuQuotaRetry = useQuotaRetry(threadMenu?.threadId ?? null);
+  const activeQuotaRetry = useQuotaRetry(activeThread);
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   /** Whether the effort/window sheet of the conversation is open (the tune sheet). */
@@ -3017,6 +3025,21 @@ export function AppShell(): React.JSX.Element {
       },
       { type: 'separator' },
       {
+        label: 'Retry when the quota returns',
+        hint: threadMenuQuotaRetry?.waiting
+          ? `waiting · retry at ${formatReset(threadMenuQuotaRetry.waiting.at)}`
+          : (threadMenuQuotaRetry?.enabled ?? target.quotaRetry === true)
+            ? 'on · waits for the provider reset'
+            : 'off',
+        selected: threadMenuQuotaRetry?.enabled ?? target.quotaRetry === true,
+        onPress: () => {
+          const enabled = threadMenuQuotaRetry?.enabled ?? target.quotaRetry === true;
+          connection.send(encodeSessionQuotaRetrySet(target.threadId, !enabled)).catch(() => {});
+          close();
+        },
+      },
+      { type: 'separator' },
+      {
         label: 'Move to folder…',
         hint: folderOf(target) ?? 'not in a folder',
         onPress: () => {
@@ -3063,7 +3086,7 @@ export function AppShell(): React.JSX.Element {
       },
       ];
     },
-    [folderOf, sessionEntries, setThreadArchived, workspaceOf],
+    [folderOf, sessionEntries, setThreadArchived, workspaceOf, threadMenuQuotaRetry],
   );
 
   const threadActions: SheetEntry[] = threadMenu
@@ -4033,6 +4056,13 @@ export function AppShell(): React.JSX.Element {
               if (!activeThread) return;
               const parent = subagentRef.current?.threadId === activeThread ? subagentRef.current.parentThreadId : undefined;
               connection.send(encodeChatContinue(activeThread, parent)).catch(() => {});
+            }}
+            quotaWait={activeQuotaRetry?.waiting}
+            onQuotaCancel={() => {
+              if (activeThread) connection.send(encodeSessionQuotaRetrySet(activeThread, false)).catch(() => {});
+            }}
+            onQuotaRetryNow={() => {
+              if (activeThread) connection.send(encodeSessionQuotaRetryNow(activeThread)).catch(() => {});
             }}
             onNewThread={newThread}
             onLoadOlder={loadOlderHistory}

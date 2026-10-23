@@ -7,6 +7,8 @@ import { connection } from '../core/connection';
 import { encodeAccounts, type AccountKind, type AccountView, type AccountsRequest } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { CloseButton } from '../components/CloseButton';
+import { QuotaCard } from '../components/QuotaCard';
+import { encodeQuotaGet, encodeQuotaUnwatch, encodeQuotaWatch } from '../core/protocol';
 
 /** The words of each plan, one place. */
 export const ACCOUNT_LABELS: Record<AccountKind, { title: string; plan: string; signIn: string }> = {
@@ -80,6 +82,19 @@ export function AccountScreen({
       if (confirmTimer.current) clearTimeout(confirmTimer.current);
     };
   }, []);
+
+  // The plan's own limits, read by the server while this page shows them. The watch replaces
+  // whatever the previous page watched: one per socket.
+  useEffect(() => {
+    connection.send(encodeQuotaWatch(provider)).catch(() => {});
+    return () => {
+      connection.send(encodeQuotaUnwatch()).catch(() => {});
+    };
+  }, [provider]);
+
+  const refreshQuota = React.useCallback(() => {
+    connection.send(encodeQuotaGet(provider, true)).catch(() => {});
+  }, [provider]);
   // A sign-in that ended clears what was typed for it: nothing secret lingers in a field.
   useEffect(() => {
     if (view?.connected) {
@@ -115,6 +130,7 @@ export function AccountScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <QuotaCard provider={provider} onRefresh={refreshQuota} title="Plan usage" />
         {error ? (
           <Text style={styles.error} accessibilityLabel={`Account error ${error}`}>
             {error}

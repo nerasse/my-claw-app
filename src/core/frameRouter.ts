@@ -22,6 +22,7 @@ import { instructionsStore } from './instructions';
 import { sessionInstructionsStore } from './sessionInstructions';
 import { providersEnvStore, providerRenameStore } from './providers';
 import { statusStore } from './status';
+import { quotaRetryStore, quotaStore } from './quota';
 import { statsStore } from './stats';
 import { servicesStore } from './services';
 import { accountsStore } from './accounts';
@@ -585,6 +586,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // none. Same rule as a history page: it fills a gap, it never regresses this device.
       if (frame.draft) applyServerDraft(frame.threadId, frame.draft);
       if (frame.files) applyServerFiles(frame.threadId, frame.files, 'merge');
+      // The setting travels on every sync, so a window that opened after it was turned on shows
+      // the switch and the waiting pill without asking again.
+      if (frame.quotaRetry) quotaRetryStore.set(frame.threadId, frame.quotaRetry);
       // If truncated, the server has more entries. Request the rest.
       if (frame.truncated) {
         const { since, leaf } = chatStore.getSyncState(frame.threadId);
@@ -747,6 +751,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Pushed by the server for as long as the page is watched: the store keeps it when the page
       // is open on that thread, and drops a late one for a page since closed or moved.
       statusStore.receive(frame);
+      break;
+    case 'quota.state':
+      quotaStore.receive(frame);
+      break;
+    case 'session.quotaRetry.state':
+      quotaRetryStore.receive(frame);
       break;
     case 'stats.result':
       // The answer to one `stats.get`, and there is nothing else it could be: no thread owns it,

@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { AgentsConfigResultFrame, ProviderInfo } from '../core/protocol';
+import { connection } from '../core/connection';
+import { encodeQuotaGet } from '../core/protocol';
+import { QuotaLine } from '../components/QuotaCard';
 import { useModelCatalog, useModelIndex } from '../core/model';
 import { discoveryLine } from '../core/providerServices';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -40,6 +43,7 @@ function PlanRow({
         <Text style={[styles.hint, connected && styles.connected]} numberOfLines={1}>
           {`${summary} · ${provider.models} model${provider.models === 1 ? '' : 's'}`}
         </Text>
+        {provider.quota ? <QuotaLine provider={provider.key} /> : null}
       </View>
       <Text style={styles.linkGlyph}>›</Text>
     </Pressable>
@@ -110,6 +114,16 @@ export function ModelsScreen({
   const labelOf = (modelId: string): string => byId.get(modelId)?.label ?? modelId;
   // The tags are a page of their own now, not a provider row: the list is the providers alone.
   const real = providers.filter(provider => provider.type !== 'tags');
+  // One read per provider that publishes its limits, when the list first shows it. The line is
+  // then kept current by the store, which the server pushes while a provider page is open.
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    for (const provider of real) {
+      if (!provider.quota || asked.current.has(provider.key)) continue;
+      asked.current.add(provider.key);
+      connection.send(encodeQuotaGet(provider.key)).catch(() => {});
+    }
+  }, [real]);
   // Null on a server older than the accounts frames: no section, rather than rows that do nothing.
   const accounts = useAccounts().frame;
   useDismissKeyboard();
@@ -293,6 +307,7 @@ export function ModelsScreen({
                       }`}
                     </Text>
                   )}
+                  {provider.quota ? <QuotaLine provider={provider.key} /> : null}
                 </View>
                 <Text style={styles.linkGlyph}>›</Text>
               </Pressable>

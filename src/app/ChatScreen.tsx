@@ -40,6 +40,8 @@ import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useLayout } from '../core/layout';
 import { ContinueButton } from '../components/ContinueButton';
+import { QuotaWaitBar } from '../components/QuotaWaitBar';
+import type { QuotaRetryWait } from '../core/protocol';
 import { watchFileDrop } from '../core/fileDrop';
 import { selectableProps } from '../core/webProps';
 import { RowBoundary } from './RowBoundary';
@@ -122,6 +124,9 @@ export function ChatScreen({
   streaming,
   onStop,
   onContinue,
+  quotaWait,
+  onQuotaCancel,
+  onQuotaRetryNow,
   onQuestionReply,
   onNewThread,
   subagentCount,
@@ -173,6 +178,10 @@ export function ChatScreen({
   onStop: () => void;
   /** Picks the thread's last run back up where it stopped (error, Stop, lost), with no message. */
   onContinue?: () => void;
+  /** An armed wait for a spent quota: the pill replaces Continue until it fires or is cancelled. */
+  quotaWait?: QuotaRetryWait;
+  onQuotaCancel?: () => void;
+  onQuotaRetryNow?: () => void;
   /** The owner answered the questions of one ask: sent as one batch. */
   onQuestionReply: (id: string, answers: string[][]) => void;
   /** Wire /new: starts a fresh conversation, like the + button. */
@@ -764,7 +773,7 @@ export function ChatScreen({
   useEffect(() => {
     if (streaming) setContinuePressed(undefined);
   }, [streaming]);
-  const continueOffered = onContinue !== undefined && continueRun !== undefined && !streaming && continuePressed !== continueRun.id;
+  const continueOffered = quotaWait === undefined && onContinue !== undefined && continueRun !== undefined && !streaming && continuePressed !== continueRun.id;
   const pressContinue = useCallback(() => {
     if (!continueRun || !onContinue) return;
     setContinuePressed(continueRun.id);
@@ -1247,8 +1256,15 @@ export function ChatScreen({
   // no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
   const listHeader = useMemo(
     () =>
-      (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 || continueOffered ? (
+      (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 || continueOffered || quotaWait !== undefined ? (
         <View style={styles.looseQuestions}>
+          {quotaWait !== undefined ? (
+            <QuotaWaitBar
+              waiting={quotaWait}
+              onCancel={() => onQuotaCancel?.()}
+              onRetryNow={() => onQuotaRetryNow?.()}
+            />
+          ) : null}
           {continueOffered ? <ContinueButton onPress={pressContinue} /> : null}
           {compacting !== undefined && ruleBefore === undefined ? (
             <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} stopping={stopping} />
@@ -1263,7 +1279,7 @@ export function ChatScreen({
           ))}
         </View>
       ) : null,
-    [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions, continueOffered, pressContinue],
+    [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions, continueOffered, pressContinue, quotaWait, onQuotaCancel, onQuotaRetryNow],
   );
 
   const listFooter = useMemo(

@@ -3,6 +3,9 @@ import { FlatList, Platform, Pressable, Switch, Text, TextInput, View } from 're
 import type { ModelOption, ProviderInfo, UnavailableModel } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { connection } from '../core/connection';
+import { encodeQuotaGet, encodeQuotaUnwatch, encodeQuotaWatch } from '../core/protocol';
+import { QuotaCard } from '../components/QuotaCard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 import { CloseButton } from '../components/CloseButton';
 import { discoveryLine } from '../core/providerServices';
@@ -148,6 +151,21 @@ export function ProviderScreen({
   const { palette } = useTheme();
   useDismissKeyboard();
 
+  // The provider page is what watches its usage endpoint: the server reads it while this page
+  // is open and stops as soon as it closes -- one watch per socket, replaced on navigation.
+  useEffect(() => {
+    if (!provider.quota) return;
+    const key = provider.key;
+    connection.send(encodeQuotaWatch(key)).catch(() => {});
+    return () => {
+      connection.send(encodeQuotaUnwatch()).catch(() => {});
+    };
+  }, [provider.key, provider.quota]);
+
+  const refreshQuota = useCallback(() => {
+    connection.send(encodeQuotaGet(provider.key, true)).catch(() => {});
+  }, [provider.key]);
+
   const [query, setQuery] = useState('');
   const needle = useMemo(() => query.trim().toLowerCase(), [query]);
   const shown = useMemo(
@@ -195,6 +213,9 @@ export function ProviderScreen({
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
+        {provider.quota ? (
+          <QuotaCard provider={provider.key} onRefresh={refreshQuota} title="Usage" />
+        ) : null}
         <Pressable
           onPress={onAddModel}
           style={styles.addRow}
@@ -212,7 +233,7 @@ export function ProviderScreen({
         ) : null}
       </View>
     ),
-    [onAddModel, onEditModel, shownUnavailable, styles],
+    [onAddModel, onEditModel, shownUnavailable, styles, provider.key, provider.quota, refreshQuota],
   );
 
   return (

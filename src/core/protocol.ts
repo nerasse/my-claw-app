@@ -621,6 +621,76 @@ export interface SessionSummary {
   workspace?: string;
   /** The conversation holds text typed and not sent. One bit: the text itself rides on chat.history. */
   hasDraft?: boolean;
+  /** The owner turned on "retry when the quota returns" for this conversation (server 0.7.125+). */
+  quotaRetry?: boolean;
+}
+
+/**
+ * What a provider says about its own limits -- the server's answer, drawn as it comes.
+ *
+ * The percentages are **used**, and a balance is money or a count of credits; the two never mix.
+ * See docs/quota.md in the server repo.
+ */
+export type QuotaSource = 'claude' | 'codex' | 'opencode-go' | 'openrouter';
+
+export interface QuotaWindow {
+  id: string;
+  label: string;
+  usedPercent: number;
+  resetAt?: string;
+  windowSeconds?: number;
+}
+
+export interface QuotaBalance {
+  id: string;
+  label: string;
+  currency?: string;
+  remaining?: number;
+  total?: number;
+  count?: number;
+}
+
+export interface QuotaExtra {
+  label: string;
+  value: string;
+}
+
+export interface QuotaSnapshot {
+  provider: string;
+  source: QuotaSource;
+  plan?: string;
+  email?: string;
+  windows: QuotaWindow[];
+  balances: QuotaBalance[];
+  extras: QuotaExtra[];
+  fetchedAt: string;
+}
+
+export type QuotaFailureCode = 'no-source' | 'not-signed-in' | 'sign-in-expired' | 'rate-limited' | 'failed';
+
+export type QuotaOutcome =
+  | { ok: true; snapshot: QuotaSnapshot; stale?: boolean }
+  | { ok: false; code: QuotaFailureCode; message: string; retryAfterMs?: number };
+
+/** One provider's answer, on `quota.get` and at every change while a page watches it. */
+export interface QuotaStateFrame {
+  type: 'quota.state';
+  provider: string;
+  outcome: QuotaOutcome;
+}
+
+export interface QuotaRetryWait {
+  at: string;
+  attempts: number;
+  windows: string[];
+}
+
+/** The owner's quota-retry setting, and the wait it has armed, pushed when either changes. */
+export interface SessionQuotaRetryStateFrame {
+  type: 'session.quotaRetry.state';
+  threadId: string;
+  enabled: boolean;
+  waiting?: QuotaRetryWait;
 }
 
 export interface CommandsListResultFrame {
@@ -2544,6 +2614,8 @@ export interface ProviderInfo {
   keyEnv?: string;
   /** A ChatGPT or Claude plan: signed in rather than keyed, and `keyPresent` says it is signed in. */
   account?: AccountKind;
+  /** The usage API this provider publishes, when it publishes one (server 0.7.125+). */
+  quota?: QuotaSource;
   /** Switched off from its page (server 0.7.118+): hidden from the picker, skipped by routing. */
   disabled?: boolean;
   keyPresent: boolean;
@@ -2898,6 +2970,8 @@ export type ServerFrame =
   | ConfigResultFrame
   | ConfigSavedFrame
   | StatusResultFrame
+  | QuotaStateFrame
+  | SessionQuotaRetryStateFrame
   | StatsResultFrame
   | FsListResultFrame
   | FsReadResultFrame
@@ -3022,6 +3096,8 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'config.result',
   'config.saved',
   'status.result',
+  'quota.state',
+  'session.quotaRetry.state',
   'stats.result',
   'fs.list.result',
   'fs.read.result',
@@ -3891,6 +3967,30 @@ export function encodeStatusUnwatch(): string {
   return JSON.stringify({ type: 'status.unwatch' });
 }
 
+/** One provider's limits, asked once. `force` is the refresh button: it bypasses the TTL. */
+export function encodeQuotaGet(provider: string, force = false): string {
+  return JSON.stringify({ type: 'quota.get', provider, ...(force ? { force: true } : {}) });
+}
+
+/** Opens one provider's quota card: sent now, then at every change until unwatch or disconnect. */
+export function encodeQuotaWatch(provider: string): string {
+  return JSON.stringify({ type: 'quota.watch', provider });
+}
+
+export function encodeQuotaUnwatch(): string {
+  return JSON.stringify({ type: 'quota.unwatch' });
+}
+
+/** The conversation menu's switch: wait for a spent quota's reset, then continue. */
+export function encodeSessionQuotaRetrySet(threadId: string, enabled: boolean): string {
+  return JSON.stringify({ type: 'session.quotaRetry.set', threadId, enabled });
+}
+
+/** The waiting pill's "retry now". */
+export function encodeSessionQuotaRetryNow(threadId: string): string {
+  return JSON.stringify({ type: 'session.quotaRetry.now', threadId });
+}
+
 /**
  * Asks for the install-wide statistics over one window. Answered once, never pushed, and the
  * period travels with the request: the server refuses a window it does not know rather than
@@ -4157,6 +4257,8 @@ export interface SessionSyncResultFrame {
   compacting?: { since: string; text?: string; reasoning?: string };
   /** Why the delta was replaced by a full page. Absent means append. */
   reset?: 'unknown-cursor' | 'branch-switch';
+  /** The owner's quota-retry setting, and the wait it has armed, on every answer (server 0.7.125+). */
+  quotaRetry?: { enabled: boolean; waiting?: QuotaRetryWait };
   /** Whether entries were truncated by the limit. */
   truncated?: boolean;
   /** True when the served window was the newest page (fresh open or reset): older work exists. */
