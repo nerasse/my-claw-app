@@ -655,6 +655,14 @@ export interface QuotaExtra {
   value: string;
 }
 
+export interface QuotaResetCredits {
+  available: number;
+  nextExpiresAt?: string;
+  usable: boolean;
+  blocked?: string;
+  clears?: string;
+}
+
 export interface QuotaSnapshot {
   provider: string;
   source: QuotaSource;
@@ -663,6 +671,7 @@ export interface QuotaSnapshot {
   windows: QuotaWindow[];
   balances: QuotaBalance[];
   extras: QuotaExtra[];
+  resets?: QuotaResetCredits;
   fetchedAt: string;
 }
 
@@ -677,6 +686,15 @@ export interface QuotaStateFrame {
   type: 'quota.state';
   provider: string;
   outcome: QuotaOutcome;
+}
+
+/** What a redemption answered: a success, or the provider's own reason for refusing. */
+export interface QuotaRedeemResultFrame {
+  type: 'quota.redeem.result';
+  provider: string;
+  ok: boolean;
+  code?: string;
+  message?: string;
 }
 
 export interface QuotaRetryWait {
@@ -2971,6 +2989,7 @@ export type ServerFrame =
   | ConfigSavedFrame
   | StatusResultFrame
   | QuotaStateFrame
+  | QuotaRedeemResultFrame
   | SessionQuotaRetryStateFrame
   | StatsResultFrame
   | FsListResultFrame
@@ -3097,6 +3116,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'config.saved',
   'status.result',
   'quota.state',
+  'quota.redeem.result',
   'session.quotaRetry.state',
   'stats.result',
   'fs.list.result',
@@ -3979,6 +3999,11 @@ export function encodeQuotaWatch(provider: string): string {
 
 export function encodeQuotaUnwatch(): string {
   return JSON.stringify({ type: 'quota.unwatch' });
+}
+
+/** Spends one banked reset on the provider. Only Codex has them. */
+export function encodeQuotaRedeem(provider: string): string {
+  return JSON.stringify({ type: 'quota.redeem', provider });
 }
 
 /** The conversation menu's switch: wait for a spent quota's reset, then continue. */

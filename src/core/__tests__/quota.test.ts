@@ -1,5 +1,5 @@
 import { formatRemaining, formatReset } from '../../components/QuotaCard';
-import { quotaRetryStore, quotaStore } from '../quota';
+import { quotaRedeemStore, quotaRetryStore, quotaStore } from '../quota';
 import type { QuotaOutcome } from '../protocol';
 
 const NOW = Date.parse('2026-10-23T00:00:00.000Z');
@@ -58,6 +58,25 @@ describe('quotaStore', () => {
     quotaStore.receive({ type: 'quota.state', provider: 'claude-2', outcome });
     const first = quotaStore.all();
     expect(quotaStore.all()).toBe(first);
+  });
+});
+
+describe('quotaRedeemStore', () => {
+  afterEach(() => quotaRedeemStore.reset());
+
+  it('holds one redemption per provider and refuses a second tap while it is out', () => {
+    expect(quotaRedeemStore.begin('chatgpt')).toBe(true);
+    expect(quotaRedeemStore.begin('chatgpt')).toBe(false);
+    expect(quotaRedeemStore.get('chatgpt')?.busy).toBe(true);
+  });
+
+  it('turns the answer into the line the card shows', () => {
+    quotaRedeemStore.begin('chatgpt');
+    quotaRedeemStore.receive({ type: 'quota.redeem.result', provider: 'chatgpt', ok: false, code: 'ineligible', message: 'No window is full: nothing to reset.' });
+    expect(quotaRedeemStore.get('chatgpt')).toEqual({
+      busy: false,
+      result: { ok: false, code: 'ineligible', message: 'No window is full: nothing to reset.' },
+    });
   });
 });
 

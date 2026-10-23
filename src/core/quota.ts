@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { QuotaOutcome, QuotaRetryWait, QuotaStateFrame, SessionQuotaRetryStateFrame } from './protocol';
+import type { QuotaOutcome, QuotaRedeemResultFrame, QuotaRetryWait, QuotaStateFrame, SessionQuotaRetryStateFrame } from './protocol';
 
 type Listener = () => void;
 
@@ -98,4 +98,59 @@ export const quotaRetryStore = new QuotaRetryStore();
 
 export function useQuotaRetry(threadId: string | null | undefined): QuotaRetryState | undefined {
   return useSyncExternalStore(quotaRetryStore.subscribe, () => quotaRetryStore.get(threadId));
+}
+
+export interface QuotaRedeemState {
+  busy: boolean;
+  result?: { ok: boolean; code?: string; message?: string };
+}
+
+/**
+ * The banked-reset redemption of one provider: in flight, then its answer. A credit is spent by a
+ * single tap on a button that asks twice, so the store also owns the guard that refuses a second
+ * tap while the first is still out.
+ */
+class QuotaRedeemStore {
+  private byProvider = new Map<string, QuotaRedeemState>();
+  private listeners = new Set<Listener>();
+
+  subscribe = (listener: Listener): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  get(provider: string | null | undefined): QuotaRedeemState | undefined {
+    return provider ? this.byProvider.get(provider) : undefined;
+  }
+
+  begin(provider: string): boolean {
+    if (this.byProvider.get(provider)?.busy) return false;
+    this.set(provider, { busy: true });
+    return true;
+  }
+
+  receive(frame: QuotaRedeemResultFrame): void {
+    this.set(frame.provider, {
+      busy: false,
+      result: { ok: frame.ok, ...(frame.code ? { code: frame.code } : {}), ...(frame.message ? { message: frame.message } : {}) },
+    });
+  }
+
+  reset(): void {
+    this.byProvider.clear();
+    for (const listener of this.listeners) listener();
+  }
+
+  private set(provider: string, state: QuotaRedeemState): void {
+    this.byProvider.set(provider, state);
+    for (const listener of this.listeners) listener();
+  }
+}
+
+export const quotaRedeemStore = new QuotaRedeemStore();
+
+export function useQuotaRedeem(provider: string | null | undefined): QuotaRedeemState | undefined {
+  return useSyncExternalStore(quotaRedeemStore.subscribe, () => quotaRedeemStore.get(provider));
 }

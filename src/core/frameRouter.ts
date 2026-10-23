@@ -22,7 +22,7 @@ import { instructionsStore } from './instructions';
 import { sessionInstructionsStore } from './sessionInstructions';
 import { providersEnvStore, providerRenameStore } from './providers';
 import { statusStore } from './status';
-import { quotaRetryStore, quotaStore } from './quota';
+import { quotaRetryStore, quotaRedeemStore, quotaStore } from './quota';
 import { statsStore } from './stats';
 import { servicesStore } from './services';
 import { accountsStore } from './accounts';
@@ -757,6 +757,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'session.quotaRetry.state':
       quotaRetryStore.receive(frame);
+      break;
+    case 'quota.redeem.result':
+      quotaRedeemStore.receive(frame);
       break;
     case 'stats.result':
       // The answer to one `stats.get`, and there is nothing else it could be: no thread owns it,

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { useQuota } from '../core/quota';
-import type { QuotaOutcome, QuotaWindow } from '../core/protocol';
+import { quotaRedeemStore, useQuota, useQuotaRedeem } from '../core/quota';
+import { connection } from '../core/connection';
+import { encodeQuotaRedeem, type QuotaOutcome, type QuotaWindow } from '../core/protocol';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 /** One tick a second, so every countdown on the card moves without new data. */
@@ -111,6 +112,12 @@ export function QuotaCard({
   const outcome: QuotaOutcome | undefined = useQuota(provider);
   const live = outcome?.ok === true;
   const now = useNow(live);
+  const redeem = useQuotaRedeem(provider);
+  const [confirming, setConfirming] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+  }, []);
 
   // A reset that just passed is a number that just changed: one fresh read, once per second value.
   const nextReset = live
@@ -154,6 +161,20 @@ export function QuotaCard({
   }
 
   const { snapshot, stale } = outcome;
+  const reset = snapshot.resets;
+  const spend = (): void => {
+    if (!reset?.usable || redeem?.busy) return;
+    if (!confirming) {
+      setConfirming(true);
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(() => setConfirming(false), 4000);
+      return;
+    }
+    setConfirming(false);
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    // The store refuses a second tap while the first is in flight: a credit is not idempotent.
+    if (quotaRedeemStore.begin(provider)) connection.send(encodeQuotaRedeem(provider)).catch(() => {});
+  };
   const age = Math.max(0, Math.round((Date.now() - Date.parse(snapshot.fetchedAt)) / 1000));
   const ageText = age < 60 ? `${age} s ago` : `${Math.round(age / 60)} min ago`;
   return (
@@ -204,6 +225,44 @@ export function QuotaCard({
           ))}
         </View>
       ) : null}
+
+      {reset && reset.available > 0 ? (
+        <View style={styles.resetBlock}>
+          <View style={styles.resetTexts}>
+            <Text style={styles.resetTitle} numberOfLines={1}>
+              {`${reset.available} banked reset${reset.available === 1 ? '' : 's'}${reset.clears ? ` · ${reset.clears}` : ''}`}
+            </Text>
+            <Text style={styles.resetHint} numberOfLines={2}>
+              {!reset.usable
+                ? (reset.blocked ?? 'not usable right now')
+                : reset.nextExpiresAt
+                  ? `one expires ${formatReset(reset.nextExpiresAt)}`
+                  : 'can be used now'}
+            </Text>
+          </View>
+          <Pressable
+            onPress={spend}
+            disabled={!reset.usable || redeem?.busy === true}
+            style={({ pressed }) => [
+              styles.resetButton,
+              (!reset.usable || redeem?.busy) && styles.resetButtonOff,
+              pressed && styles.resetButtonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !reset.usable || redeem?.busy === true }}
+            accessibilityLabel={confirming ? 'Confirm spending one reset' : 'Use a reset'}>
+            <Text style={[styles.resetButtonText, (!reset.usable || redeem?.busy) && styles.resetButtonTextOff]}>
+              {redeem?.busy ? 'Redeeming…' : confirming ? 'Tap again' : 'Use a reset'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {redeem?.result ? (
+        <Text style={redeem.result.ok ? styles.redeemOk : styles.redeemError}>
+          {redeem.result.message ?? (redeem.result.ok ? 'Reset applied.' : 'Reset refused.')}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -247,5 +306,30 @@ function createStyles(palette: Palette) {
     },
     chipText: { fontSize: font.small, color: palette.textMuted },
     line: { fontSize: font.small, color: palette.textMuted },
+    resetBlock: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: space.sm,
+      paddingTop: space.sm,
+      borderTopWidth: 1,
+      borderTopColor: palette.border,
+    },
+    resetTexts: { flex: 1, gap: 1 },
+    resetTitle: { fontSize: font.meta, color: palette.text, fontWeight: '600' as const },
+    resetHint: { fontSize: font.small, color: palette.textMuted },
+    resetButton: {
+      minHeight: 34,
+      paddingHorizontal: space.md,
+      borderRadius: radius.pill,
+      backgroundColor: palette.accentSoft,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    resetButtonOff: { backgroundColor: palette.surfaceAlt },
+    resetButtonPressed: { opacity: 0.6 },
+    resetButtonText: { fontSize: font.meta, color: palette.accent, fontWeight: '600' as const },
+    resetButtonTextOff: { color: palette.textFaint },
+    redeemOk: { fontSize: font.small, color: palette.ok },
+    redeemError: { fontSize: font.small, color: palette.danger },
   };
 }

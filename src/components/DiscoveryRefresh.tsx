@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { modelStore, useDiscovery } from '../core/model';
 import { font, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { RefreshIcon } from './icons';
 
 /**
  * Discovery on demand, where the models are read.
@@ -27,7 +28,7 @@ export function DiscoveryButton(): React.JSX.Element {
       {discovery.running ? (
         <ActivityIndicator size="small" color={palette.accent} />
       ) : (
-        <Text style={styles.glyph}>⟳</Text>
+        <RefreshIcon size={20} color={palette.accent} />
       )}
     </Pressable>
   );
@@ -74,7 +75,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  glyph: { fontSize: 20, color: palette.accent },
   note: { fontSize: font.small, color: palette.textMuted, paddingHorizontal: space.xs, paddingTop: space.xs },
   error: { fontSize: font.small, color: palette.danger, paddingHorizontal: space.xs, paddingTop: space.xs },
 });

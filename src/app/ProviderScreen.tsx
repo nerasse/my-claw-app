@@ -6,6 +6,7 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { connection } from '../core/connection';
 import { encodeQuotaGet, encodeQuotaUnwatch, encodeQuotaWatch } from '../core/protocol';
 import { QuotaCard } from '../components/QuotaCard';
+import { GearIcon } from '../components/icons';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 import { CloseButton } from '../components/CloseButton';
 import { discoveryLine } from '../core/providerServices';
@@ -257,7 +258,7 @@ export function ProviderScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Edit provider">
-          <Text style={styles.editGlyph}>⚙</Text>
+          <GearIcon size={20} color={palette.text} />
         </Pressable>
         <CloseButton />
       </View>
@@ -366,7 +367,6 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
-  editGlyph: { fontSize: 18, lineHeight: 20, color: palette.text },
   activeRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
