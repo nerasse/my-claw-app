@@ -213,9 +213,6 @@ export function ProviderScreen({
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
-        {provider.quota ? (
-          <QuotaCard provider={provider.key} onRefresh={refreshQuota} title="Usage" />
-        ) : null}
         <Pressable
           onPress={onAddModel}
           style={styles.addRow}
@@ -233,7 +230,7 @@ export function ProviderScreen({
         ) : null}
       </View>
     ),
-    [onAddModel, onEditModel, shownUnavailable, styles, provider.key, provider.quota, refreshQuota],
+    [onAddModel, onEditModel, shownUnavailable, styles],
   );
 
   return (
@@ -299,6 +296,14 @@ export function ProviderScreen({
         </Text>
       ) : null}
 
+      {/* Its own block above the list, not a card inside the list's card: the model list is one
+          surface, and a bordered card drawn inside another reads as two borders and no margin. */}
+      {provider.quota ? (
+        <View style={styles.quotaBlock}>
+          <QuotaCard provider={provider.key} onRefresh={refreshQuota} title="Usage" />
+        </View>
+      ) : null}
+
       {models.length >= SEARCH_MIN_MODELS ? (
         <TextInput
           style={styles.search}
@@ -316,6 +321,7 @@ export function ProviderScreen({
       {/* A discovering provider floods its page with hundreds of models: the list virtualizes,
           the header, the error and the card look stay put above it. */}
       <FlatList
+        style={styles.list}
         data={shown}
         keyExtractor={keyOfModel}
         renderItem={renderModel}
@@ -436,6 +442,8 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
+  list: { flex: 1, marginTop: space.md },
+  quotaBlock: { marginTop: space.md, marginHorizontal: space.md },
   headerBlock: { gap: space.sm, paddingBottom: space.sm },
   addRow: {
     paddingHorizontal: space.md,
@@ -456,7 +464,6 @@ const createStyles = (palette: Palette) => ({
   search: {
     marginHorizontal: space.md,
     marginTop: space.md,
-    marginBottom: 0,
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: palette.border,
