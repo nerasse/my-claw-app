@@ -231,6 +231,7 @@ import { DevicesScreen } from './DevicesScreen';
 import { NodesScreen } from './NodesScreen';
 import { NodeScreen } from './NodeScreen';
 import { ServicesScreen } from './ServicesScreen';
+import { EmbeddingsScreen } from './EmbeddingsScreen';
 import { SETUP_WIDTH, SetupScreen, setupBanner, toggleSkip, useSetupSteps } from './SetupScreen';
 import { AccountScreen } from './AccountScreen';
 import { PageCloseContext } from '../components/CloseButton';
@@ -4879,6 +4880,8 @@ export function AppShell(): React.JSX.Element {
               />
             ) : settingsPage === 'services' ? (
               <ServicesScreen onBack={() => setSettingsPage(parentOf('services'))} />
+            ) : settingsPage === 'embeddings' ? (
+              <EmbeddingsScreen onBack={() => setSettingsPage(parentOf('embeddings'))} />
             ) : settingsPage === 'setup' ? (
               setupPage
             ) : settingsPage === 'skills' ? (

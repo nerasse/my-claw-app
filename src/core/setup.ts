@@ -80,7 +80,7 @@ const SERVICE_STEPS: Array<{ id: ServiceId; title: string; hint: string }> = [
   {
     id: 'embeddings',
     title: 'Memory by meaning',
-    hint: 'embeddings: cloud, this server or a URL',
+    hint: 'a model from a provider you already use — no second key',
   },
   {
     id: 'browser',

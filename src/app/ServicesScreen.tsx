@@ -6,6 +6,7 @@ import {
   encodeServicesFree,
   encodeServicesGet,
   encodeServicesSet,
+  type EmbeddingModelOption,
   type ServiceSource,
   type ServiceView,
 } from '../core/protocol';
@@ -17,6 +18,7 @@ import {
   servicesStore,
   useServices,
 } from '../core/services';
+import { overlayStore } from '../core/overlay';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
@@ -39,10 +41,21 @@ function sizeOf(bytes: number): string {
 /** An env name (`GROQ_API_KEY`) is a key to paste; anything else is a setting to fill. */
 const isEnvName = (name: string): boolean => /^[A-Z][A-Z0-9_]*$/.test(name);
 
+/** The words the embeddings card uses, in one place: an id is never shown. */
+const EMBED_HINT = {
+  pick: 'pick a model',
+  noProvider: 'add a provider first: its address and its key are what an embedding call needs',
+  none: 'no embedding model from your providers yet',
+};
+
 /**
  * Every optional service and where it runs: the cloud (the default), this server, or a URL
  * (docs/services.md in the server repo). A key a source still needs is pasted right here; it goes
  * to the server's .env and never comes back.
+ *
+ * Embeddings are the one service whose "cloud" is not one fixed vendor: the server can already hold
+ * the address and the key of a provider the owner pays for, so the card offers a provider and a
+ * model instead of asking for a URL and a key it already has (docs/memory.md in the server repo).
  */
 export function ServicesScreen({
   onBack,
@@ -110,6 +123,7 @@ export function ServicesScreen({
               service={service}
               install={frame.install}
               busy={busy}
+              embeddingModels={frame.embeddingModels}
             />
           ))
         )}
@@ -125,11 +139,14 @@ export function ServiceCard({
   install,
   busy,
   inline = false,
+  embeddingModels,
 }: {
   service: ServiceView;
   install: 'native' | 'compose' | 'dev';
   busy: boolean;
   inline?: boolean;
+  /** The models an embedding can run on, from the server's own catalogue. Absent on an older server. */
+  embeddingModels?: EmbeddingModelOption[];
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const label = SERVICE_LABELS[service.id];
@@ -139,16 +156,79 @@ export function ServiceCard({
   );
   const [keys, setKeys] = useState<Record<string, string>>({});
 
+  // Embeddings: a provider, then a model. The provider is what the server already holds the
+  // address and the key for, so nothing is asked twice (docs/memory.md in the server repo).
+  const models = service.id === 'embeddings' ? embeddingModels ?? [] : [];
+  const providers = [...new Set(models.map(m => m.provider))];
+  // Both halves come from the server's config, never from local state: a card that remembered its
+  // own pick showed "pick a model" again the moment the page was reopened (measured 2026-10-25).
+  const chosenModel = service.model;
+  const chosenProvider = service.provider;
+  // The name the owner reads is the catalogue's label ("Gemini Embedding 001"), never the wire id:
+  // the id is what the endpoint wants, not what a person recognises.
+  const chosenLabel = models.find(m => m.id === chosenModel)?.label ?? chosenModel;
+
   const choose = (source: ServiceSource): void => {
     if (source === 'url') {
       setEditingUrl(true);
       return;
     }
     setEditingUrl(false);
+    if (service.id === 'embeddings' && source === 'cloud' && providers.length > 0) {
+      // A provider to name: open the picker rather than writing the OpenAI default the owner may
+      // not even have a key for (which is exactly how 124 × HTTP 401 landed in the log).
+      pickEmbedding();
+      return;
+    }
     if (source === service.source) return;
     servicesStore.sending();
     connection
       .send(encodeServicesSet({ id: service.id, source }))
+      .catch(() => {});
+  };
+  /**
+   * Provider first, then model: the second sheet only lists what the chosen provider serves. A
+   * provider with a single model goes straight there, because a one-row menu is a step that asks
+   * the owner to confirm what the server already decided.
+   */
+  const pickEmbedding = (only?: string): void => {
+    if (!only) {
+      overlayStore.open({
+        kind: 'sheet',
+        options: providers.map(key => {
+          const count = models.filter(m => m.provider === key).length;
+          return {
+            key,
+            label: key,
+            hint: count === 1 ? '1 model' : `${count} models`,
+            selected: key === chosenProvider,
+            onPress: () => pickEmbedding(key),
+          };
+        }),
+      });
+      return;
+    }
+    const offered = models.filter(m => m.provider === only);
+    if (offered.length === 0) return;
+    if (offered.length === 1) {
+      sendEmbedding(offered[0]);
+      return;
+    }
+    overlayStore.open({
+      kind: 'sheet',
+      options: offered.map(m => ({
+        key: `${m.provider}/${m.id}`,
+        label: m.label,
+        hint: m.id,
+        selected: m.id === chosenModel,
+        onPress: () => sendEmbedding(m),
+      })),
+    });
+  };
+  const sendEmbedding = (m: EmbeddingModelOption): void => {
+    servicesStore.sending();
+    connection
+      .send(encodeServicesSet({ id: 'embeddings', source: 'cloud', provider: m.provider, model: m.id }))
       .catch(() => {});
   };
   const saveUrl = (): void => {
@@ -213,6 +293,30 @@ export function ServiceCard({
           );
         })}
       </View>
+      {service.id === 'embeddings' && service.source === 'cloud' ? (
+        models.length === 0 ? (
+          <Text style={styles.detail}>{EMBED_HINT.noProvider}</Text>
+        ) : (
+          <Pressable
+            hitSlop={8}
+            onPress={() => pickEmbedding()}
+            disabled={busy}
+            style={[styles.chosen, busy && styles.busy]}
+            accessibilityRole="button"
+            accessibilityLabel={`${EMBED_HINT.pick}: ${chosenLabel ?? EMBED_HINT.none}`}
+          >
+            <View style={styles.grow}>
+              <Text style={styles.chosenLabel} numberOfLines={1}>
+                {chosenLabel ?? EMBED_HINT.pick}
+              </Text>
+              <Text style={styles.detail} numberOfLines={1}>
+                {chosenProvider ? `${chosenProvider} · ${chosenModel ?? ''}` : EMBED_HINT.pick}
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        )
+      ) : null}
       {editingUrl ? (
         <View style={styles.row}>
           <TextInput
@@ -395,6 +499,19 @@ const createStyles = (palette: Palette) => ({
     flexWrap: 'wrap' as const,
     gap: space.xs,
   },
+  chosen: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
+    backgroundColor: palette.bg,
+  },
+  chosenLabel: { fontSize: font.body, color: palette.text },
+  chevron: { fontSize: font.body, color: palette.textFaint },
   chip: {
     paddingHorizontal: space.md,
     paddingVertical: space.xs,

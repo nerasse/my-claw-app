@@ -940,6 +940,27 @@ export interface TranscriptFrame {
 export type ServiceId = 'stt' | 'tts' | 'location' | 'embeddings' | 'search' | 'browser';
 export type ServiceSource = 'off' | 'cloud' | 'self-hosted' | 'url';
 
+/** One model an embedding can run on, from the catalogue's non-chat half. */
+export interface EmbeddingModelOption {
+  /** The provider key, which is what `services.set` carries back. */
+  provider: string;
+  /** The id the provider's API knows: what `memory.embedding.model` is written as. */
+  id: string;
+  label: string;
+}
+
+/**
+ * What one consumer of embeddings runs on, as the server set it. `own` is false when it inherits
+ * the default, which is what makes "everything on one model" readable at a glance.
+ */
+export interface EmbeddingConsumerView {
+  id: 'recall' | 'dedup' | 'consolidate' | 'import' | 'skills';
+  active: boolean;
+  model?: string;
+  provider?: string;
+  own: boolean;
+}
+
 /** One optional service as the server derives it (docs/services.md in the server repo). */
 export interface ServiceView {
   id: ServiceId;
@@ -952,6 +973,13 @@ export interface ServiceView {
   health: 'up' | 'down' | 'no-endpoint';
   /** A local engine this server downloads once switched on, and frees on demand (bare metal). */
   local?: { state: 'idle' | 'installing' | 'ready' | 'failed'; error?: string; bytes: number };
+  /**
+   * Embeddings only: the model in force and the provider it comes from, as the server's config
+   * states them (server 0.7.132+). The card draws these instead of remembering its own last
+   * choice, so leaving the page and coming back shows what actually runs.
+   */
+  model?: string;
+  provider?: string;
 }
 
 export interface ServicesResultFrame {
@@ -962,6 +990,14 @@ export interface ServicesResultFrame {
   pushDevices?: string[];
   /** Paired devices (server 0.7.79+). */
   pairedDevices?: number;
+  /**
+   * The embedding models a configured provider serves (server 0.7.132+). Absent on an older
+   * server, which the embeddings card reads as "no provider to pick": it then only offers the
+   * sources that server knew.
+   */
+  embeddingModels?: EmbeddingModelOption[];
+  /** One row per consumer, so the page can show what inherits and what stands alone. */
+  embeddingConsumers?: EmbeddingConsumerView[];
 }
 
 /** A ChatGPT or Claude plan, signed in from the app (server docs/subscription-accounts.md). */
@@ -3274,7 +3310,21 @@ export function encodeServicesFree(id: 'stt' | 'embeddings'): string {
   return JSON.stringify({ type: 'services.free', id });
 }
 
-export function encodeServicesSet(choice: { id: ServiceId; source: ServiceSource; url?: string }): string {
+export function encodeServicesSet(choice: {
+  id: ServiceId;
+  source: ServiceSource;
+  url?: string;
+  /** Embeddings on a provider already configured on the server: its key, not a URL and a key. */
+  provider?: string;
+  /** Embeddings: the model id, when the picker chose one rather than taking the default. */
+  model?: string;
+  /** Embeddings: which consumer this is for. Absent is the default every consumer inherits. */
+  consumer?: EmbeddingConsumerView['id'];
+  /** Embeddings: switches one consumer's semantic half off, keeping its model. */
+  enabled?: boolean;
+  /** Embeddings: drops a consumer's own entry, so it follows the default again. */
+  inherit?: boolean;
+}): string {
   return JSON.stringify({ type: 'services.set', ...choice });
 }
 

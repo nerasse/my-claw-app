@@ -97,7 +97,7 @@ export function ProviderEditScreen({
   // On for a new provider: without discovery a fresh entry lists no model, and the default model
   // picker is empty with nothing saying why.
   const [discover, setDiscover] = useState(provider?.discover ?? true);
-  const [promptCache, setPromptCache] = useState(provider?.promptCache ?? false);
+  const [promptCache, setPromptCache] = useState(provider?.promptCache ?? true);
   // `?? true`, not `?? false`: this one is on unless the owner turns it off. The providers that
   // document reasoning replay require it, and an endpoint that returns no reasoning gets none back.
   const [reasoningReplay, setReasoningReplay] = useState(provider?.reasoningReplay ?? true);

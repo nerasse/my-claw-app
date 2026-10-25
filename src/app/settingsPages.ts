@@ -32,6 +32,8 @@ export type SettingsPage =
   | 'node'
   | 'servers'
   | 'services'
+  /** Embeddings: the default model and the five consumers, one page (docs/memory.md). */
+  | 'embeddings'
   | 'setup'
   | 'approvals'
   | 'workspaces'
@@ -63,6 +65,7 @@ export const PARENT: Partial<Record<SettingsPage, SettingsPage>> = {
   models: 'index',
   agents: 'index',
   services: 'index',
+  embeddings: 'index',
   workspaces: 'index',
   skills: 'index',
   tools: 'index',

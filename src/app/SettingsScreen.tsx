@@ -33,7 +33,10 @@ export const GROUPS: ReadonlyArray<{ title: string; categories: readonly Categor
     categories: [
       { page: 'models', title: 'Models', hint: 'default, providers and plans, tags' },
       { page: 'agents', title: 'Agents', hint: 'the orchestrator and each agent: model, effort, scope' },
-      { page: 'services', title: 'Services', hint: 'voice, location, search, memory, browser' },
+      { page: 'services', title: 'Services', hint: 'voice, location, search, browser' },
+      // Its own page rather than one more card under Services: embeddings are not one switch but a
+      // default and five things that can each take their own model (owner, 2026-10-25).
+      { page: 'embeddings', title: 'Embeddings', hint: 'one model by default, per use if you want' },
     ],
   },
   {
