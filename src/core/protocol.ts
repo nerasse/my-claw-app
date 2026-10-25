@@ -1787,6 +1787,32 @@ export interface StatsDayRow extends StatsTotals {
  * `avgDurationMs` and nothing finer: the rollup keeps sums, not distributions, so a percentile
  * would be available for the live window and silently missing for everything older.
  */
+/**
+ * One tool over the window, as the model met it: a failure is what the model was told was one.
+ * `retried` and `switched` are what it did next in the same conversation -- the same tool again,
+ * or another one, routing around this one. `outcomes` are the successes the tool read out of
+ * something that looks like a failure (a search that found nothing). Server docs/tool-telemetry.md.
+ */
+export interface StatsToolRow {
+  tool: string;
+  calls: number;
+  failures: number;
+  avgDurationMs: number;
+  retried: number;
+  switched: number;
+  outcomes: Record<string, number>;
+  topErrors: Array<{ kind: string; count: number }>;
+}
+
+export interface StatsTools {
+  since?: string;
+  /** False while the server is still reading the conversations older than the recorder. */
+  backfilled: boolean;
+  /** The filter reaches the tools by conversation and source only; anything else is ignored. */
+  filterApplied: boolean;
+  rows: StatsToolRow[];
+}
+
 export interface StatsReliabilityRow {
   /** A model id when `kind` is `model`, a host when it is `provider`. */
   key: string;
@@ -1885,6 +1911,8 @@ export interface StatsPayload {
   filter: StatsFilter;
   /** The values the filter may be set to, computed without it. */
   facets: StatsFacets;
+  /** How the tools fared for the model. Absent on a server older than 0.7.133. */
+  tools?: StatsTools;
 }
 
 /**

@@ -25,6 +25,8 @@ import type {
   StatsTotals,
 } from '../../core/protocol';
 import {
+  toolFailurePct,
+  toolRowLines,
   horizonNote,
   listPrice,
   rowMoney,
@@ -231,4 +233,32 @@ test('its share is said against the whole window, in money and in tokens', () =>
   const c = totals({ calls: 3, promptTokens: 403_646, completionTokens: 260_000, billedUsd: 6.2, referenceUsd: 0 });
   expect(compactionShareLine(c, window)).toBe('41% of the cost · 40% of the tokens');
   expect(compactionShareLine(c, totals({ promptTokens: 0, completionTokens: 0, billedUsd: 0 }))).toBe('');
+});
+
+describe('tool rows', () => {
+  const row = {
+    tool: 'bash',
+    calls: 200,
+    failures: 6,
+    avgDurationMs: 1500,
+    retried: 4,
+    switched: 1,
+    outcomes: { 'no-match': 12, 'noop-skipped': 0 },
+    topErrors: [],
+  };
+
+  test('the rate keeps one decimal, and a measured zero stays a zero', () => {
+    expect(toolFailurePct(row)).toBe('3.0%');
+    expect(toolFailurePct({ calls: 0, failures: 0 })).toBe('0.0%');
+  });
+
+  test('what the model did after a failure is said only when there was one', () => {
+    expect(toolRowLines(row)[0]).toBe('200 calls · 6 failed · 4 retried · 1 switched tool · 1.5 s avg');
+    expect(toolRowLines({ ...row, failures: 0 })[0]).not.toContain('retried');
+  });
+
+  test('the successes that used to be failures are named, the empty ones left out', () => {
+    expect(toolRowLines(row)[1]).toBe('answered, not failed: 12 no match');
+    expect(toolRowLines({ ...row, outcomes: {} })).toHaveLength(1);
+  });
 });

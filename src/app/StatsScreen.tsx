@@ -33,6 +33,8 @@ import type {
   StatsReconciliation,
   StatsReliabilityRow,
   StatsSessionRow,
+  StatsToolRow,
+  StatsTools,
   StatsTotals,
 } from '../core/protocol';
 
@@ -46,13 +48,13 @@ import type {
  * api.anthropic.com was shown an OpenRouter line. The figure was never wrong, it was on the wrong
  * page.
  *
- * Six tabs, on one window and one filter. The page is a lot of figures and the folds were the wrong
+ * Seven tabs, on one window and one filter. The page is a lot of figures and the folds were the wrong
  * shape for it -- a screen that unrolled nine sections in a column buried the eight below the third.
  * A tab answers one question at a time, and the filter row above them holds the same dimensions
  * wherever it is used: the narrowing happens in SQL, on the server, so every figure on the tab
  * describes the same smaller population and none of them is a re-scaled total.
  *
- * The sixth tab is a drawer, on purpose. Endpoints, sources and the provider ledger are what the
+ * The last tab is a drawer, on purpose. Endpoints, sources and the provider ledger are what the
  * owner opens one day in a hundred (2026-09-22: "cacher les analytiques useless 99% du temps"),
  * and each of them is a table nobody reads on an ordinary visit. Advanced holds them all, out of
  * the rotation, with the vocabulary settled: an endpoint is an endpoint, and who drove a call is
@@ -64,7 +66,7 @@ import type {
 
 const PERIODS: readonly StatsPeriod[] = ['7d', '30d', '90d', 'all'];
 
-type StatsTab = 'overview' | 'models' | 'conversations' | 'cache' | 'reliability' | 'advanced';
+type StatsTab = 'overview' | 'models' | 'conversations' | 'cache' | 'reliability' | 'tools' | 'advanced';
 
 const TABS: ReadonlyArray<{ key: StatsTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
@@ -72,6 +74,7 @@ const TABS: ReadonlyArray<{ key: StatsTab; label: string }> = [
   { key: 'conversations', label: 'Conversations' },
   { key: 'cache', label: 'Cache' },
   { key: 'reliability', label: 'Reliability' },
+  { key: 'tools', label: 'Tools' },
   { key: 'advanced', label: 'Advanced' },
 ];
 
@@ -561,6 +564,7 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
             {tab === 'conversations' ? <Sessions stats={payload} /> : null}
             {tab === 'cache' ? <CacheFold cache={payload.cache} /> : null}
             {tab === 'reliability' ? <Reliability rows={payload.reliability} /> : null}
+            {tab === 'tools' ? <Tools tools={payload.tools} /> : null}
             {tab === 'advanced' ? (
               <>
                 <Providers rows={payload.providers} />
@@ -971,6 +975,93 @@ function Reliability({ rows }: { rows: StatsReliabilityRow[] }): React.JSX.Eleme
         ))}
       </View>
       <Text style={styles.codeNote}>mean latency only: the rollup keeps sums, not distributions.</Text>
+    </Card>
+  );
+}
+
+/** What an outcome is called on the page: the success a tool read out of an exit that looked bad. */
+const OUTCOME_LABELS: Record<string, string> = {
+  'no-match': 'no match',
+  differ: 'differs',
+  'noop-skipped': 'unchanged edits skipped',
+};
+
+/** A tool call is milliseconds more often than minutes: `duration` would print most of them as 0s. */
+function toolDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  return duration(ms);
+}
+
+/** A share, one decimal, with the 0 kept: "0.0%" says "measured, none", a blank says nothing. */
+export function toolFailurePct(row: Pick<StatsToolRow, 'calls' | 'failures'>): string {
+  return `${row.calls > 0 ? ((100 * row.failures) / row.calls).toFixed(1) : '0.0'}%`;
+}
+
+/**
+ * The lines under a tool's name: the volume and what the model did after a failure, then the
+ * successes that would have been failures before the fix. Exported for its own test.
+ */
+export function toolRowLines(row: StatsToolRow): string[] {
+  const volume = [`${row.calls} calls`, `${row.failures} failed`];
+  if (row.failures > 0) volume.push(`${row.retried} retried`, `${row.switched} switched tool`);
+  volume.push(`${toolDuration(row.avgDurationMs)} avg`);
+  const lines = [volume.join(' · ')];
+  const outcomes = Object.entries(row.outcomes)
+    .filter(([, n]) => n > 0)
+    .map(([key, n]) => `${n} ${OUTCOME_LABELS[key] ?? key}`);
+  if (outcomes.length > 0) lines.push(`answered, not failed: ${outcomes.join(' · ')}`);
+  return lines;
+}
+
+/**
+ * How each tool fared for the model. The failure rate is what the model was told, so a false
+ * failure (a search that found nothing reported as "exit code 1") shows here as a rate; "switched
+ * tool" is the model routing around this one after it failed, which is the cost the rate hides.
+ */
+function Tools({ tools }: { tools?: StatsTools }): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  if (!tools) {
+    return (
+      <Card>
+        <CardHead title="tools" />
+        <Text style={styles.cardNote}>this server does not record tool calls yet: update it.</Text>
+      </Card>
+    );
+  }
+  const calls = tools.rows.reduce((n, row) => n + row.calls, 0);
+  const failures = tools.rows.reduce((n, row) => n + row.failures, 0);
+  return (
+    <Card>
+      <CardHead title="tools" trailing={calls > 0 ? `${calls} calls · ${toolFailurePct({ calls, failures })} failed` : undefined} />
+      {!tools.backfilled ? <Text style={styles.codeNote}>reading the past conversations in: the history is still filling.</Text> : null}
+      {!tools.filterApplied ? (
+        <Text style={styles.codeNote}>the filter reaches tools by conversation and source only: this is the whole window.</Text>
+      ) : null}
+      {tools.rows.length === 0 ? <Text style={styles.cardNote}>no tool was called in this window.</Text> : null}
+      <View style={styles.rank}>
+        {tools.rows.map(row => (
+          <View key={row.tool} style={styles.rankRow}>
+            <View style={styles.rankTop}>
+              <Text style={[styles.rankName, styles.mono]} numberOfLines={1}>
+                {row.tool}
+              </Text>
+              <Text style={[styles.rankCost, row.failures > 0 && styles.rankCostWarn]}>{toolFailurePct(row)}</Text>
+            </View>
+            {toolRowLines(row).map(line => (
+              <Text key={line} style={styles.rankNums}>
+                {line}
+              </Text>
+            ))}
+            {row.topErrors.map(error => (
+              <Text key={error.kind} style={styles.codeNote} numberOfLines={2}>
+                {`${error.count}× ${error.kind}`}
+              </Text>
+            ))}
+          </View>
+        ))}
+      </View>
+      {tools.since ? <Text style={styles.codeNote}>{`recorded since ${tools.since.slice(0, 10)}.`}</Text> : null}
     </Card>
   );
 }
