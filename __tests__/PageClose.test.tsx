@@ -61,15 +61,16 @@ test('three levels into settings, the cross lands on the conversation in one pre
   expect(labelsOf(tree)).not.toContain('Open models');
   expect(labelsOf(tree)).toContain('Message to send');
 
-  // Settings open again at their index, not on the page the cross left.
+  // Settings come back where they were left: the cross puts the settings away, it does not throw
+  // away where the owner was (owner, 2026-10-26: "tu gardes ce qu'il y a à droite"). A transient
+  // editor (a tag, a provider form) comes back as its parent instead, since its draft is gone.
   await openSettings(tree);
-  expect(labelsOf(tree)).toContain('Open models');
-  expect(labelsOf(tree)).not.toContain('Back to models');
+  expect(labelsOf(tree)).toContain('Back to models');
   await unmount(tree);
 });
 
-test('the cross of a jobs page leaves jobs, and only jobs', async () => {
-  // A desktop: the list stays beside the settings page, so jobs can open over it.
+test('a page replaces the one on screen: opening jobs from settings does not stack them', async () => {
+  // A desktop: the list stays beside the page, which is why two pages could be built at once.
   windowIs(1600);
   const tree = await renderApp();
   await press(tree, 'Open settings');
@@ -79,9 +80,13 @@ test('the cross of a jobs page leaves jobs, and only jobs', async () => {
   await press(tree, 'Add job');
   await waitFor(() => labelsOf(tree).includes('Leave jobs'));
 
+  // One page at a time. The settings page used to stay mounted under the jobs page: invisible,
+  // and still clickable behind it (owner, 2026-10-26).
+  expect(labelsOf(tree)).not.toContain('Close settings');
+  expect(labelsOf(tree)).not.toContain('Open models');
+
   await press(tree, 'Leave jobs');
   await waitFor(() => !labelsOf(tree).includes('Add job'));
-  // The settings page under the jobs layer is still there: its cross is its own.
-  expect(labelsOf(tree)).toContain('Close settings');
+  expect(labelsOf(tree)).toContain('Message to send');
   await unmount(tree);
 });

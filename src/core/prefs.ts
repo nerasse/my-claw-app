@@ -25,6 +25,17 @@ export interface Prefs {
   setupSkipped: string[];
   /** Audio playback speed, one of PLAYBACK_RATES: kept from one note to the next, like a podcast app. */
   playbackRate: number;
+  /**
+   * The desktop columns as they were left, as JSON (`core/panes.ts` reads it back). A dragged
+   * width and a folded list are furniture, and furniture does not move back by itself.
+   */
+  panes: string;
+  /**
+   * The right-hand pane as it was left: which page, which settings page, which file. JSON, read by
+   * `core/rightPane.ts`. Local on purpose -- a phone shows one thing at a time, and a reload on the
+   * desk should come back to the file that was open.
+   */
+  rightPane: string;
 }
 
 export { DEFAULT_SERVER_URL };
@@ -38,6 +49,8 @@ const DEFAULTS: Prefs = {
   collapsedFolders: [],
   setupSkipped: [],
   playbackRate: 1,
+  panes: '',
+  rightPane: '',
 };
 
 const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
@@ -109,6 +122,8 @@ class PrefsStore {
         collapsedFolders: parseCollapsedFolders(raw.collapsedFolders),
         setupSkipped: parseCollapsedFolders(raw.setupSkipped),
         playbackRate: parsePlaybackRate(raw.playbackRate),
+        panes: raw.panes ?? '',
+        rightPane: raw.rightPane ?? '',
       };
     } catch {
       this.current = DEFAULTS;

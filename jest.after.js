@@ -10,6 +10,10 @@ const { act } = require('react-test-renderer');
 
 beforeEach(() => {
   clearAllDrafts();
+  // The stores that outlive a render tree: one test's open page or dragged column would
+  // otherwise be the next one's starting state.
+  require('./src/core/rightPane').rightPane.reset();
+  require('./src/core/panes').panes.reset();
 });
 
 afterEach(async () => {

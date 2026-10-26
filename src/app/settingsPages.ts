@@ -168,3 +168,32 @@ export const PAGE_REQUESTS: ReadonlyArray<{
   // the file editor ended up checking MCP names it had against skill names it did not.
   { match: judgesCatalogNames, requests: [encodeSkillsList] },
 ];
+
+/**
+ * The page Settings comes back to when it is reopened.
+ *
+ * A settings page is not always a place: the tag editor, the model editor, a provider form, a
+ * scope editor and the setup hold a draft that is dropped when the page closes, so reopening one
+ * of them empty would look like a half-erased screen. They come back as the page they belong
+ * under; every other page is a place the owner was reading and comes back as itself.
+ */
+const TRANSIENT: ReadonlySet<SettingsPage> = new Set<SettingsPage>([
+  'tag-editor',
+  'model-edit',
+  'provider-edit',
+  'provider-add',
+  'provider-env',
+  'scope',
+  'instruction',
+  'instruction-layer',
+  'workspace-picker',
+  'number',
+  'file',
+  'newagent',
+  'model-picker',
+  'setup',
+]);
+
+export function reopenPage(page: SettingsPage): SettingsPage {
+  return TRANSIENT.has(page) ? parentOf(page) : page;
+}

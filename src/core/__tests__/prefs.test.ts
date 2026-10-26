@@ -11,7 +11,7 @@ beforeEach(() => {
 describe('prefs.hydrate', () => {
   test('falls back to defaults when nothing is stored: a new install has no address', async () => {
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1 });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, panes: '', rightPane: '' });
     expect(DEFAULT_SERVER_URL).toBe('');
     expect(bridge.prefsSet).not.toHaveBeenCalled();
     expect(prefs.isHydrated()).toBe(true);
@@ -20,7 +20,7 @@ describe('prefs.hydrate', () => {
   test('ignores a corrupted theme mode and a blank url', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ themeMode: 'neon', serverUrl: '   ', lastThreadId: '' });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1 });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, panes: '', rightPane: '' });
     expect(bridge.prefsSet).not.toHaveBeenCalled();
   });
 

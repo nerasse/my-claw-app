@@ -257,7 +257,25 @@ import { DiagnosticsScreen } from './DiagnosticsScreen';
 import { ArchivesScreen } from './ArchivesScreen';
 import { BrowserScreen } from './BrowserScreen';
 import { browserFromLocation, closeShownWindow } from '../core/browserLive';
-import { panes } from '../core/panes';
+import { panes, readPanes } from '../core/panes';
+import {
+  closeViewer,
+  readRightPane,
+  rightPane,
+  setSettingsPage,
+  setAgentsGlobalOpen,
+  setAgentsOpen,
+  setArchivesOpen,
+  setBrowserOpen,
+  setFilesOpen,
+  setInstructionsPageOpen,
+  setJobsOpen,
+  setSettingsOpen,
+  setStatsOpen,
+  setStatusOpen,
+  setSystemFilesOpen,
+  useRightPane,
+} from '../core/rightPane';
 import { PagePane, PinnedColumn, ViewerPane } from './DesktopColumns';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
@@ -293,7 +311,7 @@ import {
   readsAgentsConfig,
   PAGE_REQUESTS,
   READS_INSTRUCTIONS_PAGES,
-  type SettingsPage,
+  reopenPage,
 } from './settingsPages';
 import { closeTopLayer } from './backCascade';
 import { AgentModelPickerPage } from './AgentModelPickerPage';
@@ -510,11 +528,24 @@ export function AppShell(): React.JSX.Element {
     sessionStore.setFolderOrder(order);
     connection.send(encodeFolderOrder(order)).catch(() => {});
   }, []);
-  const [settingsOpenState, setSettingsOpen] = useState(false);
   // The first run (docs: setup assistant): until it is finished or skipped, the setup page is the
   // whole app. Derived into settingsOpen, so nothing that closes settings can leave it.
   const [setupGate, setSetupGate] = useState(false);
-  const settingsOpen = settingsOpenState || setupGate;
+  // The right-hand column, as one value: which page it holds. Opening a page replaces whatever
+  // it held, so two pages can never be drawn at once -- the bug of 2026-10-26, where Settings
+  // opened under Jobs and the browser stayed under the settings page. `docs/right-pane.md`.
+  const right = useRightPane();
+  const settingsOpen = right.page === 'settings' || setupGate;
+  const filesOpen = right.page === 'files';
+  const archivesOpen = right.page === 'archives';
+  const browserOpen = right.page === 'browser';
+  const statusOpen = right.page === 'status';
+  const statsOpen = right.page === 'stats';
+  const systemFilesOpen = right.page === 'system-files';
+  const instructionsPageOpen = right.page === 'instructions';
+  const jobsOpen = right.window === 'jobs';
+  const agentsOpen = right.window === 'agents';
+  const agentsGlobalOpen = right.window === 'agents-global';
   // Where the default-model picker returns: the agents list, or the assistant that opened it.
   const [modelPickerFrom, setModelPickerFrom] = useState<'setup' | 'account' | null>(null);
   /** The get started opens Devices on its invitation, and Back returns to it. */
@@ -546,9 +577,15 @@ export function AppShell(): React.JSX.Element {
     setSettingsPage('account');
     connection.send(encodeAccounts({ type: 'accounts.login', provider: added })).catch(() => {});
   }, [accountsFrame]);
-  /** Which settings page is showing: the index lists the categories, every other value is a
-   *  page under it, and back always walks one level up. */
-  const [settingsPage, setSettingsPage] = useState<SettingsPage>('index');
+  /**
+   * Which settings page is showing: the index lists the categories, every other value is a
+   * page under it, and back always walks one level up.
+   *
+   * It lives in the right-pane store with the rest of the column, because it is what a reload
+   * comes back to: reopening the index every time made the owner walk three levels again to
+   * reach the screen he was working in (2026-10-26).
+   */
+  const settingsPage = right.settingsPage;
   /** The agent detail page shows this key, taken from the last agents.config.result. */
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -646,10 +683,6 @@ export function AppShell(): React.JSX.Element {
   /** Workspace a brand-new thread picked before the server knew the conversation existed. */
   const pendingWorkspaceRef = useRef(new Map<string, string>());
   const [skillsError, setSkillsError] = useState<string | null>(null);
-  const [skillViewer, setSkillViewer] = useState<{
-    url: string;
-    skill: SkillEntry;
-  } | null>(null);
   /** The transfer flow of one skill, one sheet per step: what to do, where to, and the replace
    *  confirmation when the name is already taken there. The catalog answer closes it. */
   const [skillMenu, setSkillMenu] = useState<SkillEntry | null>(null);
@@ -714,166 +747,76 @@ export function AppShell(): React.JSX.Element {
     setChatFontScale(scale);
   }, []);
   const [locationEnabled, setLocationEnabled] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<SessionFileMeta | null>(null);
-  // The gallery holds the run of pictures the tapped one belongs to, and where it was in it.
-  const [imageViewer, setImageViewer] = useState<{
-    images: MediaItem[];
-    index: number;
-  } | null>(null);
-  const [textViewer, setTextViewer] = useState<{
-    url: string;
-    filename: string;
-    /** Which rendering the reader picks: markdown prose, or a coloured code page. */
-    kind?: FileKind;
-  } | null>(null);
-  const [videoViewer, setVideoViewer] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
-  const [svgViewer, setSvgViewer] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
-  const [pdfViewer, setPdfViewer] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
-  const [htmlViewer, setHtmlViewer] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
-  /** A document read as text, and an archive read as a list: both are the server's rendering. */
-  const [officeViewer, setOfficeViewer] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
-  const [archiveViewer, setArchiveViewer] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
-  /** A file with no preview: name, size and a download button. */
-  const [fileViewer, setFileViewer] = useState<{
-    url: string;
-    filename: string;
-    sizeBytes?: number;
-  } | null>(null);
   /**
-   * Whether the viewer on screen is full screen instead of beside the conversation. Reset on
-   * every open: "it opens on the right" is the promise, the toggle is the exception.
-   */
-  const [viewerExpanded, setViewerExpanded] = useState(false);
-  /**
-   * One viewer at a time.
+   * The viewer on screen, and whether it asked for the whole window.
    *
-   * Opening a file closes whatever was up. The viewers used to overlap only because an overlay
-   * made every one of them unreachable while open; beside the conversation that stops being
-   * true, and a second tap must replace the pane rather than stack a second reader into it or
-   * leave a hidden state that reopens on the next file.
+   * One value for ten viewers, because there is one slot: opening a film while a PDF is up
+   * replaces it. That was already the rule, spelled as ten setters every opener had to call in the
+   * right order; the shape of the value is where it belongs. The gallery, a text page and a film
+   * are the same union, so "what is open" is one question with one answer -- and it is what a
+   * reload comes back to.
    */
-  const closeViewers = useCallback((): void => {
-    setImageViewer(null);
-    setTextViewer(null);
-    setVideoViewer(null);
-    setSvgViewer(null);
-    setPdfViewer(null);
-    setHtmlViewer(null);
-    setOfficeViewer(null);
-    setArchiveViewer(null);
-    setFileViewer(null);
-    setSkillViewer(null);
+  const viewer = right.viewer;
+  const viewerExpanded = right.expanded;
+
+  // Each viewer as the pair its screen reads: its payload, or null.
+  const imageViewer = viewer?.kind === 'image' ? viewer : null;
+  const textViewer = viewer?.kind === 'text' ? viewer : null;
+  const videoViewer = viewer?.kind === 'video' ? viewer : null;
+  const svgViewer = viewer?.kind === 'svg' ? viewer : null;
+  const pdfViewer = viewer?.kind === 'pdf' ? viewer : null;
+  const htmlViewer = viewer?.kind === 'html' ? viewer : null;
+  const officeViewer = viewer?.kind === 'office' ? viewer : null;
+  const archiveViewer = viewer?.kind === 'archive' ? viewer : null;
+  const fileViewer = viewer?.kind === 'file' ? viewer : null;
+  const skillViewer = useMemo(
+    () => (viewer?.kind === 'skill' ? { url: viewer.url, skill: viewer.skill as SkillEntry } : null),
+    [viewer],
+  );
+
+  // Every opener is one write on the same slot: what was on screen is replaced, and the next
+  // viewer starts beside the conversation (the toggle is the exception, not the promise). Stable
+  // identities on purpose: the shell hands these to the memoized chat list, which stops holding
+  // when one changes on every render.
+  const openImage = useCallback((images: MediaItem[], index: number): void => {
+    rightPane.openViewer({ kind: 'image', images, index });
   }, []);
-  // The two rules every opener shares, spelled once in each: what was on screen closes, and the
-  // next viewer starts beside the conversation. Stable identities on purpose: the shell hands
-  // these to the memoized chat list, which stops holding when one changes on every render.
-  const openImage = useCallback(
-    (images: MediaItem[], index: number): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setImageViewer({ images, index });
-    },
-    [closeViewers],
-  );
-  const openTextViewer = useCallback(
-    (target: { url: string; filename: string; kind?: FileKind }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setTextViewer(target);
-    },
-    [closeViewers],
-  );
-  const openVideoViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setVideoViewer(target);
-    },
-    [closeViewers],
-  );
-  const openSvgViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setSvgViewer(target);
-    },
-    [closeViewers],
-  );
-  const openPdfViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setPdfViewer(target);
-    },
-    [closeViewers],
-  );
-  const openHtmlViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setHtmlViewer(target);
-    },
-    [closeViewers],
-  );
-  const openOfficeViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setOfficeViewer(target);
-    },
-    [closeViewers],
-  );
-  const openArchiveViewer = useCallback(
-    (target: { url: string; filename: string }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setArchiveViewer(target);
-    },
-    [closeViewers],
-  );
-  const openFileViewer = useCallback(
-    (target: { url: string; filename: string; sizeBytes?: number }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setFileViewer(target);
-    },
-    [closeViewers],
-  );
-  const openSkillViewer = useCallback(
-    (target: { url: string; skill: SkillEntry }): void => {
-      closeViewers();
-      setViewerExpanded(false);
-      setSkillViewer(target);
-    },
-    [closeViewers],
-  );
+  const openTextViewer = useCallback((target: { url: string; filename: string; kind?: FileKind }): void => {
+    rightPane.openViewer({ kind: 'text', url: target.url, filename: target.filename, ...(target.kind ? { file: target.kind } : {}) });
+  }, []);
+  const openVideoViewer = useCallback((target: { url: string; filename: string }): void => {
+    rightPane.openViewer({ kind: 'video', ...target });
+  }, []);
+  const openSvgViewer = useCallback((target: { url: string; filename: string }): void => {
+    rightPane.openViewer({ kind: 'svg', ...target });
+  }, []);
+  const openPdfViewer = useCallback((target: { url: string; filename: string }): void => {
+    rightPane.openViewer({ kind: 'pdf', ...target });
+  }, []);
+  const openHtmlViewer = useCallback((target: { url: string; filename: string }): void => {
+    rightPane.openViewer({ kind: 'html', ...target });
+  }, []);
+  const openOfficeViewer = useCallback((target: { url: string; filename: string }): void => {
+    rightPane.openViewer({ kind: 'office', ...target });
+  }, []);
+  const openArchiveViewer = useCallback((target: { url: string; filename: string }): void => {
+    rightPane.openViewer({ kind: 'archive', ...target });
+  }, []);
+  const openFileViewer = useCallback((target: { url: string; filename: string; sizeBytes?: number }): void => {
+    rightPane.openViewer({ kind: 'file', ...target });
+  }, []);
+  const openSkillViewer = useCallback((target: { url: string; skill: SkillEntry }): void => {
+    rightPane.openViewer({ kind: 'skill', url: target.url, skill: target.skill });
+  }, []);
+  /** Closes whatever viewer is up, from one place: the back key, the cross of a viewer, a send. */
+  const closeViewers = closeViewer;
   const [sessionFiles, setSessionFiles] = useState<SessionFileMeta[]>([]);
   const [filesTotal, setFilesTotal] = useState(0);
-  const [archivesOpen, setArchivesOpen] = useState(false);
-  // A web tab opened on the browser (every window, or one popped out) opens on it, full screen.
+  // A web tab opened on the browser (every window, or one popped out) opens on it.
   const [browserLaunch] = useState(browserFromLocation);
   const browserWindow = browserLaunch?.window ?? null;
-  const [browserOpen, setBrowserOpen] = useState(browserLaunch !== null);
   // The browser page with the whole window to itself (owner, 2026-09-29: a tab with every screen).
   const [browserFull, setBrowserFull] = useState(browserLaunch !== null);
   const [browserError, setBrowserError] = useState<string | null>(null);
@@ -910,16 +853,8 @@ export function AppShell(): React.JSX.Element {
   /** Which group of the model picker is open: its own stack, walked by the back key. */
   const [modelPicker, setModelPicker] = useState<PickerState>(pickerStart);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
-  /** The fullscreen status page of a conversation, an absolute layer over everything else. */
-  const [statusOpen, setStatusOpen] = useState(false);
-  /** The install-wide statistics page, reached from More: about every conversation, not one. */
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [systemFilesOpen, setSystemFilesOpen] = useState(false);
   /** The instructions page of a conversation, and whether one of its files is being edited. */
-  const [instructionsPageOpen, setInstructionsPageOpen] = useState(false);
   const [instructionsPageEditing, setInstructionsPageEditing] = useState(false);
-  /** The scheduled-tasks page, another absolute layer; the editor stacks over the list. */
-  const [jobsOpen, setJobsOpen] = useState(false);
   /** The job being edited: null = the list, 'new' = a blank editor, an entry = that job. */
   const [jobsEditor, setJobsEditor] = useState<JobEntry | 'new' | null>(null);
   const [jobsSaving, setJobsSaving] = useState(false);
@@ -927,9 +862,6 @@ export function AppShell(): React.JSX.Element {
   const [jobToDelete, setJobToDelete] = useState<JobEntry | null>(null);
   /** The runs page of one job, stacked over the jobs list; a run opens as a chat over it. */
   const [jobSessions, setJobSessions] = useState<{ jobId: string; jobName: string } | null>(null);
-  const [agentsOpen, setAgentsOpen] = useState(false);
-  /** The drawer's Sub-Agents page: shared agents from every conversation, not one roster. */
-  const [agentsGlobalOpen, setAgentsGlobalOpen] = useState(false);
   const [subagentView, setSubagentView] = useState<SubAgentView | null>(null);
   const [subagentAction, setSubagentAction] = useState<'reset' | 'kill' | null>(null);
   /**
@@ -1026,6 +958,26 @@ export function AppShell(): React.JSX.Element {
   // Where the thread on screen came from: the hardware back press sends a conversation
   // opened from the archived list back to that list, instead of exiting the app.
   const fromArchivesRef = useRef(false);
+
+  /**
+   * The three pages that belong to the conversation on screen: their body, with no navigation.
+   *
+   * Written here rather than in their openers because a conversation switch has to re-read them
+   * for the new thread without opening anything else (`enterThread`), and two copies of "ask for
+   * that thread's files" would drift the way every duplicated path in this shell has.
+   */
+  const openFilesInner = useCallback((threadId: string) => {
+    setFilesError(null);
+    rightPane.show('files');
+    connection.send(encodeFilesList(threadId)).catch(() => {});
+  }, []);
+  const openInstructionsInner = useCallback((threadId: string) => {
+    sessionInstructionsStore.open(threadId);
+    setInstructionsPageEditing(false);
+    rightPane.show('instructions');
+    connection.send(encodeSessionInstructionsGet(threadId)).catch(() => {});
+  }, []);
+
   const selectThread = useCallback((threadId: string | null) => {
     activeThreadRef.current = threadId;
     setActiveThread(threadId);
@@ -1059,14 +1011,33 @@ export function AppShell(): React.JSX.Element {
       chatStore.markRead(threadId);
       setAutoFocusHero(false);
       setDrawerOpen(false);
-      setSettingsOpen(false);
-      setArchivesOpen(false);
-      // An install-wide page must not stay on top of the conversation the owner just picked: on a
-      // phone the pages cover the chat, so it would look like the tap did nothing.
-      statsStore.close();
-      setStatsOpen(false);
-      setAgentsOpen(false);
-      setAgentsGlobalOpen(false);
+      /**
+       * The right-hand column, when the owner switches conversation.
+       *
+       * A page *about a conversation* (its files, its status, its instructions) is re-read for
+       * the thread now on screen: leaving yesterday's files in the column while another
+       * conversation is on the left is the one outcome nobody wants. A page about the install
+       * (settings, statistics, the browser, the archives) has no thread in it and simply stays,
+       * which is what the owner asked for -- "quand on switch de session ça garde ce qu'il y a à
+       * droite". On a phone nothing stays: a page covers the conversation, so the tap would have
+       * looked like it did nothing.
+       */
+      if (layout.pinnedDrawer || layout.sidePane) {
+        if (filesOpen) openFilesInner(threadId);
+        else if (statusOpen) {
+          statusStore.open(threadId);
+          connection.send(encodeStatusWatch(threadId)).catch(() => {});
+        } else if (instructionsPageOpen) openInstructionsInner(threadId);
+      } else {
+        rightPane.close();
+        statsStore.close();
+      }
+      // A page that took the window (jobs, the rosters) goes whichever window this is: it covers
+      // the conversation, so a tap that landed on one must not leave it on top of the other. Read
+      // from the store rather than from the render, or this callback changes identity every time
+      // a page opens -- and everything that depends on `openThread` (the boot effect among them)
+      // would run again, which reopened the route and closed the very page just opened.
+      rightPane.closeWindow();
       // The run that raised a notification is the one now on screen: clear it, whichever way the
       // owner arrived. A tap cancels its own notification, the drawer and the deep link did not.
       dismissThreadNotification(threadId);
@@ -1083,7 +1054,7 @@ export function AppShell(): React.JSX.Element {
       // the picker never shows the previous conversation's choice.
       connection.send(encodeModelGet(threadId));
     },
-    [selectThread],
+    [selectThread, filesOpen, instructionsPageOpen, layout.pinnedDrawer, layout.sidePane, openFilesInner, openInstructionsInner, statusOpen],
   );
 
   const openThread = useCallback((threadId: string) => enterThread(threadId, null), [enterThread]);
@@ -1155,10 +1126,15 @@ export function AppShell(): React.JSX.Element {
     [workspacePicker, selectThread],
   );
 
-  /** Settings always open on the category index, never inside yesterday's page. */
+  /**
+   * Settings opens on the page the owner left it on, which is what "garder ce qu'il y a à droite"
+   * means (owner, 2026-10-26): coming back to the index every time meant walking three levels again
+   * to reach the screen being worked in. A page that was a transient editor when it closed comes
+   * back as its parent (`reopenPage`), because the draft it held is gone with it.
+   */
   const openSettings = useCallback(() => {
-    setSettingsPage('index');
-    setSettingsOpen(true);
+    setSettingsPage(page => reopenPage(page));
+    rightPane.show('settings');
     setAutoFocusHero(false);
   }, []);
 
@@ -1560,6 +1536,14 @@ export function AppShell(): React.JSX.Element {
     // what the user sees on the first frame.
     prefs.hydrate().then(stored => {
       setUrl(stored.serverUrl);
+      // What was on the desk last time: the width of both columns and the page in the right one.
+      // Read here, once, because the device bag is the only place that outlives the tab. On a
+      // phone neither is restored: a page there covers the conversation, and the app opens on the
+      // list so the owner picks where to go (the rule `lastThreadId` already follows).
+      if (layout.pinnedDrawer) {
+        panes.hydrate(readPanes(stored.panes));
+        rightPane.hydrate(readRightPane(stored.rightPane));
+      }
       serversStore.hydrate().catch(() => {});
       if (Platform.OS === 'ios') {
         getDeviceInfo().then(storedIdentity => {
@@ -1621,6 +1605,9 @@ export function AppShell(): React.JSX.Element {
       offPending();
       instance?.remove();
     };
+    // `layout` is read once at boot on purpose: a window resized later must not re-run the boot
+    // sequence (reconnect, re-ask every catalogue, reload the thread).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openThread, openStatus, selectThread, ringOnScreen]);
 
   /**
@@ -1665,13 +1652,13 @@ export function AppShell(): React.JSX.Element {
         jobSessionsRef,
         setJobRuns,
         imageViewer,
-        setImageViewer,
+        setImageViewer: closeViewers,
         textViewer,
-        setTextViewer,
+        setTextViewer: closeViewers,
         videoViewer,
-        setVideoViewer,
+        setVideoViewer: closeViewers,
         fileViewer,
-        setFileViewer,
+        setFileViewer: closeViewers,
         approvalCount: approvals.length,
         setApprovals,
         fileToDelete,
@@ -1722,7 +1709,7 @@ export function AppShell(): React.JSX.Element {
         skillReplace,
         setSkillReplace,
         skillViewer,
-        setSkillViewer,
+        setSkillViewer: closeViewers,
         setSkillsNotice,
         settingsOpen,
         setSettingsOpen,
@@ -1837,6 +1824,7 @@ export function AppShell(): React.JSX.Element {
       closeWorkspaceFilter,
       videoViewer,
       fileViewer,
+      closeViewers,
       layout.pinnedDrawer,
     ],
   );
@@ -1920,10 +1908,15 @@ export function AppShell(): React.JSX.Element {
   );
   const jobsClose = useMemo(() => ({ close: closeJobs, label: 'Leave jobs' }), [closeJobs]);
 
-  /** Something other than the conversation is showing: settings, the archives, the files. */
+  /**
+   * Something other than the conversation is showing: a page in the column, or one that took the
+   * window (jobs, the agent rosters). One list, because a phone decides the same question -- is
+   * the conversation on screen? -- for both kinds.
+   */
   const pageOpen =
-    pairingOpen || settingsOpen || archivesOpen || filesOpen || browserOpen || statusOpen || statsOpen || systemFilesOpen || instructionsPageOpen;
-  /** No conversation on a phone: the list is the screen itself (the `home` mount of Drawer). */
+    pairingOpen ||
+    right.page !== 'none' ||
+    right.window !== null;
   // The pairing screen is a page too: on a first launch there is no conversation, and the list
   // would cover it.
   const homeList = !layout.pinnedDrawer && !layout.sidePane && !pageOpen && !pairingOpen && activeThread === null;
@@ -3396,7 +3389,7 @@ export function AppShell(): React.JSX.Element {
       );
       // A move changes the tier the open document is addressed by, so its URL is stale: the
       // reader would keep showing a file that is no longer there.
-      if (mode === 'move') setSkillViewer(null);
+      if (mode === 'move') closeViewer();
       connection
         .send(encodeSkillsTransfer(mode, skill, target, overwrite))
         .catch(() => {});
@@ -4109,7 +4102,7 @@ export function AppShell(): React.JSX.Element {
     imageViewer || textViewer || videoViewer || svgViewer || pdfViewer || htmlViewer || officeViewer || archiveViewer || fileViewer || skillViewer,
   );
   const viewerInPane = split && anyViewerOpen && !viewerExpanded;
-  const toggleViewerFullscreen = useCallback((): void => setViewerExpanded(expanded => !expanded), []);
+  const toggleViewerFullscreen = useCallback((): void => rightPane.setExpanded(!rightPane.get().expanded), []);
   const fullscreenToggle = split ? toggleViewerFullscreen : undefined;
   const viewerLayers = (
     <>
@@ -4119,7 +4112,7 @@ export function AppShell(): React.JSX.Element {
           index={imageViewer.index}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setImageViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4130,7 +4123,7 @@ export function AppShell(): React.JSX.Element {
           kind={textViewer.kind}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setTextViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4140,7 +4133,7 @@ export function AppShell(): React.JSX.Element {
           filename={videoViewer.filename}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setVideoViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4150,7 +4143,7 @@ export function AppShell(): React.JSX.Element {
           filename={svgViewer.filename}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setSvgViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4160,7 +4153,7 @@ export function AppShell(): React.JSX.Element {
           filename={pdfViewer.filename}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setPdfViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4170,7 +4163,7 @@ export function AppShell(): React.JSX.Element {
           filename={htmlViewer.filename}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setHtmlViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4182,7 +4175,7 @@ export function AppShell(): React.JSX.Element {
           kind="text"
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setOfficeViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4193,7 +4186,7 @@ export function AppShell(): React.JSX.Element {
           filename={archiveViewer.filename}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setArchiveViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4204,7 +4197,7 @@ export function AppShell(): React.JSX.Element {
           sizeBytes={fileViewer.sizeBytes}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setFileViewer(null)}
+          onClose={closeViewers}
         />
       ) : null}
 
@@ -4214,7 +4207,7 @@ export function AppShell(): React.JSX.Element {
           skill={skillViewer.skill}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
-          onClose={() => setSkillViewer(null)}
+          onClose={closeViewers}
           onActions={() => setSkillMenu(skillViewer.skill)}
         />
       ) : null}
