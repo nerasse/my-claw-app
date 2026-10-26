@@ -133,9 +133,9 @@ test('the label holds still when the run ends', async () => {
   await unmount(tree);
 });
 
-describe('a redacted engine', () => {
-  // The Claude bridge sends a count and no text, so there is nothing to expand: a control that
-  // opens nothing is worse than no control.
+describe('a thought the endpoint kept to itself', () => {
+  // The Responses API reports a count for every call and words for only part of them, so there is
+  // nothing to expand: a control that opens nothing is worse than no control.
   test('shows a count and exposes no button', async () => {
     const tree = await renderApp();
     await ReactTestRenderer.act(async () => {
@@ -144,7 +144,8 @@ describe('a redacted engine', () => {
     });
     await waitFor(() => textsOf(tree).some(text => text.includes('Reasoning')));
 
-    expect(textsOf(tree)).toContain('Reasoning · 1.2k tokens');
+    expect(textsOf(tree)).toContain('Reasoning');
+    expect(textsOf(tree)).toContain('1.2k tokens');
     expect(labelsOf(tree)).not.toContain('Reasoning');
     await unmount(tree);
   });
@@ -157,19 +158,21 @@ describe('a redacted engine', () => {
       chatStore.appendDelta(THREAD, 's1', 'done');
       chatStore.endStream(THREAD, 's1');
     });
-    await waitFor(() => textsOf(tree).some(text => text.includes('Reasoning · 800 tokens')));
+    await waitFor(() => textsOf(tree).some(text => text.includes('800 tokens')));
 
-    expect(textsOf(tree)).toContain('Reasoning · 800 tokens');
+    expect(textsOf(tree)).toContain('Reasoning');
+    expect(textsOf(tree)).toContain('800 tokens');
     await unmount(tree);
   });
 });
 
-test('a replayed turn from a redacted engine still says it thought', async () => {
+test('a replayed turn whose thought had no words still says it thought, and for how long', async () => {
   const tree = await renderWith([
     { id: 'h-0', role: 'user', text: '9.11 ou 9.8 ?', ts: '2026-01-01T10:00:00.000Z' },
-    { id: 'h-1', role: 'assistant', text: '9.11', ts: '2026-01-01T10:00:01.000Z', reasoningTokens: 12300 },
+    { id: 'h-1', role: 'assistant', text: '9.11', ts: '2026-01-01T10:00:01.000Z', reasoningTokens: 12300, reasoningMs: 9_300 },
   ]);
-  await waitFor(() => textsOf(tree).some(text => text.includes('Reasoning · 12.3k tokens')), 60);
+  await waitFor(() => textsOf(tree).some(text => text.includes('12.3k tokens')), 60);
+  expect(textsOf(tree)).toContain('9.3 s');
   await unmount(tree);
 });
 

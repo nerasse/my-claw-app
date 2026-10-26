@@ -42,8 +42,8 @@ export interface TextItem {
   /** A history bubble whose reasoning stayed on the server, this long: `reasoningFetch.ts`. */
   reasoningChars?: number;
   /**
-   * Token estimate from an engine that redacts its thinking (the Claude bridge): there is a count
-   * to show and nothing to expand.
+   * What the call spent thinking, beside the words or alone when the endpoint kept them: then there
+   * is a count to show and nothing to expand.
    */
   reasoningTokens?: number;
   /**
@@ -1933,12 +1933,19 @@ class ChatStoreImpl {
     if (item?.kind === 'text' && item.waitingSince !== undefined) this.patch(threadId, id, { waitingSince: undefined });
   }
 
-  /** Latest estimate from a redacted engine; the server sends a running total, so it replaces. */
-  setReasoningTokens(threadId: string, id: string, tokens: number, since?: string): void {
+  /**
+   * What the call that wrote into this bubble spent thinking, once it has answered.
+   *
+   * It touches no span: the words were timed as they streamed, and the span of a thought with no
+   * words comes on the frame (`ms`). Opening one here measured the time between the count and the
+   * end of the stream, and wrote that over the real duration.
+   */
+  setReasoningTokens(threadId: string, id: string, tokens: number, ms?: number): void {
     if (!this.streams.has(id)) return;
-    this.openReasoningSpan(threadId, id, since);
     this.endWaiting(threadId, id);
-    this.patch(threadId, id, { reasoningTokens: tokens });
+    const item = this.getItems(threadId).find(entry => entry.id === id);
+    const timed = item?.kind === 'text' && (item.reasoningMs !== undefined || this.reasoningStart.has(id));
+    this.patch(threadId, id, { reasoningTokens: tokens, ...(ms !== undefined && ms > 0 && !timed ? { reasoningMs: ms } : {}) });
   }
 
   /**

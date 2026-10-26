@@ -195,17 +195,17 @@ export interface ReasoningDeltaFrame {
 }
 
 /**
- * Running token estimate while a redacted engine thinks (the Claude bridge never sends the text).
- * No reasoning text will follow, so the bubble shows a count and opens nothing.
+ * What the call that wrote into bubble `id` spent thinking, sent once it has answered: beside the
+ * words when there were some, alone when the endpoint kept them (the server's
+ * docs/reasoning-visibility.md, "A thought with no words"). It neither opens nor closes a span.
  */
 export interface ReasoningTokensFrame {
   type: 'chat.reasoning.tokens';
   id: string;
   threadId: string;
   tokens: number;
-  /** ISO instant the phase opened. Same rule as ReasoningDeltaFrame.since: the thinking is just as
-   *  long when the engine reports a count and no text. */
-  since?: string;
+  /** How long the thought lasted, set only when it streamed no words for this side to time. */
+  ms?: number;
 }
 
 export interface StreamDoneFrame {

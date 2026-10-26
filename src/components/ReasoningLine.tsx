@@ -21,20 +21,54 @@ function compactCount(tokens: number): string {
  */
 function ThinkingElapsed({ since }: { since: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  return <Text style={styles.elapsed}>{formatSpan(useElapsed(since))}</Text>;
+  return <Text style={styles.figure}>{formatSpan(useElapsed(since))}</Text>;
+}
+
+/**
+ * What a call spent thinking and for how long, after the label: `1.2k tokens · 12 s`.
+ *
+ * The same figures in both states of the line, so a thought the endpoint summarised and one it kept
+ * to itself read alike, one with a chevron and one without.
+ */
+function ThinkingFigures({
+  count,
+  startedAt,
+  durationMs,
+  running,
+}: {
+  count: string;
+  startedAt?: number;
+  durationMs?: number;
+  running: boolean;
+}): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  const elapsed =
+    running && startedAt !== undefined ? (
+      <ThinkingElapsed since={startedAt} />
+    ) : durationMs !== undefined ? (
+      <Text style={styles.figure}>{formatSpan(durationMs)}</Text>
+    ) : null;
+  if (!count && !elapsed) return null;
+  return (
+    <View style={styles.figures}>
+      {count ? <Text style={styles.figure}>{`${count} tokens`}</Text> : null}
+      {count && elapsed ? <Text style={styles.figure}>·</Text> : null}
+      {elapsed}
+    </View>
+  );
 }
 
 /**
  * What the model thought, as one muted line at the top of its own bubble, collapsed by default and
  * expanded on tap. Deliberately quiet: it must lose every contest with the answer.
  *
- * It carries how long the thinking took, live while it lasts and fixed once the answer starts.
- * A model can think for a minute with nothing else on screen, and the line is the only place that
- * says the wait is progress rather than a stall.
+ * It carries how long the thinking took, live while it lasts and fixed once the answer starts, and
+ * what the call spent on it once the call has answered. A model can think for a minute with nothing
+ * else on screen, and the line is the only place that says the wait is progress rather than a stall.
  *
- * Engines that redact their thinking (the Claude bridge) send only a token estimate. There is then
- * nothing to reveal, so the line renders as static text rather than a button that opens nothing.
- * See the server's docs/reasoning-visibility.md.
+ * An endpoint may keep the words of a thought and report only its count (the Responses API
+ * summarises part of its thoughts). There is then nothing to reveal, so the line renders as static
+ * text rather than a button that opens nothing. See the server's docs/reasoning-visibility.md.
  */
 export function ReasoningLine({
   id,
@@ -60,6 +94,7 @@ export function ReasoningLine({
   reasoning?: string;
   /** The page carried its length instead of the text: asked for when the line opens. */
   reasoningChars?: number;
+  /** What the call spent thinking, once it has answered. */
   tokens?: number;
   /** When the thinking started, while it is still running. */
   startedAt?: number;
@@ -87,23 +122,17 @@ export function ReasoningLine({
   // rehydrated from server history carries neither field, and must not start a counter from an
   // instant it does not have.
   const running = streaming && durationMs === undefined && startedAt !== undefined;
-  const elapsed = running ? (
-    <ThinkingElapsed since={startedAt} />
-  ) : durationMs !== undefined ? (
-    <Text style={styles.elapsed}>{formatSpan(durationMs)}</Text>
-  ) : null;
+  const figures = <ThinkingFigures count={count} startedAt={startedAt} durationMs={durationMs} running={running} />;
 
   if (!hasBody) {
     return (
       <View style={styles.line}>
         {/*
-          One name in every state, like the aside below: the running counter is what says the
-          thinking is still going, and the word does not have to move to say it. It used to read
-          "Thinking... N tokens" live and "Thought - N tokens" once sealed, which renamed a thing
-          the reader was looking at instead of letting it hold still.
+          One name in every state, like the aside below: the figures say what the thinking cost,
+          and the word does not have to move to say it.
         */}
-        <Text style={styles.label}>{`Reasoning · ${count} tokens`}</Text>
-        {elapsed}
+        <Text style={styles.label}>Reasoning</Text>
+        {figures}
       </View>
     );
   }
@@ -111,7 +140,7 @@ export function ReasoningLine({
   return (
     <CollapsibleAside
       label="Reasoning"
-      trailing={elapsed}
+      trailing={figures}
       body={body}
       showHint="Show the model's reasoning"
       hideHint="Hide the model's reasoning"
@@ -125,7 +154,8 @@ export function ReasoningLine({
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
-  /** One step fainter than the label it follows: a duration is context on an aside, not a second
-   *  label competing with it. */
-  elapsed: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, opacity: 0.75 },
+  figures: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, flexShrink: 1 },
+  /** One step fainter than the label it follows: what the thinking cost is context on an aside, not
+   *  a second label competing with it. */
+  figure: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, opacity: 0.75 },
 });

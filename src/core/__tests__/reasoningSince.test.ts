@@ -45,13 +45,13 @@ describe('a new app against an older server', () => {
     expect(bubble().reasoning).toBe('weighing');
   });
 
-  it('times a count from a redacted engine the same way', () => {
-    const before = Date.now();
+  it('opens no counter on a count: it is a figure about a thought that is over', () => {
     route({ type: 'chat.stream.start', id: 'b1', threadId: THREAD });
-    route({ type: 'chat.reasoning.tokens', id: 'b1', threadId: THREAD, tokens: 512 });
+    route({ type: 'chat.reasoning.tokens', id: 'b1', threadId: THREAD, tokens: 512, ms: 4_200 });
 
     expect(bubble().reasoningTokens).toBe(512);
-    expect(bubble().reasoningStartedAt).toBeGreaterThanOrEqual(before);
+    expect(bubble().reasoningStartedAt).toBeUndefined();
+    expect(bubble().reasoningMs).toBe(4_200);
   });
 });
 
@@ -66,13 +66,6 @@ describe('a new app against a server that dates the span', () => {
     expect(bubble().reasoningMs).toBeGreaterThanOrEqual(40_000);
   });
 
-  it('takes it off the token frame too', () => {
-    const opened = new Date(Date.now() - 40_000).toISOString();
-    route({ type: 'chat.stream.start', id: 'b1', threadId: THREAD });
-    route({ type: 'chat.reasoning.tokens', id: 'b1', threadId: THREAD, tokens: 512, since: opened });
-
-    expect(bubble().reasoningStartedAt).toBe(Date.parse(opened));
-  });
 });
 
 describe('an older app against a new server', () => {

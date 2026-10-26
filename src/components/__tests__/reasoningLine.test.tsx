@@ -104,13 +104,28 @@ test('a replayed turn whose span nobody recorded draws no counter, rather than a
   expect(textOf(tree)).not.toMatch(/\d+(\.\d+)?s/);
 });
 
-test('a redacted engine gets the counter too, beside its token estimate', () => {
-  jest.useFakeTimers();
-  const tree = render({ tokens: 1500, startedAt: Date.now() - 8_000, streaming: true });
+test('a thought with no words shows what it spent and how long, and opens nothing', () => {
+  const tree = render({ tokens: 516, durationMs: 4_200, streaming: false });
+  expect(textOf(tree)).toContain('Reasoning');
+  expect(textOf(tree)).toContain('516 tokens');
+  expect(textOf(tree)).toContain('4.2 s');
+  // Nothing to reveal, so nothing to press: a control that opens nothing is worse than none.
+  expect(tree.root.findAll((node) => node.props.accessibilityRole === 'button')).toHaveLength(0);
+});
+
+test('a thought with words carries its count too, beside the duration', () => {
+  const tree = render({ reasoning: 'weighing options', tokens: 1500, durationMs: 12_000, streaming: false });
   expect(textOf(tree)).toContain('1.5k tokens');
-  expect(textOf(tree)).toContain('8 s');
-  ReactTestRenderer.act(() => tree.unmount());
-  jest.useRealTimers();
+  expect(textOf(tree)).toContain('12 s');
+  expect(tree.root.findAll((node) => node.props.accessibilityRole === 'button').length).toBeGreaterThan(0);
+  // Folded by default: the words are behind the tap, the figures are not.
+  expect(textOf(tree)).not.toContain('weighing options');
+});
+
+test('a count with no span says the count alone, without a dangling separator', () => {
+  const tree = render({ tokens: 300, streaming: false });
+  expect(textOf(tree)).toContain('300 tokens');
+  expect(textOf(tree)).not.toContain('·');
 });
 
 test('nothing to say, nothing drawn', () => {

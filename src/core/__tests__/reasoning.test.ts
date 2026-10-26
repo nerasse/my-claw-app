@@ -29,11 +29,13 @@ describe('reasoning accumulates on its bubble', () => {
     expect(first()).toMatchObject({ text: 'answer', reasoning: 'thought', streaming: false });
   });
 
-  test('a token estimate replaces rather than accumulating, since it is a running total', () => {
+  test('a count sits beside the words of the same bubble', () => {
     chatStore.startStream(THREAD, 's1');
-    chatStore.setReasoningTokens(THREAD, 's1', 128);
+    chatStore.appendReasoning(THREAD, 's1', 'weighing');
+    chatStore.appendDelta(THREAD, 's1', 'answer');
     chatStore.setReasoningTokens(THREAD, 's1', 640);
-    expect(first().reasoningTokens).toBe(640);
+    chatStore.endStream(THREAD, 's1');
+    expect(first()).toMatchObject({ reasoning: 'weighing', text: 'answer', reasoningTokens: 640 });
   });
 
   test('a frame for an unknown bubble is dropped, never creating one', () => {
@@ -61,7 +63,7 @@ describe('a bubble carrying only reasoning survives', () => {
     expect(first().reasoning).toBe('thought, then called a tool');
   });
 
-  test('a token count alone is kept too, for a redacted engine', () => {
+  test('a count alone is kept too, for a thought the endpoint kept to itself', () => {
     chatStore.startStream(THREAD, 's1');
     chatStore.setReasoningTokens(THREAD, 's1', 512);
     chatStore.endStream(THREAD, 's1');
@@ -189,11 +191,31 @@ describe('the thinking is timed', () => {
     expect(first().reasoningStartedAt).toBe(opened);
   });
 
-  test('a redacted engine is timed too: the count carries the same instant', () => {
-    const before = Date.now();
+  test('a thought with no words is timed by the span the count carries', () => {
     chatStore.startStream(THREAD, 's1');
-    chatStore.setReasoningTokens(THREAD, 's1', 512, ago(5_000));
-    expect(first().reasoningStartedAt).toBeLessThanOrEqual(before - 4_000);
+    chatStore.setReasoningTokens(THREAD, 's1', 512, 4_200);
+    expect(first().reasoningStartedAt).toBeUndefined();
+    chatStore.endStream(THREAD, 's1');
+    expect(first()).toMatchObject({ reasoningTokens: 512, reasoningMs: 4_200 });
+  });
+
+  // The count arrives once the call has answered. Opening a span on it measured the gap between
+  // the count and the end of the stream, a few milliseconds, and wrote it over the real duration.
+  test('a count after the words leaves the span they were timed by', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'weighing', false, ago(5_000));
+    chatStore.appendDelta(THREAD, 's1', 'answer');
+    const timed = first().reasoningMs;
+    expect(timed).toBeGreaterThanOrEqual(5_000);
+    chatStore.setReasoningTokens(THREAD, 's1', 512, 90);
+    chatStore.endStream(THREAD, 's1');
+    expect(first().reasoningMs).toBe(timed);
+  });
+
+  test('a count for a thought still open does not stamp its own span on it', () => {
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'thought, then a tool', false, ago(5_000));
+    chatStore.setReasoningTokens(THREAD, 's1', 512, 90);
     chatStore.endStream(THREAD, 's1');
     expect(first().reasoningMs).toBeGreaterThanOrEqual(5_000);
   });
