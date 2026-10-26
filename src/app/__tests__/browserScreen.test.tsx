@@ -359,6 +359,26 @@ describe('BrowserScreen', () => {
       expect(StyleSheet.flatten(tiles[0]!.props.style).width).toBe(Math.floor((2521 - 10) / 2));
     });
 
+    // A row of tiles that are not all the same shape: a popup the site sized itself next to a
+    // desktop page. Flexbox stretches a row's children to the tallest by default, which drew a band
+    // of empty card under the caption of the shorter tile (2026-10-25, the owner's screenshot: a
+    // portrait Window 18 left Window 16 with a hole under its caption).
+    it('does not stretch a shorter tile to the tallest one of its row', () => {
+      pixelRatioIs(1);
+      const tree = render();
+      ReactTestRenderer.act(() => browserLiveStore.receiveWindows({ type: 'browser.windows.result', windows: [live(1), live(2)] }));
+      ReactTestRenderer.act(() => {
+        browserLiveStore.receiveFrame({ type: 'browser.frame', pageId: 'p1', seq: 1, data: 'AA', width: 1919, height: 958 });
+        browserLiveStore.receiveFrame({ type: 'browser.frame', pageId: 'p2', seq: 1, data: 'AA', width: 500, height: 600 });
+      });
+      measured(tree, { width: 1000, height: 900 });
+
+      const wall = tree.root.findByProps({ testID: 'browser-wall' });
+      const row = wall.findAll(n => n.type === View && StyleSheet.flatten(n.props.style)?.flexDirection === 'row')[0]!;
+      // Each tile keeps its own height: a tile is the page's shape plus its caption, not the row's.
+      expect(StyleSheet.flatten(row.props.style).alignItems).toBe('flex-start');
+    });
+
     // The rows are the layout's, drawn as they are: a wrap decided by the browser on rounded
     // pixels stacked two windows meant to sit side by side (2026-10-13, a 2507.7pt pane).
     it('draws the rows the layout chose, the last one centred', () => {

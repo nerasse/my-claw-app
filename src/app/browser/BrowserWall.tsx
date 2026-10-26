@@ -153,7 +153,10 @@ function WindowTile({
 
 const createStyles = (palette: Palette) => ({
   wall: { gap: space.md },
-  row: { flexDirection: 'row' as const, gap: space.md, justifyContent: 'center' as const },
+  // `flex-start`, not the default `stretch`: a row holds tiles of different shapes (a popup the
+  // site sized itself beside a desk-sized page), and stretching the shorter one to the tallest drew
+  // a band of empty card under its caption (2026-10-25, the owner's screenshot).
+  row: { flexDirection: 'row' as const, gap: space.md, justifyContent: 'center' as const, alignItems: 'flex-start' as const },
   empty: { color: palette.textFaint, fontSize: font.body, paddingVertical: space.lg },
   tile: {
     backgroundColor: palette.surface,
