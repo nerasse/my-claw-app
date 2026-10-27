@@ -26,6 +26,12 @@ export interface Prefs {
   /** Audio playback speed, one of PLAYBACK_RATES: kept from one note to the next, like a podcast app. */
   playbackRate: number;
   /**
+   * Zoom of the document readers (a .md file, a skill), one of DOC_SCALE_STEPS. Local, and shared
+   * by every reader: a page read at two steps up is a preference about the reader, not about the
+   * file, so opening the next one starts where the last was left.
+   */
+  docFontScale: number;
+  /**
    * The desktop columns as they were left, as JSON (`core/panes.ts` reads it back). A dragged
    * width and a folded list are furniture, and furniture does not move back by itself.
    */
@@ -49,6 +55,7 @@ const DEFAULTS: Prefs = {
   collapsedFolders: [],
   setupSkipped: [],
   playbackRate: 1,
+  docFontScale: 1,
   panes: '',
   rightPane: '',
 };
@@ -75,6 +82,27 @@ export function parsePlaybackRate(raw: string | undefined): number {
 export function nextPlaybackRate(current: number): number {
   const index = PLAYBACK_RATES.findIndex(rate => rate === current);
   return PLAYBACK_RATES[(index + 1) % PLAYBACK_RATES.length];
+}
+
+/**
+ * Zoom steps of the document readers, and the two rules around them.
+ *
+ * Even steps near the base keep the text recognisable; the ends are where the buttons stop, not
+ * where they wrap -- a zoom control that jumped from the smallest to the largest on one tap would
+ * lose the reader's place.
+ */
+export const DOC_SCALE_STEPS = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2] as const;
+
+export function parseDocScale(raw: string | undefined): number {
+  const value = Number(raw);
+  return DOC_SCALE_STEPS.some(step => step === value) ? value : DEFAULTS.docFontScale;
+}
+
+/** The step next to `current`, or `current` again at either end. */
+export function stepDocScale(current: number, direction: 1 | -1): number {
+  const index = DOC_SCALE_STEPS.findIndex(step => step === current);
+  const at = index < 0 ? DOC_SCALE_STEPS.indexOf(1) : index;
+  return DOC_SCALE_STEPS[Math.min(DOC_SCALE_STEPS.length - 1, Math.max(0, at + direction))];
 }
 
 export function clampChatScale(value: number): number {
@@ -122,6 +150,7 @@ class PrefsStore {
         collapsedFolders: parseCollapsedFolders(raw.collapsedFolders),
         setupSkipped: parseCollapsedFolders(raw.setupSkipped),
         playbackRate: parsePlaybackRate(raw.playbackRate),
+        docFontScale: parseDocScale(raw.docFontScale),
         panes: raw.panes ?? '',
         rightPane: raw.rightPane ?? '',
       };

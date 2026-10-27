@@ -72,3 +72,42 @@ describe('documentMarkdownStyles', () => {
     expect(styles.text?.lineHeight).toBeGreaterThanOrEqual(22);
   });
 });
+
+/**
+ * The reader's zoom, and the bug it was written next to.
+ *
+ * `documentMarkdownStyles` took the palette alone, so a page was one fixed size whatever the
+ * reader asked for. Every step now moves the body and the headings together: a heading that kept
+ * its size while the prose around it grew would read as a smaller heading at 200%.
+ */
+describe('the reader zoom', () => {
+  test('a step moves every size of the sheet, headings included', () => {
+    const base = documentMarkdownStyles(lightPalette, 1);
+    const big = documentMarkdownStyles(lightPalette, 2);
+    for (const key of ['text', 'strong', 'li', 'h1', 'h2', 'h3', 'h4'] as const) {
+      expect({ key, size: big[key]?.fontSize }).toEqual({ key, size: (base[key]?.fontSize ?? 0) * 2 });
+    }
+  });
+
+  test('the line box follows the size, so the lines never overlap', () => {
+    for (const scale of [0.85, 1.15, 1.5, 2]) {
+      const styles = documentMarkdownStyles(lightPalette, scale);
+      expect(styles.text?.lineHeight).toBeGreaterThan(styles.text?.fontSize ?? 0);
+    }
+  });
+
+  test('inline runs still share the line of the prose they sit in, at any zoom', () => {
+    for (const scale of [0.85, 1, 1.5, 2]) {
+      const styles = documentMarkdownStyles(darkPalette, scale);
+      for (const key of ['strong', 'em', 'strikethrough', 'link', 'codespan'] as const) {
+        expect({ key, size: styles[key]?.fontSize }).toEqual({ key, size: styles.text?.fontSize });
+        expect({ key, line: styles[key]?.lineHeight }).toEqual({ key, line: styles.text?.lineHeight });
+      }
+    }
+  });
+
+  test('the base sheet is unchanged: no zoom means the design sizes', () => {
+    expect(documentMarkdownStyles(lightPalette).text?.fontSize).toBe(15);
+    expect(documentMarkdownStyles(lightPalette, 1).text?.fontSize).toBe(15);
+  });
+});

@@ -1,4 +1,13 @@
-import { DEFAULT_SERVER_URL, nextPlaybackRate, parseCollapsedFolders, parsePlaybackRate, prefs } from '../prefs';
+import {
+  DEFAULT_SERVER_URL,
+  DOC_SCALE_STEPS,
+  nextPlaybackRate,
+  parseCollapsedFolders,
+  parseDocScale,
+  parsePlaybackRate,
+  prefs,
+  stepDocScale,
+} from '../prefs';
 import { deviceBridge } from '../nativeBridge';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
@@ -11,7 +20,7 @@ beforeEach(() => {
 describe('prefs.hydrate', () => {
   test('falls back to defaults when nothing is stored: a new install has no address', async () => {
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, panes: '', rightPane: '' });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, docFontScale: 1, panes: '', rightPane: '' });
     expect(DEFAULT_SERVER_URL).toBe('');
     expect(bridge.prefsSet).not.toHaveBeenCalled();
     expect(prefs.isHydrated()).toBe(true);
@@ -20,7 +29,7 @@ describe('prefs.hydrate', () => {
   test('ignores a corrupted theme mode and a blank url', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ themeMode: 'neon', serverUrl: '   ', lastThreadId: '' });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, panes: '', rightPane: '' });
+    expect(loaded).toEqual({ themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, docFontScale: 1, panes: '', rightPane: '' });
     expect(bridge.prefsSet).not.toHaveBeenCalled();
   });
 
@@ -103,5 +112,29 @@ describe('playback speed', () => {
   test('hydrate restores the speed the owner left', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ playbackRate: '1.3' });
     expect((await prefs.hydrate()).playbackRate).toBe(1.3);
+  });
+});
+
+describe('the reader zoom', () => {
+  test('a step moves one notch, and stops at both ends', () => {
+    const first = DOC_SCALE_STEPS[0];
+    const last = DOC_SCALE_STEPS[DOC_SCALE_STEPS.length - 1];
+    expect(stepDocScale(1, 1)).toBe(1.15);
+    expect(stepDocScale(1, -1)).toBe(0.85);
+    // The ends are ends: they do not wrap, or one tap too many would lose the reader's place.
+    expect(stepDocScale(last, 1)).toBe(last);
+    expect(stepDocScale(first, -1)).toBe(first);
+  });
+
+  test('a value off the list reads as normal, so a stale bag cannot strand the reader', () => {
+    expect(parseDocScale('2')).toBe(2);
+    expect(parseDocScale('1.4')).toBe(1);
+    expect(parseDocScale('big')).toBe(1);
+    expect(parseDocScale(undefined)).toBe(1);
+  });
+
+  test('hydrate restores the zoom the owner left', async () => {
+    bridge.prefsGetAll.mockResolvedValueOnce({ docFontScale: '1.5' });
+    expect((await prefs.hydrate()).docFontScale).toBe(1.5);
   });
 });

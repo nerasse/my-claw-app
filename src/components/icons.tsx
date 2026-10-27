@@ -134,3 +134,23 @@ export function RefreshIcon(props: IconProps): React.JSX.Element {
     />
   );
 }
+
+/** A letterform A over a larger one: the reader's text grows. */
+export function ZoomInIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M9 3a6 6 0 1 0 3.32 11L19 20.68 20.68 19l-6.6-6.6A6 6 0 0 0 9 3zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm-1 1.5h2V9h2.5v2H10v2.5H8V11H5.5V9H8z"
+    />
+  );
+}
+
+/** The same glass with a bar where the plus was: it shrinks. */
+export function ZoomOutIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M9 3a6 6 0 1 0 3.32 11L19 20.68 20.68 19l-6.6-6.6A6 6 0 0 0 9 3zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM5.5 9h7v2h-7z"
+    />
+  );
+}

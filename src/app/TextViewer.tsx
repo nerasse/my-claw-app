@@ -14,6 +14,7 @@ import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { CodeEditor } from '../components/CodeEditor';
 import { languageForFile } from '../components/codeeditor/document';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
+import { DocZoomControl } from '../components/DocZoomControl';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -92,6 +93,7 @@ export function TextViewer({
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
+        {isMarkdown ? <DocZoomControl /> : null}
         <DownloadControl targets={[{ url: downloadUrl ?? url, filename }]} />
         {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         <Pressable

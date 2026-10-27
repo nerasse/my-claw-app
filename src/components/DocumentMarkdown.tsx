@@ -2,6 +2,7 @@ import React, { useMemo, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Renderer, useMarkdown, type MarkedStyles } from 'react-native-marked';
 import { isDangerousHtml } from '../core/markdownSafe';
+import { useDocFontScale } from '../core/docZoom';
 import { CodeBlockBar } from './CodeBlockBar';
 import { MarkdownTable } from './MarkdownTable';
 import { MarkdownList } from './MarkdownList';
@@ -15,6 +16,11 @@ import { font, lineHeightFor, space, useTheme, type Palette } from '../theme';
 const DOC_FONT_SIZE = 15;
 const DOC_LINE_HEIGHT = 23;
 
+/** Every size of the document sheet, moved by the reader's zoom. */
+function scaled(scale: number, size: number, lineHeight: number): { fontSize: number; lineHeight: number } {
+  return { fontSize: Math.round(size * scale), lineHeight: Math.round(lineHeight * scale) };
+}
+
 /**
  * Document typography for the full-screen viewers (text viewer, skill reader): the GitHub
  * markdown conventions transposed onto the app palette -- a real heading hierarchy with
@@ -23,11 +29,11 @@ const DOC_LINE_HEIGHT = 23;
  * which were tuned for a web-like demo (italic code spans, 32pt headings) and show up in a
  * chat app as "moche".
  */
-export function documentMarkdownStyles(palette: Palette): MarkedStyles {
+export function documentMarkdownStyles(palette: Palette, scale = 1): MarkedStyles {
   // The library flattens every style over its own regular base (16px, #333333); a span that
   // only states its emphasis inherits that base and renders off-palette -- bold as dark gray
   // in dark mode. Every inline style restates the body fully.
-  const body = { fontSize: DOC_FONT_SIZE, color: palette.text, lineHeight: DOC_LINE_HEIGHT };
+  const body = { ...scaled(scale, DOC_FONT_SIZE, DOC_LINE_HEIGHT), color: palette.text };
   return {
     text: body,
     paragraph: { paddingVertical: 6 },
@@ -36,8 +42,7 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
     strikethrough: { ...body, textDecorationLine: 'line-through' },
     link: { ...body, color: palette.accent, textDecorationLine: 'underline' },
     h1: {
-      fontSize: 24,
-      lineHeight: 30,
+      ...scaled(scale, 24, 30),
       fontWeight: '700',
       color: palette.text,
       marginTop: space.xl,
@@ -47,8 +52,7 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
       borderBottomColor: palette.border,
     },
     h2: {
-      fontSize: 20,
-      lineHeight: 26,
+      ...scaled(scale, 20, 26),
       fontWeight: '700',
       color: palette.text,
       marginTop: space.xl,
@@ -58,32 +62,28 @@ export function documentMarkdownStyles(palette: Palette): MarkedStyles {
       borderBottomColor: palette.border,
     },
     h3: {
-      fontSize: 17,
-      lineHeight: 23,
+      ...scaled(scale, 17, 23),
       fontWeight: '600',
       color: palette.text,
       marginTop: space.lg,
       marginBottom: space.xs,
     },
     h4: {
-      fontSize: 15,
-      lineHeight: 21,
+      ...scaled(scale, 15, 21),
       fontWeight: '600',
       color: palette.text,
       marginTop: space.lg,
       marginBottom: space.xs,
     },
     h5: {
-      fontSize: font.body,
-      lineHeight: 20,
+      ...scaled(scale, font.body, 20),
       fontWeight: '600',
       color: palette.textMuted,
       marginTop: space.md,
       marginBottom: 2,
     },
     h6: {
-      fontSize: font.small,
-      lineHeight: 18,
+      ...scaled(scale, font.small, 18),
       fontWeight: '600',
       color: palette.textMuted,
       marginTop: space.md,
@@ -165,7 +165,7 @@ export class DocumentRenderer extends Renderer {
     return (
       <View key={this.getKey()} style={containerStyle}>
         <CodeBlockBar value={text} language={language} />
-        <Text selectable style={[styles.codeText, { color: this.codeColor }]}>
+        <Text selectable style={[styles.codeText, { color: this.codeColor, fontSize: this.typography.fontSize, lineHeight: this.typography.lineHeight }]}>
           {highlighted(text, language, this.ink.tokens)}
         </Text>
       </View>
@@ -218,7 +218,8 @@ export class DocumentRenderer extends Renderer {
 /** Full-screen markdown body, shared by the .md viewer and the skill reader. */
 export function DocumentMarkdown({ value }: { value: string }): React.JSX.Element {
   const { palette } = useTheme();
-  const mdStyles = useMemo(() => documentMarkdownStyles(palette), [palette]);
+  const scale = useDocFontScale();
+  const mdStyles = useMemo(() => documentMarkdownStyles(palette, scale), [palette, scale]);
   const ink = useMemo<MarkdownInk>(
     () => ({ tokens: tokenColors(palette), marker: palette.accent, tableHeader: { backgroundColor: palette.accentSoft } }),
     [palette],
@@ -228,13 +229,13 @@ export function DocumentMarkdown({ value }: { value: string }): React.JSX.Elemen
       new DocumentRenderer(
         palette.text,
         {
-          fontSize: DOC_FONT_SIZE,
+          fontSize: Math.round(font.meta * scale),
           color: palette.text,
-          lineHeight: DOC_LINE_HEIGHT,
+          lineHeight: lineHeightFor(Math.round(font.meta * scale)),
         },
         ink,
       ),
-    [palette.text, ink],
+    [palette.text, ink, scale],
   );
   const elements = useMarkdown(value, { styles: mdStyles, renderer });
   return <View>{elements}</View>;

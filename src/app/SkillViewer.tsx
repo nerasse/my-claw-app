@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { splitSkillDoc } from '../core/skills';
 import type { SkillEntry } from '../core/protocol';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
+import { DocZoomControl } from '../components/DocZoomControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
@@ -91,6 +92,7 @@ export function SkillViewer({
             {skill.version ? ` · v${skill.version}` : ''}
           </Text>
         </View>
+        <DocZoomControl />
         {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         {onActions ? (
           <Pressable
