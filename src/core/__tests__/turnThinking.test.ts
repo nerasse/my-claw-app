@@ -22,7 +22,7 @@ function route(frame: ServerFrame): void {
 }
 
 const open = (id = 's1'): ServerFrame => ({ type: 'chat.stream.start', id, threadId: THREAD });
-const thinking = (id = 's1', since = SINCE): ServerFrame => ({ type: 'chat.turn.thinking', id, threadId: THREAD, since });
+const thinking = (id = 's1', since = SINCE): ServerFrame => ({ type: 'chat.turn.wait', id, threadId: THREAD, since });
 
 function bubble(id = 's1'): TextItem | undefined {
   const item = chatStore.getItems(THREAD).find(entry => entry.id === id);

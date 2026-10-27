@@ -56,12 +56,20 @@ export interface TextItem {
   reasoningMs?: number;
   /**
    * A model call opened this bubble and has produced nothing yet, since this instant (the
-   * server's). The bubble draws "Thinking" with a counter where its caret would be, and the first
+   * server's). The bubble draws "Reasoning" with a counter where its caret would be, and the first
    * thing the turn writes into it takes the mark down. It lives on the bubble because the wait
    * belongs to the reply that is about to land here: drawn at the foot of the thread it sat
    * outside every bubble, beside an empty one wearing a bare caret (2026-09-30).
    */
   waitingSince?: number;
+  /**
+   * How long that wait lasted, from the server once the call produced something.
+   *
+   * Both ends of the span are then on one clock and the figure survives the run, which the counter
+   * could not: it was measured against the device's own arrival of a frame and died with the
+   * stream. This is the only duration a call that streamed no reasoning has to show.
+   */
+  waitMs?: number;
   /** Server-side command output (`/status`, ...), drawn apart from agent replies. */
   command?: boolean;
   /**
@@ -352,6 +360,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.reasoningChars ? { reasoningChars: entry.reasoningChars } : {}),
       ...(entry.reasoningTokens ? { reasoningTokens: entry.reasoningTokens } : {}),
       ...(entry.reasoningMs !== undefined ? { reasoningMs: entry.reasoningMs } : {}),
+      ...(entry.waitMs !== undefined ? { waitMs: entry.waitMs } : {}),
       ...(entry.command ? { command: true } : {}),
       ...(entry.details ? { details: entry.details } : {}),
       ...(entry.error ? { error: entry.error } : {}),
@@ -1925,6 +1934,18 @@ class ChatStoreImpl {
     const item = this.getItems(threadId).find(entry => entry.id === id);
     if (item?.kind !== 'text' || item.waitingSince === since) return;
     this.patch(threadId, id, { waitingSince: since });
+  }
+
+  /**
+   * What the wait in this bubble actually cost, once the call produced something.
+   *
+   * It replaces the counter rather than joining it: both measure the same stretch, and the figure
+   * the server took is the one that survives the stream and reads the same on a window that joined
+   * late. A call that produced nothing at all still ends with one -- the wait was real either way.
+   */
+  setWaitMs(threadId: string, id: string, ms: number): void {
+    if (!this.streams.has(id) || !Number.isFinite(ms) || ms < 0) return;
+    this.patch(threadId, id, { waitMs: Math.round(ms), waitingSince: undefined });
   }
 
   /** The turn wrote something into the bubble: the wait is over. Costs nothing once it is. */

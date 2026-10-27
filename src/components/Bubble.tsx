@@ -9,8 +9,8 @@ import { AttachmentView } from './AttachmentView';
 import { MediaCarousel, isCarouselMedia, mediaItemsOf, type MediaItem } from './MediaCarousel';
 import { CollapsibleAside } from './CollapsibleAside';
 import { CommandElapsed } from './CommandElapsed';
-import { ReasoningLine } from './ReasoningLine';
-import { TurnThinking, WAIT_REVEAL_MS, useRevealed } from './TurnThinking';
+import { ReasoningLine, showsReasoningRow } from './ReasoningLine';
+import { WaitLine, WAIT_REVEAL_MS, useRevealed } from './WaitLine';
 import { RunFoot } from './RunFoot';
 import { LocationView } from './LocationView';
 import { chatSelectable } from '../core/platform';
@@ -70,9 +70,15 @@ export const Bubble = React.memo(function BubbleView({
   const scale = useChatFontScale();
   const agent = item.role === 'agent';
   const bodySize = scaleFont(font.body, scale);
-  // While the model is only thinking there is no text yet. The reasoning line already says so, so
-  // the bare caret would be a second, redundant "working" indicator in the same bubble.
-  const thinkingShown = Boolean(item.reasoning?.trim()) || (item.reasoningTokens ?? 0) > 0;
+  // While the model has nothing to write yet, the reasoning row already says so -- the bare caret
+  // would be a second, redundant "working" indicator in the same bubble. The row's own predicate
+  // decides, so a row drawn for a long wait alone takes the caret down with it.
+  const thinkingShown = showsReasoningRow({
+    reasoning: item.reasoning,
+    reasoningChars: item.reasoningChars,
+    tokens: item.reasoningTokens,
+    waitMs: item.waitMs,
+  });
   // A call opened this bubble and has produced nothing yet: the wait takes the caret's place --
   // a bare bar would say the same thing worse -- but only once it has lasted long enough to be
   // worth a line (a model that streams its thinking answers in about a second).
@@ -141,7 +147,7 @@ export const Bubble = React.memo(function BubbleView({
       </Text>
     )
   ) : waiting ? (
-    revealed ? <TurnThinking since={item.waitingSince!} /> : null
+    revealed ? <WaitLine since={item.waitingSince!} /> : null
   ) : item.streaming && !thinkingShown ? (
     <Text style={[styles.text, agent ? null : styles.textUser, { lineHeight: lineHeightFor(bodySize) }]}>▍</Text>
   ) : null;
@@ -199,6 +205,7 @@ export const Bubble = React.memo(function BubbleView({
             tokens={item.reasoningTokens}
             startedAt={item.reasoningStartedAt}
             durationMs={item.reasoningMs}
+            waitMs={item.waitMs}
             streaming={item.streaming}
             expandReasoning={expandReasoning}
           />

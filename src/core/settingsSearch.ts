@@ -18,7 +18,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
   { page: 'appearance', where: 'Appearance', title: 'Theme', terms: 'dark light system sombre clair thème mode nuit couleur' },
   { page: 'appearance', where: 'Appearance', title: 'Message size', terms: 'text font size zoom taille police texte lecture' },
   { page: 'appearance', where: 'Appearance', title: 'Always expand tool cards', terms: 'fold unfold tools cards plier déplier outils cartes' },
-  { page: 'appearance', where: 'Appearance', title: 'Always expand reasoning', terms: 'thinking fold réflexion raisonnement plier' },
+  { page: 'appearance', where: 'Appearance', title: 'Always expand reasoning', terms: 'thinking fold réflexion raisonnement plier raisonnement' },
   { page: 'notifications', where: 'Notifications', title: 'Allow notifications', terms: 'permission push tray autoriser navigateur' },
   { page: 'notifications', where: 'Notifications', title: 'Sounds', terms: 'sound ring ringtone son sons sonnerie alerte' },
   { page: 'updates', where: 'Updates', title: 'Update the server', terms: 'upgrade version mise à jour serveur release' },

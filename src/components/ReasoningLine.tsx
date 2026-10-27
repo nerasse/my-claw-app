@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Text, View } from 'react-native';
 import { CollapsibleAside } from './CollapsibleAside';
 import { useElapsed } from './CommandElapsed';
+import { WAIT_REVEAL_MS } from './WaitLine';
 import { formatSpan } from '../core/utils';
 import { requestReasoning, useKnownReasoning } from '../core/reasoningFetch';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
@@ -13,13 +14,13 @@ function compactCount(tokens: number): string {
 }
 
 /**
- * How long the thinking has been going, climbing once a second.
+ * How long the reasoning has been going, climbing once a second.
  *
  * Its own component, so the tick redraws these few characters and nothing else: the label sits
  * inside a bubble that is streaming markdown at the same time, and re-rendering that on every
  * second to move a counter would be paid for by the whole thread.
  */
-function ThinkingElapsed({ since }: { since: number }): React.JSX.Element {
+function ReasoningElapsed({ since }: { since: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return <Text style={styles.figure}>{formatSpan(useElapsed(since))}</Text>;
 }
@@ -30,7 +31,7 @@ function ThinkingElapsed({ since }: { since: number }): React.JSX.Element {
  * The same figures in both states of the line, so a thought the endpoint summarised and one it kept
  * to itself read alike, one with a chevron and one without.
  */
-function ThinkingFigures({
+function ReasoningFigures({
   count,
   startedAt,
   durationMs,
@@ -44,7 +45,7 @@ function ThinkingFigures({
   const styles = useThemedStyles(createStyles);
   const elapsed =
     running && startedAt !== undefined ? (
-      <ThinkingElapsed since={startedAt} />
+      <ReasoningElapsed since={startedAt} />
     ) : durationMs !== undefined ? (
       <Text style={styles.figure}>{formatSpan(durationMs)}</Text>
     ) : null;
@@ -59,12 +60,38 @@ function ThinkingFigures({
 }
 
 /**
+ * Whether the reasoning row has anything to draw at all, which is also what decides if the bubble
+ * still needs its caret.
+ *
+ * Single-sourced on purpose: the two used to be decided apart, and a bubble that showed the row and
+ * the caret together wore two "working" marks in the same place (2026-10-27, the wait alone on a row).
+ */
+export function showsReasoningRow({
+  reasoning,
+  reasoningChars,
+  tokens,
+  waitMs,
+}: {
+  reasoning?: string;
+  reasoningChars?: number;
+  tokens?: number;
+  waitMs?: number;
+}): boolean {
+  const hasBody = Boolean(reasoning?.trim()) || (reasoningChars ?? 0) > 0;
+  if (hasBody || (tokens ?? 0) > 0) return true;
+  // Nothing to say about the thinking: the row is worth drawing only for a wait long enough to read,
+  // the same threshold the live counter uses. A fast answer must not add a line to every bubble.
+  return waitMs !== undefined && waitMs >= WAIT_REVEAL_MS;
+}
+
+/**
  * What the model thought, as one muted line at the top of its own bubble, collapsed by default and
  * expanded on tap. Deliberately quiet: it must lose every contest with the answer.
  *
- * It carries how long the thinking took, live while it lasts and fixed once the answer starts, and
- * what the call spent on it once the call has answered. A model can think for a minute with nothing
- * else on screen, and the line is the only place that says the wait is progress rather than a stall.
+ * It carries how long the thinking took, live while it lasts and fixed once the answer starts, what
+ * the call spent on it once the call has answered, and opposite all of it the wait that preceded the
+ * first word. A model can think for a minute with nothing else on screen, and the line is the only
+ * place that says the wait is progress rather than a stall.
  *
  * An endpoint may keep the words of a thought and report only its count (the Responses API
  * summarises part of its thoughts). There is then nothing to reveal, so the line renders as static
@@ -78,6 +105,7 @@ export function ReasoningLine({
   tokens,
   startedAt,
   durationMs,
+  waitMs,
   streaming,
   expandReasoning,
 }: {
@@ -100,6 +128,8 @@ export function ReasoningLine({
   startedAt?: number;
   /** How long it took, once it is over. */
   durationMs?: number;
+  /** How long the call took to say anything at all, measured by the server. */
+  waitMs?: number;
   /** The bubble is still being written: the thinking may not be over. */
   streaming: boolean;
   /** Server-owned pref: start expanded instead of folded. */
@@ -115,24 +145,45 @@ export function ReasoningLine({
   const body = (reasoning?.trim() || known?.trim()) ?? '';
   const hasBody = body.length > 0 || onDemand;
   const count = tokens && tokens > 0 ? compactCount(tokens) : '';
+  const hasThought = hasBody || count !== '';
+  // A thought of its own gets the figure whatever it cost -- it is a footnote on a row that is
+  // already there. Alone, it has to be worth a line of its own; `showsReasoningRow` says which.
+  const wait = showsReasoningRow({ reasoning, reasoningChars, tokens, waitMs }) && waitMs !== undefined && waitMs > 0
+    ? waitMs
+    : undefined;
 
-  if (!hasBody && !count) return null;
+  if (!hasThought && wait === undefined) return null;
 
   // Running only while the bubble is still open and nothing has sealed the span: a thread
   // rehydrated from server history carries neither field, and must not start a counter from an
   // instant it does not have.
   const running = streaming && durationMs === undefined && startedAt !== undefined;
-  const figures = <ThinkingFigures count={count} startedAt={startedAt} durationMs={durationMs} running={running} />;
+  const figures = <ReasoningFigures count={count} startedAt={startedAt} durationMs={durationMs} running={running} />;
+  // `wait` and not a bare span: the duration beside the label is what the thinking lasted, and two
+  // bare figures on one row would read as one span measured twice.
+  const waitFigure = wait !== undefined ? (
+    <Text style={styles.figure}>{`wait ${formatSpan(wait)}`}</Text>
+  ) : null;
 
+  // Nothing to open: a thought the endpoint kept to itself, or a call that only had a long wait.
+  // The row is static text, and the label goes only where there is a thought for it to name.
   if (!hasBody) {
+    // With a count there is still a row to hang the wait off, and the wait keeps the far end it has
+    // everywhere else. Alone it starts the row instead: a lone figure pushed right sits exactly
+    // where the bubble's own clock sits, and would read as a second one.
+    const alone = count === '';
     return (
       <View style={styles.line}>
-        {/*
-          One name in every state, like the aside below: the figures say what the thinking cost,
-          and the word does not have to move to say it.
-        */}
-        <Text style={styles.label}>Reasoning</Text>
+        {count ? (
+          /*
+            One name in every state, like the aside below: the figures say what the thinking cost,
+            and the word does not have to move to say it.
+          */
+          <Text style={styles.label}>Reasoning</Text>
+        ) : null}
         {figures}
+        {alone ? null : <View style={styles.spacer} />}
+        {waitFigure}
       </View>
     );
   }
@@ -141,6 +192,7 @@ export function ReasoningLine({
     <CollapsibleAside
       label="Reasoning"
       trailing={figures}
+      right={waitFigure}
       body={body}
       showHint="Show the model's reasoning"
       hideHint="Hide the model's reasoning"
@@ -155,6 +207,8 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
   figures: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, flexShrink: 1 },
+  /** Pushes the wait to the far end: it is a footnote to the row, not part of its sentence. */
+  spacer: { flex: 1 },
   /** One step fainter than the label it follows: what the thinking cost is context on an aside, not
    *  a second label competing with it. */
   figure: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, opacity: 0.75 },

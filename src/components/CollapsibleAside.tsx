@@ -26,6 +26,7 @@ import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme'
 export function CollapsibleAside({
   label,
   trailing,
+  right,
   body,
   showHint,
   hideHint,
@@ -41,6 +42,12 @@ export function CollapsibleAside({
    * the thread around it re-rendering on every second.
    */
   trailing?: React.ReactNode;
+  /**
+   * Pinned to the right end of the head row, away from the toggle. For a figure that belongs to
+   * the block as a whole while reading as a footnote to it -- the wait a call cost, set opposite
+   * the label so the eye finds it without walking through the label to get there.
+   */
+  right?: React.ReactNode;
   body: string;
   showHint: string;
   hideHint: string;
@@ -99,6 +106,7 @@ export function CollapsibleAside({
           <Text style={styles.label}>{label}</Text>
           {trailing}
         </Pressable>
+        {right}
         {open && body && !chatSelectable ? <BlockActions title={label} value={body} /> : null}
       </View>
       {open ? (
@@ -113,7 +121,7 @@ export function CollapsibleAside({
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: space.sm },
   // The toggle takes the row and yields it: a long label must not push the copy button out.
-  line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1 },
+  line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1, flexGrow: 1 },
   chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
   pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },

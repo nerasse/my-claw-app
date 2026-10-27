@@ -139,20 +139,25 @@ export interface RunStoppingFrame {
 }
 
 /**
- * The model is working on this thread and nothing has come out of the call yet: the run is
- * between a call and its first token.
+ * The wait before a model call's first output, on the bubble that call opened. Two shapes, in the
+ * order they happen:
  *
- * Drawn as one muted line with a counter, because that wait is the whole screen on the engines
- * that think before they write -- a Codex turn at effort max sends nothing for twenty seconds,
- * a provider being retried for minutes, and the thread looked dead with the Stop button as its
- * only sign (2026-09-30). The first thing the turn produces takes it down.
+ * - `since` alone, while nothing has come out of the call: one muted line with a counter, because
+ *   that wait is the whole screen on the engines that think before they write -- a Codex turn at
+ *   effort max sends nothing for twenty seconds, a provider being retried for minutes, and the
+ *   thread looked dead with the Stop button as its only sign (2026-09-30).
+ * - `ms` alone, once something has: what the wait cost. Server-measured, so it survives a reload
+ *   and reads the same on a window that joined late, and it is the only figure a call that streamed
+ *   no reasoning has to show.
  */
-export interface TurnThinkingFrame {
-  type: 'chat.turn.thinking';
+export interface TurnWaitFrame {
+  type: 'chat.turn.wait';
   id: string;
   threadId: string;
   /** Server instant the call began, so a window joining late counts from the same start. */
-  since: string;
+  since?: string;
+  /** How long the wait lasted, once the call has produced something. */
+  ms?: number;
 }
 
 export interface StreamStartFrame {
@@ -423,6 +428,8 @@ export type HistoryEntry =
       reasoningTokens?: number;
       /** How long that thinking lasted, so a reopened thread shows the span it took. */
       reasoningMs?: number;
+      /** How long the call took to say anything at all, so a reopened thread shows the wait. */
+      waitMs?: number;
       /** A replayed command answer: same bubble the live `chat.command.result` drew. */
       command?: boolean;
       /** The aside folded under that answer (a compaction summary). */
@@ -2986,7 +2993,7 @@ export type ServerFrame =
   | RunStartFrame
   | RunEndFrame
   | RunStoppingFrame
-  | TurnThinkingFrame
+  | TurnWaitFrame
   | StreamStartFrame
   | StreamDeltaFrame
   | ReasoningDeltaFrame
@@ -3123,7 +3130,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.run.start',
   'chat.run.end',
   'chat.run.stopping',
-  'chat.turn.thinking',
+  'chat.turn.wait',
   'chat.stream.start',
   'chat.stream.delta',
   'chat.reasoning.delta',

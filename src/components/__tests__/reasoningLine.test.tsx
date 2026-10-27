@@ -8,7 +8,7 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { ThemeContext } from '../../theme';
 import { darkPalette } from '../../theme/palettes';
-import { ReasoningLine } from '../ReasoningLine';
+import { ReasoningLine, showsReasoningRow } from '../ReasoningLine';
 import { resetAsideExpansion, setAsideExpanded } from '../../core/asideExpansion';
 
 // Every tree is taken down after its test: one left mounted hears the next test's resets outside
@@ -176,4 +176,52 @@ test('the expand pref opens a line nobody touched, and a line the reader closed 
   setAsideExpanded('reasoning:bubble-2', false);
   const closed = render({ id: 'bubble-2', reasoning: 'another thought', streaming: false, expandReasoning: true });
   expect(textOf(closed)).not.toContain('another thought');
+});
+
+/**
+ * The wait the call cost, opposite the thought it preceded.
+ *
+ * Two durations on one row, deliberately kept apart: `12 s` beside the label is what the thinking
+ * lasted, `wait 4 s` at the far end is how long the reader watched nothing before the first word.
+ * Folded together they read as one span measured twice.
+ */
+test('the wait sits at the far end of the row, beside what the thinking cost', () => {
+  const tree = render({ reasoning: 'weighing options', tokens: 640, durationMs: 12_000, waitMs: 4_200, streaming: false });
+  const text = textOf(tree);
+  expect(text).toContain('Reasoning');
+  expect(text).toContain('640 tokens');
+  expect(text).toContain('12 s');
+  expect(text).toContain('wait 4.2 s');
+});
+
+test('a call that streamed no reasoning still shows its wait, once it was long enough to read', () => {
+  const tree = render({ waitMs: 9_000, streaming: false });
+  expect(textOf(tree)).toContain('wait 9 s');
+  // No label: there is no thought for it to name, and a row saying "Reasoning" over nothing is a
+  // button that opens nothing.
+  expect(textOf(tree)).not.toContain('Reasoning');
+});
+
+test('a fast answer adds no row at all', () => {
+  // Below the threshold the wait is the ordinary case, not information: a row on every bubble.
+  const tree = render({ waitMs: 1_100, streaming: false });
+  expect(tree.toJSON()).toBeNull();
+});
+
+test('a thought of its own keeps its wait even when it was short', () => {
+  // With a row already there the figure is a footnote, not a new line.
+  const tree = render({ reasoning: 'a quick thought', waitMs: 1_100, durationMs: 900, streaming: false });
+  expect(textOf(tree)).toContain('wait 1.1 s');
+});
+
+test('a long wait alone takes the caret down with it', () => {
+  // Two "working" marks in the same bubble was the regression the row and the caret once were:
+  // the row is what says the turn is alive, so the bubble must not draw both.
+  expect(showsReasoningRow({ waitMs: 9_000 })).toBe(true);
+  // Under the threshold nothing is drawn at all, so the caret keeps its place.
+  expect(showsReasoningRow({ waitMs: 800 })).toBe(false);
+  // A count or a thought always earns the row.
+  expect(showsReasoningRow({ tokens: 500, waitMs: 800 })).toBe(true);
+  expect(showsReasoningRow({ reasoning: 'thought', waitMs: undefined })).toBe(true);
+  expect(showsReasoningRow({ reasoningChars: 4_000 })).toBe(true);
 });

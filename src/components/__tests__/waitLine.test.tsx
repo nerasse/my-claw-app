@@ -1,15 +1,17 @@
 /**
- * The line drawn at the bottom of the thread while a model call has produced nothing yet.
+ * The counter drawn in the bubble while a model call has produced nothing yet.
  *
  * It is the quietest thing on the screen on purpose: it must lose to every answer, and it is only
- * ever there while there is nothing else to read.
+ * ever there while there is nothing else to read. It carries no word about thinking -- nothing has
+ * come out of the call yet, so the app does not know whether the model is reasoning or the provider
+ * is retrying -- only the figure the finished row will show as `wait`.
  */
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Text } from 'react-native';
 import { ThemeContext } from '../../theme';
 import { darkPalette } from '../../theme/palettes';
-import { TurnThinking } from '../TurnThinking';
+import { WaitLine } from '../WaitLine';
 
 let mounted: ReactTestRenderer.ReactTestRenderer | null = null;
 
@@ -18,7 +20,7 @@ function render(since: number): ReactTestRenderer.ReactTestRenderer {
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
       <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
-        <TurnThinking since={since} />
+        <WaitLine since={since} />
       </ThemeContext.Provider>,
     );
   });
@@ -39,10 +41,10 @@ function textsOf(tree: ReactTestRenderer.ReactTestRenderer): string {
     .join(' | ');
 }
 
-describe('TurnThinking', () => {
-  test('says the model is working, and how long it has been', () => {
+describe('WaitLine', () => {
+  test('counts the wait without claiming what the model is doing', () => {
     const tree = render(Date.now() - 1_500);
-    expect(textsOf(tree)).toContain('Thinking');
+    expect(textsOf(tree)).toContain('wait');
     // The counter ticks while the test runs: what matters is that a span is formatted from the
     // instant given, not the exact tenth of a second it had reached.
     expect(textsOf(tree)).toMatch(/[0-9]+(\.[0-9]+)? s/);

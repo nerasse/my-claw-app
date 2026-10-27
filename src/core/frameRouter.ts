@@ -277,10 +277,13 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (frame.text) chatStore.appendCompactionText(frame.threadId, frame.text);
       if (frame.reasoning) chatStore.appendCompactionReasoning(frame.threadId, frame.reasoning);
       break;
-    case 'chat.turn.thinking':
+    case 'chat.turn.wait':
       // A model call opened this bubble and has produced nothing yet: the bubble draws the wait,
-      // and the first thing written into it takes the mark down (the store does that).
-      chatStore.markWaiting(frame.threadId, frame.id, Date.parse(frame.since));
+      // and the first thing written into it takes the mark down (the store does that). Once the
+      // call has produced something, the server says what the wait cost and the counter becomes a
+      // figure that survives a reload.
+      if (frame.since !== undefined) chatStore.markWaiting(frame.threadId, frame.id, Date.parse(frame.since));
+      if (frame.ms !== undefined) chatStore.setWaitMs(frame.threadId, frame.id, frame.ms);
       break;
     case 'chat.run.start':
       // A run opening on this thread means the compaction that held its trigger is over: the

@@ -108,7 +108,7 @@ export function AppearanceScreen({
         <View style={styles.switchRow}>
           <View style={styles.switchLabel}>
             <Text style={styles.switchTitle}>Always expand reasoning</Text>
-            <Text style={styles.hint}>off: the model's thinking stays folded</Text>
+            <Text style={styles.hint}>off: the model's reasoning stays folded</Text>
           </View>
           <Switch
             value={uiPrefs?.expandReasoning ?? false}

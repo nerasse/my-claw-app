@@ -7,7 +7,7 @@ import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme'
 /**
  * How long a call has to stay silent before the wait is worth saying.
  *
- * The engines that stream their thinking put the first delta on screen in one to two seconds
+ * The engines that stream their reasoning put the first delta on screen in one to two seconds
  * (measured: deepseek-v4.1-flash, 1658 ms), and a line that appears and is replaced that fast is a
  * flicker rather than information: the owner read it as "Thinking written before the model even
  * thought" (2026-09-30). What the line is for is the silence -- Codex at effort max sends nothing
@@ -43,23 +43,24 @@ export function useRevealed(since: number | undefined, after: number): boolean {
 }
 
 /**
- * The wait before a model's first token, drawn in the bubble the call opened: one muted line with
- * a counter, server-dated, in place of the caret an empty streaming bubble would wear.
+ * The wait before a model's first output, climbing in the bubble the call opened.
  *
- * The engines that think before they write leave the screen empty for that whole stretch -- a
- * Codex turn at effort max sends nothing for twenty seconds, a provider being retried for minutes
- * -- and the thread read as dead, the Stop button its only sign of life (2026-09-30). The line
- * says the wait is work, and it is taken down by the first thing the turn produces.
+ * The engines that think before they write leave the screen empty for that whole stretch -- a Codex
+ * turn at effort max sends nothing for twenty seconds, a provider being retried for minutes -- and
+ * the thread read as dead, the Stop button its only sign of life (2026-09-30). The line says the
+ * wait is work, and the first thing the turn produces takes it down.
  *
- * Deliberately the quietest thing on the screen: it must lose to every answer, and it is only
- * ever there while there is nothing else to read. The same counter the reasoning line uses, from
- * the same server instant, so a window that joins late counts from the start of the call.
+ * It is labelled `wait` and not with a word about thinking, because nothing has come out of the
+ * call yet and the app genuinely does not know: the model may be reasoning, may be reading a long
+ * prompt, may be queued behind a retry. The same figure comes back on the reasoning row as
+ * `wait 4 s` once there is a thought to sit beside, so the number does not change identity between
+ * the wait and the answer -- only its place.
  */
-export function TurnThinking({ since }: { since: number }): React.JSX.Element {
+export function WaitLine({ since }: { since: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.line} accessibilityRole="progressbar" accessibilityLabel="The model is working">
-      <Text style={styles.label}>Thinking</Text>
+      <Text style={styles.label}>wait</Text>
       <Text style={styles.elapsed}>{formatSpan(useElapsed(since))}</Text>
     </View>
   );

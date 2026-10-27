@@ -112,7 +112,7 @@ export function CompactionRunning({ since, text, reasoning, stopping }: { since:
       */}
       {thinking ? (
         <CollapsibleAside
-          label="Thinking…"
+          label="Reasoning…"
           body={thinking}
           showHint="Show what the compaction is thinking"
           hideHint="Hide what the compaction is thinking"
