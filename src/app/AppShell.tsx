@@ -4120,7 +4120,7 @@ export function AppShell(): React.JSX.Element {
         <TextViewer
           url={textViewer.url}
           filename={textViewer.filename}
-          kind={textViewer.kind}
+          kind={textViewer.file}
           embedded={viewerInPane}
           onToggleFullscreen={fullscreenToggle}
           onClose={closeViewers}

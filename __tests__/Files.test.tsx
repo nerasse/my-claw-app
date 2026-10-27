@@ -441,3 +441,55 @@ test('a file without a preview still offers a download', async () => {
 
   await unmount(tree);
 });
+
+/**
+ * What the reader is told a file is.
+ *
+ * The viewer state of the right pane carries the server's `kind` in `file`; `kind` is the union's
+ * own discriminant and is always `'text'`. The shell read the discriminant, so every file reached
+ * the reader as plain text and a markdown page lost its prose typography -- exactly what the zoom
+ * control betrays, since only the markdown rendering offers one.
+ */
+test('a file the server classified as markdown opens in the prose reader', async () => {
+  const tree = await renderApp();
+  // The name says nothing: only the server's verdict can make this a markdown page.
+  await openFiles(tree, [file({ id: 'f-md', filename: '1-speech', kind: 'markdown' })]);
+
+  await press(tree, 'Open file 1-speech');
+  await waitFor(() => labelsOf(tree).includes('Download'));
+  await waitFor(() => labelsOf(tree).includes('Larger text'));
+
+  await unmount(tree);
+});
+
+test('a code file opens in the code reader, with no zoom on offer', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [file({ id: 'f-ts', filename: 'main.ts', kind: 'code' })]);
+
+  await press(tree, 'Open file main.ts');
+  await waitFor(() => labelsOf(tree).includes('Download'));
+  expect(labelsOf(tree)).not.toContain('Larger text');
+
+  await unmount(tree);
+});
+
+test('a zoom step is remembered, and both ends of the range stop', async () => {
+  const tree = await renderApp();
+  await openFiles(tree, [file({ id: 'f-md', filename: 'notes.md', kind: 'markdown' })]);
+  await press(tree, 'Open file notes.md');
+  await waitFor(() => labelsOf(tree).includes('Larger text'));
+
+  await press(tree, 'Larger text');
+  await waitFor(() => textsOf(tree).some(t => t.includes('115%')));
+  // The same step on the next file: a zoom is a preference about the reader, not the page.
+  await press(tree, 'Close file view');
+  await press(tree, 'Open file notes.md');
+  await waitFor(() => textsOf(tree).some(t => t.includes('115%')));
+
+  for (let i = 0; i < 8; i += 1) await press(tree, 'Larger text');
+  await waitFor(() => textsOf(tree).some(t => t.includes('200%')));
+  for (let i = 0; i < 12; i += 1) await press(tree, 'Smaller text');
+  await waitFor(() => textsOf(tree).some(t => t.includes('85%')));
+
+  await unmount(tree);
+});

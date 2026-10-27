@@ -203,3 +203,45 @@ describe('the column survives a reload', () => {
     expect(String(bridge.prefsSet.mock.calls[0]?.[1])).toContain('"drawerWidth":340');
   });
 });
+
+/**
+ * Every viewer the column can hold, round-tripped through what a reload reads back.
+ *
+ * The rework of 2026-10-27 made the viewer part of what survives a refresh, so the payload now
+ * travels through the device bag. A kind the reader does not recognise would come back as "no
+ * viewer" -- a file open before the reload simply gone -- and the text one carries a second field,
+ * `file`, that an older shape called `kind`.
+ */
+describe('every viewer survives the round trip', () => {
+  const VIEWERS = [
+    { kind: 'image', images: [{ url: 'http://h/m/1', filename: 'photo.png' }], index: 0 },
+    { kind: 'text', url: 'http://h/m/2', filename: 'notes.md', file: 'markdown' },
+    { kind: 'text', url: 'http://h/m/3', filename: 'main.ts', file: 'code' },
+    { kind: 'video', url: 'http://h/m/4', filename: 'clip.mp4' },
+    { kind: 'svg', url: 'http://h/m/5', filename: 'logo.svg' },
+    { kind: 'pdf', url: 'http://h/m/6', filename: 'doc.pdf' },
+    { kind: 'html', url: 'http://h/m/7', filename: 'page.html' },
+    { kind: 'office', url: 'http://h/m/8', filename: 'letter.docx' },
+    { kind: 'archive', url: 'http://h/m/9', filename: 'bundle.zip' },
+    { kind: 'file', url: 'http://h/m/10', filename: 'blob.bin', sizeBytes: 12 },
+    { kind: 'skill', url: 'http://h/s/1', skill: { name: 'x' } },
+  ] as const;
+
+  test.each(VIEWERS.map(viewer => [viewer.kind, viewer] as const))('%s', (kind, viewer) => {
+    rightPane.reset();
+    rightPane.openViewer(viewer as never);
+
+    const written = readRightPane(String(bridge.prefsSet.mock.calls.at(-1)?.[1]));
+    expect(written.viewer).toEqual(viewer);
+    expect(written.page).toBe('none');
+    expect(kind).toBe(viewer.kind);
+  });
+
+  test('a stored text viewer keeps the file kind it was opened with', () => {
+    // What the reader is told the file is: the discriminant says the viewer, `file` says the page.
+    rightPane.reset();
+    rightPane.openViewer({ kind: 'text', url: 'http://h/m/2', filename: 'notes.md', file: 'code' });
+    const restored = readRightPane('{"page":"none","viewer":{"kind":"text","url":"http://h/m/2","filename":"notes.md","file":"code"}}');
+    expect(restored.viewer).toMatchObject({ file: 'code' });
+  });
+});

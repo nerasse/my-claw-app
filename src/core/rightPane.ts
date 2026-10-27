@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { prefs } from './prefs';
+import type { FileKind } from './fileKind';
 import type { SettingsPage } from '../app/settingsPages';
 
 /**
@@ -81,7 +82,7 @@ export interface ViewerImage {
  */
 export type ViewerState =
   | { kind: 'image'; images: ViewerImage[]; index: number }
-  | { kind: 'text'; url: string; filename: string; file?: string }
+  | { kind: 'text'; url: string; filename: string; file?: FileKind }
   | { kind: 'video'; url: string; filename: string }
   | { kind: 'svg'; url: string; filename: string }
   | { kind: 'pdf'; url: string; filename: string }
