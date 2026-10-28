@@ -320,13 +320,15 @@ describe('SystemFilesScreen', () => {
     expect(Clipboard.setString).toHaveBeenCalledWith('# notes\n\nsome prose\n');
   });
 
-  test('a shell script copies by selection: no copy tile in its reader', async () => {
+  test('a script copies too: the tile follows readable text, not a list of extensions', async () => {
     const tree = await render();
     receive(HOME_WITH_SCRIPT);
     press(tree, 'Open /home/neras/deploy.sh');
     receive(readResult({ path: '/home/neras/deploy.sh', text: 'echo hi\n' }));
 
-    expect(labels(tree)).not.toContain('Copy the whole file');
+    expect(labels(tree)).toContain('Copy the whole file');
+    press(tree, 'Copy the whole file');
+    expect(Clipboard.setString).toHaveBeenCalledWith('echo hi\n');
   });
 
   test('the copy tile goes away with read mode, so an edit is never mistaken for a copy', async () => {
@@ -371,6 +373,7 @@ describe('SystemFilesScreen', () => {
     expect(shown).toContain('binary file (NUL byte) · nothing to edit');
     expect(shown).toContain('50.0 KB');
     expect(labels(tree)).not.toContain('Edit file');
+    expect(labels(tree)).not.toContain('Copy the whole file');
     expect(tree.root.findAllByProps({ testID: 'code-editor' })).toHaveLength(0);
   });
 

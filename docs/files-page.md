@@ -96,11 +96,13 @@ text reader (markdown, text, CSV, code), the image, video, SVG, PDF, HTML and ar
 
 ## One tap for the whole document
 
-Markdown and plain text -- the two readers that show prose -- carry a copy tile in their top bar,
-next to the zoom and the download (`CopyButton variant="bar"`); the same tile sits in this page's
-header in read mode. A code file does not get one: its selection is the way out, and the tile would
-sit over its own scroll bar. Copying takes the whole text as read from the server, not what the
-renderer made of it, and acknowledges on the tile itself because the clipboard is invisible
+Every reader that shows text carries a copy tile in its top bar, next to the zoom and the
+download (`CopyButton variant="bar"`), and the same tile sits in this page's header in read mode:
+markdown, prose, a script, a config, a table. The bar is "there are readable bytes on screen", not
+a list of extensions -- the owner's `.sh` wanted the tile his README already had (2026-10-28). A
+binary file, which is the one thing the page refuses to draw as text, gets neither the tile nor
+the editor. Copying takes the whole text as read from the server, not what the renderer made of
+it, and acknowledges on the tile itself because the clipboard is invisible
 (`docs/text-selection.md`).
 
 ## What the store refuses to do

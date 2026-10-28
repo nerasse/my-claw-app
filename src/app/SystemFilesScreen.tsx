@@ -8,7 +8,6 @@ import { PromptSheet } from '../components/PromptSheet';
 import { CodeEditor } from '../components/CodeEditor';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { languageForFile } from '../components/codeeditor/document';
-import { kindForName } from '../core/fileKind';
 import { FolderIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useHardwareBack } from '../core/hardwareBack';
@@ -467,13 +466,12 @@ export function SystemFilesScreen({
   const markdownRead =
     state.mode === 'read' && file !== null && file.text !== null && !file.truncated && !file.error && languageForFile(file.path) === 'markdown';
   /**
-   * Prose, in the reader: markdown drawn as a page, and a plain text file the editor shows as it
-   * is. Those two get one tap on the whole document; a code file copies by selection, and the
-   * owner asked for the readers, not for everything (2026-10-28).
+   * Anything the reader shows as text gets the copy tile: markdown, prose, a script, a config,
+   * a table. The bar is "there are bytes to copy and they are readable", not a short list of
+   * extensions -- the owner's `.sh` wanted the tile a README already had (2026-10-28).
    */
   const proseRead =
-    state.mode === 'read' && file !== null && file.text !== null && !file.error &&
-    (markdownRead || kindForName(file.path) === 'text');
+    state.mode === 'read' && file !== null && file.text !== null && !file.binary && !file.error;
   const inFile = state.mode === 'read' || state.mode === 'edit';
   /** What the chevron goes back to. Nothing above the machine root, so nothing to draw there. */
   const parentDir = state.dir !== null && state.dir !== '/' ? parentOf(state.dir) : null;

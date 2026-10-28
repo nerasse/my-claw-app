@@ -63,9 +63,10 @@ export function TextViewer({
   // The code reader is a WebView of its own: it scrolls itself, so it never goes inside the
   // ScrollView the prose needs.
   const isCode = kind === 'code' || kind === 'json' || kind === 'html';
-  // The two readers that hand over prose: a whole document worth taking in one tap, where a
-  // code file already copies line by line from the editor it opens in.
-  const prose = isMarkdown || kind === 'text' || (!kind && !isCode);
+  // Every kind this viewer draws is text -- markdown, plain text, code, a table, an office
+  // document converted to it -- so the whole file is always one tap away (owner, 2026-10-28: a
+  // `.sh` wants the same tile a README gets).
+  const copyable = content !== null;
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +99,7 @@ export function TextViewer({
           {filename}
         </Text>
         {isMarkdown ? <DocZoomControl /> : null}
-        {prose && content !== null ? (
+        {copyable ? (
           <CopyButton value={content} variant="bar" accessibilityLabel="Copy the whole file" />
         ) : null}
         <DownloadControl targets={[{ url: downloadUrl ?? url, filename }]} />

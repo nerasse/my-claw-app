@@ -3,10 +3,10 @@
  *
  * The owner reads files on the right-hand pane all day and asked for the whole document in one
  * tap rather than by selecting it block by block (2026-10-28). The rule that decides when the
- * tile is drawn lives in the component, so it is pinned here: prose gets it, a code file does
- * not -- a code reader copies by selection, and the tile would sit over its own scroll bar.
+ * tile is drawn lives in the component, so it is pinned here: everything this viewer draws is
+ * text, so everything gets it -- a `.sh` as much as a README.
  *
- * The bans are about where the text goes, not about what it looks like: the body is fetched,
+ * The note below is about where the text goes, not about what it looks like: the body is fetched,
  * so every case stubs the response.
  */
 
@@ -79,9 +79,14 @@ test('a plain text file, which is the same sheet of prose, copies too', async ()
   });
 });
 
-test('a code reader does not: its own selection is the way out', async () => {
+test('a code reader copies too: any text on screen is one tap away', async () => {
   const tree = await render('code');
-  expect(copyTile(tree)).toBeUndefined();
+  const tile = copyTile(tree);
+  expect(tile).toBeDefined();
+  ReactTestRenderer.act(() => {
+    tile!.props.onPress();
+  });
+  expect(Clipboard.setString).toHaveBeenCalledWith(BODY);
   ReactTestRenderer.act(() => {
     tree.unmount();
   });
