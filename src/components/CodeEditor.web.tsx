@@ -166,7 +166,14 @@ export function CodeEditor({
       historyCompartment.of(history()),
       keymap.of(historyKeymap),
       languageExtension(editorLanguage),
-      EditorView.theme({ '&': { fontSize: `${editorFontSize}px` } }),
+      // The reader fills the box it was given and scrolls inside it. Without the explicit
+      // height the CodeMirror root keeps its natural height, so a long file grew a
+      // 6000px-tall element inside an 800px pane: the text then ran off the bottom of the
+      // window and dragged the whole page with it (owner, 2026-10-28).
+      EditorView.theme({
+        '&': { fontSize: `${editorFontSize}px`, height: '100%', minHeight: '0' },
+        '.cm-scroller': { overflow: 'auto' },
+      }),
       EditorView.updateListener.of(update => {
         if (update.docChanged || update.selectionSet) {
           // 1-based, the line shape the header shows.

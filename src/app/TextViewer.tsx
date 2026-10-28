@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { formatBytes } from '../core/utils';
 import type { FileKind } from '../core/fileKind';
+import { CopyButton } from '../components/CopyButton';
 import { CsvTable } from '../components/CsvTable';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
@@ -62,6 +63,9 @@ export function TextViewer({
   // The code reader is a WebView of its own: it scrolls itself, so it never goes inside the
   // ScrollView the prose needs.
   const isCode = kind === 'code' || kind === 'json' || kind === 'html';
+  // The two readers that hand over prose: a whole document worth taking in one tap, where a
+  // code file already copies line by line from the editor it opens in.
+  const prose = isMarkdown || kind === 'text' || (!kind && !isCode);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +98,9 @@ export function TextViewer({
           {filename}
         </Text>
         {isMarkdown ? <DocZoomControl /> : null}
+        {prose && content !== null ? (
+          <CopyButton value={content} variant="bar" accessibilityLabel="Copy the whole file" />
+        ) : null}
         <DownloadControl targets={[{ url: downloadUrl ?? url, filename }]} />
         {onToggleFullscreen ? <FullscreenToggle embedded={embedded} onPress={onToggleFullscreen} /> : null}
         <Pressable
@@ -109,7 +116,9 @@ export function TextViewer({
 
       {content !== null ? (
         isTable ? (
-          <CsvTable value={content} />
+          <View style={styles.body}>
+            <CsvTable value={content} />
+          </View>
         ) : isCode ? (
           <View style={styles.body}>
             <CodeEditor
@@ -153,7 +162,10 @@ export function TextViewer({
 }
 
 const createStyles = (palette: Palette) => ({
-  stage: { backgroundColor: palette.bg },
+  // `flex` and `minHeight` are the whole of this viewer's frame: a child that grows past it
+  // (a code reader left at its content height, a table of 900 rows) must scroll inside, never
+  // push the pane and with it the rest of the window -- docs/file-preview.md.
+  stage: { flex: 1, minHeight: 0, overflow: 'hidden' as const, backgroundColor: palette.bg },
   topBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -179,7 +191,7 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   closeGlyph: { fontSize: 14, lineHeight: 16, color: palette.text },
-  body: { flex: 1, backgroundColor: palette.bg },
+  body: { flex: 1, minHeight: 0, backgroundColor: palette.bg },
   bodyContent: { padding: space.md, paddingBottom: space.xl },
   plainText: {
     color: palette.text,

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { font, useThemedStyles, type Palette } from '../theme';
+import { CheckIcon, CopyIcon } from './icons';
+import { font, radius, useTheme, useThemedStyles, type Palette } from '../theme';
 
 /** How long the button says "copied" before going back to its label. */
 const ACK_MS = 1400;
@@ -16,17 +17,24 @@ const ACK_MS = 1400;
  * See docs/text-selection.md.
  *
  * It acknowledges: the clipboard is invisible, and a tap with no feedback reads as a dead button.
+ *
+ * Two shapes, one behaviour: `label` is the micro-word beside a block, `bar` is the tile that sits
+ * in a viewer's top bar next to the zoom and the download -- the same 32px box, so a reader's row
+ * of controls stays on one line and one baseline.
  */
 export function CopyButton({
   value,
   label = 'copy',
   accessibilityLabel,
+  variant = 'label',
 }: {
   value: string;
   label?: string;
   accessibilityLabel?: string;
+  variant?: 'label' | 'bar';
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   const [done, setDone] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -36,16 +44,35 @@ export function CopyButton({
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  const copy = (): void => {
+    Clipboard.setString(value);
+    setDone(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setDone(false), ACK_MS);
+  };
+
+  if (variant === 'bar') {
+    return (
+      <Pressable
+        onPress={copy}
+        hitSlop={8}
+        style={styles.bar}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? 'Copy the whole file'}>
+        {done ? (
+          <CheckIcon size={17} color={palette.accent} />
+        ) : (
+          <CopyIcon size={17} color={palette.text} />
+        )}
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable
       // Four uppercase micro-characters are a small target; the row around them is not.
       hitSlop={10}
-      onPress={() => {
-        Clipboard.setString(value);
-        setDone(true);
-        if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => setDone(false), ACK_MS);
-      }}
+      onPress={copy}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? 'Copy'}>
       <Text style={[styles.copy, done ? styles.done : null]}>{done ? 'copied' : label}</Text>
@@ -56,4 +83,12 @@ export function CopyButton({
 const createStyles = (palette: Palette) => ({
   copy: { fontSize: font.micro, color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
   done: { color: palette.textFaint },
+  bar: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
 });

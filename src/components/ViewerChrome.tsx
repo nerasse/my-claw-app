@@ -75,7 +75,7 @@ export function FullscreenToggle({
 }
 
 const styles = StyleSheet.create({
-  embedded: { flex: 1 },
+  embedded: { flex: 1, minHeight: 0, overflow: 'hidden' as const },
 });
 
 const createStyles = (palette: Palette) => ({

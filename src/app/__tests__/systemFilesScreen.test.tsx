@@ -13,6 +13,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import Clipboard from '@react-native-clipboard/clipboard';
 import { Text, View as HostBox } from 'react-native';
 import { SystemFilesScreen } from '../SystemFilesScreen';
 import { OverlayHost } from '../../components/OverlayHost';
@@ -306,6 +307,37 @@ describe('SystemFilesScreen', () => {
     expect(texts(tree).join('\n')).toContain('# notes');
     // The door to the raw text is still there, and it is what `Edit` does.
     expect(labels(tree)).toContain('Edit file');
+  });
+
+  test('a markdown reader offers the whole document in one tap', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult({ text: '# notes\n\nsome prose\n' }));
+
+    expect(labels(tree)).toContain('Copy the whole file');
+    press(tree, 'Copy the whole file');
+    expect(Clipboard.setString).toHaveBeenCalledWith('# notes\n\nsome prose\n');
+  });
+
+  test('a shell script copies by selection: no copy tile in its reader', async () => {
+    const tree = await render();
+    receive(HOME_WITH_SCRIPT);
+    press(tree, 'Open /home/neras/deploy.sh');
+    receive(readResult({ path: '/home/neras/deploy.sh', text: 'echo hi\n' }));
+
+    expect(labels(tree)).not.toContain('Copy the whole file');
+  });
+
+  test('the copy tile goes away with read mode, so an edit is never mistaken for a copy', async () => {
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult({ text: '# notes\n\nsome prose\n' }));
+    expect(labels(tree)).toContain('Copy the whole file');
+
+    press(tree, 'Edit file');
+    expect(labels(tree)).not.toContain('Copy the whole file');
   });
 
   test('editing the same markdown hands it back raw, in the markdown the editor knows', async () => {

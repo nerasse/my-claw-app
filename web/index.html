@@ -18,9 +18,14 @@ nothing, so on the web this meta tag is the whole keyboard avoidance. -->
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 <!-- The first paint, before the bundle has a theme: follow the system so a light desktop does
      not flash a dark rectangle on every load. -->
+<!-- overflow:hidden on html and body: the app owns the viewport. A reader that renders taller
+     than the window (a long document, a table) must scroll inside its own pane; without this
+     the document grew the page instead, and one wheel past the end of a file carried the whole
+     interface up -- left column, top bar and all (owner, 2026-10-28). overscroll-behavior keeps
+     a trackpad's fling from rubber-banding the page behind the panes. -->
 <style>
-html,body,#root{height:100%;margin:0;background:#ffffff}
-#root{display:flex}
+html,body{height:100%;margin:0;background:#ffffff;overflow:hidden;overscroll-behavior:none}
+#root{height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 @media (prefers-color-scheme: dark){html,body,#root{background:#0b0d10}}
 </style>
 </head>

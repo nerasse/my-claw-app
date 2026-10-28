@@ -137,6 +137,11 @@ const createStyles = (palette: Palette) => ({
   railNew: { backgroundColor: palette.accentSoft },
   pagePane: {
     position: 'relative' as const,
+    // A column beside the conversation is a frame: what it holds scrolls inside it, and nothing
+    // it holds may grow the window's own scroll area (a long document used to push the whole
+    // interface up, left column and all -- owner, 2026-10-28).
+    minHeight: 0,
+    overflow: 'hidden' as const,
     marginLeft: space.md,
     paddingLeft: space.md,
     borderLeftWidth: 1,

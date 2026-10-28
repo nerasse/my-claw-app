@@ -72,6 +72,37 @@ back to CodeMirror, highlight and all. Which file that is stays a single decisio
 own `languageForFile` table decides what is markdown, so the reader and the highlighter can never
 disagree about `.md`.
 
+## The reader is a frame, and the frame owns the scroll (2026-10-28)
+
+The owner reported that a long document opened on the right, when he scrolled, took the whole
+interface with it: the text ran past the bottom of the window and the conversation list and the
+composer were gone. Two things were wrong, and both are now structural rather than a `maxHeight`
+on one screen:
+
+1. **CodeMirror never filled its box.** `.cm-editor` kept its natural content height (a 6 000 px
+div inside an 800 px pane: the WebView host fills its parent, the web host did not), so the text
+escaped the pane downwards and grew the page. The web host now states `height: 100%` and gives
+`.cm-scroller` its own `overflow: auto` -- the reader scrolls, the box does not move.
+2. **Nothing clipped.** `html` and `body` scrolled, so an overflowing document became an
+overflowing *page*, and one wheel past the end of a file carried the interface up. `web/index.html`
+now sets `overflow: hidden` on `html`/`body` and `#root`, and the chain from the shell down to
+`ViewerStage` carries `minHeight: 0` with `overflow: hidden` on the panes (`AppShell`,
+`DesktopColumns`, `ViewerChrome`, `TextViewer`, `CsvTable`). A list or a document that outgrows
+its pane scrolls *inside* it, whatever it holds.
+
+The rule the next viewer inherits: **a pane is a frame; a viewer's root is `flex: 1` + `minHeight: 0`
++ `overflow: hidden`, and the scrolling lives in one child of it.** Checked the same way for the
+text reader (markdown, text, CSV, code), the image, video, SVG, PDF, HTML and archive viewers.
+
+## One tap for the whole document
+
+Markdown and plain text -- the two readers that show prose -- carry a copy tile in their top bar,
+next to the zoom and the download (`CopyButton variant="bar"`); the same tile sits in this page's
+header in read mode. A code file does not get one: its selection is the way out, and the tile would
+sit over its own scroll bar. Copying takes the whole text as read from the server, not what the
+renderer made of it, and acknowledges on the tile itself because the clipboard is invisible
+(`docs/text-selection.md`).
+
 ## What the store refuses to do
 
 `src/core/fsStore.ts` holds one directory and one open file, and it is where the honesty of the

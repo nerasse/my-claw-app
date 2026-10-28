@@ -75,6 +75,22 @@ test('a tap fills the clipboard and says so, then goes quiet again', () => {
   expect(jest.getTimerCount()).toBe(pending - 1);
 });
 
+test('the bar shape is a lone tile that copies the whole document', () => {
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<CopyButton value={'# titre\n\ntout le fichier'} variant="bar" />);
+  });
+  // No word on it: the tile lives in a row of icons, and a label would break the line.
+  expect(textsOf(tree)).not.toContain('copy');
+
+  pressLabelled(tree, 'Copy the whole file');
+  expect(Clipboard.setString).toHaveBeenCalledWith('# titre\n\ntout le fichier');
+
+  ReactTestRenderer.act(() => {
+    tree.unmount();
+  });
+});
+
 test('an aside copies its raw source, and only once open', () => {
   const body = '1. Primary Request\n\n   `src/app.ts`, whole paragraphs of it.';
   let tree!: ReactTestRenderer.ReactTestRenderer;

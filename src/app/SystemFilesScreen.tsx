@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, FlatList, Platform, Pressable, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
+import { CopyButton } from '../components/CopyButton';
 import { DownloadControl } from '../components/DownloadControl';
 import { PromptSheet } from '../components/PromptSheet';
 import { CodeEditor } from '../components/CodeEditor';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { languageForFile } from '../components/codeeditor/document';
+import { kindForName } from '../core/fileKind';
 import { FolderIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useHardwareBack } from '../core/hardwareBack';
@@ -464,6 +466,14 @@ export function SystemFilesScreen({
    */
   const markdownRead =
     state.mode === 'read' && file !== null && file.text !== null && !file.truncated && !file.error && languageForFile(file.path) === 'markdown';
+  /**
+   * Prose, in the reader: markdown drawn as a page, and a plain text file the editor shows as it
+   * is. Those two get one tap on the whole document; a code file copies by selection, and the
+   * owner asked for the readers, not for everything (2026-10-28).
+   */
+  const proseRead =
+    state.mode === 'read' && file !== null && file.text !== null && !file.error &&
+    (markdownRead || kindForName(file.path) === 'text');
   const inFile = state.mode === 'read' || state.mode === 'edit';
   /** What the chevron goes back to. Nothing above the machine root, so nothing to draw there. */
   const parentDir = state.dir !== null && state.dir !== '/' ? parentOf(state.dir) : null;
@@ -498,6 +508,9 @@ export function SystemFilesScreen({
                 : 'opening…'}
           </Text>
         </View>
+        {proseRead && file ? (
+          <CopyButton value={file.text ?? ''} variant="bar" accessibilityLabel="Copy the whole file" />
+        ) : null}
         {state.mode === 'read' && canEdit ? (
           <Pressable
             onPress={() => fsStore.beginEdit()}
@@ -785,7 +798,7 @@ export function SystemFilesScreen({
 }
 
 const createStyles = (palette: Palette) => ({
-  screen: { flex: 1 },
+  screen: { flex: 1, minHeight: 0 },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -852,7 +865,7 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.border,
   },
   chipText: { fontSize: font.micro, color: palette.textMuted },
-  listArea: { flex: 1 },
+  listArea: { flex: 1, minHeight: 0 },
   list: {},
   listContent: { paddingTop: space.xs },
   emptyContent: { flexGrow: 1, justifyContent: 'center' as const },
@@ -959,9 +972,9 @@ const createStyles = (palette: Palette) => ({
     gap: space.xs,
   },
   binaryTitle: { fontSize: font.meta, color: palette.text },
-  editorArea: { flex: 1, paddingTop: space.sm },
+  editorArea: { flex: 1, minHeight: 0, overflow: 'hidden' as const, paddingTop: space.sm },
   /** The same box as the editor, so switching to `Edit` does not move the text's top edge. */
-  readArea: { flex: 1, paddingTop: space.sm },
+  readArea: { flex: 1, minHeight: 0, paddingTop: space.sm },
   readContent: { paddingBottom: space.xl },
   truncated: {
     paddingBottom: space.xs,

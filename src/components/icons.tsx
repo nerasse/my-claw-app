@@ -66,6 +66,16 @@ export function CheckIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />;
 }
 
+/** Two sheets, one behind the other: the whole document goes to the clipboard. */
+export function CopyIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M8 3h9a2 2 0 0 1 2 2v11h-2V5H8zM5 7h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm0 2v10h10V9z"
+    />
+  );
+}
+
 /** The funnel: three rules narrowing to a point, the shape everyone reads as "narrow this list". */
 export function FilterIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M10 18h4v-2h-4zM3 6v2h18V6zm3 7h12v-2H6z" />;

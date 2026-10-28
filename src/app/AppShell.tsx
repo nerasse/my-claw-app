@@ -5994,10 +5994,11 @@ export function AppShell(): React.JSX.Element {
 }
 
 const createStyles = (palette: Palette) => ({
-  safe: { flex: 1, backgroundColor: palette.bg },
-  shell: { flex: 1, flexDirection: 'row' as const },
+  safe: { flex: 1, minHeight: 0, backgroundColor: palette.bg },
+  shell: { flex: 1, minHeight: 0, overflow: 'hidden' as const, flexDirection: 'row' as const },
   container: {
     flex: 1,
+    minHeight: 0,
     // A column in a row: without this a wide conversation pushes the list off the screen.
     minWidth: 0,
     paddingHorizontal: space.md,
@@ -6005,7 +6006,7 @@ const createStyles = (palette: Palette) => ({
     paddingBottom: space.lg,
   },
   containerSplit: { flexDirection: 'row' as const },
-  chatPane: { flex: 1, minWidth: 0 },
+  chatPane: { flex: 1, minWidth: 0, minHeight: 0 },
   chatWrap: { flex: 1, minWidth: 0 },
   pageFull: { flex: 1 },
 });

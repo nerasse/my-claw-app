@@ -55,7 +55,7 @@ export function CsvTable({ value }: { value: string }): React.JSX.Element {
 }
 
 const createStyles = (palette: Palette) => ({
-  wrapper: { flex: 1, backgroundColor: palette.bg },
+  wrapper: { flex: 1, minHeight: 0, backgroundColor: palette.bg },
   content: { padding: space.md, paddingBottom: space.xl },
   row: {
     flexDirection: 'row' as const,

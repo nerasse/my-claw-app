@@ -310,6 +310,15 @@ control is absent rather than inert.
 
 `dense` is gated on `pointer: fine`, not on width: a touchscreen laptop keeps its tap targets.
 
+### The page never scrolls
+
+`html`, `body` and `#root` are `height: 100%; overflow: hidden`, and every pane from the shell
+down carries `minHeight: 0` with `overflow: hidden` on the columns themselves (`web/index.html`,
+`AppShell`, `DesktopColumns`, `ViewerChrome`). The app owns the viewport: a document, a table or
+a listing that outgrows its box scrolls inside it. Left unclipped, a reader taller than the
+window grew the *page*, and one wheel past the end of a file rolled the whole interface up --
+conversation list and composer included (owner, 2026-10-28).
+
 ### Keyboard
 
 | Key | Effect |
