@@ -5,6 +5,7 @@ import {
   ScrollView,
   Text,
   View,
+  type TextStyle,
 } from 'react-native';
 import { formatBytes } from '../core/utils';
 import type { FileKind } from '../core/fileKind';
@@ -13,9 +14,11 @@ import { CsvTable } from '../components/CsvTable';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
 import { CodeEditor } from '../components/CodeEditor';
+import { DEFAULT_EDITOR_FONT_SIZE } from '../components/codeeditor/protocol';
 import { languageForFile } from '../components/codeeditor/document';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { DocZoomControl } from '../components/DocZoomControl';
+import { useDocFontScale } from '../core/docZoom';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -51,6 +54,8 @@ export function TextViewer({
   // opened from a bubble, with the composer's keyboard still up behind it.
   useDismissKeyboard();
   const { palette, dark } = useTheme();
+  /** The reader's zoom, shared with the other readers: every kind drawn here follows it. */
+  const scale = useDocFontScale();
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   /** Announced size from the response headers, so a big file shows what it is loading. */
@@ -98,7 +103,7 @@ export function TextViewer({
         <Text style={styles.title} numberOfLines={1}>
           {filename}
         </Text>
-        {isMarkdown ? <DocZoomControl /> : null}
+        {filename ? <DocZoomControl /> : null}
         {copyable ? (
           <CopyButton value={content} variant="bar" accessibilityLabel="Copy the whole file" />
         ) : null}
@@ -118,7 +123,7 @@ export function TextViewer({
       {content !== null ? (
         isTable ? (
           <View style={styles.body}>
-            <CsvTable value={content} />
+            <CsvTable value={content} scale={scale} />
           </View>
         ) : isCode ? (
           <View style={styles.body}>
@@ -127,6 +132,7 @@ export function TextViewer({
               language={languageForFile(filename)}
               readOnly
               dark={dark}
+              fontSize={Math.round(DEFAULT_EDITOR_FONT_SIZE * scale)}
               onError={err => setContentError(err instanceof Error ? err.message : 'editor failed')}
             />
           </View>
@@ -135,7 +141,7 @@ export function TextViewer({
             {isMarkdown ? (
               <DocumentMarkdown value={content} />
             ) : (
-              <Text style={styles.plainText} selectable>
+              <Text style={plainTextStyle(styles, scale)} selectable>
                 {content}
               </Text>
             )}
@@ -160,6 +166,27 @@ export function TextViewer({
 
     </ViewerStage>
   );
+}
+
+const DOC_TEXT_SIZE = 14;
+const DOC_TEXT_LINE = 22;
+
+/**
+ * The plain-text body, at the reader's zoom.
+ *
+ * A style function rather than a hook: the sheet's own styles are static, and the only value that
+ * moves is the scale, which the caller already holds. Line height scales with the size or a
+ * 200 % page is a pile of overlapping lines.
+ */
+function plainTextStyle(
+  styles: ReturnType<typeof createStyles>,
+  scale: number,
+): TextStyle {
+  return {
+    ...styles.plainText,
+    fontSize: Math.round(DOC_TEXT_SIZE * scale),
+    lineHeight: Math.round(DOC_TEXT_LINE * scale),
+  };
 }
 
 const createStyles = (palette: Palette) => ({
@@ -196,9 +223,9 @@ const createStyles = (palette: Palette) => ({
   bodyContent: { padding: space.md, paddingBottom: space.xl },
   plainText: {
     color: palette.text,
-    fontSize: font.body,
+    fontSize: DOC_TEXT_SIZE,
     fontFamily: 'monospace',
-    lineHeight: 22,
+    lineHeight: DOC_TEXT_LINE,
   },
   error: {
     textAlign: 'center' as const,

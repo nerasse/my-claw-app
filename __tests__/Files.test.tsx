@@ -462,13 +462,14 @@ test('a file the server classified as markdown opens in the prose reader', async
   await unmount(tree);
 });
 
-test('a code file opens in the code reader, with no zoom on offer', async () => {
+test('a code file opens in the code reader, and it zooms too', async () => {
   const tree = await renderApp();
   await openFiles(tree, [file({ id: 'f-ts', filename: 'main.ts', kind: 'code' })]);
 
   await press(tree, 'Open file main.ts');
   await waitFor(() => labelsOf(tree).includes('Download'));
-  expect(labelsOf(tree)).not.toContain('Larger text');
+  // The zoom was markdown's alone until 2026-10-29: a script had no way to grow its text.
+  expect(labelsOf(tree)).toContain('Larger text');
 
   await unmount(tree);
 });

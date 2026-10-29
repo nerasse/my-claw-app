@@ -13,13 +13,20 @@ import { font, space, useThemedStyles, type Palette } from '../theme';
  */
 const MAX_COLUMNS = 12;
 const COLUMN_WIDTH = 132;
+const CELL_FONT_SIZE = 11;
 
-export function CsvTable({ value }: { value: string }): React.JSX.Element {
+export function CsvTable({ value, scale = 1 }: { value: string; scale?: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const table = useMemo(() => parseDelimited(value), [value]);
   const columns = Math.max(...table.rows.map((row) => row.length), 1);
   const shown = Math.min(columns, MAX_COLUMNS);
   const [header, ...body] = table.rows;
+  // A table is read column by column, so the zoom widens a column with its text: leaving the
+  // width fixed would wrap every cell the reader asked to be bigger.
+  const cellStyle = useMemo(
+    () => [styles.cell, { fontSize: Math.round(CELL_FONT_SIZE * scale), width: Math.round(COLUMN_WIDTH * scale) }],
+    [styles.cell, scale],
+  );
 
   return (
     <ScrollView style={styles.wrapper} contentContainerStyle={styles.content}>
@@ -28,7 +35,7 @@ export function CsvTable({ value }: { value: string }): React.JSX.Element {
           {header ? (
             <View style={[styles.row, styles.headerRow]}>
               {Array.from({ length: shown }, (_, index) => (
-                <Text key={index} style={[styles.cell, styles.headerCell]} numberOfLines={1}>
+                <Text key={index} style={[cellStyle, styles.headerCell]} numberOfLines={1}>
                   {header[index] ?? ''}
                 </Text>
               ))}
@@ -37,7 +44,7 @@ export function CsvTable({ value }: { value: string }): React.JSX.Element {
           {body.map((row, rowIndex) => (
             <View key={rowIndex} style={styles.row}>
               {Array.from({ length: shown }, (_, index) => (
-                <Text key={index} style={styles.cell} numberOfLines={1}>
+                <Text key={index} style={cellStyle} numberOfLines={1}>
                   {row[index] ?? ''}
                 </Text>
               ))}
@@ -68,7 +75,7 @@ const createStyles = (palette: Palette) => ({
     width: COLUMN_WIDTH,
     paddingHorizontal: space.sm,
     paddingVertical: 6,
-    fontSize: font.small,
+    fontSize: CELL_FONT_SIZE,
     color: palette.text,
   },
   foot: {

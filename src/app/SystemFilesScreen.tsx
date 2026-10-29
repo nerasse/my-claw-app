@@ -6,7 +6,9 @@ import { CopyButton } from '../components/CopyButton';
 import { DownloadControl } from '../components/DownloadControl';
 import { PromptSheet } from '../components/PromptSheet';
 import { CodeEditor } from '../components/CodeEditor';
+import { DEFAULT_EDITOR_FONT_SIZE } from '../components/codeeditor/protocol';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
+import { DocZoomControl } from '../components/DocZoomControl';
 import { languageForFile } from '../components/codeeditor/document';
 import { FolderIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
@@ -14,6 +16,7 @@ import { useHardwareBack } from '../core/hardwareBack';
 import { useDismissKeyboard } from '../core/keyboard';
 import type { DeviceInfo } from '../core/device';
 import { fsStore, sortEntries, useFsStore, type FsOpenFile } from '../core/fsStore';
+import { useDocFontScale } from '../core/docZoom';
 import { prefs } from '../core/prefs';
 import { formatBytes, formatDate, httpOrigin } from '../core/utils';
 import { fsDownloadUrl, uploadToFs, type FsLocalFile } from '../core/upload';
@@ -227,6 +230,8 @@ export function SystemFilesScreen({
   const styles = useThemedStyles(createStyles);
   const { dark } = useTheme();
   const state = useFsStore();
+  /** The reader's zoom, the one the document readers share: it drives the editor's font too. */
+  const scale = useDocFontScale();
   useDismissKeyboard();
 
   const [sheetEntry, setSheetEntry] = useState<FsEntry | null>(null);
@@ -472,7 +477,12 @@ export function SystemFilesScreen({
    */
   const proseRead =
     state.mode === 'read' && file !== null && file.text !== null && !file.binary && !file.error;
+  /**
+   * The zoom belongs to any file the page draws as text, in read *and* in edit: the pref drives the
+   * editor's font size too, so a script opened in CodeMirror grows with it (2026-10-29).
+   */
   const inFile = state.mode === 'read' || state.mode === 'edit';
+  const zoomable = inFile && file !== null && file.text !== null && !file.binary && !file.error;
   /** What the chevron goes back to. Nothing above the machine root, so nothing to draw there. */
   const parentDir = state.dir !== null && state.dir !== '/' ? parentOf(state.dir) : null;
   const backLabel = inFile ? 'Back to files' : parentDir !== null ? `Up to ${parentDir}` : null;
@@ -506,6 +516,7 @@ export function SystemFilesScreen({
                 : 'opening…'}
           </Text>
         </View>
+        {zoomable ? <DocZoomControl /> : null}
         {proseRead && file ? (
           <CopyButton value={file.text ?? ''} variant="bar" accessibilityLabel="Copy the whole file" />
         ) : null}
@@ -724,6 +735,7 @@ export function SystemFilesScreen({
             language={file ? languageForFile(file.path) : null}
             readOnly={state.mode !== 'edit'}
             dark={dark}
+            fontSize={Math.round(DEFAULT_EDITOR_FONT_SIZE * scale)}
             onChange={text => fsStore.editText(text)}
             onCursor={line => setCursor(line)}
             onError={err => fsStore.setNotice(`editor: ${messageOf(err)}`)}

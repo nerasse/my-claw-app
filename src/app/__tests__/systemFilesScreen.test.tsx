@@ -21,6 +21,7 @@ import { DownloadControl } from '../../components/DownloadControl';
 import { overlayStore } from '../../core/overlay';
 import { fsStore } from '../../core/fsStore';
 import { connection } from '../../core/connection';
+import { prefs } from '../../core/prefs';
 import { deviceBridge } from '../../core/nativeBridge';
 import type { FsEntry, FsListResultFrame, FsReadResultFrame, FsWriteResultFrame, ServerFrame } from '../../core/protocol';
 import type { DeviceInfo } from '../../core/device';
@@ -190,6 +191,8 @@ describe('SystemFilesScreen', () => {
     }
     mounted = null;
     fsStore.reset();
+    // The zoom is a module-level pref: one test's 200 % would be the next one's starting size.
+    prefs.set('docFontScale', 1);
     await ReactTestRenderer.act(async () => overlayStore.reset());
     jest.clearAllMocks();
   });
@@ -329,6 +332,34 @@ describe('SystemFilesScreen', () => {
     expect(labels(tree)).toContain('Copy the whole file');
     press(tree, 'Copy the whole file');
     expect(Clipboard.setString).toHaveBeenCalledWith('echo hi\n');
+  });
+
+  // The zoom was the markdown reader's alone, which left a script -- the file this page opens in
+  // CodeMirror most often -- with no way to grow its text (owner, 2026-10-29).
+  test('every text file offers the zoom, and the editor is handed the zoomed size', async () => {
+    prefs.set('docFontScale', 1.5);
+    const tree = await render();
+    receive(HOME_WITH_SCRIPT);
+    press(tree, 'Open /home/neras/deploy.sh');
+    receive(readResult({ path: '/home/neras/deploy.sh', text: 'echo hi\n' }));
+
+    expect(labels(tree)).toContain('Larger text');
+    expect(editorProps(tree).fontSize).toBe(21);
+    press(tree, 'Larger text');
+    expect(prefs.get().docFontScale).toBe(1.75);
+  });
+
+  test('the zoom stays through an edit, and the editor follows it there too', async () => {
+    prefs.set('docFontScale', 2);
+    const tree = await render();
+    receive(HOME);
+    press(tree, 'Open /home/neras/notes.md');
+    receive(readResult({ text: '# notes\n' }));
+
+    expect(labels(tree)).toContain('Larger text');
+    press(tree, 'Edit file');
+    expect(labels(tree)).toContain('Larger text');
+    expect(editorProps(tree).fontSize).toBe(28);
   });
 
   test('the copy tile goes away with read mode, so an edit is never mistaken for a copy', async () => {

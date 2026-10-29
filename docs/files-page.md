@@ -105,6 +105,24 @@ the editor. Copying takes the whole text as read from the server, not what the r
 it, and acknowledges on the tile itself because the clipboard is invisible
 (`docs/text-selection.md`).
 
+## The zoom follows the kind, not the extension
+
+One preference (`docFontScale`, shared with the skill reader) sizes every text surface: each kind
+just has to honour it. It used to be drawn for markdown alone, so a `.txt`, a script or a CSV had
+no way to grow its text -- the three the owner reads most (2026-10-29). Now:
+
+- markdown: `DocumentMarkdown` scales its whole sheet (body 15 px, headings down the hierarchy).
+- plain text: the body's font and its line box both scale, or a 200 % page is a pile of
+  overlapping lines.
+- code: the editor is handed `fontSize = round(14 × scale)`; both hosts already take it as a prop,
+  so the WebView page and CodeMirror on web follow without a second mechanism.
+- a table: each cell's font *and* width scale. The width is what makes it work -- a fixed 132 px
+  column wraps a 200 % cell to three lines.
+
+The control stays in the reader's top bar (`DocZoomControl`: `−`, the percentage, `+`, which is
+itself a reset), and this page shows it in read *and* edit mode: the editor lives on the same
+pref, so the button is not a lie in either.
+
 ## What the store refuses to do
 
 `src/core/fsStore.ts` holds one directory and one open file, and it is where the honesty of the
