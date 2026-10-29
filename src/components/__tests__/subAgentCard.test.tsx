@@ -35,8 +35,19 @@ function render(item: ToolItem, props: Record<string, unknown> = {}) {
       </ThemeContext.Provider>,
     );
   });
+  lastTree = tree;
   return tree;
 }
+
+// A running card counts its own seconds, so it holds an interval. Unmounted after every test:
+// left alive, the tick lands after the test and React reports an act() warning for it.
+let lastTree: ReactTestRenderer.ReactTestRenderer | undefined;
+afterEach(() => {
+  if (!lastTree) return;
+  const tree = lastTree;
+  lastTree = undefined;
+  ReactTestRenderer.act(() => tree.unmount());
+});
 
 function texts(tree: ReactTestRenderer.ReactTestRenderer): string[] {
   return tree.root
@@ -154,4 +165,27 @@ it.each([
   const tree = render(makeItem({ ok: false, output: '' }), { ...DOOR, spawn: { subagentId: 's1', displayName: 'digger', status } });
   expect(texts(tree)).toContain(expected);
   expect(texts(tree)).not.toContain('error');
+});
+
+// "● running" without a clock is the same picture at ten seconds and at ten minutes, and nothing
+// else on the card carries time until the result lands.
+it('counts the run, to the left of the running state', () => {
+  const tree = render(makeItem({ running: true, ts: Date.now() - 95_000 }), {
+    ...DOOR,
+    spawn: { subagentId: 's1', displayName: 'digger', status: 'running' as const },
+  });
+  const shown = texts(tree);
+  const elapsed = shown.findIndex(text => /^1 min \d+ s$/.test(text));
+  expect(elapsed).toBeGreaterThanOrEqual(0);
+  expect(elapsed).toBeLessThan(shown.indexOf('● running'));
+});
+
+it('a settled card shows its frozen duration, not a second counter', () => {
+  const tree = render(makeItem({ durationMs: 4200, ts: Date.now() - 95_000 }), {
+    ...DOOR,
+    spawn: { subagentId: 's1', displayName: 'digger', status: 'complete' as const },
+  });
+  const shown = texts(tree);
+  expect(shown).toContain('4.2 s');
+  expect(shown.some(text => /^1 min \d+ s$/.test(text))).toBe(false);
 });

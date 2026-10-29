@@ -5,6 +5,7 @@ import type { SpawnStatus } from '../core/protocol';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatSpan } from '../core/utils';
+import { useElapsed } from './CommandElapsed';
 import { requestToolOutput } from '../core/toolOutput';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
@@ -24,6 +25,19 @@ function hostOf(url: unknown): string {
   if (typeof url !== 'string') return '';
   const match = /^https?:\/\/([^/?#:]+)/i.exec(url.trim());
   return match ? match[1].toLowerCase() : '';
+}
+
+/**
+ * Seconds since the call started, where the frozen duration will sit once it settles.
+ *
+ * A sub-agent can run for ten minutes; "● running" alone says nothing about whether it has been
+ * going for ten seconds or ten minutes, and the card carries no other trace of time until the
+ * result lands. Its own component so the tick redraws this text and not the card.
+ */
+function RunningFor({ since }: { since: number }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const elapsed = useElapsed(since);
+  return <Text style={styles.duration}>{formatSpan(elapsed)}</Text>;
 }
 
 export const SubAgentCard = React.memo(function SubAgentCardView({
@@ -116,6 +130,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
             </Text>
           ) : null}
           <View style={styles.spacer} />
+          {running && item.durationMs === undefined ? <RunningFor since={item.ts} /> : null}
           {state ? <Text style={state.style}>{state.text}</Text> : null}
           {running ? (
             <View style={styles.spinner}>
