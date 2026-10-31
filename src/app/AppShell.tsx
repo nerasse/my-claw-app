@@ -216,7 +216,7 @@ import { McpsScreen } from './McpsScreen';
 import { ConfigScreen, type ConfigEditorState } from './ConfigScreen';
 import { ModelsScreen } from './ModelsScreen';
 import { useAccounts } from '../core/accounts';
-import { useQuotaRetry } from '../core/quota';
+import { useQuotaRetry, type QuotaRetryState } from '../core/quota';
 import { formatReset } from '../components/QuotaCard';
 import { ProviderScreen, type ProviderSearch } from './ProviderScreen';
 import { ModelEditScreen } from './ModelEditScreen';
@@ -3000,7 +3000,7 @@ export function AppShell(): React.JSX.Element {
   );
 
   const conversationActions = useCallback(
-    (target: SessionSummary, close: () => void): SheetEntry[] => {
+    (target: SessionSummary, retry: QuotaRetryState | undefined, close: () => void): SheetEntry[] => {
       const shared = sessionEntries(target.threadId, close);
       return [
       // What the conversation reads comes before what it produced: the instructions decide every
@@ -3020,14 +3020,14 @@ export function AppShell(): React.JSX.Element {
       { type: 'separator' },
       {
         label: 'Retry when the quota returns',
-        hint: threadMenuQuotaRetry?.waiting
-          ? `waiting · retry at ${formatReset(threadMenuQuotaRetry.waiting.at)}`
-          : (threadMenuQuotaRetry?.enabled ?? target.quotaRetry === true)
+        hint: retry?.waiting
+          ? `waiting · retry at ${formatReset(retry.waiting.at)}`
+          : (retry?.enabled ?? target.quotaRetry === true)
             ? 'on · waits for the provider reset'
             : 'off',
-        selected: threadMenuQuotaRetry?.enabled ?? target.quotaRetry === true,
+        selected: retry?.enabled ?? target.quotaRetry === true,
         onPress: () => {
-          const enabled = threadMenuQuotaRetry?.enabled ?? target.quotaRetry === true;
+          const enabled = retry?.enabled ?? target.quotaRetry === true;
           connection.send(encodeSessionQuotaRetrySet(target.threadId, !enabled)).catch(() => {});
           close();
         },
@@ -3080,11 +3080,11 @@ export function AppShell(): React.JSX.Element {
       },
       ];
     },
-    [folderOf, sessionEntries, setThreadArchived, workspaceOf, threadMenuQuotaRetry],
+    [folderOf, sessionEntries, setThreadArchived, workspaceOf],
   );
 
   const threadActions: SheetEntry[] = threadMenu
-    ? [refreshAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, () => setThreadMenu(null))]
+    ? [refreshAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, threadMenuQuotaRetry, () => setThreadMenu(null))]
     : [];
 
   /** Every workspace the listing has conversations in: what the filter picker offers. */
@@ -3234,7 +3234,7 @@ export function AppShell(): React.JSX.Element {
     // Model and Stop sit here because only the conversation on screen can answer for them: the
     // app knows the live model and the running turn of the one in front of it, not of a thread
     // picked in the drawer. Everything below is the shared conversation list.
-    ...(activeSummary ? conversationActions(activeSummary, () => setCommandMenuOpen(false)) : []),
+    ...(activeSummary ? conversationActions(activeSummary, activeQuotaRetry, () => setCommandMenuOpen(false)) : []),
     // New conversations live on the + in the drawer (and the /new command). Session files sit in
     // this menu too, so the header keeps only the counter and the menu.
   ];
