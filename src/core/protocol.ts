@@ -1346,6 +1346,11 @@ export interface ModelResultFrame {
   effort: EffortState;
   /** Absent on a server that predates the context step: the picker then skips it. */
   context?: ContextState;
+  /**
+   * Siphon: the model this whole tree is pinned to, when one is -- docs/siphon.md. Absent means
+   * off, which is every conversation that never turned it on.
+   */
+  siphon?: string;
 }
 
 /**
@@ -3725,6 +3730,11 @@ export function encodeModelEffortSet(threadId: string, level: string): string {
 /** `'full'` hands the conversation back to the model's own window; a number is a ceiling. */
 export function encodeModelContextSet(threadId: string, choice: number | 'full'): string {
   return JSON.stringify({ type: 'model.context.set', threadId, choice });
+}
+
+/** Siphon: one model for this whole tree. `model` omitted turns it off. */
+export function encodeModelSiphonSet(threadId: string, model?: string): string {
+  return JSON.stringify({ type: 'model.siphon.set', threadId, ...(model === undefined ? {} : { model }) });
 }
 
 export function encodeAgentsConfigGet(): string {

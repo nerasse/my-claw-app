@@ -112,6 +112,10 @@ export interface BackLayers {
   setModelOpen: (value: false) => void;
   modelPicker: PickerState;
   setModelPicker: (value: PickerState) => void;
+  siphonOpen: boolean;
+  setSiphonOpen: (value: false) => void;
+  siphonPicker: PickerState;
+  setSiphonPicker: (value: PickerState) => void;
   tuneOpen: boolean;
   setTuneOpen: (value: false) => void;
   newTagPrompt: boolean;
@@ -253,6 +257,10 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setModelOpen,
     modelPicker,
     setModelPicker,
+    siphonOpen,
+    setSiphonOpen,
+    siphonPicker,
+    setSiphonPicker,
     tuneOpen,
     setTuneOpen,
     newTagPrompt,
@@ -453,6 +461,16 @@ export function closeTopLayer(layers: BackLayers): boolean {
       return true;
     }
     setModelOpen(false);
+    return true;
+  }
+  if (siphonOpen) {
+    // Same walk as the model picker: out of a group, then out of the search, then close.
+    const previous = pickerBack(siphonPicker);
+    if (previous) {
+      setSiphonPicker(previous);
+      return true;
+    }
+    setSiphonOpen(false);
     return true;
   }
   if (tuneOpen) {

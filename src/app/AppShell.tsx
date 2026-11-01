@@ -167,7 +167,15 @@ import {
   subscribeToPushRegistration,
 } from '../core/notifications';
 import { contextPercent } from '../core/context';
-import { catalogAnswered, declareModel, modelStore, undeclareModel, useModelCatalog, useThreadModel } from '../core/model';
+import {
+  catalogAnswered,
+  declareModel,
+  modelStore,
+  undeclareModel,
+  useModelCatalog,
+  useThreadModel,
+  withoutEndpoint,
+} from '../core/model';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
@@ -294,6 +302,7 @@ import { KeyboardShell } from '../components/KeyboardShell';
 import { AppUpdateModal } from './AppUpdateModal';
 import { OverlayHost } from '../components/OverlayHost';
 import { ModelSheet, pickerStart, type PickerState } from '../components/ModelSheet';
+import { SiphonSheet } from '../components/SiphonSheet';
 import { ModelTuneSheet } from '../components/ModelTuneSheet';
 import { space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { useThemeControl } from '../theme/ThemeProvider';
@@ -842,14 +851,33 @@ export function AppShell(): React.JSX.Element {
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
   const openSelection = useCallback((target: SelectionTarget) => setSelection(target), []);
   const [threadMenu, setThreadMenu] = useState<SessionSummary | null>(null);
+  /**
+   * Opening the menu re-reads the model state of the conversation it was opened on: the drawer can
+   * show a conversation this device never opened, and Siphon's row names a pin that lives on that
+   * conversation's own session. Without the read the row would answer for the wrong thread.
+   */
+  const openThreadMenu = useCallback((target: SessionSummary) => {
+    setThreadMenu(target);
+    connection.send(encodeModelGet(target.threadId)).catch(() => {});
+  }, []);
   // The conversation menu's switch and the waiting pill read the server's own state: both fields
   // are pushed when they change, so two devices never disagree on whether a wait is armed.
   const threadMenuQuotaRetry = useQuotaRetry(threadMenu?.threadId ?? null);
+  // Siphon's row names the pin, which lives on the conversation the menu was opened on.
+  const threadMenuModel = useThreadModel(threadMenu?.threadId ?? null);
   const activeQuotaRetry = useQuotaRetry(activeThread);
   const [threadToRename, setThreadToRename] = useState<SessionSummary | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   /** Whether the effort/window sheet of the conversation is open (the tune sheet). */
   const [tuneOpen, setTuneOpen] = useState(false);
+  /**
+   * Siphon: the model picker opened as "one model for this whole tree" -- docs/siphon.md.
+   *
+   * Its own stack rather than a flag on `modelOpen`, because the two flows commit different
+   * frames and only one of them may reach the effort and window steps.
+   */
+  const [siphonOpen, setSiphonOpen] = useState(false);
+  const [siphonPicker, setSiphonPicker] = useState<PickerState>(pickerStart);
   /** Which group of the model picker is open: its own stack, walked by the back key. */
   const [modelPicker, setModelPicker] = useState<PickerState>(pickerStart);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -1675,6 +1703,10 @@ export function AppShell(): React.JSX.Element {
         setModelOpen,
         modelPicker,
         setModelPicker,
+        siphonOpen,
+        setSiphonOpen,
+        siphonPicker,
+        setSiphonPicker,
         tuneOpen,
         setTuneOpen,
         newTagPrompt,
@@ -1787,6 +1819,8 @@ export function AppShell(): React.JSX.Element {
       jobToDelete,
       modelOpen,
       modelPicker,
+      siphonOpen,
+      siphonPicker,
       tuneOpen,
       newTagPrompt,
       providerEdit,
@@ -1886,6 +1920,7 @@ export function AppShell(): React.JSX.Element {
     setMoreOpen(false);
     setCommandMenuOpen(false);
     setModelOpen(false);
+    setSiphonOpen(false);
     setTuneOpen(false);
     if (settingsOpen) closeSettings();
     if (jobsOpen) closeJobs();
@@ -2783,6 +2818,12 @@ export function AppShell(): React.JSX.Element {
     setModelOpen(true);
   }, []);
 
+  /** The same root rule for Siphon's picker: its own stack, opened from the conversation menu. */
+  const openSiphon = useCallback(() => {
+    setSiphonPicker(pickerStart);
+    setSiphonOpen(true);
+  }, []);
+
   const fetchLogs = useCallback((query: LogsTailQuery) => {
     setDiagBusy(true);
     connection.send(encodeLogsTail(query));
@@ -2999,8 +3040,23 @@ export function AppShell(): React.JSX.Element {
     [sessionEntries],
   );
 
+  /** What Siphon's row says: the pinned model by name, or that nothing is pinned. */
+  const siphonHint = useCallback(
+    (pin: string | undefined): string => {
+      if (!pin) return 'off · each run picks its own model';
+      const bare = withoutEndpoint(pin);
+      return `on · ${catalog.models.find(model => model.id === bare)?.label ?? bare}, every agent`;
+    },
+    [catalog.models],
+  );
+
   const conversationActions = useCallback(
-    (target: SessionSummary, retry: QuotaRetryState | undefined, close: () => void): SheetEntry[] => {
+    (
+      target: SessionSummary,
+      retry: QuotaRetryState | undefined,
+      siphon: string | undefined,
+      close: () => void,
+    ): SheetEntry[] => {
       const shared = sessionEntries(target.threadId, close);
       return [
       // What the conversation reads comes before what it produced: the instructions decide every
@@ -3029,6 +3085,18 @@ export function AppShell(): React.JSX.Element {
         onPress: () => {
           const enabled = retry?.enabled ?? target.quotaRetry === true;
           connection.send(encodeSessionQuotaRetrySet(target.threadId, !enabled)).catch(() => {});
+          close();
+        },
+      },
+      {
+        // Siphon: the model is not picked here, the sheet is -- and it opens on this
+        // conversation's root, which is the only session that carries the pin.
+        label: 'Siphon',
+        hint: siphonHint(siphon),
+        selected: siphon !== undefined,
+        onPress: () => {
+          if (target.threadId !== activeThreadRef.current) openThread(target.threadId);
+          openSiphon();
           close();
         },
       },
@@ -3080,11 +3148,14 @@ export function AppShell(): React.JSX.Element {
       },
       ];
     },
-    [folderOf, sessionEntries, setThreadArchived, workspaceOf],
+    [folderOf, openSiphon, openThread, sessionEntries, setThreadArchived, siphonHint, workspaceOf],
   );
 
   const threadActions: SheetEntry[] = threadMenu
-    ? [refreshAction(threadMenu, () => setThreadMenu(null)), ...conversationActions(threadMenu, threadMenuQuotaRetry, () => setThreadMenu(null))]
+    ? [
+        refreshAction(threadMenu, () => setThreadMenu(null)),
+        ...conversationActions(threadMenu, threadMenuQuotaRetry, threadMenuModel?.siphon, () => setThreadMenu(null)),
+      ]
     : [];
 
   /** Every workspace the listing has conversations in: what the filter picker offers. */
@@ -3234,7 +3305,9 @@ export function AppShell(): React.JSX.Element {
     // Model and Stop sit here because only the conversation on screen can answer for them: the
     // app knows the live model and the running turn of the one in front of it, not of a thread
     // picked in the drawer. Everything below is the shared conversation list.
-    ...(activeSummary ? conversationActions(activeSummary, activeQuotaRetry, () => setCommandMenuOpen(false)) : []),
+    ...(activeSummary
+      ? conversationActions(activeSummary, activeQuotaRetry, threadModel?.siphon, () => setCommandMenuOpen(false))
+      : []),
     // New conversations live on the + in the drawer (and the /new command). Session files sit in
     // this menu too, so the header keeps only the counter and the menu.
   ];
@@ -4255,7 +4328,7 @@ export function AppShell(): React.JSX.Element {
             onClose={() => {}}
             onOpenThread={openThreadFromDrawer}
             onNewThread={newThread}
-            onThreadMenu={setThreadMenu}
+            onThreadMenu={openThreadMenu}
             onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
             onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
             onToggleFolder={toggleFolder}
@@ -4291,7 +4364,7 @@ export function AppShell(): React.JSX.Element {
             onClose={() => {}}
             onOpenThread={openThreadFromDrawer}
             onNewThread={newThread}
-            onThreadMenu={setThreadMenu}
+            onThreadMenu={openThreadMenu}
             onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
             onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
             onToggleFolder={toggleFolder}
@@ -4971,7 +5044,7 @@ export function AppShell(): React.JSX.Element {
               sessions={archivedSessions}
               onBack={() => setArchivesOpen(false)}
               onOpenThread={openThreadFromArchives}
-              onThreadMenu={setThreadMenu}
+              onThreadMenu={openThreadMenu}
             />
           ) : filesOpen ? (
             <FilesScreen
@@ -5123,7 +5196,7 @@ export function AppShell(): React.JSX.Element {
         onClose={() => setDrawerOpen(false)}
         onOpenThread={openThreadFromDrawer}
         onNewThread={newThread}
-        onThreadMenu={setThreadMenu}
+        onThreadMenu={openThreadMenu}
         onOpenWorkspaceFilter={() => setWorkspaceFilterOpen(true)}
         onClearWorkspaceFilter={() => setWorkspaceFilter(null)}
         onToggleFolder={toggleFolder}
@@ -5545,6 +5618,15 @@ export function AppShell(): React.JSX.Element {
           state={modelPicker}
           onStateChange={setModelPicker}
           onClose={() => setModelOpen(false)}
+        />
+      ) : null}
+
+      {siphonOpen && activeThread ? (
+        <SiphonSheet
+          threadId={activeThread}
+          state={siphonPicker}
+          onStateChange={setSiphonPicker}
+          onClose={() => setSiphonOpen(false)}
         />
       ) : null}
 

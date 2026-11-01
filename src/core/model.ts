@@ -84,6 +84,13 @@ interface ThreadModel {
   effort: EffortState;
   /** Absent on a server that predates the context step: the picker then skips it. */
   context?: ContextState;
+  /**
+   * Siphon: the model this whole tree is pinned to, when one is -- docs/siphon.md.
+   *
+   * Kept apart from `model`: that is what a run of *this* thread resolves to, and a sub-agent
+   * under a pinned conversation runs the pin even when its own row would name something else.
+   */
+  siphon?: string;
 }
 
 /**
@@ -229,6 +236,7 @@ class ModelStoreImpl {
       ...(frame.source === undefined ? {} : { source: frame.source }),
       effort: frame.effort ?? NO_EFFORT,
       ...(frame.context === undefined ? {} : { context: frame.context }),
+      ...(frame.siphon === undefined ? {} : { siphon: frame.siphon }),
     });
     this.emit();
   }
