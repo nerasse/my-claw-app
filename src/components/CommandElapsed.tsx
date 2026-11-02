@@ -38,7 +38,7 @@ export function CommandElapsed({ since, onAccent = false }: { since: number; onA
 }
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
-  elapsed: { fontSize: scaleFont(font.small, scale), color: palette.textFaint },
+  elapsed: { fontSize: scaleFont(font.small, scale), color: palette.textMeta },
   /** On the owner's own bubble, which is a neutral surface: the faint grey vanishes there. */
   elapsedAccent: { color: palette.bubbleUserText, opacity: 0.62 },
 });

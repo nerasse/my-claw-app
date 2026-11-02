@@ -41,7 +41,7 @@ function renderTool(item: ToolItem, props: Record<string, unknown> = {}) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
         <ToolCard item={item} {...props} />
       </ThemeContext.Provider>,
     );
@@ -61,7 +61,7 @@ function bodyVisible(tree: ReactTestRenderer.ReactTestRenderer): boolean {
 function updateItem(tree: ReactTestRenderer.ReactTestRenderer, item: ToolItem, props: Record<string, unknown> = {}) {
   ReactTestRenderer.act(() => {
     tree.update(
-      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
         <ToolCard item={item} {...props} />
       </ThemeContext.Provider>,
     );

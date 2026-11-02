@@ -961,7 +961,7 @@ const createStyles = (palette: Palette) => ({
   },
   sectionActivity: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginRight: space.xs },
   sectionDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent },
-  sectionActivityCount: { fontSize: font.micro, color: palette.textFaint },
+  sectionActivityCount: { fontSize: font.micro, color: palette.textMeta },
   /** Indented onto the rows it heads, and the fold glyph takes the same room whether the section
    *  can be folded or not: the unfiled heading has to sit where the folder names do. */
   sectionHeader: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },
@@ -973,7 +973,7 @@ const createStyles = (palette: Palette) => ({
     paddingTop: space.xs,
     paddingBottom: space.xxs,
     fontSize: font.micro,
-    color: palette.textFaint,
+    color: palette.textMeta,
     letterSpacing: 0.5,
     textTransform: 'uppercase' as const,
   },

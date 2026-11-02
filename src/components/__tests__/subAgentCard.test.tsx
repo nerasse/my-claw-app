@@ -30,7 +30,7 @@ function render(item: ToolItem, props: Record<string, unknown> = {}) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
         <SubAgentCard item={item} {...props} />
       </ThemeContext.Provider>,
     );

@@ -61,7 +61,7 @@ test('the index is four groups, one row per subject', async () => {
 test('what General and Other held is each on the page of its subject', async () => {
   const tree = await renderApp();
   await openSettings(tree);
-  await holds(tree, 'Open appearance', ['Theme Dark', 'Message size 100%', 'Always expand tool cards', 'Always expand reasoning']);
+  await holds(tree, 'Open appearance', ['Theme Sable', 'Mode System', 'Message size 100%', 'Always expand tool cards', 'Always expand reasoning']);
   // The server is its own page; the devices page is about adding and revoking devices; this
   // device's credential is a value for diagnosing, on Advanced.
   await holds(tree, 'Open server', ['Server address', 'Connect', 'Join with an invitation']);
@@ -87,7 +87,7 @@ test('the search finds a setting by a French word and opens its page', async () 
   // The results replace the groups while a word is typed.
   expect(labelsOf(tree)).not.toContain('Open models');
   await press(tree, 'Go to Theme');
-  await waitFor(() => labelsOf(tree).includes('Theme Dark'));
+  await waitFor(() => labelsOf(tree).includes('Theme Sable'));
   await unmount(tree);
 });
 

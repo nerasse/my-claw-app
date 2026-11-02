@@ -41,16 +41,21 @@ test('the drawer holds the conversations and leads to the settings', async () =>
   await unmount(tree);
 });
 
-test('the settings expose the three theme modes', async () => {
+test('the settings expose the palettes and the four modes', async () => {
   const tree = await renderApp();
   await press(tree, 'Open conversations');
   await press(tree, 'Open settings');
   await press(tree, 'Open appearance');
 
   const labels = labelsOf(tree);
-  expect(labels).toContain('Theme System');
-  expect(labels).toContain('Theme Light');
-  expect(labels).toContain('Theme Dark');
+  // The theme is a palette (ten of them) and a mode (four), and both live in Appearance: the
+  // switch left the title bar, where it was the busiest control of the busiest strip.
+  expect(labels).toContain('Theme Sable');
+  expect(labels).toContain('Theme Catppuccin');
+  expect(labels).toContain('Mode System');
+  expect(labels).toContain('Mode Light');
+  expect(labels).toContain('Mode Dark');
+  expect(labels).toContain('Mode AMOLED');
   await unmount(tree);
 });
 

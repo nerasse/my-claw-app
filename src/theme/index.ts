@@ -1,18 +1,30 @@
 import { createContext, useCallback, useContext, useMemo } from 'react';
 import { StyleSheet, useColorScheme } from 'react-native';
-import { darkPalette, lightPalette, type Palette } from './palettes';
-import type { ThemeMode } from '../core/prefs';
+import { lightPalette, type Palette } from './palettes';
+import { DEFAULT_THEME_ID, resolveTheme, type ThemeId, type ThemeMode } from './themes';
 
 export { space, radius, font, DRAWER_WIDTH, lineHeightFor, lineBoxFor } from './palettes';
 export type { Palette } from './palettes';
+export {
+  DEFAULT_THEME_ID,
+  isThemeId,
+  resolveTheme,
+  themeIds,
+  themeModes,
+  themes,
+  type PaletteSet,
+  type ThemeId,
+  type ThemeMode,
+} from './themes';
 
 export interface Theme {
   palette: Palette;
   dark: boolean;
   mode: ThemeMode;
+  themeId: ThemeId;
 }
 
-const defaultTheme: Theme = { palette: lightPalette, dark: false, mode: 'system' };
+const defaultTheme: Theme = { palette: lightPalette, dark: false, mode: 'system', themeId: DEFAULT_THEME_ID };
 
 export const ThemeContext = createContext<Theme>(defaultTheme);
 
@@ -42,13 +54,10 @@ export function scaleFont(size: number, scale: number): number {
   return Math.round(size * scale);
 }
 
-/** Resolves the requested mode against the phone setting. */
-export function useResolvedTheme(mode: ThemeMode): Theme {
+/** Resolves the stored theme and mode against the phone setting. */
+export function useResolvedTheme(themeId: ThemeId, mode: ThemeMode): Theme {
   const system = useColorScheme();
-  return useMemo(() => {
-    const dark = mode === 'system' ? system === 'dark' : mode === 'dark';
-    return { palette: dark ? darkPalette : lightPalette, dark, mode };
-  }, [mode, system]);
+  return useMemo(() => resolveTheme(themeId, mode, system), [themeId, mode, system]);
 }
 
 type StyleFactory<T> = (palette: Palette, dark: boolean, scale: number) => T;

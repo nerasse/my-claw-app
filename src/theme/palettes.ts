@@ -1,3 +1,5 @@
+import { generatedThemes } from './themes.generated';
+
 export interface Palette {
   /** Screen background. */
   bg: string;
@@ -14,11 +16,25 @@ export interface Palette {
   /** Hairlines. */
   border: string;
   text: string;
+  /** Secondary prose: an aside, a caption, a hint under a control. */
   textMuted: string;
+  /**
+   * Timestamps, counts, model names: text you read, and small.
+   *
+   * `textFaint` used to carry this as well, at 2.6:1 in the light theme, which is not readable
+   * in daylight. The two uses were always different -- one is a label, the other a decoration --
+   * so they are two fields: this one is generated at 4.5:1, `textFaint` stays near 3:1.
+   */
+  textMeta: string;
+  /** Decoration only: a hairline glyph, a disabled mark, a separator. Never below 3:1. */
   textFaint: string;
   accent: string;
   accentText: string;
   accentSoft: string;
+  /** The focus ring. Its own field: on a theme whose accent is also its warning, a ring in accent reads as an alert. */
+  focus: string;
+  /** The web `::selection`. An accent fill that is not the user bubble, by name and not by coincidence. */
+  selection: string;
   /**
    * The user bubble: a neutral step off the thread, never the accent.
    *
@@ -52,59 +68,13 @@ export interface Palette {
   codeText: string;
 }
 
-export const lightPalette: Palette = {
-  bg: '#ffffff',
-  surface: '#ffffff',
-  surfaceAlt: '#f2f3f5',
-  surfaceRaised: '#d9dee7',
-  border: '#e3e5e9',
-  text: '#14161a',
-  textMuted: '#5c626d',
-  textFaint: '#9aa0ab',
-  accent: '#2563eb',
-  accentText: '#ffffff',
-  accentSoft: '#e8efff',
-  bubbleUserBg: '#e4e8ef',
-  bubbleUserText: '#14161a',
-  ok: '#12855a',
-  warn: '#b45309',
-  danger: '#c02626',
-  diffAdd: '#12855a',
-  diffDel: '#c02626',
-  diffAddBg: '#e6f4ec',
-  diffDelBg: '#fbeaea',
-  diffHunkBg: '#eef1f6',
-  overlay: 'rgba(15,18,24,0.42)',
-  codeBg: '#f7f8fa',
-  codeText: '#14161a',
-};
-
-export const darkPalette: Palette = {
-  bg: '#0f1115',
-  surface: '#161a20',
-  surfaceAlt: '#1d222a',
-  surfaceRaised: '#343b47',
-  border: '#262c36',
-  text: '#e8eaee',
-  textMuted: '#9ba3b0',
-  textFaint: '#6b7481',
-  accent: '#4d84ff',
-  accentText: '#0b1220',
-  accentSoft: '#1b2740',
-  bubbleUserBg: '#2a313c',
-  bubbleUserText: '#e8eaee',
-  ok: '#3ecf8e',
-  warn: '#e0a33e',
-  danger: '#ff6b6b',
-  diffAdd: '#3ecf8e',
-  diffDel: '#ff6b6b',
-  diffAddBg: '#12281c',
-  diffDelBg: '#2b1414',
-  diffHunkBg: '#1a1f28',
-  overlay: 'rgba(0,0,0,0.6)',
-  codeBg: '#11151b',
-  codeText: '#e8eaee',
-};
+/**
+ * Two of the ten generated palettes, by name, for the call sites that want a concrete one: a test
+ * fixture, a context default. They are module constants like every other generated palette, which
+ * is what `useThemedStyles` (theme/index.ts) requires of anything it caches a StyleSheet against.
+ */
+export const lightPalette: Palette = generatedThemes.sable.light;
+export const darkPalette: Palette = generatedThemes.sable.dark;
 
 /** Compact by design: one dense scale used everywhere so screens stay information-first. */
 export const space = {

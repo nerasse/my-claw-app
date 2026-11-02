@@ -30,7 +30,7 @@ function render(node: React.ReactNode): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
         {node}
       </ThemeContext.Provider>,
     );

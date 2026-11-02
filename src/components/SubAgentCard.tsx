@@ -205,13 +205,13 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
   name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 1 },
-  kind: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, flexShrink: 1 },
+  kind: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, flexShrink: 1 },
   spacer: { flex: 1 },
-  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
+  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
   stateRunning: { fontSize: scaleFont(font.micro, scale), color: palette.accent, fontWeight: '600' as const },
   stateOk: { fontSize: scaleFont(font.micro, scale), color: palette.accent, fontWeight: '600' as const },
   stateBad: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
-  stateFaint: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontWeight: '600' as const },
+  stateFaint: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontWeight: '600' as const },
   spinner: { transform: [{ scale: 0.8 }] },
   // The door carries the brief as its own label: one row that says both what was asked and that
   // there is somewhere to go, instead of a line of prose above a button repeating the name.
@@ -230,7 +230,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   doorChevron: { fontSize: scaleFont(font.meta, scale), color: palette.accent },
   brief: { fontSize: scaleFont(font.small, scale), color: palette.textMuted, paddingHorizontal: space.xs },
   body: { gap: 3, paddingBottom: 2 },
-  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   blockHead: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

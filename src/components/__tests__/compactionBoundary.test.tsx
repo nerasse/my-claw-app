@@ -47,7 +47,7 @@ function mount(props: { item: TextItem }): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
+      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
         <CompactionBoundary {...props} />
       </ThemeContext.Provider>,
     );

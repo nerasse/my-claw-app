@@ -27,7 +27,7 @@ function render(props: React.ComponentProps<typeof ReasoningLine>): ReactTestRen
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
+      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
         <ReasoningLine {...props} />
       </ThemeContext.Provider>,
     );

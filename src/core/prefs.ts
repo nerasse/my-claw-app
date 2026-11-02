@@ -1,9 +1,13 @@
 import { deviceBridge } from './nativeBridge';
 import { DEFAULT_SERVER_URL } from './serverUrl';
+import { DEFAULT_THEME_ID, isThemeId, type ThemeId, type ThemeMode } from '../theme/themes';
 
-export type ThemeMode = 'system' | 'light' | 'dark';
+export type { ThemeMode };
 
 export interface Prefs {
+  /** Which palette. Device-local: a theme is a display choice, not a property of the account. */
+  themeId: ThemeId;
+  /** Light, dark, AMOLED, or follow the phone. */
   themeMode: ThemeMode;
   serverUrl: string;
   lastThreadId: string | null;
@@ -47,6 +51,7 @@ export interface Prefs {
 export { DEFAULT_SERVER_URL };
 
 const DEFAULTS: Prefs = {
+  themeId: DEFAULT_THEME_ID,
   themeMode: 'system',
   serverUrl: DEFAULT_SERVER_URL,
   lastThreadId: null,
@@ -60,7 +65,7 @@ const DEFAULTS: Prefs = {
   rightPane: '',
 };
 
-const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
+const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark', 'amoled'];
 
 /** The scale range offered in settings, and what a stored value is clamped to on load. */
 export const CHAT_SCALE_MIN = 0.85;
@@ -142,6 +147,7 @@ class PrefsStore {
       const raw = await deviceBridge.prefsGetAll();
       const themeMode = THEME_MODES.includes(raw.themeMode as ThemeMode) ? (raw.themeMode as ThemeMode) : DEFAULTS.themeMode;
       this.current = {
+        themeId: isThemeId(raw.themeId) ? raw.themeId : DEFAULTS.themeId,
         themeMode,
         serverUrl: raw.serverUrl?.trim() ? raw.serverUrl : DEFAULTS.serverUrl,
         lastThreadId: raw.lastThreadId?.trim() ? raw.lastThreadId : null,

@@ -22,7 +22,7 @@ function stageStyle(): Record<string, number | string | undefined> {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
+      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
         <ScreenLayer>
           <Text>the editor</Text>
         </ScreenLayer>

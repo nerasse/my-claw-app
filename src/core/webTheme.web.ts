@@ -44,7 +44,7 @@ body { overscroll-behavior: none; }
 [role="button"][aria-disabled="true"] { cursor: default; }
 
 /* Keyboard focus has to be visible, and only for the keyboard: :focus-visible is exactly that. */
-:focus-visible { outline: 2px solid ${palette.accent}; outline-offset: 2px; border-radius: 6px; }
+:focus-visible { outline: 2px solid ${palette.focus}; outline-offset: 2px; border-radius: 6px; }
 input:focus, textarea:focus { outline: none; }
 /* In a menu the rows run edge to edge inside a scroller that clips an outline drawn outside them:
    the focused row is tinted instead (docs/keyboard.md). */
@@ -55,15 +55,16 @@ input:focus, textarea:focus { outline: none; }
 }
 
 /* Selected text must stay readable in both themes: accentSoft is dark-on-dark in the dark
-   palette, so the browser paints it nearly invisible. accent + accentText flips one way in
-   light (blue on dark text) and the other way in dark, always with contrast. */
-::selection { background: ${palette.accent}; color: ${palette.accentText}; }
+   palette, so the browser paints it nearly invisible. The pair flips one way in light and the
+   other way in dark, always with contrast. It reads the selection token and not the accent one
+   because the highlight is an accent fill by name now, not by coincidence with the user bubble. */
+::selection { background: ${palette.selection}; color: ${palette.accentText}; }
 
 /* ...except on a surface that is already the accent, which is what a user bubble is: there the
    rule above paints the colours that are on screen anyway, and a drag selects nothing visible.
    The pair is flipped on those, so the highlight reads as the page's own inverse. */
 [data-claw-on-accent="1"]::selection,
-[data-claw-on-accent="1"] ::selection { background: ${palette.accentText}; color: ${palette.accent}; }
+[data-claw-on-accent="1"] ::selection { background: ${palette.accentText}; color: ${palette.selection}; }
 
 /* Text is unselectable by default in react-native-web. Marked regions opt back in. */
 [data-claw-select="text"], [data-claw-select="text"] * { user-select: text !important; }

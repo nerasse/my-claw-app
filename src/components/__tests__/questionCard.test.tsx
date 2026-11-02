@@ -43,7 +43,7 @@ function render(request: QuestionAskFrame = ask) {
   const onRevealField = jest.fn();
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
         <QuestionCard request={request} onReply={onReply} onRevealField={onRevealField} />
       </ThemeContext.Provider>,
     );

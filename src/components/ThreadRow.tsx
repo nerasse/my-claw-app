@@ -98,8 +98,8 @@ const createStyles = (palette: Palette) => ({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent },
   title: { flex: 1, fontSize: font.body, color: palette.text },
   titleUnread: { fontWeight: '700' as const },
-  date: { fontSize: font.micro, color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
-  meta: { fontSize: font.small, color: palette.textFaint },
+  date: { fontSize: font.micro, color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
+  meta: { fontSize: font.small, color: palette.textMeta },
   question: {
     fontSize: font.micro,
     fontWeight: '700' as const,
@@ -117,7 +117,7 @@ const createStyles = (palette: Palette) => ({
   workspace: {
     alignSelf: 'flex-start' as const,
     fontSize: font.micro,
-    color: palette.textFaint,
+    color: palette.textMeta,
     borderWidth: 1,
     borderColor: palette.border,
     borderRadius: radius.sm,

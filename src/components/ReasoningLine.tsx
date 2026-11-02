@@ -205,11 +205,11 @@ export function ReasoningLine({
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2 },
-  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.3 },
   figures: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, flexShrink: 1 },
   /** Pushes the wait to the far end: it is a footnote to the row, not part of its sentence. */
   spacer: { flex: 1 },
   /** One step fainter than the label it follows: what the thinking cost is context on an aside, not
    *  a second label competing with it. */
-  figure: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, opacity: 0.75 },
+  figure: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, opacity: 0.75 },
 });

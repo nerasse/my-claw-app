@@ -16,7 +16,7 @@ afterEach(async () => {
 async function render(onBack: () => void, onEnableNotifications: () => Promise<void>): Promise<void> {
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
+      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
         <NotificationsScreen onBack={onBack} onEnableNotifications={onEnableNotifications} onChannelsChange={() => {}} />
       </ThemeContext.Provider>,
     );

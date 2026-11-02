@@ -26,7 +26,7 @@ function render(props: React.ComponentProps<typeof CompactionRunning>) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
-      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
+      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
         <CompactionRunning {...props} />
       </ThemeContext.Provider>,
     );

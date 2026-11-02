@@ -1680,7 +1680,7 @@ const createStyles = (palette: Palette) => ({
   menuGlyph: { fontSize: 20, lineHeight: 22, color: palette.text },
   headerText: { flex: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
-  subtitle: { fontSize: font.small, color: palette.textFaint },
+  subtitle: { fontSize: font.small, color: palette.textMeta },
   statusButton: { padding: 2 },
   connBadge: {
     fontSize: font.meta,

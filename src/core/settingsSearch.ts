@@ -15,7 +15,7 @@ export interface SettingsEntry {
 }
 
 export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
-  { page: 'appearance', where: 'Appearance', title: 'Theme', terms: 'dark light system sombre clair thème mode nuit couleur' },
+  { page: 'appearance', where: 'Appearance', title: 'Theme', terms: 'dark light system amoled sombre clair thème mode nuit couleur palette sable lin charbon catppuccin gruvbox kanagawa tokyo flexoki' },
   { page: 'appearance', where: 'Appearance', title: 'Message size', terms: 'text font size zoom taille police texte lecture' },
   { page: 'appearance', where: 'Appearance', title: 'Always expand tool cards', terms: 'fold unfold tools cards plier déplier outils cartes' },
   { page: 'appearance', where: 'Appearance', title: 'Always expand reasoning', terms: 'thinking fold réflexion raisonnement plier raisonnement' },

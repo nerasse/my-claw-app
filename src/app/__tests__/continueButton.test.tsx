@@ -119,7 +119,7 @@ describe('the Continue button', () => {
     } as unknown as React.ComponentProps<typeof ChatScreen>;
     act(() => {
       mounted = TestRenderer.create(
-        <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+        <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
           <ChatScreen {...props} />
         </ThemeContext.Provider>,
       );

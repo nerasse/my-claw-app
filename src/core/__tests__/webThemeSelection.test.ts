@@ -28,12 +28,12 @@ describe.each([
   const css = webThemeCss(palette);
 
   test('the page paints a selection in the accent', () => {
-    expect(ruleFor(css, '\n::selection')).toBe(`background: ${palette.accent}; color: ${palette.accentText};`);
+    expect(ruleFor(css, '\n::selection')).toBe(`background: ${palette.selection}; color: ${palette.accentText};`);
   });
 
   test('an accent-filled surface flips it, or the highlight is the bubble', () => {
     const rule = ruleFor(css, '[data-claw-on-accent="1"] ::selection');
-    expect(rule).toBe(`background: ${palette.accentText}; color: ${palette.accent};`);
+    expect(rule).toBe(`background: ${palette.accentText}; color: ${palette.selection};`);
     // Both the marked element's own text and its descendants: react-native-web renders the text
     // of a bubble in a child node, but a marked Text would otherwise be missed.
     expect(css).toContain('[data-claw-on-accent="1"]::selection');
@@ -45,7 +45,7 @@ describe.each([
     const page = ruleFor(css, '\n::selection');
     const bubble = ruleFor(css, '[data-claw-on-accent="1"] ::selection');
     expect(bubble).not.toBe(page);
-    expect(palette.accent).not.toBe(palette.accentText);
+    expect(palette.selection).not.toBe(palette.accentText);
   });
 });
 

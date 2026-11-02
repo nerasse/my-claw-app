@@ -2,7 +2,8 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { useResolvedTheme, useThemedStyles, ThemeContext, type Palette, type Theme } from '../index';
 import { darkPalette, lightPalette } from '../palettes';
-import type { ThemeMode } from '../../core/prefs';
+import { themes } from '../themes';
+import type { ThemeId, ThemeMode } from '../themes';
 
 /* eslint-disable @react-native/no-deep-imports -- the color scheme hook can only be mocked at its source module */
 jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
@@ -13,10 +14,10 @@ jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
 // The hook is mocked at its RN internal path; grab the same instance the component sees.
 const systemScheme = require('react-native/Libraries/Utilities/useColorScheme').default as jest.Mock;
 
-function resolve(mode: ThemeMode): Theme {
+function resolve(mode: ThemeMode, themeId: ThemeId = 'sable'): Theme {
   let captured!: Theme;
   function Probe(): null {
-    captured = useResolvedTheme(mode);
+    captured = useResolvedTheme(themeId, mode);
     return null;
   }
   ReactTestRenderer.act(() => {
@@ -42,6 +43,25 @@ describe('useResolvedTheme', () => {
     systemScheme.mockReturnValue('light');
     expect(resolve('dark').palette).toBe(darkPalette);
   });
+
+  test('system never resolves to AMOLED: a phone has no idea what its panel is', () => {
+    systemScheme.mockReturnValue('dark');
+    expect(resolve('system').palette).toBe(themes.sable.dark);
+    expect(resolve('system').themeId).toBe('sable');
+  });
+
+  test('AMOLED is a dark theme with a black background, and it is only reached on purpose', () => {
+    const amoled = resolve('amoled');
+    expect(amoled.palette).toBe(themes.sable.amoled);
+    expect(amoled.palette.bg).toBe('#000000');
+    // The ~40 call sites that branch on lightness mean "is this a dark palette".
+    expect(amoled.dark).toBe(true);
+  });
+
+  test('a stored theme that no longer exists falls back rather than resolving to nothing', () => {
+    expect(resolve('dark', 'charbon' as ThemeId).palette).toBe(themes.charbon.dark);
+    expect(resolve('dark', 'nope' as ThemeId).palette).toBe(themes.sable.dark);
+  });
 });
 
 describe('useThemedStyles', () => {
@@ -64,8 +84,8 @@ describe('useThemedStyles', () => {
   }
 
   test('reuses the same sheet for a palette and rebuilds for the other one', () => {
-    const light: Theme = { palette: lightPalette, dark: false, mode: 'light' };
-    const dark: Theme = { palette: darkPalette, dark: true, mode: 'dark' };
+    const light: Theme = { palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' };
+    const dark: Theme = { palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' };
 
     const first = stylesFor(light);
     expect(stylesFor(light)).toBe(first);

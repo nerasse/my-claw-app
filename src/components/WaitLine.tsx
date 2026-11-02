@@ -68,6 +68,6 @@ export function WaitLine({ since }: { since: number }): React.JSX.Element {
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 6, paddingHorizontal: 2 },
-  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
-  elapsed: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, opacity: 0.75 },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.3 },
+  elapsed: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, opacity: 0.75 },
 });

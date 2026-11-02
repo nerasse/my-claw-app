@@ -50,7 +50,7 @@ afterEach(async () => {
 function render(node: React.JSX.Element): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
-    tree = ReactTestRenderer.create(<ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>{node}</ThemeContext.Provider>);
+    tree = ReactTestRenderer.create(<ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>{node}</ThemeContext.Provider>);
   });
   mounted.push(tree);
   return tree;
@@ -253,7 +253,7 @@ test('a redraw that hands back a row without its work asks again', () => {
   const refreshed = [summaryRow('run-w1', 10)];
   ReactTestRenderer.act(() => {
     tree.update(
-      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark' }}>
+      <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
         <FoldedRunGroup run={RUN} summaries={refreshed} open onToggle={jest.fn()} onOpen={onOpen} />
       </ThemeContext.Provider>,
     );

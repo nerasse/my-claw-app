@@ -4410,6 +4410,8 @@ export function AppShell(): React.JSX.Element {
               />
             ) : settingsPage === 'appearance' ? (
               <AppearanceScreen
+                themeId={themeControl.themeId}
+                onThemeIdChange={themeControl.setThemeId}
                 themeMode={themeControl.mode}
                 onThemeModeChange={themeControl.setMode}
                 chatFontScale={chatFontScale}

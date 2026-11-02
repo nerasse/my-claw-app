@@ -54,7 +54,7 @@ function render(over: Partial<React.ComponentProps<typeof ChatScreen>> = {}) {
   let tree!: TestRenderer.ReactTestRenderer;
   act(() => {
     tree = TestRenderer.create(
-      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light' }}>
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
         <ChatScreen {...props()} {...over} />
       </ThemeContext.Provider>,
     );

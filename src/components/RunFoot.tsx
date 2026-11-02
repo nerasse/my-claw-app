@@ -49,7 +49,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: 8,
     marginTop: 2,
   },
-  span: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
+  span: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   statusError: { fontSize: scaleFont(font.micro, scale), color: palette.danger },
   statusAborted: { fontSize: scaleFont(font.micro, scale), color: palette.textMuted },
 });

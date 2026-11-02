@@ -356,15 +356,15 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // the real width, so this is the one truncation that knows what it is cutting.
   previewBlock: { flex: 0, marginTop: 2, marginLeft: 8 + space.sm },
   spacer: { flex: 1 },
-  extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
-  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontVariant: ['tabular-nums' as const] },
+  extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
+  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
   failed: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
   // Not `danger`: the call was cut off, which is not the same statement as a tool that ran and
   // came back with an error.
   interrupted: { fontSize: scaleFont(font.micro, scale), color: palette.warn, fontWeight: '600' as const },
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
-  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const },
+  label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, marginTop: 2 },
   // Right-aligned under the fold's own row: the buttons belong to the block below them, and a
   // row that is empty on web (BlockActions renders nothing there) must not leave a gap.

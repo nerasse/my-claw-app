@@ -297,7 +297,7 @@ test('empty categories open their page and back out the way they came', async ()
   await waitFor(() => labelsOf(tree).includes('Open appearance'));
 
   await pressLabel(tree, 'Open appearance');
-  await waitFor(() => labelsOf(tree).includes('Theme System'));
+  await waitFor(() => labelsOf(tree).includes('Theme Sable'));
   expect(await hardwareBack()).toBe(true);
   await waitFor(() => labelsOf(tree).includes('Open updates'));
 

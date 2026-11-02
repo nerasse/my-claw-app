@@ -2,14 +2,20 @@ import React from 'react';
 import { Pressable, Switch, Text, View } from 'react-native';
 import type { UiPrefsResultFrame } from '../core/protocol';
 import type { ThemeMode } from '../core/prefs';
-import { font, scaleFont, useTheme } from '../theme';
+import {
+  font,
+  radius,
+  scaleFont,
+  space,
+  themeIds,
+  themeModes,
+  themes,
+  useTheme,
+  useThemedStyles,
+  type Palette,
+  type ThemeId,
+} from '../theme';
 import { Section, SettingsPageFrame, useSettingsStyles } from './settingsParts';
-
-const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
-  { mode: 'system', label: 'System' },
-  { mode: 'light', label: 'Light' },
-  { mode: 'dark', label: 'Dark' },
-];
 
 /** The scales offered as a picker, and the label each one shows. 1 = the design size. */
 const SCALE_OPTIONS: Array<{ value: number; label: string }> = [
@@ -19,11 +25,43 @@ const SCALE_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 1.3, label: '130%' },
 ];
 
+const swatchStyles = {
+  frame: {
+    width: 34,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'space-between' as const,
+    padding: 3,
+  },
+  bubble: { width: 14, height: 7, borderRadius: 3 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+};
+
 /**
- * How the app looks, in one place: the theme was on Other, the text size and the folding on
- * General, three pages for one question (owner, 2026-10-04).
+ * A theme seen from the outside: its background, its user bubble, its accent. Three shapes and
+ * no more -- a full preview would be a second implementation of every screen.
+ */
+function Swatch({ palette }: { palette: Palette }): React.JSX.Element {
+  return (
+    <View style={[swatchStyles.frame, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+      <View style={[swatchStyles.bubble, { backgroundColor: palette.bubbleUserBg }]} />
+      <View style={[swatchStyles.dot, { backgroundColor: palette.accent }]} />
+    </View>
+  );
+}
+
+/**
+ * How the app looks, in one place: the palette, the mode, the text size and the folding.
+ *
+ * The theme control left the title bar on 2026-11-02. A theme is a setting changed every few
+ * months, not a control, and the bar is the busiest strip of the app.
  */
 export function AppearanceScreen({
+  themeId,
+  onThemeIdChange,
   themeMode,
   onThemeModeChange,
   chatFontScale,
@@ -32,6 +70,8 @@ export function AppearanceScreen({
   onUiPrefsChange,
   onBack,
 }: {
+  themeId: ThemeId;
+  onThemeIdChange: (themeId: ThemeId) => void;
   themeMode: ThemeMode;
   onThemeModeChange: (mode: ThemeMode) => void;
   /** Thread typography scale: 1 = the design sizes. Live, so the picker shows the current one. */
@@ -43,28 +83,61 @@ export function AppearanceScreen({
   onBack: () => void;
 }): React.JSX.Element {
   const styles = useSettingsStyles();
+  const own = useThemedStyles(localStyles);
   const { dark } = useTheme();
+  // The swatches follow the mode on screen: the same theme in light and in dark are two colours.
+  const preview = themeMode === 'light' ? 'light' : themeMode === 'amoled' ? 'amoled' : dark ? 'dark' : 'light';
+
   return (
     <SettingsPageFrame title="Appearance" onBack={onBack}>
       <Section title="theme">
-        <View style={styles.segment}>
-          {THEME_OPTIONS.map(option => {
+        {themeIds.map(id => {
+          const set = themes[id];
+          const selected = id === themeId;
+          return (
+            <Pressable
+              key={id}
+              style={[own.themeRow, selected && own.themeRowActive]}
+              onPress={() => onThemeIdChange(id)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Theme ${set.label}`}>
+              <Swatch palette={set[preview]} />
+              <View style={own.themeMain}>
+                <Text style={[own.themeLabel, selected && own.themeLabelActive]}>{set.label}</Text>
+                <Text style={own.themeSource} numberOfLines={1}>
+                  {set.source}
+                </Text>
+              </View>
+              {selected ? <Text style={own.check}>✓</Text> : null}
+            </Pressable>
+          );
+        })}
+      </Section>
+
+      <Section title="mode">
+        <View style={own.grid}>
+          {themeModes.map(option => {
             const selected = option.mode === themeMode;
             return (
               <Pressable
                 key={option.mode}
-                style={[styles.segmentItem, selected && styles.segmentItemActive]}
+                style={[own.gridItem, selected && own.gridItemActive]}
                 onPress={() => onThemeModeChange(option.mode)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
-                accessibilityLabel={`Theme ${option.label}`}>
-                <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>{option.label}</Text>
+                accessibilityLabel={`Mode ${option.label}`}>
+                <Text style={[own.gridText, selected && own.gridTextActive]}>{option.label}</Text>
               </Pressable>
             );
           })}
         </View>
         <Text style={styles.hint}>
-          {themeMode === 'system' ? `follows the device · currently ${dark ? 'dark' : 'light'}` : 'forced choice'}
+          {themeMode === 'system'
+            ? `follows the device · currently ${dark ? 'dark' : 'light'}`
+            : themeMode === 'amoled'
+              ? 'pure black · the panel switches those pixels off'
+              : 'forced choice'}
         </Text>
       </Section>
 
@@ -122,3 +195,36 @@ export function AppearanceScreen({
     </SettingsPageFrame>
   );
 }
+
+const localStyles = (palette: Palette) => ({
+  // Ten rows in one card: a selected row is a fill, not a border of its own.
+  themeRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.md,
+    minHeight: 40,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.sm,
+  },
+  themeRowActive: { backgroundColor: palette.surfaceRaised },
+  themeMain: { flex: 1, minWidth: 0 },
+  themeLabel: { fontSize: font.body, color: palette.text },
+  themeLabelActive: { fontWeight: '600' as const },
+  themeSource: { fontSize: font.micro, color: palette.textMeta },
+  check: { fontSize: font.body, color: palette.accent },
+  // Four modes do not fit in one segment at 360 pt without wrapping a label or shrinking the tap
+  // target below what a finger needs, so the choice is a 2x2 grid.
+  grid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: space.sm },
+  gridItem: {
+    width: '48%' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  gridItemActive: { backgroundColor: palette.surface, borderColor: palette.accent },
+  gridText: { fontSize: font.meta, color: palette.textMuted },
+  gridTextActive: { color: palette.text, fontWeight: '600' as const },
+});
