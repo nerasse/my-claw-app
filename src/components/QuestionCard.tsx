@@ -408,7 +408,14 @@ const createStyles = (palette: Palette) =>
       padding: space.sm,
       gap: space.sm,
     },
-    head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    // Same head height as the tool and sub-agent cards: a thread that mixes a call, a question
+    // and a run is one column, and its rows line up.
+    head: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      minHeight: 29,
+    },
     title: { fontSize: font.body, fontWeight: '600', color: palette.accent },
     waiting: { fontSize: font.small, color: palette.textMuted },
     block: { gap: space.xs },

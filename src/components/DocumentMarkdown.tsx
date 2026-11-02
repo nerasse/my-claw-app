@@ -108,6 +108,7 @@ export function documentMarkdownStyles(palette: Palette, scale = 1): MarkedStyle
       backgroundColor: palette.codeBg,
       fontStyle: 'normal',
       fontWeight: '400',
+      color: palette.codeText,
     },
     code: {
       backgroundColor: palette.codeBg,
@@ -227,7 +228,7 @@ export function DocumentMarkdown({ value }: { value: string }): React.JSX.Elemen
   const renderer = useMemo(
     () =>
       new DocumentRenderer(
-        palette.text,
+        palette.codeText,
         {
           fontSize: Math.round(font.meta * scale),
           color: palette.text,
@@ -235,7 +236,7 @@ export function DocumentMarkdown({ value }: { value: string }): React.JSX.Elemen
         },
         ink,
       ),
-    [palette.text, ink, scale],
+    [palette.codeText, palette.text, ink, scale],
   );
   const elements = useMarkdown(value, { styles: mdStyles, renderer });
   return <View>{elements}</View>;

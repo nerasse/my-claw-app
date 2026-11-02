@@ -7,6 +7,7 @@ import { ScrollableBlock } from './ScrollableBlock';
 import { formatSpan } from '../core/utils';
 import { useElapsed } from './CommandElapsed';
 import { requestToolOutput } from '../core/toolOutput';
+import { runStateOf, stateWord } from '../core/toolState';
 import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -95,17 +96,15 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
     if (open && item.truncated && threadId) requestToolOutput(threadId, item.id);
   }, [open, item.truncated, item.id, threadId]);
 
-  const state = running
-    ? { text: '● running', style: styles.stateRunning }
-    : spawn?.status === 'complete'
-      ? { text: '✓ done', style: styles.stateOk }
-      : spawn?.status === 'aborted'
-        ? { text: 'aborted', style: styles.stateFaint }
-        : spawn?.status === 'interrupted'
-          ? { text: 'interrupted', style: styles.stateFaint }
-          : spawn?.status === 'error' || item.ok === false
-            ? { text: 'error', style: styles.stateBad }
-            : null;
+  // One vocabulary with the tool card (core/toolState): a sub-agent that failed and a tool that
+  // failed say the same word, and neither says "aborted" while the other says "interrupted".
+  const state = runStateOf({
+    running,
+    ok: spawn?.status === 'error' ? false : item.ok,
+    aborted: spawn?.status === 'aborted' || spawn?.status === 'interrupted',
+    truncated: item.truncated,
+  });
+  const word = stateWord(state);
 
   return (
     <View style={[styles.card, running && styles.cardRunning, spawn?.status === 'error' && styles.cardError]}>
@@ -131,7 +130,9 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           ) : null}
           <View style={styles.spacer} />
           {running && item.durationMs === undefined ? <RunningFor since={item.ts} /> : null}
-          {state ? <Text style={state.style}>{state.text}</Text> : null}
+          {word ? (
+            <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]}>{word}</Text>
+          ) : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
@@ -208,10 +209,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   kind: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, flexShrink: 1 },
   spacer: { flex: 1 },
   duration: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
-  stateRunning: { fontSize: scaleFont(font.micro, scale), color: palette.accent, fontWeight: '600' as const },
-  stateOk: { fontSize: scaleFont(font.micro, scale), color: palette.accent, fontWeight: '600' as const },
-  stateBad: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
-  stateFaint: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontWeight: '600' as const },
+  state: { fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },
+  stateBad: { color: palette.danger },
+  stateWarn: { color: palette.warn },
   spinner: { transform: [{ scale: 0.8 }] },
   // The door carries the brief as its own label: one row that says both what was asked and that
   // there is somewhere to go, instead of a line of prose above a button repeating the name.

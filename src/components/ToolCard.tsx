@@ -9,6 +9,7 @@ import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 import { useElapsed } from './CommandElapsed';
+import { runStateOf, stateWord } from '../core/toolState';
 
 /**
  * One executed tool, collapsed to a single dense line and expanded on tap to show the
@@ -73,6 +74,8 @@ export const ToolCard = React.memo(function ToolCardView({
   // store froze the duration at the run's end, so the head draws that number like any settled
   // card instead of counting from `ts` against the current clock.
   const interrupted = !running && item.interrupted === true;
+  const state = runStateOf({ running, ok: item.ok, interrupted: item.interrupted, truncated: item.truncated });
+  const word = stateWord(state);
   // A tool output carrying a unified diff (apply_patch) renders as colour-coded lines instead of
   // a plain monospace block. splitDiff only runs while the card is expanded (a collapsed card has
   // nothing to paint).
@@ -155,7 +158,7 @@ export const ToolCard = React.memo(function ToolCardView({
         }}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${interrupted ? ', interrupted' : !item.ok && !running ? ', failed' : ''}`}
+        accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
           <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
@@ -168,8 +171,7 @@ export const ToolCard = React.memo(function ToolCardView({
             <View style={styles.spacer} />
           )}
           {!open && summary.extraArgs > 0 ? <ExtraArgs count={summary.extraArgs} /> : null}
-          {interrupted ? <Text style={styles.interrupted}>interrupted</Text> : null}
-          {!item.ok && !running && !interrupted ? <Text style={styles.failed}>failed</Text> : null}
+          {word ? <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]}>{word}</Text> : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
@@ -345,7 +347,15 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   },
   cardOpen: { backgroundColor: palette.codeBg },
   cardError: { borderColor: palette.danger },
-  head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  head: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    // One height for every card head, running or settled, one-line preview or none: a thread of
+    // twenty calls is a list, and a list whose rows are whatever their content needs is a
+    // staircase.
+    minHeight: Math.round(29 * scale),
+  },
   chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
   name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
   preview: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.textMuted },
@@ -358,10 +368,10 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   spacer: { flex: 1 },
   extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   duration: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
-  failed: { fontSize: scaleFont(font.micro, scale), color: palette.danger, fontWeight: '600' as const },
-  // Not `danger`: the call was cut off, which is not the same statement as a tool that ran and
-  // came back with an error.
-  interrupted: { fontSize: scaleFont(font.micro, scale), color: palette.warn, fontWeight: '600' as const },
+  state: { fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },
+  // Two colours, three words: a failure is an error, a stop or a clip is not.
+  stateBad: { color: palette.danger },
+  stateWarn: { color: palette.warn },
   spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
   body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
@@ -383,6 +393,8 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     fontFamily: 'monospace',
     fontSize: scaleFont(font.small, scale),
     lineHeight: lineHeightFor(scaleFont(font.small, scale)),
-    color: palette.text,
+    // `codeText`, not `text`: on a theme whose code plate is darker than the page (Flexoki,
+    // AMOLED) the page ink has no contrast left to give.
+    color: palette.codeText,
   },
 });

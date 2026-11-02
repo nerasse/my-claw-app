@@ -143,41 +143,53 @@ it('a delegated browser task is a sub-agent card: the browser is who, the site i
   expect(texts(tree)).toContain('Check the cart total');
 });
 
+// One vocabulary with the tool card (core/toolState). Running and done carry no word: the
+// spinner and the duration already say it, and a card that spelled out "done" next to "1.2 s"
+// would be saying it twice.
 it.each([
-  ['running' as const, '● running'],
-  ['complete' as const, '✓ done'],
-  ['error' as const, 'error'],
-  ['aborted' as const, 'aborted'],
+  ['error' as const, 'failed'],
+  ['aborted' as const, 'stopped'],
 ])('says in the head that the run is %s', (status, expected) => {
-  const tree = render(makeItem({ running: status === 'running' }), {
+  const tree = render(makeItem({ running: false }), {
     ...DOOR,
     spawn: { subagentId: 's1', displayName: 'digger', status },
   });
   expect(texts(tree)).toContain(expected);
 });
 
-// 2026-10-04: a card the server went down under is drawn from its state alone, and such a card is
-// never `ok`. Read before the state, `ok: false` painted it a red "error" -- a stopped one too.
-it.each([
-  ['interrupted' as const, 'interrupted'],
-  ['aborted' as const, 'aborted'],
-])('a card drawn from its state alone says %s, not error', (status, expected) => {
-  const tree = render(makeItem({ ok: false, output: '' }), { ...DOOR, spawn: { subagentId: 's1', displayName: 'digger', status } });
-  expect(texts(tree)).toContain(expected);
-  expect(texts(tree)).not.toContain('error');
+it.each(['running' as const, 'complete' as const])('a %s run draws no state word', status => {
+  const tree = render(makeItem({ running: status === 'running', durationMs: status === 'complete' ? 1200 : undefined }), {
+    ...DOOR,
+    spawn: { subagentId: 's1', displayName: 'digger', status },
+  });
+  for (const word of ['failed', 'stopped', 'truncated', 'done', 'running']) {
+    expect(texts(tree)).not.toContain(word);
+  }
 });
 
-// "● running" without a clock is the same picture at ten seconds and at ten minutes, and nothing
-// else on the card carries time until the result lands.
-it('counts the run, to the left of the running state', () => {
+// 2026-10-04: a card the server went down under is drawn from its state alone, and such a card is
+// never `ok`. Read before the state, `ok: false` painted it a red "error" -- a stopped one too.
+it.each(['interrupted' as const, 'aborted' as const])(
+  'a card drawn from its state alone says stopped (%s), not failed',
+  status => {
+    const tree = render(makeItem({ ok: false, output: '' }), {
+      ...DOOR,
+      spawn: { subagentId: 's1', displayName: 'digger', status },
+    });
+    expect(texts(tree)).toContain('stopped');
+    expect(texts(tree)).not.toContain('failed');
+  },
+);
+
+// A running card without a clock is the same picture at ten seconds and at ten minutes, and
+// nothing else on the card carries time until the result lands.
+it('counts the run while it runs', () => {
   const tree = render(makeItem({ running: true, ts: Date.now() - 95_000 }), {
     ...DOOR,
     spawn: { subagentId: 's1', displayName: 'digger', status: 'running' as const },
   });
   const shown = texts(tree);
-  const elapsed = shown.findIndex(text => /^1 min \d+ s$/.test(text));
-  expect(elapsed).toBeGreaterThanOrEqual(0);
-  expect(elapsed).toBeLessThan(shown.indexOf('● running'));
+  expect(shown.some(text => /^1 min \d+ s$/.test(text))).toBe(true);
 });
 
 it('a settled card shows its frozen duration, not a second counter', () => {

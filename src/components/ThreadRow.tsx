@@ -50,6 +50,11 @@ export const ThreadRow = React.memo(function ThreadRowRow({
     <View
       style={[styles.row, active && styles.rowActive]}
       {...contextMenuProps(() => onMenu(item))}>
+      {/* An accent bar, not a tinted background. A tint reads as a mood; a bar reads as a
+          position, and it still says where you are when every palette tints differently.
+          The bar carries no radius of its own: the row's overflow shapes it, otherwise it
+          overflows the curve and reads as a tab glued to the side (POC, 2026-11-02). */}
+      {active ? <View style={styles.activeBar} /> : null}
       <Pressable
         style={[styles.main, dense && styles.mainDense]}
         onPress={() => onOpen(item.threadId)}
@@ -90,8 +95,21 @@ export const ThreadRow = React.memo(function ThreadRowRow({
 const DOT_SPINNER = 11;
 
 const createStyles = (palette: Palette) => ({
-  row: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: radius.sm },
-  rowActive: { backgroundColor: palette.accentSoft },
+  row: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderRadius: radius.sm,
+    overflow: 'hidden' as const,
+  },
+  rowActive: { backgroundColor: palette.surfaceRaised },
+  activeBar: {
+    position: 'absolute' as const,
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: palette.accent,
+  },
   main: { flex: 1, paddingVertical: space.sm, paddingHorizontal: space.sm, gap: 1 },
   mainDense: { paddingVertical: space.xs },
   titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },

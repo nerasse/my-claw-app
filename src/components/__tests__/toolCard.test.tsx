@@ -280,7 +280,7 @@ describe('ToolCard elapsed time while running', () => {
    * the card must stop counting there, whatever the clock does afterwards -- a card left running
    * read "220m 25s" on a call the server had settled in 25 s.
    */
-  test('an interrupted card says so, and holds the duration the run ended on', () => {
+  test('a call the run ended under says stopped, and holds the duration the run ended on', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-09-06T13:25:25.000Z'));
     const started = Date.now() - 25_000;
@@ -288,7 +288,7 @@ describe('ToolCard elapsed time while running', () => {
     expect(textsOf(tree)).toContain('25 s');
 
     updateItem(tree, makeItem({ running: false, ok: false, interrupted: true, ts: started, durationMs: 25_000 }));
-    expect(textsOf(tree)).toContain('interrupted');
+    expect(textsOf(tree)).toContain('stopped');
     // "failed" is a verdict only a result can carry: this call never returned one.
     expect(textsOf(tree)).not.toContain('failed');
     expect(textsOf(tree)).toContain('25 s');
@@ -303,6 +303,6 @@ describe('ToolCard elapsed time while running', () => {
   test('a call that ran and came back with an error still reads failed', () => {
     const tree = renderTool(makeItem({ running: false, ok: false, output: 'boom', durationMs: 300 }));
     expect(textsOf(tree)).toContain('failed');
-    expect(textsOf(tree)).not.toContain('interrupted');
+    expect(textsOf(tree)).not.toContain('stopped');
   });
 });

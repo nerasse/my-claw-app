@@ -80,6 +80,9 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
       fontStyle: 'normal',
       fontWeight: '400',
       backgroundColor: palette.codeBg,
+      // The plate is not the page: on a theme whose code background is darker than the
+      // background, the page ink has no contrast left.
+      color: palette.codeText,
     },
     code: {
       backgroundColor: palette.codeBg,
@@ -236,7 +239,8 @@ export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: Ma
     const { size, color } = toneOf(palette, tone, scale);
     const codeSize = codeSizeFor(size);
     return new WrappingRenderer(
-      { color, fontSize: codeSize, lineHeight: lineHeightFor(codeSize) },
+      // The block's ink, not the prose's: a plate can be darker than the page it sits on.
+      { color: palette.codeText, fontSize: codeSize, lineHeight: lineHeightFor(codeSize) },
       { fontSize: size, color, ...lineBoxFor(size, text) },
       tone,
       ink,
