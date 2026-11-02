@@ -56,7 +56,7 @@ export const lightPalette: Palette = {
   bg: '#ffffff',
   surface: '#ffffff',
   surfaceAlt: '#f2f3f5',
-  surfaceRaised: '#e6e0da',
+  surfaceRaised: '#d9dee7',
   border: '#e3e5e9',
   text: '#14161a',
   textMuted: '#5c626d',
@@ -64,8 +64,8 @@ export const lightPalette: Palette = {
   accent: '#2563eb',
   accentText: '#ffffff',
   accentSoft: '#e8efff',
-  bubbleUserBg: '#f0e6e2',
-  bubbleUserText: '#191714',
+  bubbleUserBg: '#e4e8ef',
+  bubbleUserText: '#14161a',
   ok: '#12855a',
   warn: '#b45309',
   danger: '#c02626',
@@ -76,14 +76,14 @@ export const lightPalette: Palette = {
   diffHunkBg: '#eef1f6',
   overlay: 'rgba(15,18,24,0.42)',
   codeBg: '#f7f8fa',
-  codeText: '#191714',
+  codeText: '#14161a',
 };
 
 export const darkPalette: Palette = {
   bg: '#0f1115',
   surface: '#161a20',
   surfaceAlt: '#1d222a',
-  surfaceRaised: '#3d3833',
+  surfaceRaised: '#343b47',
   border: '#262c36',
   text: '#e8eaee',
   textMuted: '#9ba3b0',
@@ -91,8 +91,8 @@ export const darkPalette: Palette = {
   accent: '#4d84ff',
   accentText: '#0b1220',
   accentSoft: '#1b2740',
-  bubbleUserBg: '#322f2c',
-  bubbleUserText: '#eae5dd',
+  bubbleUserBg: '#2a313c',
+  bubbleUserText: '#e8eaee',
   ok: '#3ecf8e',
   warn: '#e0a33e',
   danger: '#ff6b6b',
@@ -103,7 +103,7 @@ export const darkPalette: Palette = {
   diffHunkBg: '#1a1f28',
   overlay: 'rgba(0,0,0,0.6)',
   codeBg: '#11151b',
-  codeText: '#eae5dd',
+  codeText: '#e8eaee',
 };
 
 /** Compact by design: one dense scale used everywhere so screens stay information-first. */
