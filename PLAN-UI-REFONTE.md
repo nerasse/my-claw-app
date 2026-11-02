@@ -165,6 +165,14 @@ POC added that the app should not gain.
 
 Net: 24 fields become 30. Six added, two removed.
 
+As built (2026-11-02): 29 fields, not 30 -- the count above never added up. Six added
+(`surfaceRaised`, `codeText`, `bubbleUserBg`, `bubbleUserText`, `focus`, `selection`), two removed,
+plus `textMeta` from §1.8 option 2, which this table was written before.
+
+`diffAdd`/`diffDel` are no longer `ok`/`danger`: a light green on a green wash lands at 3:1 whatever
+the wash does, so the diff fields are the *readable* pair drawn inside a tinted line, while `ok` and
+`danger` stay the marks on the page.
+
 ### 1.8 The faint grey is below the rule the POC enforces
 
 Measured on today's palettes:
@@ -189,6 +197,12 @@ those lines become visibly darker. Two honest options:
 
 Recommendation: **option 2.** The POC conflated the two because a mock has no cost for a field; the app
 does. And a decorative hairline label at 3:1 is fine — the rule is about text you must read.
+
+As built: the sweep is targeted, not exhaustive. 21 styles moved to `textMeta` -- the thread, the
+tool cards, the run foot, the wait and reasoning lines, the sub-agent card, the conversation rows,
+the drawer's section labels and counts, the chat header. The remaining ~300 uses are glyphs,
+chevrons, placeholders, separators and disabled marks: shapes, not text, and they stay near 3:1 by
+design. Sweeping all 323 would have made every icon heavier for no reader.
 
 Either way the invariant test of §1.6 must be written against the field each call site actually uses,
 which means the sweep happens in P1 and the rule is enforced in P2.
