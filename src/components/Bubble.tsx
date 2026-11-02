@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RunInfo, TextItem } from '../core/chat';
 import type { DeviceInfo } from '../core/device';
 import type { FileKind } from '../core/fileKind';
@@ -164,9 +164,10 @@ export const Bubble = React.memo(function BubbleView({
   ) {
     return null;
   }
-  // A user bubble is filled with the accent, which is also what a browser paints the selection
-  // highlight in: unmarked, a drag over one's own message selects text that looks untouched.
-  // webTheme.web.ts flips the pair on the marked subtree. Nothing on Android.
+  // A browser paints the selection highlight in the accent. Unmarked, a drag over one's own
+  // message would select text that looks untouched. webTheme.web.ts flips the pair on the marked
+  // subtree, and the mark stays on the bubble: the primary button inside it is still accent-filled.
+  // Nothing on Android.
   const onAccent = agent ? {} : onAccentProps();
   return (
     <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
@@ -310,7 +311,14 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
-  bubbleUser: { backgroundColor: palette.accent, borderBottomRightRadius: radius.sm },
+  bubbleUser: {
+    backgroundColor: palette.bubbleUserBg,
+    borderBottomRightRadius: radius.sm,
+    // A neutral bubble on a neutral thread has no edge without this hairline. The POC used a
+    // color-mix, which React Native has no equivalent for; one hairline is not worth a fifth token.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.border,
+  },
   bubbleAgent: { backgroundColor: palette.surfaceAlt, borderBottomLeftRadius: radius.sm },
   bubbleNotice: {
     backgroundColor: palette.surface,
@@ -324,16 +332,16 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   },
   // The line box is stated at the call site: a message carrying an emoji must not pin it.
   text: { fontSize: scaleFont(font.body, scale), color: palette.text },
-  textUser: { color: palette.accentText },
+  textUser: { color: palette.bubbleUserText },
   // Command output keeps its line breaks: /status is a table, not prose.
   textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: scaleFont(font.small, scale) },
   textNotice: { color: palette.text, fontSize: scaleFont(font.small, scale) },
   error: { fontSize: scaleFont(font.small, scale), color: palette.danger, marginTop: 2 },
   queued: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, marginTop: 2 },
-  queuedUser: { color: palette.accentText, opacity: 0.7 },
+  queuedUser: { color: palette.bubbleUserText, opacity: 0.62 },
   time: { fontSize: scaleFont(font.micro, scale), alignSelf: 'flex-end' as const, marginTop: 1 },
   timeAgent: { color: palette.textFaint },
-  timeUser: { color: palette.accentText, opacity: 0.7 },
+  timeUser: { color: palette.bubbleUserText, opacity: 0.62 },
   menuRow: { width: '100%' as const, flexDirection: 'row' as const, marginTop: 1 },
   menuRowAgent: { justifyContent: 'flex-end' as const },
   menuRowUser: { justifyContent: 'flex-start' as const },

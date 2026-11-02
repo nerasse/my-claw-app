@@ -5,6 +5,12 @@ export interface Palette {
   surface: string;
   /** Inputs and agent bubbles. */
   surfaceAlt: string;
+  /**
+   * The third elevation: a selected row, and a card drawn *inside* another surface (the chip and
+   * the location card sit on the user bubble). Two steps were not enough -- with only `surface`
+   * and `surfaceAlt` a selected row and a card were the same grey.
+   */
+  surfaceRaised: string;
   /** Hairlines. */
   border: string;
   text: string;
@@ -14,13 +20,15 @@ export interface Palette {
   accentText: string;
   accentSoft: string;
   /**
-   * Secondary text and inactive tracks drawn *on* an accent fill (a user bubble). Neither
-   * textMuted nor border survives there: both are tuned for the page background, and on accent
-   * they read as either invisible or dirty. Expressed as a translucent accentText so the two
-   * themes stay coherent without a second accent ramp.
+   * The user bubble: a neutral step off the thread, never the accent.
+   *
+   * It used to be filled with `accent`, which put 1.4 % of the screen in colour and made the
+   * owner's own messages the loudest thing in a conversation they had already read. A bubble is
+   * a surface; the colour belongs to the accent drawn on top of it.
    */
-  onAccentMuted: string;
-  onAccentTrack: string;
+  bubbleUserBg: string;
+  /** Text on `bubbleUserBg`. A dedicated field, because `text` has no relationship with it. */
+  bubbleUserText: string;
   ok: string;
   warn: string;
   danger: string;
@@ -37,12 +45,18 @@ export interface Palette {
   overlay: string;
   /** Monospace blocks inside tool cards. */
   codeBg: string;
+  /**
+   * Text inside a `codeBg` block. Not `text`: on a theme whose code background is darker than
+   * the page (Flexoki, AMOLED) the page ink has no contrast left to give.
+   */
+  codeText: string;
 }
 
 export const lightPalette: Palette = {
   bg: '#ffffff',
   surface: '#ffffff',
   surfaceAlt: '#f2f3f5',
+  surfaceRaised: '#e6e0da',
   border: '#e3e5e9',
   text: '#14161a',
   textMuted: '#5c626d',
@@ -50,8 +64,8 @@ export const lightPalette: Palette = {
   accent: '#2563eb',
   accentText: '#ffffff',
   accentSoft: '#e8efff',
-  onAccentMuted: 'rgba(255,255,255,0.74)',
-  onAccentTrack: 'rgba(255,255,255,0.34)',
+  bubbleUserBg: '#f0e6e2',
+  bubbleUserText: '#191714',
   ok: '#12855a',
   warn: '#b45309',
   danger: '#c02626',
@@ -62,12 +76,14 @@ export const lightPalette: Palette = {
   diffHunkBg: '#eef1f6',
   overlay: 'rgba(15,18,24,0.42)',
   codeBg: '#f7f8fa',
+  codeText: '#191714',
 };
 
 export const darkPalette: Palette = {
   bg: '#0f1115',
   surface: '#161a20',
   surfaceAlt: '#1d222a',
+  surfaceRaised: '#3d3833',
   border: '#262c36',
   text: '#e8eaee',
   textMuted: '#9ba3b0',
@@ -75,8 +91,8 @@ export const darkPalette: Palette = {
   accent: '#4d84ff',
   accentText: '#0b1220',
   accentSoft: '#1b2740',
-  onAccentMuted: 'rgba(11,18,32,0.68)',
-  onAccentTrack: 'rgba(11,18,32,0.26)',
+  bubbleUserBg: '#322f2c',
+  bubbleUserText: '#eae5dd',
   ok: '#3ecf8e',
   warn: '#e0a33e',
   danger: '#ff6b6b',
@@ -87,6 +103,7 @@ export const darkPalette: Palette = {
   diffHunkBg: '#1a1f28',
   overlay: 'rgba(0,0,0,0.6)',
   codeBg: '#11151b',
+  codeText: '#eae5dd',
 };
 
 /** Compact by design: one dense scale used everywhere so screens stay information-first. */

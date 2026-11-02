@@ -53,5 +53,5 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     color: palette.textMuted,
     fontStyle: 'italic' as const,
   },
-  transcriptOnAccent: { color: palette.onAccentMuted },
+  transcriptOnAccent: { color: palette.textMuted },
 });

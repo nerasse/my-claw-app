@@ -208,9 +208,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  buttonOnAccent: { backgroundColor: palette.accentText },
+  buttonOnAccent: { backgroundColor: palette.accent },
   glyph: { color: palette.accentText },
-  glyphOnAccent: { color: palette.accent },
+  glyphOnAccent: { color: palette.accentText },
   // Taller than the bars: the strip is the drag target, and a thumb needs room to land on it.
   bars: {
     flex: 1,
@@ -220,9 +220,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     height: 32,
   },
   bar: { width: 2, borderRadius: radius.pill, backgroundColor: palette.border },
-  barOnAccent: { backgroundColor: palette.onAccentTrack },
+  barOnAccent: { backgroundColor: palette.bubbleUserText, opacity: 0.24 },
   barPlayed: { backgroundColor: palette.accent },
-  barPlayedOnAccent: { backgroundColor: palette.accentText },
+  barPlayedOnAccent: { backgroundColor: palette.accent },
   thumb: {
     position: 'absolute' as const,
     width: THUMB,
@@ -231,7 +231,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     borderRadius: radius.pill,
     backgroundColor: palette.accent,
   },
-  thumbOnAccent: { backgroundColor: palette.accentText },
+  thumbOnAccent: { backgroundColor: palette.accent },
   // Under the waveform, starting where it starts.
   meta: {
     flexDirection: 'row' as const,
@@ -245,7 +245,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     color: palette.textFaint,
     fontVariant: ['tabular-nums' as const],
   },
-  timeOnAccent: { color: palette.onAccentMuted },
+  timeOnAccent: { color: palette.textMuted },
   // Fixed width: the label goes from "1×" to "1.5×", and the row must not shift under the thumb.
   rate: {
     minWidth: 38,
@@ -257,16 +257,16 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  rateOnAccent: { borderColor: palette.onAccentTrack },
+  rateOnAccent: { borderColor: palette.border },
   rateActive: { borderColor: palette.accent },
-  rateActiveOnAccent: { borderColor: palette.accentText },
+  rateActiveOnAccent: { borderColor: palette.accent },
   rateText: {
     fontSize: scaleFont(font.micro, scale),
     fontWeight: '600' as const,
     color: palette.textFaint,
     fontVariant: ['tabular-nums' as const],
   },
-  rateTextOnAccent: { color: palette.onAccentMuted },
+  rateTextOnAccent: { color: palette.textMuted },
   rateTextActive: { color: palette.accent },
-  rateTextActiveOnAccent: { color: palette.accentText },
+  rateTextActiveOnAccent: { color: palette.accent },
 });

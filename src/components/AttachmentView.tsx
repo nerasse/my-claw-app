@@ -197,7 +197,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     justifyContent: 'center' as const,
   },
   caption: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, marginTop: 2 },
-  captionOnAccent: { color: palette.onAccentMuted },
+  captionOnAccent: { color: palette.textMuted },
   chip: {
     alignSelf: 'flex-start' as const,
     flexDirection: 'row' as const,
@@ -211,7 +211,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     marginBottom: space.sm,
   },
   chipGone: { opacity: 0.6 },
-  chipOnAccent: { backgroundColor: palette.onAccentTrack },
+  chipOnAccent: { backgroundColor: palette.surfaceRaised },
   chipText: { fontSize: scaleFont(font.body, scale), fontWeight: '500' as const, color: palette.text },
-  chipTextOnAccent: { color: palette.accentText },
+  chipTextOnAccent: { color: palette.bubbleUserText },
 });
