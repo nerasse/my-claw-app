@@ -15,6 +15,8 @@ import {
   type Palette,
   type ThemeId,
 } from '../theme';
+import { customPalette, hasCustom, type CustomTheme } from '../theme/customPalette';
+import { CustomThemeEditor } from './CustomThemeEditor';
 import { Section, SettingsPageFrame, useSettingsStyles } from './settingsParts';
 
 /** The scales offered as a picker, and the label each one shows. 1 = the design size. */
@@ -62,6 +64,8 @@ function Swatch({ palette }: { palette: Palette }): React.JSX.Element {
 export function AppearanceScreen({
   themeId,
   onThemeIdChange,
+  custom,
+  onCustomChange,
   themeMode,
   onThemeModeChange,
   chatFontScale,
@@ -72,6 +76,9 @@ export function AppearanceScreen({
 }: {
   themeId: ThemeId;
   onThemeIdChange: (themeId: ThemeId) => void;
+  /** The colours of the `custom` palette, when one is written. */
+  custom: CustomTheme;
+  onCustomChange: (custom: CustomTheme) => void;
   themeMode: ThemeMode;
   onThemeModeChange: (mode: ThemeMode) => void;
   /** Thread typography scale: 1 = the design sizes. Live, so the picker shows the current one. */
@@ -113,7 +120,36 @@ export function AppearanceScreen({
             </Pressable>
           );
         })}
+        {/* Last, and only useful once it holds something: pressing it with nothing written
+            duplicates the theme on screen, which is the only sane starting point. */}
+        <Pressable
+          style={[own.themeRow, themeId === 'custom' && own.themeRowActive]}
+          onPress={() => onThemeIdChange('custom')}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: themeId === 'custom' }}
+          accessibilityLabel="Theme Custom">
+          <Swatch
+            palette={
+              hasCustom(custom)
+                ? customPalette(custom, preview)
+                : themes[themeId === 'custom' ? 'sable' : themeId][preview]
+            }
+          />
+          <View style={own.themeMain}>
+            <Text style={[own.themeLabel, themeId === 'custom' && own.themeLabelActive]}>Custom</Text>
+            <Text style={own.themeSource} numberOfLines={1}>
+              {hasCustom(custom) ? 'your own colours' : 'duplicate a theme to start'}
+            </Text>
+          </View>
+          {themeId === 'custom' ? <Text style={own.check}>✓</Text> : null}
+        </Pressable>
       </Section>
+
+      {themeId === 'custom' ? (
+        <Section title="custom colours">
+          <CustomThemeEditor custom={custom} onChange={onCustomChange} themeId={themeId} />
+        </Section>
+      ) : null}
 
       <Section title="mode">
         <View style={own.grid}>

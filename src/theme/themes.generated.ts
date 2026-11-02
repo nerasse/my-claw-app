@@ -12,6 +12,19 @@ export interface GeneratedPaletteSet {
   amoled: Palette;
 }
 
+export interface PaletteSource {
+  bg: string;
+  surface: string;
+  line: string;
+  ink: string;
+  muted: string;
+  faint: string;
+  accent: string;
+  ok: string;
+  warn: string;
+  danger: string;
+}
+
 export type GeneratedThemeId =
   | 'sable'
   | 'lin'
@@ -934,5 +947,49 @@ export const generatedThemes: Record<GeneratedThemeId, GeneratedPaletteSet> = {
       focus: "#3ba99f",
       selection: "#3ba99f",
     },
+  },
+};
+
+/** The source colours a theme is built from, as chosen rather than derived. */
+export const paletteSources: Record<GeneratedThemeId, { light: PaletteSource; dark: PaletteSource }> = {
+  "sable": {
+    light: { bg: "#f6f4f1", surface: "#fdfbf8", line: "#e1dcd4", ink: "#191714", muted: "#56504a", faint: "#8a8378", accent: "#8a3a2e", ok: "#2f6b47", warn: "#8a5a10", danger: "#a51f4b" },
+    dark: { bg: "#14120f", surface: "#1b1815", line: "#2a261f", ink: "#eae5dd", muted: "#a0988c", faint: "#6f685e", accent: "#e08a72", ok: "#6cc08d", warn: "#d8a94f", danger: "#ef6a86" },
+  },
+  "lin": {
+    light: { bg: "#f5f4ef", surface: "#fcfbf7", line: "#dfddd3", ink: "#191a15", muted: "#53544a", faint: "#8a8b7d", accent: "#5c6b32", ok: "#2f6b47", warn: "#8a5a10", danger: "#a82f28" },
+    dark: { bg: "#12130f", surface: "#191a16", line: "#282a22", ink: "#e8e9e1", muted: "#a8a39a", faint: "#6f6b63", accent: "#a8bd6e", ok: "#6cc08d", warn: "#d8a94f", danger: "#f08379" },
+  },
+  "charbon": {
+    light: { bg: "#f6f5f3", surface: "#ffffff", line: "#e0ded8", ink: "#181614", muted: "#544f49", faint: "#8a857f", accent: "#242220", ok: "#2f6b47", warn: "#b4762a", danger: "#a82f28" },
+    dark: { bg: "#131210", surface: "#1a1917", line: "#282622", ink: "#e9e6e1", muted: "#a8a39a", faint: "#6f6b64", accent: "#e8e4dd", ok: "#6cc08d", warn: "#e0a45c", danger: "#f08379" },
+  },
+  "catppuccin": {
+    light: { bg: "#eff1f5", surface: "#ffffff", line: "#bcc0cc", ink: "#4c4f69", muted: "#6c6f85", faint: "#9ea0b0", accent: "#8839ef", ok: "#40a02b", warn: "#df8e1d", danger: "#d20f39" },
+    dark: { bg: "#1e1e2e", surface: "#262637", line: "#45475a", ink: "#cdd6f4", muted: "#a6adc8", faint: "#707592", accent: "#cba6f7", ok: "#a6e3a1", warn: "#f9e2af", danger: "#f38ba8" },
+  },
+  "gruvbox": {
+    light: { bg: "#fbf1c7", surface: "#f7edc3", line: "#d5c4a1", ink: "#3c3836", muted: "#7c6f64", faint: "#a89a86", accent: "#076678", ok: "#79740e", warn: "#b57614", danger: "#9d0006" },
+    dark: { bg: "#282828", surface: "#32302f", line: "#504945", ink: "#ebdbb2", muted: "#a89984", faint: "#7c6f64", accent: "#fe8019", ok: "#b8bb26", warn: "#fabd2f", danger: "#fb4934" },
+  },
+  "rose-pine": {
+    light: { bg: "#faf4ed", surface: "#fffaf3", line: "#f2e9e1", ink: "#464261", muted: "#797593", faint: "#a4a0b0", accent: "#907aa9", ok: "#56887f", warn: "#ea9d34", danger: "#b4637a" },
+    dark: { bg: "#191724", surface: "#1f1d2e", line: "#26233a", ink: "#e0def4", muted: "#908caa", faint: "#6e6a86", accent: "#c4a7e7", ok: "#95b1ac", warn: "#f6c177", danger: "#eb6f92" },
+  },
+  "everforest": {
+    light: { bg: "#fdf6e3", surface: "#f8f2dd", line: "#efebd4", ink: "#5c6a72", muted: "#829181", faint: "#a6b0a0", accent: "#3a94c5", ok: "#8da101", warn: "#dfa000", danger: "#f85552" },
+    dark: { bg: "#2d353b", surface: "#343f44", line: "#3d484d", ink: "#d3c6aa", muted: "#859289", faint: "#7a8478", accent: "#7fbbb3", ok: "#a7c080", warn: "#dbbc7f", danger: "#e67e80" },
+  },
+  "kanagawa": {
+    light: { bg: "#f2ecbc", surface: "#f7f1c8", line: "#d5cea3", ink: "#545464", muted: "#716e61", faint: "#8a8980", accent: "#4d699b", ok: "#6f894e", warn: "#de9800", danger: "#c84053" },
+    dark: { bg: "#1f1f28", surface: "#2a2a37", line: "#363646", ink: "#dcd7ba", muted: "#c8c093", faint: "#727169", accent: "#7e9cd8", ok: "#98bb6c", warn: "#e6c384", danger: "#e46876" },
+  },
+  "tokyo-night": {
+    light: { bg: "#e1e2e7", surface: "#eef0f5", line: "#c4c8da", ink: "#3760bf", muted: "#6172b0", faint: "#848cb5", accent: "#2e7de9", ok: "#587539", warn: "#8c6c3e", danger: "#f52a65" },
+    dark: { bg: "#1a1b26", surface: "#1f2335", line: "#292e42", ink: "#c0caf5", muted: "#a9b1d6", faint: "#565f89", accent: "#7aa2f7", ok: "#9ece6a", warn: "#e0af68", danger: "#f7768e" },
+  },
+  "flexoki": {
+    light: { bg: "#fffcf0", surface: "#f7f4e8", line: "#dad8ce", ink: "#100f0f", muted: "#6f6e69", faint: "#b7b5ac", accent: "#24837b", ok: "#66800b", warn: "#ad8301", danger: "#af3029" },
+    dark: { bg: "#100f0f", surface: "#1c1b1a", line: "#343331", ink: "#cecdc3", muted: "#878580", faint: "#575653", accent: "#3aa99f", ok: "#879a39", warn: "#d0a215", danger: "#d14d41" },
   },
 };

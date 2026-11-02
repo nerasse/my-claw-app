@@ -1,12 +1,16 @@
 import { deviceBridge } from './nativeBridge';
 import { DEFAULT_SERVER_URL } from './serverUrl';
 import { DEFAULT_THEME_ID, isThemeId, type ThemeId, type ThemeMode } from '../theme/themes';
+import { EMPTY_CUSTOM, parseHex, SOURCE_FIELDS, type CustomTheme } from '../theme/customPalette';
+import type { PaletteSource } from '../theme/themes.generated';
 
 export type { ThemeMode };
 
 export interface Prefs {
   /** Which palette. Device-local: a theme is a display choice, not a property of the account. */
   themeId: ThemeId;
+  /** The colours of the `custom` palette, when one is written. Sparse: unset fields derive. */
+  customTheme: CustomTheme;
   /** Light, dark, AMOLED, or follow the phone. */
   themeMode: ThemeMode;
   serverUrl: string;
@@ -52,6 +56,7 @@ export { DEFAULT_SERVER_URL };
 
 const DEFAULTS: Prefs = {
   themeId: DEFAULT_THEME_ID,
+  customTheme: EMPTY_CUSTOM,
   themeMode: 'system',
   serverUrl: DEFAULT_SERVER_URL,
   lastThreadId: null,
@@ -115,6 +120,31 @@ export function clampChatScale(value: number): number {
   return Math.min(CHAT_SCALE_MAX, Math.max(CHAT_SCALE_MIN, value));
 }
 
+/**
+ * A stored custom theme, or nothing.
+ *
+ * Every colour is validated on the way in: this string is what the app paints itself with, and a
+ * value that is not a hex would produce a palette whose fields are `undefined` and a StyleSheet
+ * full of holes. A key that does not exist any more is dropped rather than carried.
+ */
+export function parseCustomTheme(raw: string | undefined): CustomTheme {
+  if (!raw) return EMPTY_CUSTOM;
+  try {
+    const parsed = JSON.parse(raw) as Partial<CustomTheme>;
+    const clean = (seed: Partial<PaletteSource> | undefined): Partial<PaletteSource> => {
+      const out: Partial<PaletteSource> = {};
+      for (const { key } of SOURCE_FIELDS) {
+        const value = typeof seed?.[key] === 'string' ? parseHex(String(seed[key])) : null;
+        if (value) out[key] = value;
+      }
+      return out;
+    };
+    return { light: clean(parsed.light), dark: clean(parsed.dark) };
+  } catch {
+    return EMPTY_CUSTOM;
+  }
+}
+
 type Listener = (prefs: Prefs) => void;
 
 /**
@@ -148,6 +178,7 @@ class PrefsStore {
       const themeMode = THEME_MODES.includes(raw.themeMode as ThemeMode) ? (raw.themeMode as ThemeMode) : DEFAULTS.themeMode;
       this.current = {
         themeId: isThemeId(raw.themeId) ? raw.themeId : DEFAULTS.themeId,
+        customTheme: parseCustomTheme(raw.customTheme),
         themeMode,
         serverUrl: raw.serverUrl?.trim() ? raw.serverUrl : DEFAULTS.serverUrl,
         lastThreadId: raw.lastThreadId?.trim() ? raw.lastThreadId : null,
@@ -173,7 +204,15 @@ class PrefsStore {
     this.current = { ...this.current, [key]: value };
     this.emit();
     // Fire and forget: a failed write only costs the setting on the next cold start.
-    deviceBridge.prefsSet(key, value === null ? null : String(value)).catch(() => {});
+    // A list keeps its comma form (an id carries no comma, and the file stays legible); only a
+    // real object is JSON. `typeof [] === 'object'` is the trap this line avoids.
+    const stored =
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? JSON.stringify(value)
+        : value === null
+          ? null
+          : String(value);
+    deviceBridge.prefsSet(key, stored).catch(() => {});
   }
 
   private emit(): void {

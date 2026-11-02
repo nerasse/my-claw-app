@@ -4415,6 +4415,8 @@ export function AppShell(): React.JSX.Element {
               <AppearanceScreen
                 themeId={themeControl.themeId}
                 onThemeIdChange={themeControl.setThemeId}
+                custom={themeControl.custom}
+                onCustomChange={themeControl.setCustom}
                 themeMode={themeControl.mode}
                 onThemeModeChange={themeControl.setMode}
                 chatFontScale={chatFontScale}

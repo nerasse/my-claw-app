@@ -347,6 +347,12 @@ def amoled(t):
     return out
 
 
+def seed_ts(seed, indent=""):
+    keys = ("bg", "surface", "line", "ink", "muted", "faint", "accent", "ok", "warn", "danger")
+    body = ", ".join(f'{k}: "{seed[k]}"' for k in keys)
+    return "{ " + body + " }"
+
+
 def ts(palette, indent="      "):
     lines = []
     for k, v in palette.items():
@@ -413,12 +419,42 @@ def main():
         "  dark: Palette;\n"
         "  amoled: Palette;\n"
         "}\n\n"
+        "export interface PaletteSource {\n"
+        "  bg: string;\n"
+        "  surface: string;\n"
+        "  line: string;\n"
+        "  ink: string;\n"
+        "  muted: string;\n"
+        "  faint: string;\n"
+        "  accent: string;\n"
+        "  ok: string;\n"
+        "  warn: string;\n"
+        "  danger: string;\n"
+        "}\n\n"
         "export type GeneratedThemeId =\n"
         + "\n".join(f"  | '{n}'" % () if False else f"  | '{n}'" for n in order)
         + ";\n\n"
         "export const generatedThemes: Record<GeneratedThemeId, GeneratedPaletteSet> = {\n"
     )
-    OUT.write_text(header + "\n".join(blocks) + "\n};\n")
+
+    # The eleven colours a human chooses, per theme and mode. Exported because the app derives a
+    # custom palette with the same algorithm (theme/derive.ts) and derive.test.ts proves the port
+    # by recomputing these ten themes from them, byte for byte.
+    seed_blocks = []
+    for name in order:
+        seed_blocks.append(
+            f'  "{name}": {{\n'
+            f"    light: {seed_ts(by_theme[name]['light'])},\n"
+            f"    dark: {seed_ts(by_theme[name]['dark'])},\n"
+            f"  }},"
+        )
+    seeds = (
+        "\n/** The source colours a theme is built from, as chosen rather than derived. */\n"
+        "export const paletteSources: Record<GeneratedThemeId, { light: PaletteSource; dark: PaletteSource }> = {\n"
+        + "\n".join(seed_blocks)
+        + "\n};\n"
+    )
+    OUT.write_text(header + "\n".join(blocks) + "\n};\n" + seeds)
 
     print(f"{OUT.relative_to(ROOT)}: {len(order)} themes x 3 modes")
     if problems:

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { prefs, type ThemeMode } from '../core/prefs';
+import type { CustomTheme } from './customPalette';
 import { DEFAULT_THEME_ID, type ThemeId } from './themes';
 import { applyWebTheme } from '../core/webTheme';
 import { ChatFontScaleContext, ThemeContext, useResolvedTheme } from './index';
@@ -7,6 +8,9 @@ import { ChatFontScaleContext, ThemeContext, useResolvedTheme } from './index';
 export interface ThemeControl {
   themeId: ThemeId;
   setThemeId: (themeId: ThemeId) => void;
+  /** The colours of the custom palette, when one is written. */
+  custom: CustomTheme;
+  setCustom: (custom: CustomTheme) => void;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
 }
@@ -14,6 +18,8 @@ export interface ThemeControl {
 const ThemeControlContext = createContext<ThemeControl>({
   themeId: DEFAULT_THEME_ID,
   setThemeId: () => {},
+  custom: { light: {}, dark: {} },
+  setCustom: () => {},
   mode: 'system',
   setMode: () => {},
 });
@@ -30,18 +36,20 @@ const DEFAULT_CHAT_SCALE = 1;
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [themeId, setThemeId] = useState<ThemeId>(prefs.get().themeId);
+  const [custom, setCustom] = useState<CustomTheme>(prefs.get().customTheme);
   const [mode, setMode] = useState<ThemeMode>(prefs.get().themeMode);
   const [chatScale, setChatScale] = useState<number>(prefs.get().chatFontScale ?? DEFAULT_CHAT_SCALE);
 
   useEffect(() =>
     prefs.subscribe(next => {
       setThemeId(next.themeId);
+      setCustom(next.customTheme);
       setMode(next.themeMode);
       setChatScale(next.chatFontScale ?? DEFAULT_CHAT_SCALE);
     }),
   []);
 
-  const theme = useResolvedTheme(themeId, mode);
+  const theme = useResolvedTheme(themeId, mode, custom);
   // The cursor, the hover states, the focus ring, the scrollbars and the selection colour live
   // in the document, not in the tree. No-op on Android.
   useEffect(() => {
@@ -52,10 +60,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
     () => ({
       themeId,
       setThemeId: next => prefs.set('themeId', next),
+      custom,
+      setCustom: next => prefs.set('customTheme', next),
       mode,
       setMode: next => prefs.set('themeMode', next),
     }),
-    [themeId, mode],
+    [themeId, custom, mode],
   );
 
   return (

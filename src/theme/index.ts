@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo } from 'react';
 import { StyleSheet, useColorScheme } from 'react-native';
 import { lightPalette, type Palette } from './palettes';
 import { DEFAULT_THEME_ID, resolveTheme, type ThemeId, type ThemeMode } from './themes';
+import type { CustomTheme } from './customPalette';
 
 export { space, radius, font, DRAWER_WIDTH, lineHeightFor, lineBoxFor } from './palettes';
 export type { Palette } from './palettes';
@@ -55,9 +56,9 @@ export function scaleFont(size: number, scale: number): number {
 }
 
 /** Resolves the stored theme and mode against the phone setting. */
-export function useResolvedTheme(themeId: ThemeId, mode: ThemeMode): Theme {
+export function useResolvedTheme(themeId: ThemeId, mode: ThemeMode, custom?: CustomTheme): Theme {
   const system = useColorScheme();
-  return useMemo(() => resolveTheme(themeId, mode, system), [themeId, mode, system]);
+  return useMemo(() => resolveTheme(themeId, mode, system, custom), [themeId, mode, system, custom]);
 }
 
 type StyleFactory<T> = (palette: Palette, dark: boolean, scale: number) => T;

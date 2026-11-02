@@ -1,26 +1,34 @@
+import { customPaletteSet, hasCustom, type CustomTheme } from './customPalette';
 import { generatedThemes, type GeneratedPaletteSet, type GeneratedThemeId } from './themes.generated';
 
 /**
- * The palettes, by name.
+ * The palettes, by name -- and one that has no name.
  *
- * There is no `custom` entry: a hand-picked palette is built from prefs and memoised elsewhere,
- * and putting it in this table would make one of its rows a different kind of object from the
- * other ten. `useThemedStyles` caches one StyleSheet per palette *identity*, so every palette
- * reachable from here has to be a module constant.
+ * `themes` holds the ten committed ones and nothing else. A custom palette is built from prefs
+ * and memoised in `customPalette.ts`, because a table entry that changes with the prefs would be
+ * a different kind of object from its nine neighbours, and `useThemedStyles` caches a StyleSheet
+ * per palette *identity*: everything reachable from this file has to be a module constant.
  */
-export type ThemeId = GeneratedThemeId;
+export type ThemeId = GeneratedThemeId | 'custom';
 
 export type PaletteSet = GeneratedPaletteSet;
 
-export const themes: Record<ThemeId, PaletteSet> = generatedThemes;
+export const themes: Record<GeneratedThemeId, PaletteSet> = generatedThemes;
 
 /** Sable: the app's own theme, and the default of a fresh install. */
 export const DEFAULT_THEME_ID: ThemeId = 'sable';
 
-export const themeIds: ThemeId[] = Object.keys(generatedThemes) as ThemeId[];
+/** The ten written themes, in the order the picker shows them. Custom is appended there. */
+export const themeIds: GeneratedThemeId[] = Object.keys(generatedThemes) as GeneratedThemeId[];
 
 export function isThemeId(value: unknown): value is ThemeId {
-  return typeof value === 'string' && value in generatedThemes;
+  return value === 'custom' || (typeof value === 'string' && value in generatedThemes);
+}
+
+/** The set a theme id draws, or undefined when `custom` has nothing written yet. */
+export function resolvePaletteSet(themeId: ThemeId, custom: CustomTheme | undefined): PaletteSet | undefined {
+  if (themeId === 'custom') return hasCustom(custom) ? customPaletteSet(custom) : undefined;
+  return themes[themeId as GeneratedThemeId];
 }
 
 /**
@@ -49,14 +57,18 @@ export function resolveTheme(
   themeId: ThemeId,
   mode: ThemeMode,
   system: string | null | undefined,
+  custom?: CustomTheme,
 ): { palette: PaletteSet['light']; dark: boolean; mode: ThemeMode; themeId: ThemeId } {
-  const set = themes[themeId] ?? themes[DEFAULT_THEME_ID];
+  // A custom theme with nothing written is not a half-built palette: it resolves to the default,
+  // which is what an owner who cleared it (or a failed migration) expects to see.
+  const resolvedId: ThemeId = resolvePaletteSet(themeId, custom) ? themeId : DEFAULT_THEME_ID;
+  const set = resolvePaletteSet(resolvedId, custom) ?? themes[DEFAULT_THEME_ID as GeneratedThemeId];
   const resolved: 'light' | 'dark' | 'amoled' =
     mode === 'system' ? (system === 'dark' ? 'dark' : 'light') : mode;
   return {
     palette: set[resolved],
     dark: resolved !== 'light',
     mode,
-    themeId: themeId in themes ? themeId : DEFAULT_THEME_ID,
+    themeId: resolvedId,
   };
 }
