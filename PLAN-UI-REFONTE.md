@@ -597,6 +597,16 @@ empty override sets is not an error state, it is "Duplicate a theme to start" (1
 
 ### 12.3 Two tiers of fields, and why not thirty
 
+As built (2026-11-02): **one tier, ten fields, per mode.** The two-tier form above was replaced by
+the observation that the derived half is not a preference -- it is contrast arithmetic. Locking a
+derived value behind an unlock is the same promise as not offering it at all, minus a lock to
+forget. So the editor takes `bg`, `surface`, `line`, `ink`, `muted`, `faint`, `accent`, `ok`,
+`warn`, `danger` and derives the other nineteen, exactly as the ten shipped themes do. `bubbleUserBg`
+and `codeBg` left the editable list for the same reason.
+
+That also removed the "warn, never rewrite" problem below: there is nothing to warn about, because
+everything the owner does not type is computed to pass the invariants.
+
 Thirty `ColorField`s is a form nobody fills in, and twenty of those values are not independent: the
 elevation steps, `faint`, `bubbleUserBg`, `codeBg` and the diff backgrounds are all arithmetic on the
 eleven the owner actually has an opinion about.
