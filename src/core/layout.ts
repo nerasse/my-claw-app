@@ -26,8 +26,28 @@ const WIDE_MIN = 1440;
 /**
  * A line of text stops being readable somewhere past 90 characters, whatever the window does.
  * The conversation is centred inside this instead of filling the pane.
+ *
+ * 1100, not 860: at 1920 the old cap filled 73 % of the pane and left a dead half, and at 15 pt
+ * 1100 is still inside a comfortable measure. The cards (`TOOL_WIDTH`) stay at 980 -- the number
+ * the POC argued for measures prose against the window, and mixing the two is how a 1160 column
+ * was defended as a reading decision.
  */
-export const READING_WIDTH = 860;
+export const READING_WIDTH = 1100;
+
+/**
+ * The one column a conversation is drawn in: its header, its rows and its composer.
+ *
+ * A function rather than a constant because the failure it prevents is two numbers drifting
+ * apart -- the thread capped at one width and the composer at another, which reads as the input
+ * being off-centre by a few points and is invisible in any single screen's test.
+ */
+export function conversationColumn(readingWidth: number): {
+  maxWidth: number;
+  width: '100%';
+  alignSelf: 'center';
+} {
+  return { maxWidth: readingWidth, width: '100%', alignSelf: 'center' };
+}
 
 /**
  * Cap for a page of controls (settings, files, jobs). Wider than prose, because a row here is a
@@ -37,16 +57,14 @@ export const READING_WIDTH = 860;
 export const PAGE_WIDTH = 980;
 
 /**
- * Cap for a tool card. Wider than prose on purpose: a diff, an argument list and a log are data,
- * not sentences. They have columns of their own, and squeezing them into a reading column does
- * not make them readable, it wraps every line.
+ * Cap for a tool card, and for every row of a conversation.
  *
- * Not much wider, though. At 1280 the cards overran the header and every other page by 200pt on
- * each side, and a row that starts outside everything else on screen reads as a layout bug
- * rather than as a wider column. Aligned with a page of controls instead: the widest thing the
- * app already draws.
+ * It used to be 980 against prose's 860: cards wider than bubbles, which put their left edges
+ * 60 pt apart and made a thread look misaligned. A row is a row -- a bubble, a card, a question
+ * and a sub-agent all start at the same x -- so the two are one number now, and it is the
+ * reading one. A diff inside it keeps its own horizontal scroll.
  */
-export const TOOL_WIDTH = PAGE_WIDTH;
+export const TOOL_WIDTH = READING_WIDTH;
 
 export interface Layout {
   width: number;
@@ -106,7 +124,8 @@ export function useLayout(): Layout {
       dialogs: desktop,
       sidePane: width >= WIDE_MIN,
       dense: desktop && pointerFine,
-      readingWidth: READING_WIDTH,
+      // Never wider than the pane either: a 400 pt phone would otherwise claim a 1100 pt column.
+      readingWidth: Math.min(width, READING_WIDTH),
       pageWidth: PAGE_WIDTH,
       // Never wider than the pane: on a phone the cap is the window, and the card fills it.
       toolWidth: Math.min(width, TOOL_WIDTH),

@@ -38,7 +38,7 @@ import { LocationEditor } from '../components/LocationEditor';
 import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import { useLayout } from '../core/layout';
+import { conversationColumn, useLayout } from '../core/layout';
 import { ContinueButton } from '../components/ContinueButton';
 import { QuotaWaitBar } from '../components/QuotaWaitBar';
 import type { QuotaRetryWait } from '../core/protocol';
@@ -216,10 +216,7 @@ export function ChatScreen({
   const layout = useLayout();
   // A conversation is prose: past ~90 characters a line stops being readable, however wide the
   // window is. The column is centred inside the pane rather than stretched across it.
-  const column = useMemo(
-    () => ({ maxWidth: layout.readingWidth, width: '100%' as const, alignSelf: 'center' as const }),
-    [layout.readingWidth],
-  );
+  const column = useMemo(() => conversationColumn(layout.readingWidth), [layout.readingWidth]);
   // Every row of the thread, bubble or card, sits in this one column. A tool card is not prose
   // and wants more than the reading width, but giving the two their own centred columns put their
   // left edges 60pt apart, and a thread whose rows do not share an edge reads as broken

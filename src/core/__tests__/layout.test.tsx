@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Text, useWindowDimensions } from 'react-native';
-import { TOOL_WIDTH, useLayout, type Layout } from '../layout';
+import { PAGE_WIDTH, READING_WIDTH, TOOL_WIDTH, useLayout, type Layout } from '../layout';
 
 /**
  * The breakpoint ladder. Keyed on the window and not on the platform, so a tablet in landscape
@@ -53,14 +53,18 @@ test('a wide desktop opens a page beside the conversation instead of over it', (
   expect(layoutAt(1600).sidePane).toBe(true);
 });
 
-test('a conversation never widens past a readable line, whatever the window does', () => {
-  expect(layoutAt(3840).readingWidth).toBe(layoutAt(412).readingWidth);
+test('a conversation never widens past a readable line, and never past the pane', () => {
+  expect(layoutAt(3840).readingWidth).toBe(READING_WIDTH);
+  // A 412 pt phone is narrower than the measure: the column is the window there.
+  expect(layoutAt(412).readingWidth).toBe(412);
 });
 
-test('a tool card is data and gets a wider column than prose, still capped', () => {
+test('a card and a bubble share one column: a row starts where the row above started', () => {
   const wide = layoutAt(3840);
-  expect(wide.toolWidth).toBeGreaterThan(wide.readingWidth);
+  expect(wide.toolWidth).toBe(wide.readingWidth);
   expect(wide.toolWidth).toBe(TOOL_WIDTH);
+  // Settings pages are a different shape: two ends of a row, not a sentence.
+  expect(PAGE_WIDTH).toBeLessThan(TOOL_WIDTH);
 });
 
 test('on a phone the tool column is the window, never wider than the pane', () => {
