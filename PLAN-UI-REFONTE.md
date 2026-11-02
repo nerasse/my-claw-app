@@ -422,6 +422,12 @@ Whatever is chosen, the composer and the thread must share one `--gutter` equiva
 that is two numbers that must agree and nothing enforces it. Add a layout test that measures both at
 seven widths, the way the POC does.
 
+As built (2026-11-02): 1100, and **`TOOL_WIDTH` follows it**. The paragraph above was measuring the
+wrong pair: rows were already drawn in the tool column, so prose at 860 and cards at 980 put a
+bubble's edge 60 pt inside a card's and a thread read as misaligned. One row width, one function
+(`conversationColumn`), and a test at eight widths. `PAGE_WIDTH` (settings, files) stays 980: a page
+of controls is a label and a value at opposite ends, not a sentence.
+
 ## 8. Order
 
 Each lot is independently shippable and independently reviewable.
