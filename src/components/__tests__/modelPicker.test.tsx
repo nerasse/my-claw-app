@@ -5,6 +5,10 @@ import { useModelPickerFlow, pickerStart, type PickerState } from '../ModelSheet
 import { modelStore } from '../../core/model';
 import { connection } from '../../core/connection';
 import type { ModelOption } from '../../core/protocol';
+import type { SheetEntry, SheetOption } from '../ActionSheet';
+
+const optionOf = (options: SheetEntry[], label: string): SheetOption | undefined =>
+  options.find((entry): entry is SheetOption => entry.type === undefined && entry.label === label);
 
 /**
  * The routing step of the model picker. A model served by several providers is picked, then the
@@ -32,6 +36,8 @@ const CONTEXT_MODEL: ModelOption = {
 interface Harness {
   state: PickerState;
   labels: () => string[];
+  /** The status lines: what the step is waiting for, said without pretending to be a row. */
+  notes: () => string[];
   hint: (label: string) => string | undefined;
   selected: () => string[];
   press: (label: string) => void;
@@ -50,17 +56,20 @@ function mount(
   let flow!: ReturnType<typeof useModelPickerFlow>;
   const harness: Harness = {
     state: pickerStart,
-    labels: () => flow.options.map(option => option.label),
-    hint: label => flow.options.find(option => option.label === label)?.hint,
-    selected: () => flow.options.filter(option => option.selected).map(option => option.label),
+    labels: () => flow.options.flatMap(option => (option.type === undefined ? [option.label] : [])),
+    notes: () => flow.options.flatMap(option => (option.type === 'note' ? [option.text] : [])),
+    hint: label => optionOf(flow.options, label)?.hint,
+
+    selected: () =>
+      flow.options.flatMap(option => (option.type === undefined && option.selected ? [option.label] : [])),
     preview: () => flow.preview,
     input: () => {
       const inputs = tree.root.findAllByType(TextInput);
       return inputs[0] ?? null;
     },
     press: label => {
-      const option = flow.options.find(entry => entry.label === label);
-      if (!option) throw new Error(`no row labelled ${label} in ${flow.options.map(o => o.label).join(', ')}`);
+      const option = optionOf(flow.options, label);
+      if (!option) throw new Error(`no row labelled ${label} in ${flow.options.map(o => (o.type === undefined ? o.label : '')).join(', ')}`);
       ReactTestRenderer.act(() => option.onPress());
     },
     committed: [],
@@ -120,8 +129,9 @@ test('a routable model asks for its routes, once the step is open and not before
     // providers in the same order.
     sort: 'price',
   });
-  // Nothing is answered yet: the step says so rather than showing an empty list as a fact.
-  expect(picker.labels()).toContain('loading routes...');
+  // Nothing is answered yet: the step says so rather than showing an empty list as a fact. It
+  // says it as a note, not as a row -- a status is not something to press.
+  expect(picker.notes()).toContain('loading routes...');
 
   ReactTestRenderer.act(() => {
     modelStore.replaceEndpoints({

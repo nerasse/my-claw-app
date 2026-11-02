@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { ActionSheet, type SheetOption } from './ActionSheet';
+import { ActionSheet, type SheetEntry } from './ActionSheet';
 import { connection } from '../core/connection';
 import {
   endpointOf,
@@ -220,7 +220,7 @@ export function useModelPickerFlow({
   page?: boolean;
 }): {
   preview: string;
-  options: SheetOption[];
+  options: SheetEntry[];
   back: () => void;
   search: PickerSearch | null;
   customContextInput: (PickerSearch & { keyboardType: 'number-pad'; returnKeyType: 'done' }) | null;
@@ -401,7 +401,7 @@ export function useModelPickerFlow({
   const { options, preview } = useMemo(() => {
     /** In-flow back rows exist only in the sheet: the page has a back entry of its own. */
     const backRow = page ? [] : [{ label: '< Back', onPress: back }];
-    const rows: SheetOption[] = [];
+    const rows: SheetEntry[] = [];
     let head = '';
 
     if (stage === 'model' && needle) {
@@ -417,16 +417,12 @@ export function useModelPickerFlow({
         });
       }
       if (matches.length === 0) {
-        rows.push({
-          key: 'empty',
-          label: 'no model matches',
-          onPress: () => {},
-        });
+        rows.push({ type: 'note', key: 'empty', text: 'no model matches' });
       } else if (matches.length > shown.length) {
         rows.push({
+          type: 'note',
           key: 'more',
-          label: `${matches.length - shown.length} more · narrow the search`,
-          onPress: () => {},
+          text: `${matches.length - shown.length} more · narrow the search`,
         });
       }
       rows.push(...backRow);
@@ -490,13 +486,12 @@ export function useModelPickerFlow({
         }
       }
       if (routes.pending) {
-        rows.push({ key: 'pending', label: 'loading routes...', onPress: () => {} });
+        rows.push({ type: 'note', key: 'pending', text: 'loading routes...' });
       } else if (routes.endpoints.length === 0) {
         rows.push({
+          type: 'note',
           key: 'none',
-          label: 'no route of its own',
-          hint: 'the provider lists none for this model',
-          onPress: () => {},
+          text: 'no route of its own — the provider lists none for this model',
         });
       }
       rows.push(...backRow);
@@ -685,7 +680,14 @@ export function ModelPickerPage({
         contentContainerStyle={styles.body}
         keyboardShouldPersistTaps="handled"
       >
-        {flow.options.map(option => (
+        {flow.options.map(option =>
+          option.type === 'separator' ? (
+            <View key={option.key ?? 'sep'} style={styles.pageSeparator} />
+          ) : option.type === 'note' ? (
+            <Text key={option.key ?? option.text} style={styles.pageNote}>
+              {option.text}
+            </Text>
+          ) : (
           <Pressable
             key={option.key ?? option.label}
             style={styles.option}
@@ -704,7 +706,8 @@ export function ModelPickerPage({
             </View>
             {option.selected ? <Text style={styles.check}>✓</Text> : null}
           </Pressable>
-        ))}
+          ),
+        )}
       </ScrollView>
     </View>
   );
@@ -712,6 +715,8 @@ export function ModelPickerPage({
 
 const createPageStyles = (palette: Palette) => ({
   screen: { flex: 1 },
+  pageSeparator: { height: 1, backgroundColor: palette.border, marginVertical: space.xs },
+  pageNote: { paddingVertical: space.sm, fontSize: font.small, color: palette.textMeta },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

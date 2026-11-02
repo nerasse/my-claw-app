@@ -27,10 +27,26 @@ export interface SheetSeparator {
   key?: string;
 }
 
-export type SheetEntry = (SheetOption & { type?: undefined }) | SheetSeparator;
+/**
+ * A status line. Not an option.
+ *
+ * "no model matches" and "loading routes..." used to be rows with `onPress: () => {}`: focusable,
+ * announced as buttons, and doing nothing when pressed. The keyboard walked onto them and the
+ * screen reader offered a control that does not exist.
+ */
+export interface SheetNote {
+  type: 'note';
+  key?: string;
+  text: string;
+}
 
-const keyOfEntry = (entry: SheetEntry): string =>
-  entry.type === 'separator' ? entry.key ?? 'separator' : entry.key ?? entry.label;
+export type SheetEntry = (SheetOption & { type?: undefined }) | SheetSeparator | SheetNote;
+
+const keyOfEntry = (entry: SheetEntry): string => {
+  if (entry.type === 'separator') return entry.key ?? 'separator';
+  if (entry.type === 'note') return entry.key ?? entry.text;
+  return entry.key ?? entry.label;
+};
 
 /**
  * How many rows the sheet lays out before it starts batching. The model search caps itself at 40
@@ -88,20 +104,22 @@ export function ActionSheet({
   const SEARCH_ROW = -1;
   const rows = [
     ...(search ? [SEARCH_ROW] : []),
-    ...(options ?? []).flatMap((option, index) => (option.type === 'separator' ? [] : [index])),
+    ...(options ?? []).flatMap((option, index) => (option.type === undefined ? [index] : [])),
   ];
-  const selected = (options ?? []).findIndex(option => option.type !== 'separator' && option.selected);
+  const selected = (options ?? []).findIndex(option => option.type === undefined && option.selected);
   const { refFor, propsFor } = useMenuFocus(rows, search ? SEARCH_ROW : selected >= 0 ? selected : rows[0]);
 
   const renderEntry = useCallback(
     ({ item: option, index }: { item: SheetEntry; index: number }) =>
       option.type === 'separator' ? (
         <View style={styles.optionSeparator} />
+      ) : option.type === 'note' ? (
+        <Text style={styles.note}>{option.text}</Text>
       ) : (
         <Pressable
           ref={refFor(index)}
           {...propsFor(index)}
-          style={styles.option}
+          style={[styles.option, dialogs && styles.optionDialog]}
           onPress={option.onPress}
           accessibilityRole="button"
           accessibilityState={{ selected: option.selected ?? false }}
@@ -118,7 +136,7 @@ export function ActionSheet({
           {option.selected ? <Text style={styles.check}>✓</Text> : null}
         </Pressable>
       ),
-    [styles, refFor, propsFor],
+    [styles, refFor, propsFor, dialogs],
   );
 
   return (
@@ -210,7 +228,9 @@ const createStyles = (palette: Palette) => ({
   },
   backdropCentered: { justifyContent: 'center' as const, alignItems: 'center' as const },
   dialog: {
-    width: 460,
+    // 320 for a menu, 400 for the model picker: a row of model names is data and needs the room,
+    // a list of verbs does not, and a 460-wide menu of five short labels was a billboard.
+    width: 320,
     maxWidth: '92%' as const,
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -251,13 +271,23 @@ const createStyles = (palette: Palette) => ({
   },
   scrollWrap: { flexShrink: 1, minHeight: 0 },
   scroll: { flexGrow: 1 },
+  // One metric per rank: a phone row is 46 (a thumb), a desktop dialog row is 34 (a mouse). The
+  // old 40 + 8 either side landed anywhere from 46 to 52 depending on the label's line box.
   option: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
-    paddingVertical: space.md,
+    paddingHorizontal: space.xs,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
+    minHeight: 46,
+  },
+  optionDialog: { minHeight: 34 },
+  note: {
+    paddingHorizontal: space.xs,
+    paddingVertical: space.sm,
+    fontSize: font.small,
+    color: palette.textMeta,
   },
   optionMain: { flex: 1, gap: 1 },
   optionLabel: { fontSize: font.title, color: palette.text },

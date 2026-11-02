@@ -381,7 +381,8 @@ test('a short catalog carries no search row, a flooded one cuts the list it show
   await typeInto(flooded, 'Search models', 'vendor/');
   // 45 matches, 40 rendered: the cut is the flow's own cap, not the sheet's virtualization,
   // so what it hides is a count rather than more scrolling.
-  await waitFor(() => labelsOf(flooded).includes('5 more · narrow the search'), 60);
+  // A note, not a row: the overflow is a count, and a count is not something to press.
+  await waitFor(() => textsOf(flooded).includes('5 more · narrow the search'), 60);
   expect(labelsOf(flooded)).toContain('vendor/model-39');
   expect(labelsOf(flooded)).not.toContain('vendor/model-40');
 

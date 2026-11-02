@@ -509,8 +509,9 @@ describe('handing an answer back to a caller', () => {
       });
     });
 
-    await waitFor(() => textsOf(tree).includes('Deleted one'));
-    expect(textsOf(tree)).toContain('conversation is gone');
+    // One note, not a row: the title and the reason are the same statement.
+    await waitFor(() => textsOf(tree).some(text => text.includes('Deleted one')));
+    expect(textsOf(tree).some(text => text.includes('conversation is gone'))).toBe(true);
     // Nothing selectable, so no target count on the action.
     expect(textsOf(tree)).toContain('Send for action');
     await settleAndUnmount(tree);

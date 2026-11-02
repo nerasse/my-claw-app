@@ -3137,6 +3137,9 @@ export function AppShell(): React.JSX.Element {
               close();
             },
           },
+      // A destructive action goes last, alone, behind its own rule: thirteen entries in four
+      // groups put Delete one slip below Archive, and both are one tap.
+      { type: 'separator' },
       {
         label: 'Delete',
         danger: true,
@@ -5352,15 +5355,17 @@ export function AppShell(): React.JSX.Element {
             options={[
               // The state as a row, not as custom content: a sheet says one thing at a time, and a
               // refusal or an empty list has to read as an answer rather than as an empty menu.
+              // A note, not a row: it says what the sheet is waiting for, it is not something to
+              // press, and as an option it announced itself as a button that does nothing.
               ...(handoffCallers.status !== 'ready' || handoffCallers.callers.length === 0
                 ? [{
+                    type: 'note' as const,
                     key: 'state',
-                    label: handoffCallers.status === 'loading'
+                    text: handoffCallers.status === 'loading'
                       ? 'Looking up who called this sub-agent…'
                       : handoffCallers.status === 'refused'
                         ? 'This sub-agent is no longer reachable from here'
                         : 'Nothing has called this sub-agent yet',
-                    onPress: () => {},
                   }]
                 : []),
               ...reachable.map(caller => ({
@@ -5376,10 +5381,9 @@ export function AppShell(): React.JSX.Element {
               // Shown, not hidden: "that conversation is gone" is the answer to why it cannot be
               // picked, and a silently shorter list is not.
               ...handoffCallers.callers.filter(c => c.unreachable || !c.threadId).map(caller => ({
+                type: 'note' as const,
                 key: caller.sessionId,
-                label: caller.title ?? caller.sessionId,
-                hint: 'conversation is gone',
-                onPress: () => {},
+                text: `${caller.title ?? caller.sessionId} · conversation is gone`,
               })),
               { type: 'separator' as const, key: 'actions' },
               {

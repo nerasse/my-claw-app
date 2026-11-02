@@ -21,10 +21,10 @@ const series = (n: number) => Array.from({ length: n }, (_, i) => ({ url: `http:
 
 const menu = (): OverlayMenu | null => overlayStore.getState().menu;
 const labels = (): string[] =>
-  (menu()?.options ?? []).filter((o): o is SheetOption & { type?: undefined } => o.type !== 'separator').map(o => o.label);
+  (menu()?.options ?? []).filter((o): o is SheetOption & { type?: undefined } => o.type === undefined).map(o => o.label);
 /** Presses a row as the host does: the menu closes first, then the row runs. */
 const choose = (label: string): void => {
-  const option = (menu()?.options ?? []).find((o: SheetEntry) => o.type !== 'separator' && o.label === label) as
+  const option = (menu()?.options ?? []).find((o: SheetEntry) => o.type === undefined && o.label === label) as
     | SheetOption
     | undefined;
   if (!option) throw new Error(`no row "${label}" in ${JSON.stringify(labels())}`);

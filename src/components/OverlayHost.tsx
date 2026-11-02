@@ -52,7 +52,8 @@ export function OverlayHost(): React.JSX.Element | null {
 }
 
 function closingFirst(entry: SheetEntry): SheetEntry {
-  if (entry.type === 'separator') return entry;
+  // A separator has nothing to press, and neither has a note: only an option closes the sheet.
+  if (entry.type !== undefined) return entry;
   return {
     ...entry,
     onPress: () => {
@@ -100,7 +101,7 @@ function AnchoredMenu({
   const { left, top } = menuPosition(anchor, origin, window, height);
   // The keyboard's way in and round, as in a sheet (`menuFocus.ts`): wide windows on Android (DeX)
   // draw their menus here.
-  const rows = options.flatMap((entry, i) => (entry.type === 'separator' ? [] : [i]));
+  const rows = options.flatMap((entry, i) => (entry.type === undefined ? [i] : []));
   const { refFor, propsFor } = useMenuFocus(rows, rows[0]);
   return (
     <>
@@ -113,6 +114,10 @@ function AnchoredMenu({
         {options.map((entry, i) =>
           entry.type === 'separator' ? (
             <View key={entry.key ?? `sep-${i}`} style={styles.separator} />
+          ) : entry.type === 'note' ? (
+            <Text key={entry.key ?? `note-${i}`} style={styles.note}>
+              {entry.text}
+            </Text>
           ) : (
             <Pressable
               key={entry.key ?? entry.label}
@@ -139,6 +144,7 @@ function AnchoredMenu({
 }
 
 const createStyles = (palette: Palette) => ({
+  note: { paddingHorizontal: space.md, paddingVertical: space.sm, fontSize: font.small, color: palette.textMeta },
   menu: {
     position: 'absolute' as const,
     width: MENU_WIDTH,
