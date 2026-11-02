@@ -109,9 +109,6 @@ describe('Siphon in the conversation menu', () => {
     await press(tree, 'Siphon');
     await waitFor(() => labelsOf(tree).includes('Strong'));
 
-    // A tag names a route, and walking a route by available quota is phase 2: it is not offered.
-    expect(labelsOf(tree)).not.toContain('Work');
-
     const before = sentFrames().filter(frame => frame.type === 'model.set').length;
     await press(tree, 'Strong');
 
@@ -119,6 +116,40 @@ describe('Siphon in the conversation menu', () => {
     expect(pins).toEqual([{ type: 'model.siphon.set', threadId: THREAD, model: 'strong-2' }]);
     // The last decision applies, and it applies to the pin only: this is not a model pick.
     expect(sentFrames().filter(frame => frame.type === 'model.set').length).toBe(before);
+    await unmount(tree);
+  });
+
+  it('offers tags, and a tag is pinned as the tag', async () => {
+    // The server resolves a tag to the model it aliases, keeps its effort with it and walks a tag
+    // route by its candidates. Filtering tags out of this sheet made the whole mode unavailable to
+    // anyone whose work is organised in tags -- which is how it was reported: "je ne peux pas
+    // sélectionner de tag depuis le menu".
+    const tree = await renderApp();
+    await ReactTestRenderer.act(async () => chatStore.addUserMessage(THREAD, 'u1', 'hello', []));
+    await emit(modelState(THREAD));
+    await openChatMenu(tree);
+
+    await emit({
+      type: 'model.list.result',
+      models: [
+        { id: 'fast-1', label: 'Fast' },
+        { id: 'tag:Work', label: 'Work', effort: 'low' },
+        { id: 'tag:Default', label: 'Default' },
+      ],
+      defaultModel: 'fast-1',
+      unavailable: [],
+    });
+
+    await press(tree, 'Siphon');
+    await waitFor(() => labelsOf(tree).includes('Work'));
+    expect(labelsOf(tree)).toContain('Default');
+
+    await press(tree, 'Work');
+    // The tag itself travels: resolving it here would be a second answer to "what does this tag
+    // mean", and the server already has one.
+    expect(sentFrames().filter(frame => frame.type === 'model.siphon.set')).toEqual([
+      { type: 'model.siphon.set', threadId: THREAD, model: 'tag:Work' },
+    ]);
     await unmount(tree);
   });
 

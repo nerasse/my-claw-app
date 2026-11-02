@@ -33,9 +33,10 @@ export function SiphonSheet({
   // The pinned model is what the list marks; with no pin, the model the conversation runs now is
   // the one the owner is most likely to want everywhere.
   const active = pin ?? thread?.model ?? catalog.defaultModel;
-  // A tag is phase 2: it names a route, and walking that route by quota is a different mode. The
-  // catalogue lists tags as models, so they are the one thing this sheet filters out.
-  const models: ModelOption[] = catalog.models.filter(model => !model.id.startsWith('tag:'));
+  // Tags are offered like any other subject: the server already resolves one to the model it
+  // aliases, keeps its effort with it, and walks a tag route by its candidates -- so a pin on a tag
+  // is a pin on what that tag means, kept as one decision.
+  const models: ModelOption[] = catalog.models;
 
   return (
     <ModelPickerSheet
