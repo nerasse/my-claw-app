@@ -6,7 +6,7 @@ import { ScrollableBlock } from './ScrollableBlock';
 import { formatSpan, summarizeArgs } from '../core/utils';
 import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
-import { DiffView, splitDiff } from './DiffView';
+import { DiffView, diffCounts, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 import { useElapsed } from './CommandElapsed';
 import { runStateOf, stateWord } from '../core/toolState';
@@ -84,6 +84,11 @@ export const ToolCard = React.memo(function ToolCardView({
     [open, item.output],
   );
   const hasDiff = split !== null && split.diff.length > 0;
+  const counts = hasDiff ? diffCounts(split.diff) : null;
+  // `read` answers raw characters, and an `offset` starts the answer mid-file: numbering from 1
+  // there would claim the excerpt's first line is the file's first line. No offset, real numbers.
+  const numbered = item.name === 'read' && !Number(item.args?.offset ?? 0);
+  const listing = item.name === 'ls' ? parseListing(item.output) : null;
 
   // Stream-expansion is owned by the server pref: with expandTools on, the card opens when the
   // tool starts and stays open (the result is on screen). With it off, the card is NEVER opened
@@ -243,7 +248,15 @@ export const ToolCard = React.memo(function ToolCardView({
             </>
           ) : null}
           <View style={styles.outputHead}>
-            <Text style={styles.label}>output{item.truncated ? ' · truncated' : ''}</Text>
+            <Text style={styles.label}>
+              {`output${item.truncated ? ' · truncated' : ''}`}
+              {counts ? (
+                <>
+                  <Text style={styles.diffAdd}>{`  +${counts.added}`}</Text>
+                  <Text style={styles.diffDel}>{` −${counts.removed}`}</Text>
+                </>
+              ) : null}
+            </Text>
             <BlockActions title={`${item.name} output`} value={item.output} />
           </View>
           {split ? (
@@ -251,7 +264,24 @@ export const ToolCard = React.memo(function ToolCardView({
               <DiffView parts={split} />
             </ScrollableBlock>
           ) : null}
-          {!hasDiff ? (
+          {!hasDiff && listing ? (
+            <ScrollableBlock title={`${item.name} output`} style={styles.code}>
+              {listing.map(entry => (
+                <View key={entry.name} style={styles.tableRow}>
+                  <Text style={styles.tableKind}>{entry.kind}</Text>
+                  <Text style={styles.tableName} numberOfLines={1}>
+                    {entry.name}
+                  </Text>
+                </View>
+              ))}
+            </ScrollableBlock>
+          ) : null}
+          {!hasDiff && !listing && numbered ? (
+            <ScrollableBlock title={`${item.name} output`} style={styles.code}>
+              <NumberedText text={item.output} />
+            </ScrollableBlock>
+          ) : null}
+          {!hasDiff && !listing && !numbered ? (
             <ScrollableBlock title={`${item.name} output`} style={styles.code}>
               <Text style={styles.codeText}>{item.output.trim() || (interrupted ? '(no result: the run ended)' : '(empty)')}</Text>
             </ScrollableBlock>
@@ -261,6 +291,45 @@ export const ToolCard = React.memo(function ToolCardView({
     </View>
   );
 });
+
+/**
+ * The file a `read` returned, with a gutter.
+ *
+ * One row per line rather than one text with the numbers glued on: the gutter then keeps its own
+ * ink, and a line that wraps does not push the number below it out of its column.
+ */
+function NumberedText({ text }: { text: string }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const lines = text.replace(/\n$/, '').split('\n');
+  const width = String(lines.length).length;
+  return (
+    <View>
+      {lines.map((line, index) => (
+        <View key={index} style={styles.numberedRow}>
+          <Text style={styles.lineNumber}>{String(index + 1).padStart(width, ' ')}</Text>
+          <Text style={styles.codeText}>{line || ' '}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * `ls` answers `d name` / `f name`, one entry per line (`src/tools/ls.ts` in the server). That is
+ * a table: the kind in its own column, the name in the other, instead of one monospace string
+ * where the eye has to find the space. Any other shape falls back to the plain block.
+ */
+function parseListing(output: string): Array<{ kind: string; name: string }> | null {
+  const lines = output.trim().split('\n').filter(line => line !== '');
+  if (lines.length === 0) return null;
+  const parsed: Array<{ kind: string; name: string }> = [];
+  for (const line of lines) {
+    const match = /^([df]) (.+)$/.exec(line);
+    if (!match) return null;
+    parsed.push({ kind: match[1] === 'd' ? 'dir' : 'file', name: match[2]! });
+  }
+  return parsed;
+}
 
 /**
  * How many arguments the preview beside it is not showing.
@@ -389,6 +458,25 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },
+  diffAdd: { color: palette.diffAdd },
+  diffDel: { color: palette.diffDel },
+  numberedRow: { flexDirection: 'row' as const, gap: space.sm },
+  // The gutter never competes with the code it numbers.
+  lineNumber: {
+    fontFamily: 'monospace',
+    fontSize: scaleFont(font.small, scale),
+    lineHeight: lineHeightFor(scaleFont(font.small, scale)),
+    color: palette.textFaint,
+    textAlign: 'right' as const,
+  },
+  tableRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.sm },
+  tableKind: {
+    width: Math.round(30 * scale),
+    fontSize: scaleFont(font.micro, scale),
+    color: palette.textMeta,
+    fontVariant: ['tabular-nums' as const],
+  },
+  tableName: { flex: 1, fontFamily: 'monospace', fontSize: scaleFont(font.small, scale), color: palette.codeText },
   codeText: {
     fontFamily: 'monospace',
     fontSize: scaleFont(font.small, scale),

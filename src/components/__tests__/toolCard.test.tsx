@@ -306,3 +306,67 @@ describe('ToolCard elapsed time while running', () => {
     expect(textsOf(tree)).not.toContain('stopped');
   });
 });
+
+describe('what an unfolded card reports', () => {
+  const texts = (tree: ReactTestRenderer.ReactTestRenderer): string[] =>
+    tree.root.findAllByType(Text).map(node => [node.props.children].flat().join(''));
+
+  // A tap, not the pref: `expandTools` only auto-opens a card that is still running.
+  const open = (item: ToolItem): ReactTestRenderer.ReactTestRenderer => {
+    const tree = renderTool(item);
+    ReactTestRenderer.act(() => {
+      tree.root
+        .find(node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Tool ') && typeof node.props.onPress === 'function')
+        .props.onPress();
+    });
+    return tree;
+  };
+
+  it('counts the lines a patch moved', () => {
+    const output = [
+      'Patched a/b.ts',
+      '--- a/b.ts',
+      '+++ b/b.ts',
+      '@@ -1,2 +1,3 @@',
+      '-one',
+      '-two',
+      '+one',
+      '+two',
+      '+three',
+      ' ctx',
+    ].join('\n');
+    const shown = texts(open(makeItem({ name: 'apply_patch', args: { path: 'b.ts' }, output }))).join('|');
+    // The one number a diff never said out loud.
+    expect(shown).toContain('+3');
+    expect(shown).toContain('−2');
+    expect(shown).toContain('output');
+  });
+
+  it('numbers the lines a read returned', () => {
+    const shown = texts(open(makeItem({ name: 'read', args: { path: 'a.ts' }, output: 'const a = 1;\nconst b = 2;\n' })));
+    expect(shown).toContain('1');
+    expect(shown).toContain('const a = 1;');
+    expect(shown).toContain('2');
+  });
+
+  it('does not number a read that started at an offset: the first line would be a lie', () => {
+    const shown = texts(
+      open(makeItem({ name: 'read', args: { path: 'a.ts', offset: 4000 }, output: 'middle of the file\nand more' })),
+    );
+    expect(shown).not.toContain('1');
+    expect(shown.join('|')).toContain('middle of the file');
+  });
+
+  it('draws an ls as two columns', () => {
+    const shown = texts(open(makeItem({ name: 'ls', args: { path: '.' }, output: 'd src\nf package.json\nd docs' })));
+    expect(shown).toContain('dir');
+    expect(shown).toContain('file');
+    expect(shown).toContain('package.json');
+  });
+
+  it('falls back to the block when an ls answer is not the shape we know', () => {
+    const shown = texts(open(makeItem({ name: 'ls', args: { path: '.' }, output: 'something else entirely' })));
+    expect(shown).not.toContain('dir');
+    expect(shown.join('|')).toContain('something else entirely');
+  });
+});

@@ -15,12 +15,23 @@ import { scaleFont, useThemedStyles } from '../theme';
 
 type DiffKind = 'add' | 'del' | 'ctx' | 'hunk' | 'file' | 'plain';
 
-interface DiffLine {
+export interface DiffLine {
   kind: DiffKind;
   text: string;
 }
 
 const HUNK_RE = /^@@ .* @@$/;
+
+/** How many lines the patch moved. The one number a diff never said out loud. */
+export function diffCounts(diff: DiffLine[]): { added: number; removed: number } {
+  let added = 0;
+  let removed = 0;
+  for (const line of diff) {
+    if (line.kind === 'add') added++;
+    else if (line.kind === 'del') removed++;
+  }
+  return { added, removed };
+}
 
 /** Split a tool output into the plain-text preamble, an optional diff body, and the tail. */
 export function splitDiff(output: string): { preamble: string; diff: DiffLine[]; tail: string } {
