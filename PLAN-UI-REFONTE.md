@@ -691,3 +691,38 @@ the **same** palette object; one changed hex returns a different one.
 
 ~600 lines, of which 200 are the derivation port. It is the most expensive lot and the only optional
 one, which is why it is last: if it is cut, §1 through §6 still stand untouched.
+
+## 13. As delivered — 2026-11-03
+
+Every lot in §8 is on `main`, and the parts that were only proposed are marked as built where they
+landed. This section records what the plan did not anticipate, so the next reader does not
+re-derive it.
+
+**Glyphs.** The plan treated the ~300 text-glyph uses as out of scope. They were not restyling:
+`‹` and `›` carry the metrics of whatever font the platform falls back to, so their optical centre
+sits off the box, and the same character is a different shape on Android, iOS and the web. 186 uses
+that drew chrome became vectors from `components/icons.tsx`; 26 remain and none is drawn (accessibility
+labels, help prose, one comment). Two additions to the icon module made it possible without touching
+40 call sites: `tone`, a palette role resolved inside the icon, and `color` kept for the one literal
+case (an icon over a photograph). The first pass hardcoded `palette.x` per call site and lightened
+every back arrow while darkening every row chevron; a role per glyph style is what fixed it.
+
+**What the compiler could not see.** Four defects in that sweep were found only by looking at the
+rendered page in a browser: a plus invisible (accent ink on the accent fill), a stat card whose title
+carried its own fold mark as text, an empty badge pill, and a 16 pt tap target inside a 34 pt footer.
+`scripts/chrome-sheet/` renders the heaviest screens with made-up data so this check needs no login;
+it earned its place four times over.
+
+**The voice recorder.** Three separate faults, each a rule the component did not have: react-native-web's
+PanResponder is a *touch* responder, so on a phone it never saw `touchmove` once the browser claimed
+the pan (`touch-action: none` must be set before the gesture; the web build uses pointer events with
+`setPointerCapture`); the composer unmounted the text field for the length of a take, moving the 30 pt
+target under the held finger; and a left drag only cancelled on release, so a thumb that stopped past
+the threshold decided nothing. `scripts/voice-recorder-e2e/` drives the real Composer against a
+stubbed `getUserMedia`, which is how these were settled rather than argued.
+
+**Server side, already fixed.** `llm/resolver.ts` used to do `model.limit ?? global.limit`, replacing
+the whole block: a model declaring only `context` lost `output` and no `max_tokens` went out. Commit
+`6298ef1` in the server repo resolves each field on its own (`mergedLimit`), so the two `mimo` entries
+now inherit an `output` without any config change. Verified against the deployed 0.7.154 by calling
+the resolver, not by reading the source.
