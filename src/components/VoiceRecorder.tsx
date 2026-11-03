@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Platform, Pressable, Text, Vibration, View } from 'react-native';
-import { MicIcon, TrashIcon } from './icons';
+import { MicIcon, StopIcon, TrashIcon } from './icons';
 import {
   deviceBridge,
   deviceEvents,
@@ -310,87 +310,74 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     [begin, discard, keep, setPhaseBoth, slide],
   );
 
-  return (
-    <View style={[styles.wrap, active && styles.wrapActive]}>
-      {/* Always this slot, so inserting the bar never re-parents the button below. */}
-      {active ? (
-        <Animated.View
-          style={[
-            styles.bar,
-            {
-              opacity: rise,
-              transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [4, 0] }) }],
-            },
-          ]}>
-          <Animated.View style={[styles.dot, { opacity: blink }]} />
-          <Text style={styles.timer}>{formatDuration(elapsedMs)}</Text>
-          {armed ? (
-            <Text style={styles.armed} numberOfLines={1}>
-              Release to delete
-            </Text>
-          ) : warning ? (
-            <Text style={styles.warning} numberOfLines={2} accessibilityRole="alert">
-              {warning}
-            </Text>
-          ) : (
-            <Waveform levels={levels} styles={styles} />
-          )}
-          {locked ? (
-            <Pressable
-              onPress={discard}
-              hitSlop={8}
-              style={styles.ghost}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel recording">
-              <Text style={styles.ghostText}>Delete</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.hint} numberOfLines={1}>
-              {'\u2039 slide to delete'}
-            </Text>
-          )}
-        </Animated.View>
-      ) : null}
+  // The take owns the whole row. It used to sit in a wrapper that split the free space with the
+  // composer's own spacer, so the waveform got half of a bar and stopped mid-way -- a bar that
+  // does not answer to its own edge reads as broken, not as compact.
+  if (!active) {
+    return (
+      <Animated.View
+        {...pan.panHandlers}
+        style={[styles.button, hero && styles.buttonHero, dense && !hero && styles.buttonDense]}
+        accessibilityRole="button"
+        accessibilityLabel="Record voice message"
+        accessibilityHint="Hold to record, slide left to delete, slide up to keep your hands free">
+        <MicIcon color={styles.glyphIdle.color} size={hero ? 20 : 17} />
+      </Animated.View>
+    );
+  }
 
+  return (
+    <Animated.View
+      style={[
+        styles.take,
+        {
+          opacity: rise,
+          transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [4, 0] }) }],
+        },
+      ]}>
+      {/* Where the thumb is going: a mark, not a caption. It fills with the danger colour the
+          moment the take is past the point of no return, which is the only feedback the gesture
+          needs while the eye is on the finger. */}
+      <TrashIcon size={14} color={armed ? styles.armed.color : styles.trashIdle.color} />
+      <Animated.View style={[styles.dot, { opacity: blink }]} />
+      <Text style={styles.timer}>{formatDuration(elapsedMs)}</Text>
+      {warning ? (
+        <Text style={styles.warning} numberOfLines={1} accessibilityRole="alert">
+          {warning}
+        </Text>
+      ) : (
+        <Waveform levels={levels} styles={styles} />
+      )}
       {locked ? (
         <Pressable
           onPress={() => {
             keep().catch(() => {});
           }}
-          style={[styles.button, dense && !hero && styles.buttonDense, styles.buttonStop]}
+          style={[styles.button, styles.buttonStop]}
           accessibilityRole="button"
           accessibilityLabel="Stop recording">
-          <View style={styles.stopGlyph} />
+          <StopIcon size={13} color={styles.stopIcon.color} />
         </Pressable>
       ) : (
         <Animated.View
           {...pan.panHandlers}
           style={[
             styles.button,
-            hero && styles.buttonHero,
-            dense && !hero && styles.buttonDense,
-            recording && (armed ? styles.buttonArmed : styles.buttonLive),
+            armed ? styles.buttonArmed : styles.buttonLive,
             {
               transform: [
                 { translateX: slide },
-                { scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
+                { scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
               ],
             },
           ]}
           accessibilityRole="button"
-          accessibilityLabel={recording ? 'Recording, release to keep' : 'Record voice message'}
-          accessibilityHint="Hold to record, slide left to delete, slide up to keep your hands free">
-          {armed ? (
-            <TrashIcon color={styles.glyphOnFill.color} size={hero ? 20 : 17} />
-          ) : (
-            <MicIcon
-              color={recording ? styles.glyphOnFill.color : styles.glyphIdle.color}
-              size={hero ? 20 : 17}
-            />
-          )}
+          accessibilityLabel={armed ? 'Release to delete' : 'Recording, release to keep'}
+          accessibilityHint="Slide left to delete, slide up to keep your hands free">
+          {armed ? <TrashIcon color={styles.glyphOnFill.color} size={15} /> : <MicIcon color={styles.glyphOnFill.color} size={15} />}
         </Animated.View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -421,8 +408,16 @@ function Waveform({
 }
 
 const createStyles = (palette: Palette) => ({
-  wrap: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
-  wrapActive: { flex: 1 },
+  // The take is the row: one height with the controls it replaces, and it fills the width it is
+  // given rather than asking for a share of it.
+  take: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    minHeight: 30,
+  },
+  trashIdle: { color: palette.textFaint },
   // The scale of the composer's bar: the microphone is a secondary action beside the send
   // button, not a second primary one. Two filled circles of the same size fight for the eye.
   button: {
@@ -441,14 +436,6 @@ const createStyles = (palette: Palette) => ({
   stopGlyph: { width: 14, height: 14, borderRadius: 3, backgroundColor: palette.accentText },
   glyphIdle: { color: palette.textMuted },
   glyphOnFill: { color: palette.accentText },
-  // One height with the row of controls it replaces, so a take does not resize the composer.
-  bar: {
-    flex: 1,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    minHeight: 30,
-  },
   dot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: palette.danger },
   timer: {
     fontSize: font.small,
@@ -464,9 +451,8 @@ const createStyles = (palette: Palette) => ({
     height: 18,
   },
   waveBar: { flex: 1, borderRadius: radius.pill, backgroundColor: palette.accentSoft },
-  hint: { fontSize: font.small, color: palette.textFaint },
   warning: { flex: 1, fontSize: font.small, color: palette.danger },
-  armed: { flex: 1, fontSize: font.small, color: palette.danger, textAlign: 'center' as const },
-  ghost: { paddingHorizontal: space.sm, paddingVertical: space.xs },
-  ghostText: { fontSize: font.meta, color: palette.danger },
+  /** The colour the trash mark takes once the take is past the point of no return. */
+  armed: { color: palette.danger },
+  stopIcon: { color: palette.accentText },
 });

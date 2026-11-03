@@ -164,3 +164,49 @@ export function ZoomOutIcon(props: IconProps): React.JSX.Element {
     />
   );
 }
+
+/** Three rules: the conversation list, folded away. */
+export function MenuIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M4 6h16v2H4zm0 5h16v2H4zm0 5h11v2H4z" />;
+}
+
+/**
+ * The overflow affordance, in both directions: a row of dots under a message, a column of them
+ * in a title bar. One component with a flag rather than two near-identical paths.
+ */
+export function MoreIcon({ vertical = false, ...props }: IconProps & { vertical?: boolean }): React.JSX.Element {
+  const dots = vertical ? 'M12 5.5a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2zm0 4.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2zm0 4.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2z' : 'M5.5 12a1.6 1.6 0 1 0 3.2 0 1.6 1.6 0 0 0-3.2 0zm5.65 0a1.6 1.6 0 1 0 3.2 0 1.6 1.6 0 0 0-3.2 0zm5.65 0a1.6 1.6 0 1 0 3.2 0 1.6 1.6 0 0 0-3.2 0z';
+  return <Icon {...props} d={dots} />;
+}
+
+/** A chevron, pointing where the fold will go. Rotation, so one path serves all four. */
+export function ChevronIcon({
+  direction = 'right',
+  ...props
+}: IconProps & { direction?: 'up' | 'down' | 'left' | 'right' }): React.JSX.Element {
+  const angle = { right: 0, down: 90, left: 180, up: 270 }[direction];
+  return (
+    <Svg width={props.size ?? 20} height={props.size ?? 20} viewBox="0 0 24 24">
+      <Path
+        fill={props.color}
+        d="M9.5 5.5 16 12l-6.5 6.5-1.7-1.7L12.6 12 7.8 7.2z"
+        transform={`rotate(${angle} 12 12)`}
+      />
+    </Svg>
+  );
+}
+
+/** A square: the run in flight, stopped. */
+export function StopIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M7 7h10v10H7z" />;
+}
+
+/**
+ * The sub-agent mark: a small head with two eyes, the shape the POC used for it. It sits where a
+ * bullet would, so it is drawn on the same 24-box as everything else and asked for at 13-16.
+ */
+export function AgentIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon {...props} d="M4.5 8.5A2.5 2.5 0 0 1 7 6h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 18H7a2.5 2.5 0 0 1-2.5-2.5zM9 10.6a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zm6 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zM9.5 4h5v1.6h-5z" />
+  );
+}

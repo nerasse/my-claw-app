@@ -441,7 +441,9 @@ export function Composer({
             onActiveChange={setRecording}
           />
         ) : null}
-        <View style={styles.grow} />
+        {/* While a take is running the recorder owns the bar: a spacer beside it split the
+            width in two and the waveform stopped halfway. */}
+        {recording ? null : <View style={styles.grow} />}
         {sendVisible ? (
           <Pressable
             style={[

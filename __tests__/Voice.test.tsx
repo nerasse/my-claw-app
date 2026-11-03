@@ -201,7 +201,9 @@ test('sliding left discards the take instead of sending it', async () => {
   const touch = finger(tree);
   await touch.down();
   await touch.move(-120, 0);
-  await touch.up();
+  // Past the point of no return the button says what releasing will do: the label follows the
+  // gesture, which is what a screen reader needs to hear before the finger lifts.
+  await touch.up('Release to delete');
 
   expect(bridge.cancelRecording).toHaveBeenCalled();
   expect(bridge.stopRecording).not.toHaveBeenCalled();
