@@ -9,7 +9,7 @@
 import React from 'react';
 import { Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
-import { DiffView, splitDiff } from '../DiffView';
+import { DiffView, diffCounts, splitDiff } from '../DiffView';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
 
@@ -55,6 +55,25 @@ describe('splitDiff', () => {
     ]);
     expect(diff[4]!.text).toBe('export const b = 2;');
     expect(diff[5]!.text).toBe('export const b = 3;');
+  });
+
+  // git appends the enclosing function to a hunk header, and so does every diff copied out of a
+  // terminal. Anchored on a trailing `@@` the header matched only our own patcher's output: a real
+  // patch ended at its first hunk, so the card drew it as plain grey text with no counter -- which
+  // is exactly what the owner saw on a patch that had applied fine.
+  it('recognises a hunk header that names the enclosing function', () => {
+    const output = [
+      '--- a/src/llm/resolver.ts',
+      '+++ b/src/llm/resolver.ts',
+      '@@ -243,8 +243,14 @@ function mergedLimit',
+      '   const merged = { ...config.llm.limit }',
+      '-  return model?.limit ?? merged.limit',
+      '+  if (model?.limit?.context) merged.context = model.limit.context',
+      '+  return merged',
+    ].join('\n');
+    const { diff } = splitDiff(output);
+    expect(diff.map(d => d.kind)).toEqual(['file', 'file', 'hunk', 'ctx', 'del', 'add', 'add']);
+    expect(diffCounts(diff)).toEqual({ added: 2, removed: 1 });
   });
 
   it('returns an empty diff for an output without a diff', () => {

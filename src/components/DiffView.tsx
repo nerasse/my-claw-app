@@ -20,7 +20,16 @@ export interface DiffLine {
   text: string;
 }
 
-const HUNK_RE = /^@@ .* @@$/;
+/**
+ * A hunk header.
+ *
+ * Anchored on the two ranges rather than on a trailing `@@`: git appends the enclosing function
+ * to the header (`@@ -243,8 +243,14 @@ function mergedLimit`), and so does any diff copied out of a
+ * terminal. Requiring the line to end at `@@` matched our own patcher's output and nothing else, so
+ * a real git diff stopped at its first hunk -- no colours, no `+n −n` counter, the whole patch
+ * drawn as one grey block. The two ranges are what actually identify the line.
+ */
+const HUNK_RE = /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/;
 
 /** How many lines the patch moved. The one number a diff never said out loud. */
 export function diffCounts(diff: DiffLine[]): { added: number; removed: number } {

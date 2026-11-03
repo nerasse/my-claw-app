@@ -1045,10 +1045,14 @@ test('the header reads the share of the context window instead of announcing a h
     });
   });
 
-  await waitFor(() => stringsOf(tree).some(text => text.includes('25.0%')));
+  // The gauge is drawn at this window width, and it is the only place the share lives: the pair
+  // it is a share of is right beside it in the POC's chip.
+  await waitFor(() => stringsOf(tree).some(text => text.includes('50k')));
+  expect(stringsOf(tree).some(text => text.includes('/ 200k'))).toBe(true);
+  expect(stringsOf(tree).some(text => text.includes('25%'))).toBe(true);
 
-  // The next turn's reading moves the line, even by a fraction of a percent: on a wide window a
-  // whole percent sat still for dozens of turns and the gauge read as stuck.
+  // The next turn's reading moves the pair, even when the rounded share has not moved yet: on a
+  // wide window a whole percent sat still for dozens of turns and the gauge read as stuck.
   await ReactTestRenderer.act(async () => {
     DeviceEventEmitter.emit('claw:ws:message', {
       text: JSON.stringify({
@@ -1061,7 +1065,7 @@ test('the header reads the share of the context window instead of announcing a h
       }),
     });
   });
-  await waitFor(() => stringsOf(tree).some(text => text.includes('25.4%')));
+  await waitFor(() => stringsOf(tree).some(text => text.includes('51k')));
   await unmount(tree);
 });
 

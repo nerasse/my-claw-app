@@ -2,7 +2,7 @@ import { CheckIcon, CopyIcon } from './icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { font, radius, useThemedStyles, type Palette } from '../theme';
+import { radius, useThemedStyles, type Palette } from '../theme';
 
 /** How long the button says "copied" before going back to its label. */
 const ACK_MS = 1400;
@@ -80,7 +80,9 @@ export function CopyButton({
 }
 
 const createStyles = (palette: Palette) => ({
-  copy: { fontSize: font.micro, color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
+  // In the ink of the block's label, not in the accent: six copy buttons down one open card in
+  // the accent read as six primary actions, and the block's own text is what the eye should find.
+  copy: { fontSize: 10, color: palette.textMeta, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
   done: { color: palette.textFaint },
   bar: {
     width: 32,

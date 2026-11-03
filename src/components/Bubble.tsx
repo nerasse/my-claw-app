@@ -313,12 +313,16 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   stackAgent: { alignItems: 'flex-start' as const },
   stackUser: { alignItems: 'flex-end' as const },
   bubble: {
-    width: '100%' as const,
     borderRadius: radius.md,
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
   bubbleUser: {
+    // The POC's two bounds, not one: the bubble shrinks to its text, and it stops at a
+    // comfortable measure. Drawn full width, a message of three words left half a screen of
+    // empty bubble to its right, which reads as padding rather than as a short message.
+    alignSelf: 'flex-end' as const,
+    maxWidth: '88%' as const,
     backgroundColor: palette.bubbleUserBg,
     borderBottomRightRadius: radius.sm,
     // A neutral bubble on a neutral thread has no edge without this hairline. The POC used a
@@ -329,7 +333,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // No fill and no padding: the answer starts where every other row of the thread starts, and
   // a run of them reads as one column of prose. `bubbleNotice` and `bubbleCommand` keep a plate
   // of their own -- they are not the agent speaking.
-  bubbleAgent: { backgroundColor: 'transparent' as const, paddingHorizontal: 0, paddingVertical: 0 },
+  bubbleAgent: { width: '100%' as const, backgroundColor: 'transparent' as const, paddingHorizontal: 0, paddingVertical: 0 },
   byline: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, marginBottom: 2 },
   bubbleNotice: {
     backgroundColor: palette.surface,

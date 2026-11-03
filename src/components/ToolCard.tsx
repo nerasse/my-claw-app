@@ -154,7 +154,7 @@ export const ToolCard = React.memo(function ToolCardView({
   }, [open]);
 
   return (
-    <View style={[styles.card, !item.ok && !running && !interrupted && styles.cardError, open && styles.cardOpen]}>
+    <View style={[styles.card, open && styles.cardOpen]}>
       <Pressable
         onPress={() => {
           setOpen(value => !value);
@@ -165,27 +165,27 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
-          <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
+          <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
           <Text style={[styles.rowText, styles.name]}>{item.name}</Text>
           {/* One line, every tool, folded. A shell command used to wrap under the head at three
               lines: the densest argument is the one worth the room, the argument went the other
               way, and the POC's rule ("closed, the card is 29 px whatever the tool") is what a
               column of twenty calls needs to stay a list. The command is one tap away. */}
           {!open && preview ? (
-            <Text style={[styles.rowText, styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
+            <Text style={[styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
               {preview}
             </Text>
           ) : (
             <View style={styles.spacer} />
           )}
           {!open && summary.extraArgs > 0 ? <ExtraArgs count={summary.extraArgs} /> : null}
-          {word ? <Text style={[styles.rowText, styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]}>{word}</Text> : null}
+          {word ? <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]}>{word}</Text> : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
             </View>
           ) : null}
-          {running ? <RunningFor since={item.ts} /> : duration ? <Text style={[styles.rowText, styles.duration]}>{duration}</Text> : null}
+          {running ? <RunningFor since={item.ts} /> : duration ? <Text style={styles.duration}>{duration}</Text> : null}
         </View>
       </Pressable>
 
@@ -245,7 +245,7 @@ export const ToolCard = React.memo(function ToolCardView({
           ) : null}
           <View style={styles.outputHead}>
             <Text style={styles.label}>
-              {`output${item.truncated ? ' · truncated' : ''}`}
+              {hasDiff ? 'diff' : `output${item.truncated ? ' · truncated' : ''}`}
               {counts ? (
                 <>
                   <Text style={styles.diffAdd}>{`  +${counts.added}`}</Text>
@@ -255,8 +255,11 @@ export const ToolCard = React.memo(function ToolCardView({
             </Text>
             <BlockActions title={`${item.name} output`} value={item.output} />
           </View>
-          {split ? (
-            <ScrollableBlock title={`${item.name} output`}>
+          {/* The plate is drawn only when there is something in it: a `split` that parsed no hunk
+              still exists as an object, and rendering around it put an empty grey block under every
+              `output` label of every card. */}
+          {split && split.diff.length > 0 ? (
+            <ScrollableBlock title={`${item.name} output`} style={styles.code}>
               <DiffView parts={split} />
             </ScrollableBlock>
           ) : null}
@@ -406,20 +409,22 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     borderColor: palette.border,
     borderWidth: 1,
     borderRadius: radius.sm,
-    paddingHorizontal: space.sm,
-    paddingVertical: 4,
-    marginBottom: space.sm,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    marginBottom: 6,
+    overflow: 'hidden' as const,
   },
-  cardOpen: { backgroundColor: palette.codeBg },
-  cardError: { borderColor: palette.danger },
+  // Same plate open or closed: the POC's card does not change dress when you unfold it, only
+  // grows a body. A fill that appeared on open made the fold read as a mode change.
+  cardOpen: {},
   head: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: space.sm,
-    // One height for every card head, running or settled, one-line preview or none: a thread of
-    // twenty calls is a list, and a list whose rows are whatever their content needs is a
-    // staircase.
-    minHeight: Math.round(29 * scale),
+    gap: 5,
+    // The POC's own number, and the rule behind it: a folded card is 29 pt whatever the tool, so
+    // twenty calls read as a list and not a staircase.
+    height: Math.round(29 * scale),
+    paddingHorizontal: 8,
   },
   /**
    * The head row is one line of type at one size. Four sizes in a 29 pt row (10 for the chevron,
@@ -428,34 +433,33 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
    */
   rowText: { fontSize: scaleFont(HEAD_SIZE, scale), lineHeight: Math.round(HEAD_SIZE * 1.5 * scale) },
   chevron: { color: palette.textFaint, width: 8 },
-  name: { fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
-  preview: { flex: 1, color: palette.textMuted },
+  name: { fontWeight: '500' as const, color: palette.text, fontFamily: 'monospace' },
+  preview: { flex: 1, fontSize: scaleFont(11, scale), color: palette.textMuted },
   // A path, a command or a pattern: read in the prose face they look like a sentence that lost
   // its spaces.
   previewMono: { fontFamily: 'monospace' },
   spacer: { flex: 1 },
-  extraArgs: { color: palette.textMeta },
-  duration: { color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
-  state: { fontWeight: '600' as const },
+  extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
+  duration: { fontSize: scaleFont(10.5, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
+  state: { fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },
   // Two colours, three words: a failure is an error, a stop or a clip is not.
   stateBad: { color: palette.danger },
   stateWarn: { color: palette.warn },
-  spinner: { marginLeft: space.xs, transform: [{ scale: 0.8 }] },
-  body: { marginTop: space.sm, gap: 3, paddingBottom: 2 },
-  label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
-  outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, marginTop: 2 },
+  spinner: { transform: [{ scale: 0.8 }] },
+  body: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },
+  label: { fontSize: scaleFont(9.5, scale), fontWeight: '500' as const, color: palette.textMeta, letterSpacing: 0.57, textTransform: 'uppercase' as const },
+  outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, height: Math.round(18 * scale) },
   // Right-aligned under the fold's own row: the buttons belong to the block below them, and a
   // row that is empty on web (BlockActions renders nothing there) must not leave a gap.
   argsActions: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const },
-  // The plate is the container's, the face is the text's: the block between them owns the
-  // height, and a border drawn on the scrolling node would scroll away with the content.
+  // The plate is the container's, the face is the text's. The POC draws one material for
+  // everything machine -- no border, just the `code-bg` step, the same one the closed output of a
+  // bash call used to wear with a frame around it.
   code: {
-    backgroundColor: palette.bg,
+    backgroundColor: palette.codeBg,
     borderRadius: 5,
-    borderWidth: 1,
-    borderColor: palette.border,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   diffAdd: { color: palette.diffAdd },
   diffDel: { color: palette.diffDel },

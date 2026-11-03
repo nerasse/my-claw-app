@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { shortTokens } from '../core/context';
-import { font, radius, useThemedStyles, type Palette } from '../theme';
+import { radius, useThemedStyles, type Palette } from '../theme';
 
 /**
  * How full the window is: the share, the two numbers it is a share of, and a track.
@@ -54,7 +54,7 @@ const createStyles = (palette: Palette) => ({
   wrap: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 7,
+    gap: 8,
     height: 28,
     paddingLeft: 9,
     paddingRight: 10,
@@ -72,19 +72,20 @@ const createStyles = (palette: Palette) => ({
   // Past 90 % the one colour that means "do something about it".
   fillFull: { backgroundColor: palette.danger },
   numbers: {
-    fontSize: font.micro,
-    color: palette.textMeta,
+    fontSize: 11,
+    color: palette.textMuted,
     fontVariant: ['tabular-nums' as const],
   },
-  strong: { color: palette.textMuted, fontWeight: '600' as const },
+  strong: { color: palette.text, fontWeight: '600' as const },
   // Behind its own rule: the share is a reading of the pair, not a third number beside it.
   percent: {
-    fontSize: font.small,
+    fontSize: 11,
     color: palette.textMuted,
+    fontWeight: '500' as const,
     fontVariant: ['tabular-nums' as const],
     paddingLeft: 7,
     borderLeftWidth: 1,
-    borderLeftColor: palette.border,
+    borderLeftColor: palette.surfaceRaised,
   },
-  percentFull: { color: palette.danger, fontWeight: '600' as const },
+  percentFull: { color: palette.warn, fontWeight: '600' as const },
 });

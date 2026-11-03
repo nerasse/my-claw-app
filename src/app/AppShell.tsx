@@ -3338,10 +3338,11 @@ export function AppShell(): React.JSX.Element {
     offline ? status.state : null,
     threadModel ? (modelProvider ? `${modelProvider} / ${currentModelLabel}` : currentModelLabel) : null,
     effortLabel,
-    // Below 560 pt the gauge is not drawn, and the share then lives only here. A tenth: on a 1M
-    // window a turn moves it by a couple of hundred tokens, and a whole percent sat still for
-    // dozens of turns and read as a gauge that was stuck.
-    contextShare === null ? null : `${contextShare.toFixed(1)}%`,
+    // The share lives in exactly one place. Where the gauge is drawn (560 pt and up) it is
+    // already there, three figures wide; repeating it here put the same number twice in one
+    // strip. Below that the gauge is gone and this is the only place left for it -- to a tenth,
+    // because on a 1M window a turn moves it by a couple of hundred tokens.
+    contextShare === null || layout.width >= 560 ? null : `${contextShare.toFixed(1)}%`,
     pending > 0 ? `${pending} pending` : null,
     itemCount > 0 ? `${itemCount} items` : null,
   ]

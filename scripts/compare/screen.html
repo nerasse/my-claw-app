@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>my-claw · the screen, as the app draws it</title>
+<style>html,body,#root{margin:0;width:100%;min-height:100%}body{font-family:system-ui}</style>
+</head><body><div id="root"></div><script src="index.js"></script>
+<script>
+// A card only opens on a tap or while it is running, so a screenshot of a settled thread shows
+// every card folded -- which is how the open-card gaps went unseen for two rounds. Open the ones
+// the harness asked for, by their own accessibility label, the way a reader would.
+setTimeout(function () {
+  // The calls live under a run bar; opening the bar is what puts the cards on screen at all.
+  document.querySelectorAll('[aria-label="Show the run work"]').forEach(function (el) {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  setTimeout(function () {
+    var n = 0;
+    document.querySelectorAll('[aria-label^="Tool "]').forEach(function (el) {
+      if (n >= 3) return;
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      n += 1;
+    });
+  }, 300);
+}, 700);
+</script>
+</body></html>

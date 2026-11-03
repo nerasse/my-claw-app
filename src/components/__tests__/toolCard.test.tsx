@@ -342,7 +342,9 @@ describe('what an unfolded card reports', () => {
     // The one number a diff never said out loud.
     expect(shown).toContain('+3');
     expect(shown).toContain('−2');
-    expect(shown).toContain('output');
+    // The block names what it is: a patch is not an `output`, and the POC draws the diff under
+    // its own label so the count reads as "lines moved" rather than as a footnote on a command.
+    expect(shown).toContain('diff');
   });
 
   it('numbers the lines a read returned', () => {

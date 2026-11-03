@@ -1,4 +1,4 @@
-import { ChevronIcon, MenuIcon, MoreIcon } from '../components/icons';
+import { AgentIcon, ChevronIcon, MenuIcon, MoreIcon } from '../components/icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, PanResponder, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
@@ -1354,15 +1354,16 @@ export function ChatScreen({
           <View style={styles.header}>
             <Pressable
               onPress={onBack}
-              style={styles.menuButton}
-              hitSlop={8}
+              style={styles.headerAction}
+              hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel={`Back to ${subagent.parentTitle}`}>
-              <ChevronIcon direction="left" size={22} tone="text" />
+              <ChevronIcon direction="left" size={18} tone="text" />
             </Pressable>
             {/* The marker, in the accent and on its own: the title stays the identity and nothing
-                else, which is what gets read, selected and copied. */}
-            <Text style={styles.subGlyph}>◈</Text>
+                else, which is what gets read, selected and copied. A drawn head, not a `◈`: the
+                chrome carries no text glyph anywhere else either. */}
+            <AgentIcon size={13} tone="accent" />
             <View style={styles.headerText}>
               <Text style={styles.title} numberOfLines={1}>
                 {`${subagent.id.replace(/^subagent\//, '')} · ${subagent.type}`}
@@ -1375,11 +1376,11 @@ export function ChatScreen({
             </View>
             <Pressable
               onPress={onSubAgentMenu}
-              hitSlop={8}
-              style={styles.menuButton}
+              hitSlop={6}
+              style={styles.headerAction}
               accessibilityRole="button"
               accessibilityLabel="Sub-agent actions">
-              <MoreIcon vertical size={16} tone="faint" />
+              <MoreIcon vertical size={16} tone="muted" />
             </Pressable>
           </View>
           {/* Standing marker: every chat screen here looks alike, and without it a message meant
@@ -1392,10 +1393,11 @@ export function ChatScreen({
         {layout.pinnedDrawer ? null : (
           <Pressable
             onPress={onOpenDrawer}
-            style={styles.menuButton}
+            style={styles.headerAction}
+            hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Open conversations">
-            <MenuIcon size={16} tone="faint" />
+            <MenuIcon size={16} tone="muted" />
           </Pressable>
         )}
         <View style={styles.headerText}>
@@ -1406,8 +1408,9 @@ export function ChatScreen({
             {subtitle}
           </Text>
         </View>
-        {/* The share is in the metadata line below; the pair it is a share of needs a wider
-            strip than a phone's title bar, and below 560 pt it takes the room the title wants. */}
+        {/* The gauge carries the share, so the metadata line above drops it: one figure, one
+            place. Below 560 pt there is no room for three numbers and the share stays in the
+            line, which is the one thing a phone header can afford. */}
         {layout.width >= 560 ? meter : null}
         {subagentCount && subagentCount.total > 0 && onAgentsPress ? (
           <Pressable
@@ -1416,9 +1419,9 @@ export function ChatScreen({
             style={styles.agentsButton}
             accessibilityRole="button"
             accessibilityLabel={`${subagentCount.total} sub-agent${subagentCount.total === 1 ? '' : 's'}${subagentCount.running > 0 ? `, ${subagentCount.running} running` : ''}`}>
-            <Text style={styles.agentsGlyph}>◈</Text>
+            <AgentIcon size={13} tone="muted" />
             <Text style={styles.agentsCount}>{subagentCount.total}</Text>
-            {subagentCount.running > 0 ? <Text style={styles.agentsRunning}>●</Text> : null}
+            {subagentCount.running > 0 ? <View style={styles.agentsLive} /> : null}
           </Pressable>
         ) : null}
         {connectionState !== 'connected' ? (
@@ -1440,10 +1443,11 @@ export function ChatScreen({
         ) : null}
         <Pressable
           onPress={onOpenMenu}
-          style={[styles.menuButton, layout.dense && styles.menuButtonDense]}
+          style={styles.headerAction}
+          hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel="Commands">
-          <MoreIcon vertical size={16} tone="faint" />
+          <MoreIcon vertical size={16} tone="muted" />
         </Pressable>
       </View>
       )}
@@ -1656,17 +1660,18 @@ const createStyles = (palette: Palette) => ({
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: space.md,
-    paddingBottom: space.sm,
+    gap: 8,
+    // 44 min, the POC's own strip (48 on the web, 44 on a phone; `compact.css` is explicit that
+    // the phone is the tighter one). A height set in pixels here would fight the phone's, so the
+    // frame is a floor and the padding does the rest.
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
   // 26, not the menu glyph's 20: the same chevron at the same size as every other screen's back.
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
-  subGlyph: {
-    color: palette.accent,
-    fontSize: font.meta,
-  },
+  backGlyph: { fontSize: 14, lineHeight: 20, color: palette.textMuted },
   subRule: {
     height: 1,
     backgroundColor: palette.accent,
@@ -1675,21 +1680,40 @@ const createStyles = (palette: Palette) => ({
   agentsButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 3,
-    paddingHorizontal: space.xs,
-  },
-  agentsGlyph: {
-    color: palette.accent,
-    fontSize: font.meta,
+    gap: 5,
+    height: Math.round(24),
+    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
   },
   agentsCount: {
     color: palette.text,
     fontSize: font.small,
+    fontWeight: '600' as const,
     fontVariant: ['tabular-nums' as const],
   },
-  agentsRunning: {
-    color: palette.accent,
-    fontSize: font.micro,
+  // A dot of the live colour, drawn: a 5 pt square of accent is the one mark that says a run is
+  // in flight, and a text bullet for it was a glyph in the chrome.
+  agentsLive: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: palette.accent,
+  },
+  /**
+   * An action of the title bar: the icon and its 28 pt box, nothing behind it.
+   *
+   * These were 40 pt tiles filled with `surfaceAlt`, which is the shape a *button* takes on a
+   * page of controls -- in a title bar the strip became a row of grey chips competing with the
+   * context gauge for the same weight. The POC draws no background at all; the hit area is what
+   * makes it a target.
+   */
+  headerAction: {
+    width: Math.round(28),
+    height: Math.round(28),
+    borderRadius: radius.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   menuButtonDense: { width: 32, height: 32 },
   menuButton: {
@@ -1701,8 +1725,10 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   menuGlyph: { fontSize: 20, lineHeight: 22, color: palette.text },
-  headerText: { flex: 1 },
-  title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
+  headerText: { flex: 1, minWidth: 0 },
+  // 14 and 11, the POC's pair rounded to the app's own scale: the title is a line of the
+  // conversation's type, not a screen heading, and at 15 it drew the eye before the answer under it.
+  title: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textMeta },
   statusButton: { padding: 2 },
   connBadge: {

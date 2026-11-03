@@ -235,20 +235,23 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   footer: { marginTop: space.xs },
   // The bar's own gap: the card's chevron and its name are 6 pt apart, and a bar whose arrow
   // touched its text read as a different control at the same place.
+  //
+  // 27 pt, the POC's number: a run bar is a step under a card's 29, because it stands for work
+  // rather than being one piece of it, and the two heights must not compete in one column.
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 6,
+    gap: 7,
+    height: Math.round(27 * scale),
     backgroundColor: palette.surfaceAlt,
     borderWidth: 1,
     borderColor: palette.border,
     borderRadius: radius.sm,
     paddingHorizontal: 8,
-    paddingVertical: 4,
   },
   summary: {
     flex: 1,
-    fontSize: scaleFont(font.small, scale),
+    fontSize: scaleFont(11.5, scale),
     color: palette.textMuted,
   },
   /** What the fold holds, in the ink of the message it belongs to. */
