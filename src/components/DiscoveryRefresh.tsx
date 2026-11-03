@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { modelStore, useDiscovery } from '../core/model';
-import { font, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 import { RefreshIcon } from './icons';
 
 /**
@@ -69,9 +69,12 @@ export function DiscoveryNote(): React.JSX.Element | null {
 }
 
 const createStyles = (palette: Palette) => ({
+  // The same 40 pt square the page's other header actions live in, so the row reads as one set of
+  // controls rather than three sizes side by side. The icon inside stays 20 pt.
   button: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },

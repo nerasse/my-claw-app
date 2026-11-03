@@ -185,7 +185,15 @@ const createStyles = (palette: Palette) => ({
     paddingVertical: space.sm,
     backgroundColor: palette.surfaceAlt,
   },
-  footerLink: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  // A row inside a footer is a thumb target before it is a line of text: `delete` beside it is
+  // 34 pt tall, and the cap link answered nothing that far from its own words.
+  footerLink: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    minHeight: 34,
+  },
   footerKey: { fontSize: font.small, color: palette.textMuted, minWidth: 84 },
   footerValue: { flex: 1, fontSize: font.small, color: palette.text },
   deleteLink: { paddingHorizontal: space.sm, paddingVertical: 4 },

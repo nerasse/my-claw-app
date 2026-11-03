@@ -288,7 +288,9 @@ export function ModelsScreen({
                 <View style={styles.linkMain}>
                   <View style={styles.linkTitleLine}>
                     <Text style={styles.linkTitle}>{provider.group || provider.key}</Text>
-                    <Text style={styles.badge}>{provider.type}</Text>
+                    {/* Only when there is a word to show: an empty pill is a shape that asks a
+                        question and answers nothing. */}
+                    {provider.type ? <Text style={styles.badge}>{provider.type}</Text> : null}
                     {provider.discover ? <Text style={styles.badge}>discovery</Text> : null}
                     {provider.disabled ? <Text style={styles.badgeOff}>off</Text> : null}
                   </View>
