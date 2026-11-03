@@ -388,21 +388,10 @@ export function Composer({
           })}
         </View>
       ) : null}
-      <View style={styles.row}>
-        {onPickAttachment && !recording ? (
-          <Pressable
-            style={[styles.attach, hero && styles.sendHero, dense && !hero && styles.buttonDense]}
-            onPress={onPickAttachment}
-            disabled={uploading || locationBusy}
-            accessibilityRole="button"
-            accessibilityLabel="Add attachment">
-            {uploading || locationBusy ? (
-              <ActivityIndicator size="small" color={palette.textFaint} />
-            ) : (
-              <PlusIcon size={20} color={palette.accent} />
-            )}
-          </Pressable>
-        ) : null}
+      {/* The shell is the thing with the border, and the field sits inside it. One frame around
+          the text and the actions is what the POC draws: a message box whose bottom row is the
+          controls, so a long message never pushes the send button to the side of the screen. */}
+      <View style={[styles.shell, hero && styles.shellHero, dense && !hero && styles.shellDense]}>
         {recording ? null : (
         // The frame is the wrapper's, never the field's: border, background and padding on the
         // input itself scroll away with the text on Android, which is why a long message came to
@@ -429,6 +418,21 @@ export function Composer({
           />
         </View>
         )}
+        <View style={styles.bar}>
+        {onPickAttachment && !recording ? (
+          <Pressable
+            style={[styles.attach, hero && styles.sendHero, dense && !hero && styles.buttonDense]}
+            onPress={onPickAttachment}
+            disabled={uploading || locationBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Add attachment">
+            {uploading || locationBusy ? (
+              <ActivityIndicator size="small" color={palette.textFaint} />
+            ) : (
+              <PlusIcon size={20} color={palette.accent} />
+            )}
+          </Pressable>
+        ) : null}
         {micVisible ? (
           <VoiceRecorder
             hero={hero}
@@ -470,7 +474,23 @@ export function Composer({
             )}
           </Pressable>
         ) : null}
+        </View>
       </View>
+      {/* A desktop has keys and no thumb: the two shortcuts worth learning, in the order they are
+          learned. A phone has neither the room nor the need. */}
+      {dense ? (
+        <View style={styles.keyhints}>
+          <Text style={styles.keyhint}>
+            <Text style={styles.keycap}>↵</Text> envoyer
+          </Text>
+          <Text style={styles.keyhint}>
+            <Text style={styles.keycap}>⇧↵</Text> nouvelle ligne
+          </Text>
+          <Text style={styles.keyhint}>
+            <Text style={styles.keycap}>/</Text> commandes
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -574,21 +594,37 @@ const createStyles = (palette: Palette) => ({
   locationTitle: { fontSize: font.meta, fontWeight: '600' as const, color: palette.text },
   locationAddress: { fontSize: font.small, color: palette.textMuted },
   locationMeta: { fontSize: font.small, color: palette.textFaint },
-  field: {
-    flex: 1,
-    // Same height as the send button so the two pills align exactly.
-    minHeight: 44,
-    justifyContent: 'center' as const,
-    paddingHorizontal: space.md,
-    paddingVertical: 9,
+  // One frame around the text and the controls: the border belongs to the block, so a grown
+  // message pushes the bar down instead of stretching a pill whose ends the text would escape.
+  shell: {
     borderWidth: 1,
     borderColor: palette.border,
-    // Half the collapsed height, not `radius.pill`. A pill radius is 999: empty, the field is a
-    // perfect pill either way, but grown to six lines it becomes a stadium whose ends are
-    // 88pt half-circles, and the first line of text is then drawn outside the shape that is
-    // supposed to contain it. Half the height rounds the corners and leaves the sides straight.
-    borderRadius: 22,
     backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.lg,
+    paddingHorizontal: 6,
+    paddingTop: 4,
+    paddingBottom: 4,
+    gap: 2,
+  },
+  shellHero: { borderRadius: radius.lg },
+  shellDense: { borderRadius: radius.md },
+  bar: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
+  keyhints: { flexDirection: 'row' as const, gap: space.md, paddingHorizontal: space.xs, paddingTop: 2 },
+  keyhint: { fontSize: font.micro, color: palette.textMeta },
+  keycap: {
+    fontSize: font.micro,
+    color: palette.textMuted,
+    fontFamily: 'monospace',
+  },
+  // The field carries no frame of its own any more: the shell around it does. Border, radius and
+  // background on the input scroll away with the text on Android, which is why a long message
+  // used to sit across the rounded edge, cut in the middle of a line.
+  field: {
+    flex: 1,
+    minHeight: 30,
+    justifyContent: 'center' as const,
+    paddingHorizontal: space.sm,
+    paddingVertical: 6,
   },
   fieldHero: {
     minHeight: 50,

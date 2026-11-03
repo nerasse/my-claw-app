@@ -97,6 +97,7 @@ export function ChatScreen({
   threadId,
   title,
   subtitle,
+  meter,
   connectionState,
   mediaBase,
   deviceInfo,
@@ -143,6 +144,8 @@ export function ChatScreen({
   threadId: string;
   title: string;
   subtitle: string;
+  /** The context gauge, drawn only where the title bar has the room for three numbers. */
+  meter?: React.ReactNode;
   connectionState: WsState;
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
@@ -1383,6 +1386,9 @@ export function ChatScreen({
             {subtitle}
           </Text>
         </View>
+        {/* The share is in the metadata line below; the pair it is a share of needs a wider
+            strip than a phone's title bar, and below 560 pt it takes the room the title wants. */}
+        {layout.width >= 560 ? meter : null}
         {subagentCount && subagentCount.total > 0 && onAgentsPress ? (
           <Pressable
             onPress={onAgentsPress}

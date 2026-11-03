@@ -426,7 +426,10 @@ test('the subtitle shows which model the thread runs on', async () => {
     { id: 'strong-2', label: 'Strong' },
   ], defaultModel: 'fast-1' });
   await emit({ type: 'model.result', threadId: THREAD, model: 'strong-2', defaultModel: 'fast-1', effort: { level: '', levels: [], supported: false } });
-  await waitFor(() => allTexts(tree).some(text => text.includes('model: Strong')), 60);
+  // The model is named, not prefixed: the line reads like a model reference, and the provider
+  // leads it when the catalogue says which one serves it.
+  await waitFor(() => allTexts(tree).some(text => text.includes('Strong')), 60);
+  expect(allTexts(tree).some(text => text.includes('model: '))).toBe(false);
   await settleAndUnmount(tree);
 });
 

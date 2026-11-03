@@ -612,18 +612,24 @@ test('the frame around the composer belongs to the wrapper, never to the field',
   expect(inputStyle.padding).toBe(0);
   expect(inputStyle.maxHeight).toBeGreaterThan(0);
 
-  // Up through the composite TextInput to the View that draws the frame.
-  let ancestor = input.parent;
-  while (ancestor && String(ancestor.type) !== 'View') ancestor = ancestor.parent;
-  const frame = StyleSheet.flatten(ancestor!.props.style) as Record<string, number>;
-  expect(frame.borderWidth).toBe(1);
-  expect(frame.paddingVertical).toBeGreaterThan(0);
-  // The text ceiling and the frame's padding are what add up to the height a thumb sees; the
-  // frame is never allowed to be shorter than the send button beside it.
-  expect(frame.minHeight).toBe(44);
-  // Half the collapsed height, never a pill radius: 999 turns a grown field into a stadium whose
-  // ends are half-circles as tall as the field, and the first line of text lands outside them.
-  expect(frame.borderRadius).toBe(frame.minHeight / 2);
+  // Immediate View above the input: the field's own box, no frame of its own.
+  let field = input.parent;
+  while (field && String(field.type) !== 'View') field = field.parent;
+  const fieldStyle = StyleSheet.flatten(field!.props.style) as Record<string, number>;
+  expect(fieldStyle.borderWidth).toBeUndefined();
+  expect(fieldStyle.backgroundColor).toBeUndefined();
+
+  // ...and above it, the shell: one frame around the text AND the row of controls, so a grown
+  // message pushes the bar down instead of stretching a pill the text would escape.
+  let shell = field!.parent;
+  while (shell && !(String(shell.type) === 'View' && StyleSheet.flatten(shell.props.style)?.borderWidth === 1)) {
+    shell = shell.parent;
+  }
+  expect(shell).toBeTruthy();
+  const shellStyle = StyleSheet.flatten(shell!.props.style) as Record<string, number>;
+  expect(shellStyle.backgroundColor).toBeTruthy();
+  // A rounded block, not a stadium: the same reason the field never carried a pill radius.
+  expect(shellStyle.borderRadius).toBeLessThan(40);
   await unmount(tree);
 });
 
@@ -1021,9 +1027,9 @@ test('Session files from a drawer conversation opens that conversation and its f
 
 test('the header reads the share of the context window instead of announcing a healthy link', async () => {
   const tree = await renderWithHistory();
-  // No model state yet: the line carries what it knows and claims nothing about the context.
-  // The drawer keeps its own connection dot; the header line does not repeat it.
-  expect(stringsOf(tree).some(text => text.includes('ctx '))).toBe(false);
+  // No model state yet: the line carries what it knows and claims nothing about the context --
+  // the share is a bare percentage now, the model and its provider come first.
+  expect(stringsOf(tree).some(text => /\d+%/.test(text))).toBe(false);
   expect(stringsOf(tree).some(text => text.startsWith('connected · '))).toBe(false);
 
   await ReactTestRenderer.act(async () => {
@@ -1039,7 +1045,7 @@ test('the header reads the share of the context window instead of announcing a h
     });
   });
 
-  await waitFor(() => stringsOf(tree).some(text => text.includes('ctx 25.0%')));
+  await waitFor(() => stringsOf(tree).some(text => text.includes('25.0%')));
 
   // The next turn's reading moves the line, even by a fraction of a percent: on a wide window a
   // whole percent sat still for dozens of turns and the gauge read as stuck.
@@ -1055,7 +1061,7 @@ test('the header reads the share of the context window instead of announcing a h
       }),
     });
   });
-  await waitFor(() => stringsOf(tree).some(text => text.includes('ctx 25.4%')));
+  await waitFor(() => stringsOf(tree).some(text => text.includes('25.4%')));
   await unmount(tree);
 });
 

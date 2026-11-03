@@ -201,6 +201,7 @@ import { resetToolOutputAsks } from '../core/toolOutput';
 import { dropReasoningAsks, knownReasoning } from '../core/reasoningFetch';
 import { httpOrigin, uuid, withView } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
+import { ContextMeter } from '../components/ContextMeter';
 import { SettingsScreen } from './SettingsScreen';
 import { AppearanceScreen } from './AppearanceScreen';
 import { UpdatesScreen } from './UpdatesScreen';
@@ -3326,15 +3327,35 @@ export function AppShell(): React.JSX.Element {
   // number that moves on its own. How full the window is decides when the conversation has to be
   // compacted, so it belongs where the owner already looks. Degraded states keep the word.
   const contextShare = contextPercent(threadModel?.context);
+  // What runs here, said the way a model is named: provider first, because two providers serve
+  // the same id and `opus-5` alone does not say whose. The share closes the line -- it is the one
+  // number that moves on its own, and it is what decides when this conversation has to compact.
+  const modelProvider = threadModel
+    ? catalog.models.find(model => model.id === threadModel.model)?.provider
+    : undefined;
+  const effortLabel = threadModel?.effort?.level || null;
   const subtitle = [
-    offline ? status.state : contextShare === null ? null : `ctx ${contextShare.toFixed(1)}%`,
+    offline ? status.state : null,
+    threadModel ? (modelProvider ? `${modelProvider} / ${currentModelLabel}` : currentModelLabel) : null,
+    effortLabel,
+    // Below 560 pt the gauge is not drawn, and the share then lives only here. A tenth: on a 1M
+    // window a turn moves it by a couple of hundred tokens, and a whole percent sat still for
+    // dozens of turns and read as a gauge that was stuck.
+    contextShare === null ? null : `${contextShare.toFixed(1)}%`,
     pending > 0 ? `${pending} pending` : null,
     itemCount > 0 ? `${itemCount} items` : null,
-    // The model that runs here: the one fact about a conversation worth seeing at a glance.
-    currentModelLabel ? `model: ${currentModelLabel}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
+  const meter =
+    threadModel?.context?.used !== undefined && threadModel.context.effective !== undefined && contextShare !== null ? (
+      <ContextMeter
+        used={threadModel.context.used}
+        effective={threadModel.context.effective}
+        percent={contextShare}
+        onPress={openModel}
+      />
+    ) : undefined;
   const hint = offline
     ? pending > 0
       ? `offline · ${pending} message(s) will send on reconnect`
@@ -4071,6 +4092,7 @@ export function AppShell(): React.JSX.Element {
             threadId={activeThread ?? ''}
             title={title}
             subtitle={subtitle}
+            meter={meter}
             connectionState={status.state}
             locationEnabled={locationEnabled}
             mediaBase={mediaBase}

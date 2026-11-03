@@ -195,6 +195,16 @@ export const Bubble = React.memo(function BubbleView({
         // and hide the reasoning line, the attachments and the tool cards from a screen reader.
         // The ⋯ button is the accessible way to the same menu.
         accessible={false}>
+        {/* Who is talking, once per turn. The agent's message is prose on the thread, not a
+            bubble: a conversation where both sides are cards reads as a chat, and this one is a
+            document with a question at the top of each turn. */}
+        {agent && !grouped && showTime && !item.command && !item.notice ? (
+          <View style={styles.byline}>
+            <Text style={styles.bylineWho}>my-claw</Text>
+            <Text style={styles.bylineSep}>·</Text>
+            <Text style={styles.bylineTime}>{clock(item.ts)}</Text>
+          </View>
+        ) : null}
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
@@ -271,7 +281,7 @@ export const Bubble = React.memo(function BubbleView({
         {/* Sent on a socket that called itself open; the receipt is what proves it arrived. */}
         {!agent && item.pending ? <Text style={styles.queuedUser}>sending…</Text> : null}
 
-        {showTime ? <Text style={[styles.time, agent ? styles.timeAgent : styles.timeUser]}>{clock(item.ts)}</Text> : null}
+        {showTime && !agent ? <Text style={[styles.time, styles.timeUser]}>{clock(item.ts)}</Text> : null}
       </Pressable>
 
       {/* The ⋯ row sits under the bubble on the side the author reads from: right for the agent,
@@ -319,7 +329,14 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: palette.border,
   },
-  bubbleAgent: { backgroundColor: palette.surfaceAlt, borderBottomLeftRadius: radius.sm },
+  // No fill and no padding: the answer starts where every other row of the thread starts, and
+  // a run of them reads as one column of prose. `bubbleNotice` and `bubbleCommand` keep a plate
+  // of their own -- they are not the agent speaking.
+  bubbleAgent: { backgroundColor: 'transparent' as const, paddingHorizontal: 0, paddingVertical: 0 },
+  byline: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, marginBottom: 2 },
+  bylineWho: { fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const, color: palette.textMuted },
+  bylineSep: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
+  bylineTime: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   bubbleNotice: {
     backgroundColor: palette.surface,
     borderWidth: 1,
