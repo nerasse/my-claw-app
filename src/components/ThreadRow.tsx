@@ -103,15 +103,21 @@ const createStyles = (palette: Palette) => ({
     overflow: 'hidden' as const,
   },
   rowActive: { backgroundColor: palette.surfaceRaised },
+  /**
+   * Inset from the row's own edges, as the POC draws it: a bar that runs the full height reads as
+   * a border of the list rather than a position in it, and at 3 pt against a 37 pt row it drew
+   * more attention than the title it points at.
+   */
   activeBar: {
     position: 'absolute' as const,
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
+    left: 1,
+    top: 7,
+    bottom: 7,
+    width: 2,
+    borderRadius: 2,
     backgroundColor: palette.accent,
   },
-  main: { flex: 1, paddingVertical: space.sm, paddingHorizontal: space.sm, gap: 1 },
+  main: { flex: 1, paddingVertical: 5, paddingHorizontal: 8, gap: 1 },
   mainDense: { paddingVertical: space.xs },
   titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent },

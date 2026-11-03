@@ -23,14 +23,6 @@ import { runStateOf, stateWord } from '../core/toolState';
  * controls of its own, and a control inside a control is announced as one thing by a screen
  * reader and steals the toggle's touch.
  */
-/**
- * How many lines a shell preview gets before the layout cuts it.
- *
- * Three, like codex (`STATUS_DETAILS_DEFAULT_MAX_LINES`); pi allows five. Three is the mobile
- * answer: a thread is a column of these, and five turns a dozen calls back into a wall.
- */
-const PREVIEW_BLOCK_LINES = 3;
-
 export const ToolCard = React.memo(function ToolCardView({
   item,
   threadId,
@@ -169,7 +161,11 @@ export const ToolCard = React.memo(function ToolCardView({
         <View style={styles.head}>
           <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
           <Text style={styles.name}>{item.name}</Text>
-          {!open && preview && !summary.block ? (
+          {/* One line, every tool, folded. A shell command used to wrap under the head at three
+              lines: the densest argument is the one worth the room, the argument went the other
+              way, and the POC's rule ("closed, the card is 29 px whatever the tool") is what a
+              column of twenty calls needs to stay a list. The command is one tap away. */}
+          {!open && preview ? (
             <Text style={[styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
               {preview}
             </Text>
@@ -185,13 +181,6 @@ export const ToolCard = React.memo(function ToolCardView({
           ) : null}
           {running ? <RunningFor since={item.ts} /> : duration ? <Text style={styles.duration}>{duration}</Text> : null}
         </View>
-        {!open && preview && summary.block ? (
-          <Text
-            style={[styles.preview, styles.previewMono, styles.previewBlock]}
-            numberOfLines={PREVIEW_BLOCK_LINES}>
-            {preview}
-          </Text>
-        ) : null}
       </Pressable>
 
       {open ? (
@@ -432,9 +421,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // A path, a command or a pattern: read in the prose face they look like a sentence that lost
   // its spaces.
   previewMono: { fontFamily: 'monospace', fontSize: scaleFont(font.micro, scale) },
-  // Wrapped under the head, not beside it: `numberOfLines` counts lines the layout produced at
-  // the real width, so this is the one truncation that knows what it is cutting.
-  previewBlock: { flex: 0, marginTop: 2, marginLeft: 8 + space.sm },
   spacer: { flex: 1 },
   extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   duration: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },

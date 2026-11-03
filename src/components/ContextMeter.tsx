@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { shortTokens } from '../core/context';
-import { font, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, useThemedStyles, type Palette } from '../theme';
 
 /**
  * How full the window is: the share, the two numbers it is a share of, and a track.
@@ -51,15 +51,24 @@ export function ContextMeter({
 }
 
 const createStyles = (palette: Palette) => ({
-  wrap: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  wrap: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 7,
+    height: 28,
+    paddingLeft: 9,
+    paddingRight: 10,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+  },
   track: {
-    width: 54,
-    height: 3,
-    borderRadius: 2,
+    width: 46,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: palette.surfaceRaised,
     overflow: 'hidden' as const,
   },
-  fill: { height: 3, borderRadius: 2, backgroundColor: palette.accent },
+  fill: { height: 5, borderRadius: 3, backgroundColor: palette.accent },
   // Past 90 % the one colour that means "do something about it".
   fillFull: { backgroundColor: palette.danger },
   numbers: {
@@ -68,12 +77,14 @@ const createStyles = (palette: Palette) => ({
     fontVariant: ['tabular-nums' as const],
   },
   strong: { color: palette.textMuted, fontWeight: '600' as const },
+  // Behind its own rule: the share is a reading of the pair, not a third number beside it.
   percent: {
-    fontSize: font.micro,
+    fontSize: font.small,
     color: palette.textMuted,
     fontVariant: ['tabular-nums' as const],
-    minWidth: 30,
-    textAlign: 'right' as const,
+    paddingLeft: 7,
+    borderLeftWidth: 1,
+    borderLeftColor: palette.border,
   },
   percentFull: { color: palette.danger, fontWeight: '600' as const },
 });

@@ -144,14 +144,17 @@ describe('ToolCard arguments fold', () => {
   // A shell command is the densest argument drawn here. It gets its own lines under the head,
   // where the layout wraps to the real width and cuts by line -- codex and pi both do this, and
   // neither cuts a preview by a character count.
-  it('gives a shell command its own lines under the head, and keeps a path on the head row', () => {
+  it('keeps one line for every tool, folded, whatever the argument', () => {
+    // A shell command used to wrap under the head at three lines. A column of twenty calls read
+    // as a staircase, which is the one thing a folded card exists to prevent: the POC's rule is
+    // 29 px per card whatever the tool, and the command is one tap away.
     const long = `cd /home/neras/dev/my-claw && ${'echo x && '.repeat(20)}true`;
     const shell = renderTool(makeItem({ args: { command: long } }));
     const shellPreview = shell.root
       .findAllByType(Text)
       .find(t => t.props.children === long);
     expect(shellPreview).toBeDefined();
-    expect(shellPreview!.props.numberOfLines).toBe(3);
+    expect(shellPreview!.props.numberOfLines).toBe(1);
 
     const path = renderTool(makeItem({ name: 'apply_patch', args: { path: '/a/b/c/manager.ts' } }));
     const pathPreview = path.root

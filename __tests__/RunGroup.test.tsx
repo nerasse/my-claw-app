@@ -63,6 +63,13 @@ function render(node: React.JSX.Element): ReactTestRenderer.ReactTestRenderer {
  * Host nodes only. A Pressable surfaces three times (composite, its class, its view) with the
  * same props, so counting labels straight would triple every bar.
  */
+/** Every string a Text draws, nested Texts included, in document order. */
+function textOf(tree: ReactTestRenderer.ReactTestRenderer): string {
+  const flat = (value: unknown): string =>
+    typeof value === 'string' ? value : Array.isArray(value) ? value.map(flat).join('') : '';
+  return tree.root.findAllByType(Text).map(node => flat(node.props.children)).join('');
+}
+
 const bars = (tree: ReactTestRenderer.ReactTestRenderer) =>
   tree.root.findAll(node => typeof node.type === 'string' && node.props.accessibilityRole === 'button');
 
@@ -126,13 +133,17 @@ const group = (items: ChatItem[], open: boolean, onToggle = jest.fn(), foot: Run
 test('a collapsed group is one bar, and it says what it holds', () => {
   const tree = group([card('a'), card('b'), card('c')], false);
   expect(bars(tree)).toHaveLength(1);
-  const texts = tree.root.findAllByType(Text).map(node => node.props.children);
-  // The title describes the fold and nothing else: a run span in it read as the fold's own time
+  // Two weights inside one Text, as the POC draws them: the count in the ink, the tool name
+  // greyed beside it. Nothing of the body is mounted while it is closed, and the header never
+  // carries the run's span -- a span in it read as the fold's own time
   // ("on a l'impression que c'est le temps du dernier regroupement", 2026-09-22).
-  expect(texts).toContain('3 tool calls · bash');
-  expect(texts).not.toContain('3 tool calls · bash · 1 min');
-  // Nothing of the body is mounted while it is closed: that is what makes a long thread cheap.
-  expect(texts).not.toContain('a');
+  const drawn = textOf(tree);
+  expect(drawn).toContain('3 tool calls');
+  expect(drawn).toContain('bash');
+  expect(drawn).not.toContain('1 min');
+  // Nothing of the body while it is closed: that is what makes a long thread cheap. The ids are
+  // what renderItem draws, and `bash` hides an "a" of its own.
+  expect(tree.root.findAllByType(Text).map(node => node.props.children)).not.toContain('a');
 });
 
 test("the run's span and status ride its empreinte, and only there", () => {
@@ -144,7 +155,7 @@ test("the run's span and status ride its empreinte, and only there", () => {
     <RunGroup run={stopped} items={items} open={false} onToggle={jest.fn()} renderItem={item => <Text>{item.id}</Text>} />,
   );
   const middleTexts = middle.root.findAllByType(Text).map(node => node.props.children);
-  expect(middleTexts).toContain('2 tool calls · bash');
+  expect(middleTexts.join('')).toContain('2 tool calls');
   expect(middleTexts).not.toContain('run ·');
   expect(middleTexts).not.toContain('Stopped');
 
@@ -162,7 +173,8 @@ test("the run's span and status ride its empreinte, and only there", () => {
   // The word `run` scopes the number: this is the run's 1 min, not the fold's.
   expect(tailTexts).toContain('run · 1 min');
   expect(tailTexts).toContain(' · Stopped');
-  expect(tailTexts).not.toContain('2 tool calls · bash · 1 min');
+  // The bar above says what it holds and no span at all.
+  expect(textOf(middle)).not.toContain('1 min');
 });
 
 test('a fold that only holds thoughts says so, instead of "run"', () => {
@@ -334,7 +346,7 @@ test('two merged rows of one run read as a single group', () => {
     />,
   );
   const texts = tree.root.findAllByType(Text).map(node => node.props.children);
-  expect(texts).toContain('52 tool calls · bash');
+  expect(texts.join('')).toContain('52 tool calls');
   // The merged folds read as one group, and the run signs once, under it.
   expect(texts).toContain('run · 1 min');
 });

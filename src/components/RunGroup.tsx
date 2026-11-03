@@ -12,18 +12,18 @@ import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '.
  * model had before writing the next one -- "run" said nothing about those, and "N thoughts" names
  * exactly what opening it shows (the reasoning lines of the phases it hides).
  */
-function headline(toolCount: number, firstTool: string | undefined, thoughts: number): string {
-  const parts: string[] = [];
-  if (toolCount > 0) {
-    parts.push(`${toolCount} tool call${toolCount === 1 ? '' : 's'}`);
-    if (firstTool) parts.push(firstTool);
-  } else if (thoughts > 0) {
-    parts.push(`${thoughts} thought${thoughts === 1 ? '' : 's'}`);
-  }
+function headline(
+  toolCount: number,
+  firstTool: string | undefined,
+  thoughts: number,
+): { count: string; detail: string } {
+  let count = 'run';
+  if (toolCount > 0) count = `${toolCount} tool call${toolCount === 1 ? '' : 's'}`;
+  else if (thoughts > 0) count = `${thoughts} thought${thoughts === 1 ? '' : 's'}`;
   // No duration, ever: the header describes the fold, and a run's span in it read as the fold's
   // own time ("on a l'impression que c'est le temps du dernier regroupement", 2026-09-22). The
   // run signs itself, at its end -- `RunFoot`.
-  return parts.length > 0 ? parts.join(' · ') : 'run';
+  return { count, detail: toolCount > 0 && firstTool ? `· ${firstTool}` : '' };
 }
 
 /**
@@ -69,6 +69,7 @@ export const RunGroup = React.memo(function RunGroupView({
   const toolCount = items.reduce((n, item) => (item.kind === 'tool' ? n + 1 : n), 0);
   const firstTool = items.find(item => item.kind === 'tool')?.name;
   const summary = headline(toolCount, firstTool, items.length - toolCount);
+  const label = { count: summary.count, detail: summary.detail };
   const toggle = (): void => onToggle();
 
   /**
@@ -92,7 +93,7 @@ export const RunGroup = React.memo(function RunGroupView({
 
   return (
     <View style={styles.wrap}>
-      <Bar summary={summary} open={open} onPress={toggle} styles={styles} />
+      <Bar label={label} open={open} onPress={toggle} styles={styles} />
       {open ? (
         <View style={styles.body}>
           {items.map((item, index) => (
@@ -101,7 +102,7 @@ export const RunGroup = React.memo(function RunGroupView({
         </View>
       ) : null}
       {open && items.length >= FOOTER_FROM_ITEMS ? (
-        <Bar summary={summary} open onPress={toggle} styles={styles} footer />
+        <Bar label={label} open onPress={toggle} styles={styles} footer />
       ) : null}
       {/* Last: the run ends here, whatever this fold holds -- its signature comes after it. */}
       {foot !== undefined ? <RunFoot run={foot} /> : null}
@@ -164,7 +165,7 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   return (
     <View style={styles.wrap}>
       <Bar
-        summary={summary}
+        label={summary}
         open={open}
         // Only the fold state moves here: the effect above is what asks, so a group opened by a
         // press and a group reopened by a redraw cannot take two different paths.
@@ -199,13 +200,13 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
  * closes it. Only the chevron differs, and it points the way the content is.
  */
 function Bar({
-  summary,
+  label,
   open,
   onPress,
   styles,
   footer = false,
 }: {
-  summary: string;
+  label: { count: string; detail: string };
   open: boolean;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
@@ -222,7 +223,8 @@ function Bar({
           it folds away, so neither asks the reader to scroll to the other end. */}
       <ChevronIcon direction={open ? (footer ? 'up' : 'down') : 'right'} size={14} tone="faint" />
       <Text style={styles.summary} numberOfLines={1}>
-        {summary}
+        <Text style={styles.count}>{label.count}</Text>
+        {label.detail ? ` ${label.detail}` : ''}
       </Text>
     </Pressable>
   );
@@ -230,9 +232,13 @@ function Bar({
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   wrap: { width: '100%' as const, marginBottom: space.xs },
+  footer: { marginTop: space.xs },
+  // The bar's own gap: the card's chevron and its name are 6 pt apart, and a bar whose arrow
+  // touched its text read as a different control at the same place.
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    gap: 6,
     backgroundColor: palette.surfaceAlt,
     borderWidth: 1,
     borderColor: palette.border,
@@ -240,13 +246,13 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  footer: { marginTop: space.xs },
-  chevron: { fontSize: scaleFont(font.small, scale), color: palette.textFaint, marginRight: 6 },
   summary: {
     flex: 1,
     fontSize: scaleFont(font.small, scale),
-    color: palette.textFaint,
+    color: palette.textMuted,
   },
+  /** What the fold holds, in the ink of the message it belongs to. */
+  count: { color: palette.text, fontWeight: '500' as const },
   statusError: {
     fontSize: scaleFont(font.small, scale),
     color: palette.danger,

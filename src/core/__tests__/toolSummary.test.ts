@@ -82,7 +82,7 @@ it('marks a path, a command or a pattern as code and a bare verb as prose', () =
 it('draws no mark of its own: the row already has a chevron', () => {
   // A per-family glyph was tried and read as a stray arrow beside the chevron, not as a category.
   for (const call of [['read', { path: 'a' }], ['bash', { command: 'ls' }], ['some_mcp_tool', { a: 1 }]] as const) {
-    expect(Object.keys(summarizeTool(call[0], call[1])).sort()).toEqual(['block', 'detail', 'extraArgs', 'mono']);
+    expect(Object.keys(summarizeTool(call[0], call[1])).sort()).toEqual(['detail', 'extraArgs', 'mono']);
   }
 });
 

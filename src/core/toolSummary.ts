@@ -212,14 +212,6 @@ export interface ToolSummary {
   extraArgs: number;
   /** Whether `detail` is code (a path, a command, a pattern) and wants the monospace face. */
   mono: boolean;
-  /**
-   * Whether the preview earns its own lines under the head rather than the tail of the head row.
-   *
-   * Only shell commands do. They are the densest argument drawn here, the one where a cut costs
-   * real understanding, and the only one long enough to need the room -- a path is short, and a
-   * column of cards stays scannable only while the rows keep a constant height.
-   */
-  block: boolean;
 }
 
 /**
@@ -235,7 +227,7 @@ export function summarizeTool(
 ): ToolSummary {
   const family = FAMILY[name];
   const keys = KEYS[name];
-  if (!keys) return { detail: clamp(fallback.text), extraArgs: fallback.extraArgs, mono: false, block: false };
+  if (!keys) return { detail: clamp(fallback.text), extraArgs: fallback.extraArgs, mono: false };
 
   const verb = firstString(args, VERB_KEYS);
   let target = firstString(args, keys);
@@ -252,6 +244,5 @@ export function summarizeTool(
     // A verb on its own is a word, not code. Anything carrying a target is a path, a command or
     // a pattern, and reads wrong in the prose face.
     mono: Boolean(target) && family !== undefined && family !== 'agent',
-    block: family === 'shell' && Boolean(target),
   };
 }
