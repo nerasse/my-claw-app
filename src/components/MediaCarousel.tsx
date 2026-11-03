@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect, useState } from 'react';
 import { Image, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { DeviceInfo } from '../core/device';
@@ -157,7 +158,7 @@ export function MediaCarousel({
               accessibilityRole="button"
               accessibilityLabel="Previous image"
             >
-              <Text style={styles.arrowGlyph}>‹</Text>
+              <ChevronIcon direction="left" size={24} color="#fff" />
             </Pressable>
             <Pressable
               style={[styles.arrow, styles.arrowRight, index === items.length - 1 ? styles.arrowOff : null]}
@@ -167,7 +168,7 @@ export function MediaCarousel({
               accessibilityRole="button"
               accessibilityLabel="Next image"
             >
-              <Text style={styles.arrowGlyph}>›</Text>
+              <ChevronIcon direction="right" size={24} color="#fff" />
             </Pressable>
             <View style={styles.counter} pointerEvents="none">
               <Text style={styles.counterText}>{`${index + 1}/${items.length}`}</Text>

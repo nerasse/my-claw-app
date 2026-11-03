@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect } from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { connection } from '../core/connection';
@@ -9,7 +10,7 @@ import {
 } from '../core/protocol';
 import { servicesStore, useServices } from '../core/services';
 import { overlayStore } from '../core/overlay';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /**
@@ -139,7 +140,7 @@ export function EmbeddingsScreen({ onBack }: { onBack: () => void }): React.JSX.
           accessibilityRole="button"
           accessibilityLabel="Back to settings"
         >
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <Text style={styles.title}>Embeddings</Text>
         <CloseButton />
@@ -187,7 +188,7 @@ export function EmbeddingsScreen({ onBack }: { onBack: () => void }): React.JSX.
                       {defaultProvider ? `${defaultProvider} · ${defaultModel}` : defaultModel}
                     </Text>
                   </View>
-                  <Text style={styles.chevron}>›</Text>
+                  <ChevronIcon direction="right" size={16} tone="faint" />
                 </Pressable>
               ) : (
                 <Text style={styles.detail}>

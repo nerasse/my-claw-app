@@ -1,7 +1,7 @@
+import { CloseIcon } from './icons';
 import React, { createContext, useContext } from 'react';
 import { Pressable } from 'react-native';
-import { radius, useTheme, useThemedStyles, type Palette } from '../theme';
-import { CloseIcon } from './icons';
+import { radius, useThemedStyles, type Palette } from '../theme';
 
 /**
  * Leaves the whole stack a page sits in (settings, jobs) for the conversation, in one press,
@@ -14,7 +14,6 @@ export const PageCloseContext = createContext<{ close: () => void; label: string
 export function CloseButton(): React.JSX.Element | null {
   const target = useContext(PageCloseContext);
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
   if (!target) return null;
   return (
     <Pressable
@@ -23,7 +22,7 @@ export function CloseButton(): React.JSX.Element | null {
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={target.label}>
-      <CloseIcon size={20} color={palette.textMuted} />
+      <CloseIcon size={20} tone="faint" />
     </Pressable>
   );
 }

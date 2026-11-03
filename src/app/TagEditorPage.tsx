@@ -1,3 +1,4 @@
+import { CheckIcon, ChevronIcon } from '../components/icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { connection } from '../core/connection';
@@ -5,7 +6,7 @@ import { useModelCatalog } from '../core/model';
 import { useTags } from '../core/tags';
 import { encodeAgentsConfigGet, encodeModelList, encodeTagsRouteUpsert, encodeTagsUpsert, type TagRouteCandidate } from '../core/protocol';
 import { ModelPickerPage, pickerStart, type PickerState } from '../components/ModelSheet';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 function routeOf(tag: { route?: TagRouteCandidate[]; model?: string; effort?: string; contextCap?: number } | null): TagRouteCandidate[] {
@@ -151,7 +152,7 @@ export function TagEditorPage({
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to tags">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <Text style={styles.title}>Tag {name}</Text>
         {tag ? <Pressable onPress={onDelete} disabled={saving} style={styles.deleteButton} accessibilityRole="button" accessibilityLabel={`Delete tag ${name}`}><Text style={styles.deleteText}>Delete</Text></Pressable> : null}
@@ -184,7 +185,7 @@ export function TagEditorPage({
           <Text style={styles.addGlyph}>+</Text><Text style={styles.addText}>Add model</Text>
         </Pressable>
         <Pressable style={styles.toggleRow} onPress={() => { setFallbackToGlobalDefault(value => !value); markDirty(); }} accessibilityRole="checkbox" accessibilityState={{ checked: fallbackToGlobalDefault }}>
-          <View style={[styles.checkbox, fallbackToGlobalDefault && styles.checkboxOn]}>{fallbackToGlobalDefault ? <Text style={styles.check}>✓</Text> : null}</View>
+          <View style={[styles.checkbox, fallbackToGlobalDefault && styles.checkboxOn]}>{fallbackToGlobalDefault ? <CheckIcon size={16} tone="faint" /> : null}</View>
           <View style={styles.toggleCopy}><Text style={styles.toggleTitle}>Fallback to global default</Text><Text style={styles.meta}>Try the global model after this route is exhausted</Text></View>
         </Pressable>
       </ScrollView>

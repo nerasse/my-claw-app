@@ -1,3 +1,4 @@
+import { CloseIcon } from '../components/icons';
 /**
  * The web host for a web page: an `iframe` with an empty `sandbox`, which is the browser's own
  * "no scripts, no forms, no navigation" -- the same fence the Android host builds by hand.
@@ -9,7 +10,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /** CSS on purpose: an `iframe` is a DOM element, not a React Native view. */
@@ -48,7 +49,7 @@ export function HtmlViewer({
           accessibilityRole="button"
           accessibilityLabel="Close file view"
         >
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="faint" />
         </Pressable>
       </View>
       <View style={styles.body}>

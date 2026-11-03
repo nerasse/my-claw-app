@@ -1,7 +1,8 @@
+import { ChevronIcon, CloseIcon, PlusIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { McpEntry } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -70,7 +71,7 @@ export function McpsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to settings">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>MCP servers</Text>
@@ -83,7 +84,7 @@ export function McpsScreen({
           style={[styles.addButton, adding ? styles.addActive : styles.addIdle]}
           accessibilityRole="button"
           accessibilityLabel={adding ? 'Cancel add server' : 'Add server'}>
-          <Text style={adding ? styles.addTextActive : styles.addTextIdle}>{adding ? '✕' : '+'}</Text>
+          {adding ? <CloseIcon size={18} tone="accent" /> : <PlusIcon size={18} tone="accent" />}
         </Pressable>
         <CloseButton />
       </View>

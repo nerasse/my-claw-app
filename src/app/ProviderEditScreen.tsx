@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Linking, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import type { ProviderInfo, ProvidersEnvResultFrame } from '../core/protocol';
@@ -13,7 +14,7 @@ import {
   serviceOf,
   type ProviderService,
 } from '../core/providerServices';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 export type ProviderType = 'openai' | 'codex' | 'anthropic';
@@ -145,7 +146,7 @@ export function ProviderEditScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel={creating ? 'Back to add a provider' : 'Back to provider'}>
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={1}>
@@ -281,7 +282,7 @@ export function ProviderEditScreen({
           accessibilityState={{ expanded: advanced }}
           accessibilityLabel="Advanced settings">
           <Text style={styles.advancedText}>advanced</Text>
-          <Text style={styles.chevron}>{advanced ? '⌄' : '›'}</Text>
+          <ChevronIcon direction={advanced ? 'down' : 'right'} size={14} tone="faint" />
         </Pressable>
         {!advanced && !advancedValid ? (
           <Text style={[styles.note, styles.noteTaken]}>a setting in Advanced needs attention</Text>
@@ -380,7 +381,7 @@ export function ProviderEditScreen({
                       <Text style={styles.linkText}>{apiKeyEnv || 'none'}</Text>
                       <Text style={styles.note}>rename the variable, or read the key from another one</Text>
                     </View>
-                    <Text style={styles.chevron}>›</Text>
+                    <ChevronIcon direction="right" size={16} tone="faint" />
                   </Pressable>
                 )}
               </View>

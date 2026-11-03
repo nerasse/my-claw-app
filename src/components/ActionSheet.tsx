@@ -1,3 +1,4 @@
+import { CheckIcon } from '../components/icons';
 import React, { useCallback } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useDismissKeyboard, useKeyboardHeight, useSheetBottomInset } from '../core/keyboard';
@@ -133,7 +134,7 @@ export function ActionSheet({
             ) : null}
           </View>
           {option.shortcut ? <Text style={styles.shortcut}>{option.shortcut}</Text> : null}
-          {option.selected ? <Text style={styles.check}>✓</Text> : null}
+          {option.selected ? <CheckIcon size={16} tone="faint" /> : null}
         </Pressable>
       ),
     [styles, refFor, propsFor, dialogs],

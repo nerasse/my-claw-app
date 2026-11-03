@@ -1,3 +1,4 @@
+import { CloseIcon } from '../components/icons';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -116,7 +117,7 @@ export function TextViewer({
           accessibilityRole="button"
           accessibilityLabel="Close file view"
         >
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="faint" />
         </Pressable>
       </View>
 

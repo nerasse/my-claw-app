@@ -1,3 +1,4 @@
+import { CheckIcon, ChevronIcon } from '../components/icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { QuestionAskFrame, QuestionInfoFrame } from '../core/protocol';
@@ -21,7 +22,7 @@ import {
   isRecapPage,
   questionAllowsCustom,
 } from '../core/questionState';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useTheme, useThemedStyles } from '../theme';
 
 /** How long a picked option stays on screen before the form moves on. */
 const AUTO_NEXT_MS = 250;
@@ -158,7 +159,7 @@ export function QuestionCard({
             style={styles.walk}
             accessibilityRole="button"
             accessibilityLabel="Previous question">
-            <Text style={styles.walkLabel}>‹ Back</Text>
+            <View style={styles.walkRow}><ChevronIcon direction="left" size={16} tone="accent" /><Text style={styles.walkLabel}>Back</Text></View>
           </Pressable>
         ) : (
           <View style={styles.walkSpacer} />
@@ -186,7 +187,7 @@ export function QuestionCard({
             style={styles.send}
             accessibilityRole="button"
             accessibilityLabel={page === total - 1 ? 'Review the answers' : 'Next question'}>
-            <Text style={styles.sendLabel}>{page === total - 1 ? 'Review ›' : 'Next ›'}</Text>
+            <Text style={styles.sendLabel}>{page === total - 1 ? 'Review' : 'Next'}</Text>
           </Pressable>
         )}
       </View>
@@ -275,6 +276,8 @@ function QuestionBlock({
   onRevealField?: (field: TextInput | null) => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
+  // The tick sits on the accent fill, so it takes the surface ink rather than a theme role.
+  const { palette } = useTheme();
   const custom = questionAllowsCustom(question);
   const editing = draftEditing(draft, index);
   const multiple = question.multiple === true;
@@ -306,7 +309,7 @@ function QuestionBlock({
                   render as tofu, which is what the first version shipped. */}
               {multiple ? (
                 <View style={[styles.checkBox, hit ? styles.checkBoxHit : null]}>
-                  {hit ? <Text style={styles.checkMark}>✓</Text> : null}
+                  {hit ? <CheckIcon size={13} color={palette.surface} /> : null}
                 </View>
               ) : (
                 <View style={[styles.radioRing, hit ? styles.radioRingHit : null]}>
@@ -332,7 +335,7 @@ function QuestionBlock({
           accessibilityLabel="Type your own answer">
           <View style={styles.optionRow}>
             <View style={[styles.checkBox, editing ? styles.checkBoxHit : null]}>
-              {editing ? <Text style={styles.checkMark}>✓</Text> : null}
+              {editing ? <CheckIcon size={13} color={palette.surface} /> : null}
             </View>
             <Text style={[styles.customLabel, editing ? styles.optionLabelHit : null]}>
               {draftText(draft, index) && !editing
@@ -476,7 +479,8 @@ const createStyles = (palette: Palette) =>
     edit: { fontSize: font.small, color: palette.accent },
     foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     walk: { paddingVertical: space.sm, paddingHorizontal: space.sm },
-    walkLabel: { fontSize: font.body, color: palette.accent },
+    walkRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2 },
+  walkLabel: { fontSize: font.body, color: palette.accent },
     walkSpacer: { width: space.sm },
     progress: { fontSize: font.small, color: palette.textMuted },
     /** The send did not land: same place as the progress line, in the palette's warning tone. */

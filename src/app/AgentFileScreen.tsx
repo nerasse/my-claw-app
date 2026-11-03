@@ -1,9 +1,10 @@
+import { CheckIcon, ChevronIcon } from '../components/icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, SectionList, Text, TextInput, View } from 'react-native';
 import type { AgentFileResultFrame } from '../core/protocol';
 import type { AgentFileEditorState } from '../core/agentsFile';
 import { CardEdge } from '../components/CardEdge';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -61,7 +62,7 @@ const PickRow = React.memo(function PickRowView({
             </Text>
           ) : null}
         </View>
-        <Text style={styles.glyph}>{checked ? '✓' : ''}</Text>
+        {checked ? <CheckIcon size={16} tone="accent" /> : null}
       </Pressable>
     </CardEdge>
   );
@@ -379,7 +380,7 @@ export function AgentFileScreen({
                       : 'no longer exists'}
                   </Text>
                   <Text style={[styles.glyph, styles.removed]}>
-                    {selected[kind].has(name) ? '✓' : '✕'}
+                    {selected[kind].has(name) ? 'on' : ''}
                   </Text>
                 </Pressable>
               </CardEdge>
@@ -687,7 +688,7 @@ function Header({
         accessibilityRole="button"
         accessibilityLabel="Back to agent"
       >
-        <Text style={styles.backGlyph}>‹</Text>
+        <ChevronIcon direction="left" size={22} tone="text" />
       </Pressable>
       <View style={styles.headerText}>
         <Text style={styles.title}>{title}</Text>

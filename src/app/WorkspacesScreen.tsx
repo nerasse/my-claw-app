@@ -1,7 +1,8 @@
+import { ChevronIcon, CloseIcon, PlusIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { InstructionEntry, NestedInstruction, WorkspaceEntry } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -93,7 +94,7 @@ export function WorkspacesScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to settings">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Workspaces</Text>
@@ -106,7 +107,7 @@ export function WorkspacesScreen({
           style={[styles.addButton, adding ? styles.addActive : styles.addIdle]}
           accessibilityRole="button"
           accessibilityLabel={adding ? 'Cancel add workspace' : 'Add workspace'}>
-          <Text style={adding ? styles.addTextActive : styles.addTextIdle}>{adding ? '✕' : '+'}</Text>
+          {adding ? <CloseIcon size={18} tone="accent" /> : <PlusIcon size={18} tone="accent" />}
         </Pressable>
         <CloseButton />
       </View>
@@ -184,7 +185,7 @@ export function WorkspacesScreen({
                   {promptSummary('default', entries, nested) || 'your conversations and memory'}
                 </Text>
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
           </View>
         </View>
@@ -216,7 +217,7 @@ export function WorkspacesScreen({
                       </Text>
                       <Text style={styles.itemHint}>{promptSummary(item.key, entries, nested)}</Text>
                     </View>
-                    <Text style={styles.linkGlyph}>›</Text>
+                    <ChevronIcon direction="right" size={16} tone="faint" />
                   </Pressable>
                 </View>
               ))

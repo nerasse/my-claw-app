@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
@@ -7,7 +8,7 @@ import { formatSpan, summarizeArgs } from '../core/utils';
 import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, diffCounts, splitDiff } from './DiffView';
-import { font, lineHeightFor, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
+import { font, lineHeightFor, radius, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 import { useElapsed } from './CommandElapsed';
 import { runStateOf, stateWord } from '../core/toolState';
 
@@ -166,7 +167,7 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
-          <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+          <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
           <Text style={styles.name}>{item.name}</Text>
           {!open && preview && !summary.block ? (
             <Text style={[styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
@@ -224,7 +225,7 @@ export const ToolCard = React.memo(function ToolCardView({
             accessibilityLabel={`Arguments of ${item.name}`}
             accessibilityHint={argsOpen ? 'Hide the arguments' : 'Show the arguments'}>
             <View style={styles.outputHead}>
-              <Text style={styles.chevron}>{argsOpen ? '▾' : '▸'}</Text>
+              <ChevronIcon direction={argsOpen ? 'down' : 'right'} size={14} tone="faint" />
               <Text style={styles.label}>arguments</Text>
               {!argsOpen && preview ? (
                 <Text style={styles.preview} numberOfLines={1}>

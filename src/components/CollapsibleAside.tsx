@@ -1,10 +1,11 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState, useRef, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
 import { chatSelectable } from '../core/platform';
 import { setAsideExpanded, useStoredAsideExpansion } from '../core/asideExpansion';
-import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
+import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
 /**
  * A long aside folded into one muted line, expanded on tap. Two things use it: what the model
@@ -102,7 +103,7 @@ export function CollapsibleAside({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={label}
           accessibilityHint={open ? hideHint : showHint}>
-          <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+          <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
           <Text style={styles.label}>{label}</Text>
           {trailing}
         </Pressable>

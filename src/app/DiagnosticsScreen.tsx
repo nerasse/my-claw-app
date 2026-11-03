@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -67,7 +68,7 @@ export function DiagnosticsScreen({
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel={backLabel}>
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Diagnostics</Text>

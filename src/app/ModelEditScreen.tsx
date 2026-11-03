@@ -1,7 +1,8 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import type { ModelDeclaration, ModelOption, UnavailableModel } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /** The server's rule, mirrored so a refusal is not the first feedback: no whitespace, no `@`. */
@@ -153,7 +154,7 @@ export function ModelEditScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to provider">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{mode === 'create' ? 'New model' : 'Model settings'}</Text>

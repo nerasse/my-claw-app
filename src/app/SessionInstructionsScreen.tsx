@@ -1,6 +1,7 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useSessionInstructions } from '../core/sessionInstructions';
 import { CopyButton } from '../components/CopyButton';
@@ -68,7 +69,7 @@ export function SessionInstructionsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Close instructions">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title}>Instructions</Text>
@@ -184,7 +185,7 @@ function LayerRow({
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
           accessibilityLabel={`${layer.label}, ${bytes(layer.bytes)}`}>
-          <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+          <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
           <View style={styles.rowMain}>
             <Text style={styles.rowTitle} numberOfLines={1}>
               {layer.label}

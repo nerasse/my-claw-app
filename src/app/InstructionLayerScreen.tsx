@@ -1,10 +1,11 @@
+import { CheckIcon, ChevronIcon, CloseIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { InstructionEntry, WorkspaceEntry } from '../core/protocol';
 import type { LayerState } from '../core/instructions';
 import { layerIsDirty } from '../core/instructions';
 import { layerOfFile, sourceStatusOf } from '../core/layers';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useTheme, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 interface LadderStep {
@@ -49,6 +50,7 @@ export function InstructionLayerScreen({
   onSave: (applyToAll: boolean) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   const [applyToAll, setApplyToAll] = useState(false);
 
   const workspaceKeys = workspaces.map(w => w.key);
@@ -113,7 +115,7 @@ export function InstructionLayerScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel={backLabel}>
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title} accessibilityLabel={`${layer.file} layer`}>
@@ -164,13 +166,13 @@ export function InstructionLayerScreen({
                       {step.right}
                     </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.glyph,
-                      step.mark === 'win' ? styles.glyphWin : step.mark === 'blocked' ? styles.glyphBlocked : null,
-                    ]}>
-                    {step.mark === 'win' ? '✓' : step.mark === 'blocked' ? '✕' : '–'}
-                  </Text>
+                  {step.mark === 'win' ? (
+                    <CheckIcon size={16} tone="accent" />
+                  ) : step.mark === 'blocked' ? (
+                    <CloseIcon size={16} color={palette.danger} />
+                  ) : (
+                    <Text style={styles.glyph}>–</Text>
+                  )}
                 </View>
               </View>
             ))}
@@ -376,7 +378,7 @@ function SourceRow({
           {subtitle}
         </Text>
       </View>
-      <Text style={[styles.glyph, selected ? styles.glyphWin : null]}>{selected ? '✓' : ''}</Text>
+      {selected ? <CheckIcon size={16} tone="accent" /> : null}
     </Pressable>
   );
 }

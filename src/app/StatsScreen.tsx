@@ -1,6 +1,7 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { connection } from '../core/connection';
 import { statsStore, useStats, DEFAULT_STATS_PERIOD } from '../core/stats';
@@ -429,7 +430,7 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Close statistics">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title}>Statistics</Text>
@@ -476,7 +477,7 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
             style={[styles.chip, styles.chipClear]}
             accessibilityRole="button"
             accessibilityLabel="Clear every filter">
-            <Text style={styles.chipClearText}>{'✕ clear'}</Text>
+            <Text style={styles.chipClearText}>{'× clear'}</Text>
           </Pressable>
         ) : null}
         {FILTER_CHIPS.map(chip => {
@@ -597,10 +598,11 @@ function Card({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <View style={styles.card}>{children}</View>;
 }
 
-function CardHead({ title, trailing }: { title: string; trailing?: string }): React.JSX.Element {
+function CardHead({ title, trailing, fold }: { title: string; trailing?: string; fold?: 'up' | 'down' | 'left' | 'right' }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.cardHead}>
+      {fold ? <ChevronIcon direction={fold} size={13} tone="faint" /> : null}
       <Text style={styles.cardTitle}>{title}</Text>
       {trailing ? <Text style={styles.cardTrailing}>{trailing}</Text> : null}
     </View>
@@ -827,7 +829,8 @@ function Sessions({ stats }: { stats: StatsPayload }): React.JSX.Element {
             accessibilityState={{ expanded: delegatedOpen }}
             accessibilityLabel={delegatedOpen ? 'Fold delegated runs' : 'Unfold delegated runs'}>
             <CardHead
-              title={delegatedOpen ? '▾ delegated runs' : '▸ delegated runs'}
+              title="delegated runs"
+              fold={delegatedOpen ? 'down' : 'right'}
               trailing={`${delegated.length} · sub-agents and browser`}
             />
           </Pressable>
@@ -1178,7 +1181,7 @@ const createStyles = (palette: Palette) => ({
   },
   cardHead: {
     flexDirection: 'row' as const,
-    alignItems: 'baseline' as const,
+    alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     gap: space.sm,
   },

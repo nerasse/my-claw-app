@@ -1,3 +1,4 @@
+import { ChevronIcon, CloseIcon } from '../components/icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
@@ -97,7 +98,7 @@ export function SettingsScreen({
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to chat">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <Text style={styles.title}>Settings</Text>
       </View>
@@ -121,7 +122,7 @@ export function SettingsScreen({
           />
           {query ? (
             <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear the search">
-              <Text style={styles.searchClear}>✕</Text>
+              <CloseIcon size={14} tone="faint" />
             </Pressable>
           ) : null}
         </View>
@@ -142,7 +143,7 @@ export function SettingsScreen({
                     <Text style={styles.rowTitle}>{entry.title}</Text>
                     <Text style={styles.rowHint}>{entry.where}</Text>
                   </View>
-                  <Text style={styles.linkGlyph}>›</Text>
+                  <ChevronIcon direction="right" size={16} tone="faint" />
                 </Pressable>
               ))}
             </View>
@@ -160,7 +161,7 @@ export function SettingsScreen({
                   <Text style={styles.rowTitle}>Get started</Text>
                   <Text style={styles.rowHint}>{`${setup.settled} of ${setup.total} done or skipped`}</Text>
                 </View>
-                <Text style={styles.linkGlyph}>›</Text>
+                <ChevronIcon direction="right" size={16} tone="faint" />
               </Pressable>
             ) : null}
             {GROUPS.map(group => (
@@ -180,7 +181,7 @@ export function SettingsScreen({
                             {hintOf(category)}
                           </Text>
                         </View>
-                        <Text style={styles.linkGlyph}>›</Text>
+                        <ChevronIcon direction="right" size={16} tone="faint" />
                       </Pressable>
                   ))}
                 </View>
@@ -227,7 +228,6 @@ const createStyles = (palette: Palette) => ({
   },
   searchGlyph: { fontSize: font.body, color: palette.textFaint },
   searchInput: { flex: 1, paddingVertical: space.sm, fontSize: font.body, color: palette.text },
-  searchClear: { fontSize: font.meta, color: palette.textFaint },
   empty: { marginTop: space.lg, paddingHorizontal: space.xs, fontSize: font.meta, color: palette.textFaint },
   section: {
     marginTop: space.lg,

@@ -1,7 +1,8 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useCallback, useMemo } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import type { ToolEntry } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
@@ -247,7 +248,7 @@ export function ToolsScreen({
           accessibilityRole="button"
           accessibilityLabel="Back to settings"
         >
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Tools</Text>

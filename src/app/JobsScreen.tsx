@@ -1,7 +1,8 @@
+import { ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useJobs } from '../core/jobs';
 import type { JobEntry } from '../core/protocol';
@@ -52,7 +53,7 @@ export function JobsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Close jobs">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title}>Jobs</Text>
@@ -179,7 +180,7 @@ const JobCard = React.memo(function JobCardView({
           accessibilityRole="button"
           accessibilityLabel={`Job sessions ${job.name}`}>
           <Text style={styles.sessionsText}>sessions</Text>
-          <Text style={styles.sessionsGlyph}>›</Text>
+          <ChevronIcon direction="right" size={16} tone="accent" />
         </Pressable>
       </Pressable>
     </View>
@@ -269,5 +270,4 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.surfaceAlt,
   },
   sessionsText: { fontSize: font.small, color: palette.accent, fontWeight: '600' as const },
-  sessionsGlyph: { fontSize: font.body, color: palette.accent },
 });

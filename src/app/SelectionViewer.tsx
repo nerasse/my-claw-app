@@ -1,10 +1,11 @@
+import { CloseIcon } from '../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDismissKeyboard } from '../core/keyboard';
 import type { SelectionTarget } from '../core/textSelection';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 
 /** How long the copy button says "copied" before going back to its label. */
 const ACK_MS = 1400;
@@ -64,7 +65,7 @@ export function SelectionViewer({
           style={styles.close}
           accessibilityRole="button"
           accessibilityLabel="Close the selection view">
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="faint" />
         </Pressable>
       </View>
 

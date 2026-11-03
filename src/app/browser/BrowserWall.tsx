@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../../theme';
+import { font, radius, space, useThemedStyles, type Palette } from '../../theme';
 import { ExpandIcon } from '../../components/icons';
 import { shownTab, useLiveFrame } from '../../core/browserLive';
 import type { BrowserLiveWindow } from '../../core/protocol';
@@ -86,7 +86,6 @@ function WindowTile({
   onStage: (windowId: number) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
   const tab = shownTab(window);
   const frame = useLiveFrame(tab?.pageId);
   const picture = frame === 'gone' ? undefined : frame;
@@ -144,7 +143,7 @@ function WindowTile({
           style={[styles.action, styles.actionIcon]}
           accessibilityRole="button"
           accessibilityLabel={`Show window ${window.alias} large`}>
-          <ExpandIcon size={16} color={palette.text} />
+          <ExpandIcon size={16} tone="text" />
         </Pressable>
       </View>
     </View>

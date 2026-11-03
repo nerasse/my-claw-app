@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Switch, Text, View } from 'react-native';
 import type { UiPrefsResultFrame } from '../core/protocol';
 import type { ThemeMode } from '../core/prefs';
+import { CheckIcon } from '../components/icons';
 import {
   font,
   radius,
@@ -116,7 +117,7 @@ export function AppearanceScreen({
                   {set.source}
                 </Text>
               </View>
-              {selected ? <Text style={own.check}>✓</Text> : null}
+              {selected ? <CheckIcon size={16} tone="accent" /> : null}
             </Pressable>
           );
         })}
@@ -141,7 +142,7 @@ export function AppearanceScreen({
               {hasCustom(custom) ? 'your own colours' : 'duplicate a theme to start'}
             </Text>
           </View>
-          {themeId === 'custom' ? <Text style={own.check}>✓</Text> : null}
+          {themeId === 'custom' ? <CheckIcon size={16} tone="accent" /> : null}
         </Pressable>
       </Section>
 

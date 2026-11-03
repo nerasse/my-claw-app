@@ -28,7 +28,7 @@ export function DiscoveryButton(): React.JSX.Element {
       {discovery.running ? (
         <ActivityIndicator size="small" color={palette.accent} />
       ) : (
-        <RefreshIcon size={20} color={palette.accent} />
+        <RefreshIcon size={20} tone="accent" />
       )}
     </Pressable>
   );

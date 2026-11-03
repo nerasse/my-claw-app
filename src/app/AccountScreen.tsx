@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { BackButton, headerStyle } from '../components/BackButton';
@@ -5,7 +6,7 @@ import { CopyButton } from '../components/CopyButton';
 import { accountsStore, useAccounts } from '../core/accounts';
 import { connection } from '../core/connection';
 import { encodeAccounts, type AccountKind, type AccountView, type AccountsRequest } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 import { QuotaCard } from '../components/QuotaCard';
 import { encodeQuotaGet, encodeQuotaUnwatch, encodeQuotaWatch } from '../core/protocol';
@@ -265,7 +266,7 @@ export function AccountScreen({
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Use a long-lived token instead">
-              <Text style={styles.link}>{tokenOpen ? '▾' : '▸'} Use a long-lived token instead</Text>
+              <View style={styles.linkRow}><ChevronIcon direction={tokenOpen ? 'down' : 'right'} size={13} tone="accent" /><Text style={styles.link}>Use a long-lived token instead</Text></View>
             </Pressable>
             {tokenOpen ? (
               <>
@@ -317,7 +318,7 @@ export function AccountScreen({
                 <Text style={styles.cardTitle}>Models</Text>
                 <Text style={styles.hint} numberOfLines={1}>what it offers, its settings, remove it</Text>
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
           </View>
         ) : null}

@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
@@ -81,7 +82,7 @@ export function ScrollableBlock({
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           accessibilityLabel={`${expanded ? 'Fold' : 'Unfold'} ${title.toLowerCase()}`}>
-          <Text style={styles.moreChevron}>{expanded ? '▴' : '▾'}</Text>
+          <ChevronIcon direction={expanded ? 'up' : 'down'} size={12} tone="accent" />
           <Text style={styles.moreLabel}>{expanded ? 'show less' : 'show all'}</Text>
         </Pressable>
       ) : null}

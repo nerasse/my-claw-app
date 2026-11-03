@@ -1,9 +1,10 @@
+import { CloseIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatBytes } from '../core/utils';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 
 /**
  * Download card for file types with no preview (audio, archives, binaries...). Shared by the
@@ -45,7 +46,7 @@ export function FileViewer({
           style={styles.closeButton}
           accessibilityRole="button"
           accessibilityLabel="Close file view">
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="faint" />
         </Pressable>
       </View>
 

@@ -1,7 +1,8 @@
+import { CheckIcon, ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { WorkspaceEntry } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /**
@@ -54,7 +55,7 @@ export function WorkspacePickerScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel={backLabel}>
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Workspace</Text>
@@ -106,7 +107,7 @@ export function WorkspacePickerScreen({
                 </Text>
                 <Text style={styles.itemHint}>no pin · what every agent falls back to</Text>
               </View>
-              <Text style={styles.glyph}>{isCurrent(null) ? '✓' : ''}</Text>
+              {isCurrent(null) ? <CheckIcon size={16} tone="accent" /> : null}
             </Pressable>
           </View>
         </View>
@@ -131,7 +132,7 @@ export function WorkspacePickerScreen({
                         {workspace.path}
                       </Text>
                     </View>
-                    <Text style={styles.glyph}>{isCurrent(workspace.key) ? '✓' : ''}</Text>
+                    {isCurrent(workspace.key) ? <CheckIcon size={16} tone="accent" /> : null}
                   </Pressable>
                 </View>
               ))}
@@ -190,7 +191,6 @@ const createStyles = (palette: Palette) => ({
   itemNameDefault: { color: palette.accent },
   itemHint: { fontSize: font.small, color: palette.textMuted },
   removed: { color: palette.danger },
-  glyph: { fontSize: 18, color: palette.accent, width: 22, textAlign: 'center' as const },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },
   error: {
     textAlign: 'center' as const,

@@ -1,3 +1,4 @@
+import { ChevronIcon, PlusIcon } from '../components/icons';
 import React, { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { AgentsConfigResultFrame, ProviderInfo } from '../core/protocol';
@@ -6,7 +7,7 @@ import { encodeQuotaGet } from '../core/protocol';
 import { QuotaLine } from '../components/QuotaCard';
 import { useModelCatalog, useModelIndex } from '../core/model';
 import { discoveryLine } from '../core/providerServices';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 import { useAccounts } from '../core/accounts';
@@ -45,7 +46,7 @@ function PlanRow({
         </Text>
         {provider.quota ? <QuotaLine provider={provider.key} /> : null}
       </View>
-      <Text style={styles.linkGlyph}>›</Text>
+      <ChevronIcon direction="right" size={16} tone="faint" />
     </Pressable>
   );
 }
@@ -136,7 +137,7 @@ export function ModelsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to settings">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Models</Text>
@@ -152,7 +153,7 @@ export function ModelsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="New provider">
-          <Text style={styles.addGlyph}>+</Text>
+          <PlusIcon size={18} tone="text" />
         </Pressable>
         <CloseButton />
       </View>
@@ -187,7 +188,7 @@ export function ModelsScreen({
                           : 'none set · what every agent falls back to'}
                   </Text>
                 </View>
-                <Text style={styles.linkGlyph}>›</Text>
+                <ChevronIcon direction="right" size={16} tone="faint" />
               </Pressable>
               <View style={styles.separator} />
               <Pressable
@@ -203,7 +204,7 @@ export function ModelsScreen({
                       : 'what image runs switch to when the model cannot take images'}
                   </Text>
                 </View>
-                <Text style={styles.linkGlyph}>›</Text>
+                <ChevronIcon direction="right" size={16} tone="faint" />
               </Pressable>
               {config.contextCap ? (
                 <>
@@ -217,7 +218,7 @@ export function ModelsScreen({
                       <Text style={styles.linkTitle}>Context cap</Text>
                       <Text style={styles.hint}>{contextCapText(config.contextCap)}</Text>
                     </View>
-                    <Text style={styles.linkGlyph}>›</Text>
+                    <ChevronIcon direction="right" size={16} tone="faint" />
                   </Pressable>
                 </>
               ) : null}
@@ -265,7 +266,7 @@ export function ModelsScreen({
                 <Text style={styles.linkTitle}>Add your first provider</Text>
                 <Text style={styles.hint}>a ChatGPT or Claude plan, or an API key</Text>
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
           ) : null}
           {real.map((provider, index) => (
@@ -309,7 +310,7 @@ export function ModelsScreen({
                   )}
                   {provider.quota ? <QuotaLine provider={provider.key} /> : null}
                 </View>
-                <Text style={styles.linkGlyph}>›</Text>
+                <ChevronIcon direction="right" size={16} tone="faint" />
               </Pressable>
               )}
             </View>
@@ -329,7 +330,7 @@ export function ModelsScreen({
                 named routes: a model, then the ones it falls back to
               </Text>
             </View>
-            <Text style={styles.linkGlyph}>›</Text>
+            <ChevronIcon direction="right" size={16} tone="faint" />
           </Pressable>
         </View>
       </ScrollView>
@@ -372,7 +373,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  addGlyph: { fontSize: 22, lineHeight: 24, color: palette.text },
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },

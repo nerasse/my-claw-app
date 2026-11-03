@@ -1,6 +1,7 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /** One numeric per-agent setting: the iteration budget or the context ceiling. A blank value
@@ -53,7 +54,7 @@ export function NumberEditorScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel={backLabel}>
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{title}</Text>

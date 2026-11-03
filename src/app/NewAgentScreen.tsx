@@ -1,6 +1,7 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /** Name rules of the server loader: lowercase, digits, dashes, no leading dash. */
@@ -40,7 +41,7 @@ export function NewAgentScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to agents">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>New agent</Text>

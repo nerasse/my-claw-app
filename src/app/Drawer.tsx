@@ -18,7 +18,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { FilterIcon, FolderIcon, GearIcon, NewFolderIcon, PlusIcon, SidebarIcon } from '../components/icons';
+import { ChevronIcon, CloseIcon, FilterIcon, FolderIcon, GearIcon, MoreIcon, NewFolderIcon, PlusIcon, SidebarIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
@@ -581,12 +581,12 @@ export function Drawer({
                   uses, in the same muted colour as the heading it sits on. The unfiled section
                   keeps the room without the glyph -- it is not a folder. */}
               {folder ? (
-                <Text style={styles.sectionFold}>{item.folded ? '▸' : '▾'}</Text>
+                <ChevronIcon direction={item.folded ? 'down' : 'right'} size={14} tone="faint" />
               ) : (
                 <Text style={styles.sectionFold}>{''}</Text>
               )}
               <View style={styles.sectionGlyph}>
-                {folder ? <FolderIcon size={15} color={palette.textFaint} /> : null}
+                {folder ? <FolderIcon size={15} tone="faint" /> : null}
               </View>
               <Text style={styles.sectionLabel} numberOfLines={1}>
                 {item.label}
@@ -607,7 +607,7 @@ export function Drawer({
                 style={styles.sectionMenu}
                 accessibilityRole="button"
                 accessibilityLabel={`Actions for folder ${folder.name}`}>
-                <Text style={styles.sectionMenuGlyph}>⋯</Text>
+                <MoreIcon size={16} tone="faint" />
               </Pressable>
             ) : null}
           </View>,
@@ -635,7 +635,6 @@ export function Drawer({
       openThread,
       runningIds,
       toggleFolder,
-      palette.textFaint,
       questionIds,
       unreadIds,
       styles,
@@ -698,7 +697,7 @@ export function Drawer({
                 style={styles.folderButton}
                 accessibilityRole="button"
                 accessibilityLabel="Hide the conversation list">
-                <SidebarIcon size={20} color={palette.textFaint} />
+                <SidebarIcon size={20} tone="faint" />
               </Pressable>
             ) : null}
             <Pressable
@@ -707,7 +706,7 @@ export function Drawer({
               style={styles.folderButton}
               accessibilityRole="button"
               accessibilityLabel="New folder">
-              <NewFolderIcon size={22} color={palette.text} />
+              <NewFolderIcon size={22} tone="text" />
             </Pressable>
             <Pressable
               onPress={onNewThread}
@@ -715,7 +714,7 @@ export function Drawer({
               style={styles.newButton}
               accessibilityRole="button"
               accessibilityLabel="New conversation">
-              <PlusIcon size={20} color={palette.accent} />
+              <PlusIcon size={20} tone="accent" />
             </Pressable>
           </View>
         </View>
@@ -756,7 +755,7 @@ export function Drawer({
             <Text style={styles.filterChipText} numberOfLines={1}>
               {workspaceFilter}
             </Text>
-            <Text style={styles.filterChipGlyph}>✕</Text>
+            <CloseIcon size={16} tone="faint" />
           </Pressable>
         ) : null}
 
@@ -829,14 +828,14 @@ export function Drawer({
                   {pending > 0 ? ` · ${pending} pending` : ''}
                 </Text>
               </View>
-              <Text style={styles.footerGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
             <Pressable
               style={styles.settingsButton}
               onPress={onOpenSettings}
               accessibilityRole="button"
               accessibilityLabel="Open settings">
-              <GearIcon size={22} color={palette.text} />
+              <GearIcon size={22} tone="text" />
             </Pressable>
           </View>
         </View>

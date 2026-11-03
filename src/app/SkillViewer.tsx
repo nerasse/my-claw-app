@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { splitSkillDoc } from '../core/skills';
@@ -81,7 +82,7 @@ export function SkillViewer({
           accessibilityRole="button"
           accessibilityLabel="Close skill view"
         >
-          <Text style={styles.closeGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.titleBlock}>
           <Text style={styles.title} numberOfLines={1}>

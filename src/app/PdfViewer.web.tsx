@@ -1,3 +1,4 @@
+import { CloseIcon } from '../components/icons';
 /**
  * The web host for a PDF: the browser already has a renderer, so this is an `iframe` on the media
  * URL and nothing else. Bundling pdf.js for the web build would be a second copy of a megabyte and
@@ -10,7 +11,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /** CSS on purpose: an `iframe` is a DOM element, not a React Native view. */
@@ -48,7 +49,7 @@ export function PdfViewer({
           accessibilityRole="button"
           accessibilityLabel="Close file view"
         >
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="text" />
         </Pressable>
       </View>
       <View style={styles.body}>

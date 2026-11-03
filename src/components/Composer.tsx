@@ -1,3 +1,4 @@
+import { CloseIcon, PlusIcon, SendIcon } from './icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,7 +12,6 @@ import {
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from 'react-native';
-import { PlusIcon, SendIcon } from './icons';
 import { commandQuery, filterCommands, type CommandDef } from '../core/commands';
 import { COMPOSER_INPUT_ID } from '../core/domIds';
 import { editorIntent } from '../core/editorKeys';
@@ -305,7 +305,7 @@ export function Composer({
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Remove current location">
-              <Text style={styles.chipRemove}>✕</Text>
+              <CloseIcon size={16} tone="faint" />
             </Pressable>
           ) : null}
         </View>
@@ -372,7 +372,7 @@ export function Composer({
                     hitSlop={8}
                     accessibilityRole="button"
                     accessibilityLabel={`Remove attachment ${attachment.filename}`}>
-                    <Text style={styles.chipRemove}>✕</Text>
+                    <CloseIcon size={16} tone="faint" />
                   </Pressable>
                 ) : null}
                 {percent !== undefined ? (
@@ -428,7 +428,7 @@ export function Composer({
             {uploading || locationBusy ? (
               <ActivityIndicator size="small" color={palette.textFaint} />
             ) : (
-              <PlusIcon size={18} color={palette.textMuted} />
+              <PlusIcon size={18} tone="muted" />
             )}
           </Pressable>
         ) : null}

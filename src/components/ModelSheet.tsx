@@ -1,3 +1,4 @@
+import { CheckIcon, ChevronIcon } from '../components/icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ActionSheet, type SheetEntry } from './ActionSheet';
@@ -652,7 +653,7 @@ export function ModelPickerPage({
           accessibilityRole="button"
           accessibilityLabel={backLabel}
         >
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{flowProps.title}</Text>
@@ -704,7 +705,7 @@ export function ModelPickerPage({
                 </Text>
               ) : null}
             </View>
-            {option.selected ? <Text style={styles.check}>✓</Text> : null}
+            {option.selected ? <CheckIcon size={16} tone="faint" /> : null}
           </Pressable>
           ),
         )}

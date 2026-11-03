@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState, useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
@@ -8,7 +9,7 @@ import { formatSpan } from '../core/utils';
 import { useElapsed } from './CommandElapsed';
 import { requestToolOutput } from '../core/toolOutput';
 import { runStateOf, stateWord } from '../core/toolState';
-import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
 /**
  * A `spawn` or `send` call: not a tool result to read, a sub-agent to go and see.
@@ -119,7 +120,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={`Sub-agent ${label || id || action}${running ? ', running' : ''}`}
           accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
-          <Text style={styles.chevron}>{open ? '▾' : '▸'}</Text>
+          <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
           <Text style={styles.name} numberOfLines={1}>
             {label || id || action}
           </Text>
@@ -153,7 +154,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           <Text style={styles.doorLabel} numberOfLines={1}>
             {brief ? brief.replace(/\s+/g, ' ').trim() : `open ${subagent.label}`}
           </Text>
-          <Text style={styles.doorChevron}>›</Text>
+          <ChevronIcon direction="right" size={16} tone="accent" />
         </Pressable>
       ) : brief && !open ? (
         <Text style={styles.brief} numberOfLines={1}>

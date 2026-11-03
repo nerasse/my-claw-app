@@ -1,7 +1,8 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useCallback, useMemo } from 'react';
 import { Platform, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { scopeLabelOf, type RosterGroup, type RosterRow, type SubAgentsStatus } from '../core/subagents';
@@ -129,7 +130,7 @@ export function AgentsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel={`Back to ${parentTitle}`}>
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title} numberOfLines={1}>

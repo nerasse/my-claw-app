@@ -1,6 +1,6 @@
+import { CheckIcon, DownloadIcon } from './icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
-import { CheckIcon, DownloadIcon } from './icons';
 import { useTransferProgress } from '../core/nativeBridge';
 import { newTransferId, type DownloadTarget } from '../core/download';
 import { requestDownload, type DownloadState } from '../core/downloadFlow';

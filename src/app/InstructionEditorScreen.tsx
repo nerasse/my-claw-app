@@ -1,8 +1,9 @@
+import { ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { EditorState } from '../core/instructions';
 import { isDirty } from '../core/instructions';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /** The one-line explanation of what saving will do, which differs per origin. */
@@ -55,7 +56,7 @@ export function InstructionEditorScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to instructions">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{editor.file}</Text>

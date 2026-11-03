@@ -5,7 +5,7 @@ import { shownTab, useLiveFrame } from '../../core/browserLive';
 import type { BrowserControlAction, BrowserInput, BrowserLiveWindow } from '../../core/protocol';
 import { LiveSurface } from './LiveSurface';
 import { hostOf, stateLabel } from './BrowserWall';
-import { OpenInNewIcon } from '../../components/icons';
+import { ChevronIcon, CloseIcon, OpenInNewIcon } from '../../components/icons';
 import { useTheme } from '../../theme';
 import { textEdit } from './surfaceMath';
 
@@ -121,7 +121,10 @@ export function LiveWindowView({
       <View style={styles.bar}>
         {/* Words, not a second chevron under the page's own: this one goes back to the windows. */}
         <Pressable onPress={onBack} style={styles.button} accessibilityRole="button" accessibilityLabel="Back to all windows">
-          <Text style={styles.buttonText}>‹ Windows</Text>
+          <View style={styles.buttonLabel}>
+            <ChevronIcon direction="left" size={14} tone="faint" />
+            <Text style={styles.buttonText}>Windows</Text>
+          </View>
         </Pressable>
         {windows.length > 1 ? (
           <View style={styles.switcher}>
@@ -165,7 +168,7 @@ export function LiveWindowView({
         ) : null}
         {Platform.OS === 'web' ? (
           <Pressable onPress={popOut} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Open in a new browser window">
-            <OpenInNewIcon size={18} color={palette.text} />
+            <OpenInNewIcon size={18} tone="text" />
           </Pressable>
         ) : null}
         <Pressable
@@ -200,7 +203,7 @@ export function LiveWindowView({
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel={`Close tab ${t.title || t.url}`}>
-                <Text style={styles.tabClose}>×</Text>
+                <CloseIcon size={16} tone="faint" />
               </Pressable>
             </View>
           ))}
@@ -337,6 +340,7 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.sm,
     backgroundColor: palette.surfaceAlt,
   },
+  buttonLabel: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2 },
   buttonText: { fontSize: font.small, color: palette.text },
   primary: {
     height: 36,

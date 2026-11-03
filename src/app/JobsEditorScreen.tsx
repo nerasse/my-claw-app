@@ -1,7 +1,8 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useModelCatalog } from '../core/model';
 import { ScopeEditorScreen } from './ScopeEditorScreen';
@@ -294,7 +295,7 @@ export function JobsEditorScreen({
               </Text>
             ) : null}
           </View>
-          <Text style={styles.linkGlyph}>›</Text>
+          <ChevronIcon direction="right" size={16} tone="faint" />
         </Pressable>
       </View>
     );
@@ -308,7 +309,7 @@ export function JobsEditorScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to jobs">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{job ? job.name : 'New job'}</Text>
@@ -569,7 +570,7 @@ export function JobsEditorScreen({
                   </Text>
                 ) : null}
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
             <View style={styles.separator} />
             <Pressable
@@ -588,7 +589,7 @@ export function JobsEditorScreen({
                   </Text>
                 ) : null}
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
           </View>
           <Text style={styles.note}>

@@ -1,8 +1,8 @@
+import { CheckIcon, CopyIcon } from './icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { CheckIcon, CopyIcon } from './icons';
-import { font, radius, useTheme, useThemedStyles, type Palette } from '../theme';
+import { font, radius, useThemedStyles, type Palette } from '../theme';
 
 /** How long the button says "copied" before going back to its label. */
 const ACK_MS = 1400;
@@ -34,7 +34,6 @@ export function CopyButton({
   variant?: 'label' | 'bar';
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
   const [done, setDone] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -60,9 +59,9 @@ export function CopyButton({
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? 'Copy the whole file'}>
         {done ? (
-          <CheckIcon size={17} color={palette.accent} />
+          <CheckIcon size={17} tone="faint" />
         ) : (
-          <CopyIcon size={17} color={palette.text} />
+          <CopyIcon size={17} tone="text" />
         )}
       </Pressable>
     );

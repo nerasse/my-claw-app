@@ -1,7 +1,8 @@
+import { CheckIcon, ChevronIcon } from '../components/icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { CardEdge } from '../components/CardEdge';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -40,7 +41,7 @@ const ScopeRow = React.memo(function ScopeRowView({
             {item.description}
           </Text>
         </View>
-        <Text style={styles.glyph}>{checked ? '✓' : ''}</Text>
+        {checked ? <CheckIcon size={16} tone="accent" /> : null}
       </Pressable>
     </CardEdge>
   );
@@ -154,7 +155,7 @@ export function ScopeEditorScreen({
           accessibilityRole="button"
           accessibilityLabel="Back to the agent"
         >
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{title}</Text>
@@ -292,7 +293,7 @@ export function ScopeEditorScreen({
                                 : 'no such tool in the catalog'}
                           </Text>
                           <Text style={[styles.glyph, styles.removed]}>
-                            {picked.has(name) ? '✓' : '✕'}
+                            {picked.has(name) ? 'on' : ''}
                           </Text>
                         </Pressable>
                       </CardEdge>

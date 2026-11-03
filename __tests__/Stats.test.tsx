@@ -483,7 +483,8 @@ test('the conversations tab files worker runs apart, folded by default', async (
     // 364 of 533 sessions of one window were workers (measured 2026-09-22): they must not read as
     // 364 chats. The conversations section counts its own.
     expect(screen(tree)).not.toContain('researcher');
-    expect(screen(tree)).toContain('▸ delegated runs');
+    // The fold mark is a drawn chevron beside the title now, not a character inside it.
+    expect(screen(tree)).toContain('delegated runs');
 
     await pressLabel(tree, 'Unfold delegated runs');
     await waitFor(() => screen(tree).includes('researcher'));

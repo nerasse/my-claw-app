@@ -1,3 +1,4 @@
+import { ChevronIcon, CloseIcon } from '../components/icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -241,7 +242,7 @@ export function ImageViewer({
             accessibilityRole="button"
             accessibilityLabel="Previous image"
           >
-            <Text style={styles.navGlyph}>‹</Text>
+            <ChevronIcon direction="left" size={22} color={"#fff"} />
           </Pressable>
           <Pressable
             style={[styles.nav, styles.navRight, at === images.length - 1 ? styles.navOff : null]}
@@ -254,7 +255,7 @@ export function ImageViewer({
             accessibilityRole="button"
             accessibilityLabel="Next image"
           >
-            <Text style={styles.navGlyph}>›</Text>
+            <ChevronIcon direction="right" size={24} color="#fff" />
           </Pressable>
         </>
       ) : null}
@@ -285,7 +286,7 @@ export function ImageViewer({
               accessibilityRole="button"
               accessibilityLabel="Close image"
             >
-              <Text style={styles.closeGlyph}>✕</Text>
+              <CloseIcon size={18} color={"#fff"} />
             </Pressable>
           </View>
 

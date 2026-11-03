@@ -1,8 +1,9 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { ProviderInfo, ProvidersEnvResultFrame } from '../core/protocol';
 import { envNamePresent } from '../core/providers';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /**
@@ -57,7 +58,7 @@ export function ProviderEnvScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to provider settings">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Environment variable</Text>

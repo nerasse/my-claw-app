@@ -3,7 +3,7 @@ import { Pressable, View, useWindowDimensions, type StyleProp, type ViewStyle } 
 import { GearIcon, PlusIcon, SidebarIcon } from '../components/icons';
 import { ResizeHandle } from '../components/ResizeHandle';
 import { RAIL_WIDTH, drawerColumnOf, pagePaneMax, panes, usePanes } from '../core/panes';
-import { radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { radius, space, useThemedStyles, type Palette } from '../theme';
 import { keyLayerProps } from '../core/keyNav';
 
 /**
@@ -27,7 +27,6 @@ export function PinnedColumn({
   onOpenSettings: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
   const collapsed = usePanes(p => p.drawerCollapsed);
   const width = usePanes(p => p.drawerWidth);
   return (
@@ -36,14 +35,14 @@ export function PinnedColumn({
       {collapsed ? (
         <View style={styles.rail} testID="drawer-rail">
           <Pressable onPress={() => panes.setDrawerCollapsed(false)} style={styles.railButton} accessibilityRole="button" accessibilityLabel="Show the conversation list">
-            <SidebarIcon size={20} color={palette.text} />
+            <SidebarIcon size={20} tone="text" />
           </Pressable>
           <Pressable onPress={onNewThread} style={[styles.railButton, styles.railNew]} accessibilityRole="button" accessibilityLabel="New conversation">
-            <PlusIcon size={20} color={palette.accent} />
+            <PlusIcon size={20} tone="accent" />
           </Pressable>
           <View style={styles.fill} />
           <Pressable onPress={onOpenSettings} style={styles.railButton} accessibilityRole="button" accessibilityLabel="Settings">
-            <GearIcon size={20} color={palette.textFaint} />
+            <GearIcon size={20} tone="faint" />
           </Pressable>
         </View>
       ) : (

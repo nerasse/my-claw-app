@@ -6,7 +6,7 @@ import { useDismissKeyboard } from '../core/keyboard';
 import { connection } from '../core/connection';
 import { encodeQuotaGet, encodeQuotaUnwatch, encodeQuotaWatch } from '../core/protocol';
 import { QuotaCard } from '../components/QuotaCard';
-import { GearIcon } from '../components/icons';
+import { CheckIcon, ChevronIcon, GearIcon } from '../components/icons';
 import { DiscoveryButton, DiscoveryNote } from '../components/DiscoveryRefresh';
 import { CloseButton } from '../components/CloseButton';
 import { discoveryLine } from '../core/providerServices';
@@ -72,7 +72,7 @@ const ModelRow = React.memo(function ModelRowView({
           </Text>
         ) : null}
       </View>
-      <Text style={styles.checkmark}>{isDefault ? '✓' : ''}</Text>
+      {isDefault ? <CheckIcon size={16} tone="accent" /> : null}
     </Pressable>
   );
 });
@@ -242,7 +242,7 @@ export function ProviderScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to models">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{provider.group || provider.key}</Text>
@@ -258,7 +258,7 @@ export function ProviderScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Edit provider">
-          <GearIcon size={20} color={palette.text} />
+          <GearIcon size={20} tone="text" />
         </Pressable>
         <CloseButton />
       </View>
@@ -412,7 +412,6 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
   },
-  checkmark: { fontSize: font.body, color: palette.accent, fontWeight: '600' as const },
   linkTitleOff: { fontSize: font.body, fontWeight: '600' as const, color: palette.textMuted },
   badgeAlt: {
     fontSize: font.micro,

@@ -1,9 +1,10 @@
+import { ChevronIcon, MoreIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { InstructionEntry, NestedInstruction, WorkspaceEntry } from '../core/protocol';
 import type { InstructionsStatus } from '../core/instructions';
 import { sourceStatusOf, sourceOwnsFile } from '../core/layers';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { CloseButton } from '../components/CloseButton';
@@ -241,7 +242,7 @@ export function WorkspaceScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel={backLabel}>
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title} accessibilityLabel={`Workspace ${workspace.key}`}>
@@ -329,7 +330,7 @@ export function WorkspaceScreen({
                         renaming moves the agents and jobs pinned to it
                       </Text>
                     </View>
-                    <Text style={styles.linkGlyph}>›</Text>
+                    <ChevronIcon direction="right" size={16} tone="faint" />
                   </Pressable>
                 )}
               </>
@@ -381,10 +382,10 @@ export function WorkspaceScreen({
                           onPress={() => setMenuEntry(entry)}
                           accessibilityRole="button"
                           accessibilityLabel={`Actions for ${entry.file} of ${workspace.key}`}>
-                          <Text style={styles.layerGlyph}>⋯</Text>
+                          <MoreIcon size={16} tone="faint" />
                         </Pressable>
                       ) : null}
-                      <Text style={styles.linkGlyph}>›</Text>
+                      <ChevronIcon direction="right" size={16} tone="faint" />
                     </View>
                   </View>
                 );
@@ -426,7 +427,7 @@ export function WorkspaceScreen({
                         {sizeLabel(item.bytes)}
                       </Text>
                     </View>
-                    <Text style={styles.linkGlyph}>›</Text>
+                    <ChevronIcon direction="right" size={16} tone="faint" />
                   </Pressable>
                 </View>
               ))}

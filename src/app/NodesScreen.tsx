@@ -1,9 +1,10 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { formatClaimCode, nodeInstallCommand, nodeServerUrl, nodesStore, useNodes, type NodeInstallMode, type NodePlatform } from '../core/nodes';
 import type { NodeRecord } from '../core/protocol';
 import { BackButton, headerStyle } from '../components/BackButton';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { CloseButton } from '../components/CloseButton';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -276,7 +277,7 @@ export function NodesScreen({
               ) : null}
               {node.agent ? <Text style={styles.detail}>{`agent ${node.agent}`}</Text> : null}
             </View>
-            <Text style={styles.chevron}>›</Text>
+            <ChevronIcon direction="right" size={16} tone="faint" />
           </Pressable>
         ))}
       </ScrollView>

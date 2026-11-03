@@ -1,3 +1,4 @@
+import { CloseIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { VoicePlayer } from './VoicePlayer';
@@ -59,7 +60,7 @@ export function StagedVoiceList({
                     hitSlop={8}
                     accessibilityRole="button"
                     accessibilityLabel="Remove voice message">
-                    <Text style={styles.remove}>✕</Text>
+                    <CloseIcon size={14} tone="muted" />
                   </Pressable>
                 ) : undefined
               }

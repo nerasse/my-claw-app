@@ -1,6 +1,6 @@
+import { ChevronIcon, MicIcon, StopIcon, TrashIcon } from './icons';
 import React, { useRef } from 'react';
 import { ActivityIndicator, Animated, Pressable, Text, View } from 'react-native';
-import { ChevronIcon, MicIcon, StopIcon, TrashIcon } from './icons';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { useRecordingGesture } from '../core/recordingGesture';
 import { formatDuration } from '../core/voice';

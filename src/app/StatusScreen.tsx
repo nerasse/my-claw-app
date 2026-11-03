@@ -1,6 +1,7 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useStatus } from '../core/status';
 import { withoutEndpoint } from '../core/model';
@@ -187,7 +188,7 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Close status">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title}>Status</Text>
@@ -253,7 +254,7 @@ function Fold({
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={label}>
-        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+        <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
         <Text style={styles.foldLabel}>{label}</Text>
         {hint ? (
           <Text style={styles.foldHint} numberOfLines={1}>
@@ -486,7 +487,7 @@ function SubAgents({ agents }: { agents: UsageAgent[] }): React.JSX.Element | nu
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel="By sub-agent">
-        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+        <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
         <View style={styles.usageWho}>
           <Text style={styles.usageName} numberOfLines={1}>
             by sub-agent
@@ -541,7 +542,7 @@ function UsageRow({
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`Usage of ${label}`}>
-        <Text style={styles.foldGlyph}>{open ? '▾' : '▸'}</Text>
+        <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
         <View style={styles.usageWho}>
           <View style={styles.usageNameRow}>
             {running ? <View style={styles.runningDot} accessibilityLabel={`${label} is running`} /> : null}

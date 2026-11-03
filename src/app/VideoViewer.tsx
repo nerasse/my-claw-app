@@ -1,3 +1,4 @@
+import { CloseIcon } from '../components/icons';
 import React from 'react';
 import { Platform, Pressable, StatusBar, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,7 +51,7 @@ export function VideoViewer({
           accessibilityRole="button"
           accessibilityLabel="Close video"
         >
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} color={"#fff"} />
         </Pressable>
       </View>
       <VideoView

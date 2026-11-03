@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { Text } from 'react-native';
+import { ChevronIcon } from '../src/components/icons';
 import ReactTestRenderer from 'react-test-renderer';
 import { FoldedRunGroup, RunGroup } from '../src/components/RunGroup';
 import { chatStore, type ChatItem, type RunInfo, type RunSummaryItem } from '../src/core/chat';
@@ -188,9 +189,10 @@ test('a long open group carries a bar at the bottom too', () => {
   expect(both).toHaveLength(2);
   // Both close it, and both name it, so whichever end the reader reaches is the same control.
   expect(both.map(node => node.props.accessibilityLabel)).toEqual(['Hide the run work', 'Hide the run work']);
-  const chevrons = tree.root.findAllByType(Text).map(node => node.props.children);
-  expect(chevrons).toContain('▾');
-  expect(chevrons).toContain('▴');
+  // The fold arrow is a drawn chevron now, not a character in a Text: the top bar points down
+  // at the work, the bottom bar points up at it.
+  expect(tree.root.findAllByType(ChevronIcon)).toHaveLength(2);
+  expect(tree.root.findAllByType(ChevronIcon).map(node => node.props.direction)).toEqual(['down', 'up']);
 });
 
 test('a short open group keeps one bar', () => {

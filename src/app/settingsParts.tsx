@@ -1,6 +1,7 @@
+import { ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { CloseButton } from '../components/CloseButton';
@@ -70,7 +71,7 @@ export function LinkRow({
           </Text>
         ) : null}
       </View>
-      <Text style={styles.linkGlyph}>›</Text>
+      <ChevronIcon direction="right" size={16} tone="faint" />
     </Pressable>
   );
 }

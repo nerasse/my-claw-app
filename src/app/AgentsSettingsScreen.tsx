@@ -1,9 +1,10 @@
+import { ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { AgentInfo, AgentsConfigResultFrame } from '../core/protocol';
 import type { AgentsStatus } from '../core/agents';
 import { useModelCatalog, useModelIndex } from '../core/model';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -65,7 +66,7 @@ export function AgentsSettingsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to settings">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Agents</Text>
@@ -120,7 +121,7 @@ export function AgentsSettingsScreen({
                         }`}
                       </Text>
                     </View>
-                    <Text style={styles.linkGlyph}>›</Text>
+                    <ChevronIcon direction="right" size={16} tone="faint" />
                   </Pressable>
                 </View>
               ))}

@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
@@ -217,7 +218,9 @@ function Bar({
       accessibilityRole="button"
       accessibilityLabel={open ? 'Hide the run work' : 'Show the run work'}
       accessibilityState={{ expanded: open }}>
-      <Text style={styles.chevron}>{open ? (footer ? '▴' : '▾') : '▸'}</Text>
+      {/* The top bar closes downwards, the bottom bar upwards: each arrow points at the work
+          it folds away, so neither asks the reader to scroll to the other end. */}
+      <ChevronIcon direction={open ? (footer ? 'up' : 'down') : 'right'} size={14} tone="faint" />
       <Text style={styles.summary} numberOfLines={1}>
         {summary}
       </Text>

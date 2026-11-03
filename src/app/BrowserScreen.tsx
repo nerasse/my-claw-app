@@ -25,7 +25,7 @@ import {
   useLiveNotice,
   useLiveWindows,
 } from '../core/browserLive';
-import { CollapseIcon, ExpandIcon, OpenInNewIcon, PlusIcon, RefreshIcon } from '../components/icons';
+import { ChevronIcon, CollapseIcon, ExpandIcon, OpenInNewIcon, PlusIcon, RefreshIcon } from '../components/icons';
 import { useTheme } from '../theme';
 import { BrowserWall, wallOrder } from './browser/BrowserWall';
 import { DEFAULT_RATIO, wallLayout } from './browser/wallLayout';
@@ -309,7 +309,6 @@ export function BrowserScreen({
   onToggleFullScreen?: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
   const info = useBrowserInfo();
   const { copied, copy } = useCopy();
   const [revealed, setRevealed] = useState(false);
@@ -352,7 +351,7 @@ export function BrowserScreen({
           style={styles.iconButton}
           accessibilityRole="button"
           accessibilityLabel="Close browser">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title} numberOfLines={1}>Browser</Text>
@@ -380,12 +379,12 @@ export function BrowserScreen({
             style={styles.iconButton}
             accessibilityRole="button"
             accessibilityLabel={fullScreen ? 'Exit full screen' : 'Full screen'}>
-            {fullScreen ? <CollapseIcon size={18} color={palette.text} /> : <ExpandIcon size={18} color={palette.text} />}
+            {fullScreen ? <CollapseIcon size={18} tone="text" /> : <ExpandIcon size={18} tone="text" />}
           </Pressable>
         ) : null}
         {Platform.OS === 'web' ? (
           <Pressable onPress={openInTab} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Open the browser in a new tab">
-            <OpenInNewIcon size={18} color={palette.text} />
+            <OpenInNewIcon size={18} tone="text" />
           </Pressable>
         ) : null}
       </View>
@@ -491,7 +490,7 @@ export function BrowserScreen({
                 style={styles.iconButtonSmall}
                 accessibilityRole="button"
                 accessibilityLabel="Refresh browser state">
-                <RefreshIcon size={16} color={palette.text} />
+                <RefreshIcon size={16} tone="text" />
               </Pressable>
             </View>
             {info.services.length === 0 ? (

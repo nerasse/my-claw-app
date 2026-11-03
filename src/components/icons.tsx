@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
+import { useTheme } from '../theme';
 
 /**
  * Chrome icons, drawn as vectors.
@@ -13,13 +14,33 @@ import Svg, { Path } from 'react-native-svg';
 
 interface IconProps {
   size?: number;
-  color: string;
+  /** A literal colour, for an icon drawn over a picture. Prefer `tone` everywhere else. */
+  color?: string;
+  /** Which ink of the theme to draw with. Resolved here, so no page needs the palette in scope. */
+  tone?: 'text' | 'muted' | 'faint' | 'accent';
 }
 
-function Icon({ size = 20, color, d }: IconProps & { d: string }): React.JSX.Element {
+/**
+ * The ink an icon takes: a role of the theme, or a literal when it sits over a photograph.
+ *
+ * A role rather than a colour because a page with a dozen rows would otherwise each need the
+ * palette in scope to draw a chevron, and the two together drift: the pass that replaced the text
+ * glyphs lightened every back arrow and darkened every row chevron that way.
+ */
+function useInk(color: string | undefined, tone: IconProps['tone']): string {
+  const { palette } = useTheme();
+  if (color) return color;
+  if (tone === 'text') return palette.text;
+  if (tone === 'accent') return palette.accent;
+  if (tone === 'muted') return palette.textMuted;
+  return palette.textFaint;
+}
+
+function Icon({ size = 20, color, tone, d }: IconProps & { d: string }): React.JSX.Element {
+  const ink = useInk(color, tone);
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path fill={color} d={d} />
+      <Path fill={ink} d={d} />
     </Svg>
   );
 }
@@ -184,11 +205,12 @@ export function ChevronIcon({
   direction = 'right',
   ...props
 }: IconProps & { direction?: 'up' | 'down' | 'left' | 'right' }): React.JSX.Element {
+  const ink = useInk(props.color, props.tone);
   const angle = { right: 0, down: 90, left: 180, up: 270 }[direction];
   return (
     <Svg width={props.size ?? 20} height={props.size ?? 20} viewBox="0 0 24 24">
       <Path
-        fill={props.color}
+        fill={ink}
         d="M9.5 5.5 16 12l-6.5 6.5-1.7-1.7L12.6 12 7.8 7.2z"
         transform={`rotate(${angle} 12 12)`}
       />

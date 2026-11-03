@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
@@ -9,7 +10,7 @@ import {
   type NotificationUsage,
 } from '../core/nativeBridge';
 import { useDismissKeyboard } from '../core/keyboard';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 import { notificationPermission } from '../core/notifications';
 import { Section, useSettingsStyles } from './settingsParts';
@@ -210,7 +211,7 @@ export function NotificationsScreen({
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to settings">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <Text style={styles.title}>Notifications</Text>
         <CloseButton />
@@ -259,7 +260,7 @@ export function NotificationsScreen({
                             {soundLabel(choice)}
                           </Text>
                         </View>
-                        <Text style={styles.linkGlyph}>›</Text>
+                        <ChevronIcon direction="right" size={16} tone="faint" />
                       </Pressable>
                       <View style={styles.buttonRow}>
                         <Pressable

@@ -1,9 +1,10 @@
+import { CloseIcon } from '../components/icons';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatBytes } from '../core/utils';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /**
@@ -80,7 +81,7 @@ export function ArchiveViewer({
           accessibilityRole="button"
           accessibilityLabel="Close file view"
         >
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="faint" />
         </Pressable>
       </View>
 

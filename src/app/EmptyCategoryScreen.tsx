@@ -1,6 +1,7 @@
+import { ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -22,7 +23,7 @@ export function EmptyCategoryScreen({
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to settings">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <Text style={styles.title}>{title}</Text>
         <CloseButton />

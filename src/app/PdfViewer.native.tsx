@@ -1,3 +1,4 @@
+import { CloseIcon } from '../components/icons';
 /**
  * The Android host for a PDF: a WebView running the bundled pdf.js page
  * (`assets/pdfviewer/index.html`, built by `scripts/build-pdfviewer.js`).
@@ -14,7 +15,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 /** Where the Gradle `copyPdfviewerAssets` task puts the page (android/app/build.gradle). */
@@ -87,7 +88,7 @@ export function PdfViewer({
           accessibilityRole="button"
           accessibilityLabel="Close file view"
         >
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="text" />
         </Pressable>
       </View>
 

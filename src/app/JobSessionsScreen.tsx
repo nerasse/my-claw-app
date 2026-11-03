@@ -1,7 +1,8 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useCallback } from 'react';
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import type { JobRunEntry } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
@@ -98,7 +99,7 @@ export function JobSessionsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to jobs">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerMain}>
           <Text style={styles.title} numberOfLines={1}>

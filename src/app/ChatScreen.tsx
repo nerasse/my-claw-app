@@ -1,3 +1,4 @@
+import { ChevronIcon, MenuIcon, MoreIcon } from '../components/icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, PanResponder, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
@@ -1357,7 +1358,7 @@ export function ChatScreen({
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={`Back to ${subagent.parentTitle}`}>
-              <Text style={styles.backGlyph}>‹</Text>
+              <ChevronIcon direction="left" size={22} tone="text" />
             </Pressable>
             {/* The marker, in the accent and on its own: the title stays the identity and nothing
                 else, which is what gets read, selected and copied. */}
@@ -1378,7 +1379,7 @@ export function ChatScreen({
               style={styles.menuButton}
               accessibilityRole="button"
               accessibilityLabel="Sub-agent actions">
-              <Text style={styles.menuGlyph}>⋮</Text>
+              <MoreIcon vertical size={16} tone="faint" />
             </Pressable>
           </View>
           {/* Standing marker: every chat screen here looks alike, and without it a message meant
@@ -1394,7 +1395,7 @@ export function ChatScreen({
             style={styles.menuButton}
             accessibilityRole="button"
             accessibilityLabel="Open conversations">
-            <Text style={styles.menuGlyph}>☰</Text>
+            <MenuIcon size={16} tone="faint" />
           </Pressable>
         )}
         <View style={styles.headerText}>
@@ -1442,7 +1443,7 @@ export function ChatScreen({
           style={[styles.menuButton, layout.dense && styles.menuButtonDense]}
           accessibilityRole="button"
           accessibilityLabel="Commands">
-          <Text style={styles.menuGlyph}>⋮</Text>
+          <MoreIcon vertical size={16} tone="faint" />
         </Pressable>
       </View>
       )}

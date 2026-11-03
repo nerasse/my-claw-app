@@ -10,7 +10,7 @@ import { DEFAULT_EDITOR_FONT_SIZE } from '../components/codeeditor/protocol';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { DocZoomControl } from '../components/DocZoomControl';
 import { languageForFile } from '../components/codeeditor/document';
-import { FolderIcon } from '../components/icons';
+import { ChevronIcon, CloseIcon, FolderIcon, MoreIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useHardwareBack } from '../core/hardwareBack';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -154,7 +154,6 @@ const FileRow = React.memo(function FileRowView({
   onActions: (entry: FsEntry) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
-  const { palette } = useTheme();
   const dir = isDirEntry(entry);
   const stamp =
     entry.mtimeMs > 0 ? formatDate(new Date(entry.mtimeMs).toISOString()) : '';
@@ -168,7 +167,7 @@ const FileRow = React.memo(function FileRowView({
         accessibilityLabel={`Open ${entry.path}`}>
         {dir ? (
           <View style={styles.rowIcon}>
-            <FolderIcon size={18} color={palette.textMuted} />
+            <FolderIcon size={18} tone="muted" />
           </View>
         ) : (
           <View style={styles.rowBadge}>
@@ -185,7 +184,7 @@ const FileRow = React.memo(function FileRowView({
             {stamp ? ` · ${stamp}` : ''}
           </Text>
         </View>
-        {dir ? <Text style={styles.chevron}>›</Text> : null}
+        {dir ? <ChevronIcon direction="right" size={16} tone="faint" /> : null}
       </Pressable>
       {downloadUrl ? (
         <DownloadControl targets={[{ url: downloadUrl, filename: entry.name }]} variant="row" />
@@ -196,7 +195,7 @@ const FileRow = React.memo(function FileRowView({
         style={styles.more}
         accessibilityRole="button"
         accessibilityLabel={`Actions for ${entry.name}`}>
-        <Text style={styles.moreGlyph}>⋯</Text>
+        <MoreIcon size={16} tone="faint" />
       </Pressable>
     </View>
   );
@@ -497,7 +496,7 @@ export function SystemFilesScreen({
             style={styles.backButton}
             accessibilityRole="button"
             accessibilityLabel={backLabel}>
-            <Text style={styles.backGlyph}>‹</Text>
+            <ChevronIcon direction="left" size={22} tone="text" />
           </Pressable>
         ) : null}
         <View style={styles.headerMain}>
@@ -546,7 +545,7 @@ export function SystemFilesScreen({
           style={styles.closeButton}
           accessibilityRole="button"
           accessibilityLabel="Close files">
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="faint" />
         </Pressable>
       </View>
 

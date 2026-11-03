@@ -138,9 +138,10 @@ describe('QuestionCard', () => {
   it('Send is nowhere but the recap', () => {
     const { tree } = render();
     expect(pressables(tree).some(p => p.text.includes('Send'))).toBe(false);
-    // The last question offers the review rather than another Next.
+    // The last question offers the review rather than another Next. The arrow beside it is a
+    // drawn chevron, so the word is all the text says.
     pressLabel(tree, 'Next question');
-    expect(hasText(tree, 'Review ›')).toBe(true);
+    expect(hasText(tree, 'Review')).toBe(true);
     pressLabel(tree, 'Review the answers');
     expect(pressables(tree).some(p => p.text.includes('Send'))).toBe(true);
   });

@@ -1,7 +1,8 @@
+import { ChevronIcon, PlusIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { TagInfo } from '../core/protocol';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useTheme, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -30,6 +31,7 @@ export function TagsScreen({
   onOpenContextCap?: (name: string) => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   useDismissKeyboard();
   const isDefault = (tag: TagInfo): boolean => tag.name === 'Default';
 
@@ -41,7 +43,7 @@ export function TagsScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to models">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Tags</Text>
@@ -54,7 +56,7 @@ export function TagsScreen({
           style={styles.addButton}
           accessibilityRole="button"
           accessibilityLabel="New tag">
-          <Text style={styles.addGlyph}>+</Text>
+          <PlusIcon size={18} color={palette.accentText} />
         </Pressable>
         <CloseButton />
       </View>
@@ -83,13 +85,13 @@ export function TagsScreen({
                   <View style={styles.linkTitleLine}><Text style={styles.linkTitle}>{tag.name}</Text>{tag.effort ? <Text style={styles.badge}>{tag.effort}</Text> : null}</View>
                   <Text style={styles.hint} numberOfLines={1}>{isDefault(tag) ? `follows the default model · ${tag.model ?? ''}` : `${tag.model ?? ''}`}</Text>
                 </View>
-                {isDefault(tag) ? null : <Text style={styles.linkGlyph}>›</Text>}
+                {isDefault(tag) ? null : <ChevronIcon direction="right" size={16} tone="faint" />}
               </Pressable>
               {isDefault(tag) ? null : <>
                 <View style={styles.divider} />
                 <View style={styles.footer}>
                   <Pressable style={styles.footerLink} onPress={() => onOpenContextCap?.(tag.name)} accessibilityRole="button" accessibilityLabel={`Context cap for tag ${tag.name}`}>
-                    <Text style={styles.footerKey}>context cap</Text><Text style={styles.footerValue}>{tag.contextCap === undefined ? 'agent/global setting' : `${tag.contextCap} tokens`}</Text><Text style={styles.linkGlyph}>›</Text>
+                    <Text style={styles.footerKey}>context cap</Text><Text style={styles.footerValue}>{tag.contextCap === undefined ? 'agent/global setting' : `${tag.contextCap} tokens`}</Text><ChevronIcon direction="right" size={16} tone="faint" />
                   </Pressable>
                   <Pressable style={styles.deleteLink} onPress={() => onDeleteTag(tag.name)} accessibilityRole="button" accessibilityLabel={`Delete tag ${tag.name}`}><Text style={styles.deleteText}>delete</Text></Pressable>
                 </View>
@@ -104,7 +106,7 @@ export function TagsScreen({
               accessibilityRole="button"
               accessibilityLabel={`Open tag ${tag.name}`}>
               <Text style={styles.name}>{tag.name}</Text>
-              {isDefault(tag) ? <Text style={styles.defaultHint}>default</Text> : <Text style={styles.linkGlyph}>›</Text>}
+              {isDefault(tag) ? <Text style={styles.defaultHint}>default</Text> : <ChevronIcon direction="right" size={16} tone="faint" />}
             </Pressable>
           ))}
         </ScrollView>
@@ -140,7 +142,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  addGlyph: { fontSize: 22, lineHeight: 24, color: palette.surface },
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },

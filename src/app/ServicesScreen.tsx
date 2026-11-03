@@ -1,3 +1,4 @@
+import { ChevronIcon } from '../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { connection } from '../core/connection';
@@ -19,7 +20,7 @@ import {
   useServices,
 } from '../core/services';
 import { overlayStore } from '../core/overlay';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { CloseButton } from '../components/CloseButton';
 
 /** A compose install runs a local engine as a profile the owner starts on the host. */
@@ -100,7 +101,7 @@ export function ServicesScreen({
           accessibilityRole="button"
           accessibilityLabel="Back to settings"
         >
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <Text style={styles.title}>Services</Text>
         <CloseButton />
@@ -313,7 +314,7 @@ export function ServiceCard({
                 {chosenProvider ? `${chosenProvider} · ${chosenModel ?? ''}` : EMBED_HINT.pick}
               </Text>
             </View>
-            <Text style={styles.chevron}>›</Text>
+            <ChevronIcon direction="right" size={16} tone="faint" />
           </Pressable>
         )
       ) : null}

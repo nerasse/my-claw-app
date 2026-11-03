@@ -5,7 +5,7 @@ import type { SessionFileMeta } from '../core/protocol';
 import type { DeviceInfo } from '../core/device';
 import { formatBytes, formatDate, viewerFor } from '../core/utils';
 import type { FileKind } from '../core/fileKind';
-import { TrashIcon } from '../components/icons';
+import { ChevronIcon, TrashIcon } from '../components/icons';
 import { DownloadControl } from '../components/DownloadControl';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -161,7 +161,7 @@ export function FilesScreen({
           accessibilityRole="button"
           accessibilityLabel="Back to chat"
         >
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Session files</Text>

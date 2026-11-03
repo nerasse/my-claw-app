@@ -1,3 +1,4 @@
+import { CheckIcon, ChevronIcon } from '../components/icons';
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { connection } from '../core/connection';
@@ -8,12 +9,13 @@ import { modelReady, setupSettled, setupSteps, type SetupStep } from '../core/se
 import { useModelCatalog } from '../core/model';
 import { pushSupported } from '../core/notifications';
 import { prefs } from '../core/prefs';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { ServiceCard } from './ServicesScreen';
 import { CloseButton } from '../components/CloseButton';
 
+// Only the two marks still drawn as text: done is a vector, and the rest is a step number.
 const MARK: Record<SetupStep['state'], string> = {
-  done: '✓',
+  done: '',
   skipped: '–',
   todo: '',
   unknown: '',
@@ -111,7 +113,7 @@ export function SetupScreen({
       <View style={styles.header}>
         {gate ? null : (
           <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back to settings">
-            <Text style={styles.backGlyph}>‹</Text>
+            <ChevronIcon direction="left" size={22} tone="text" />
           </Pressable>
         )}
         <View style={styles.headerText}>
@@ -165,16 +167,13 @@ export function SetupScreen({
                     }
                     accessibilityLabel={`Setup step ${step.title}${step.state === 'done' ? ', done' : step.state === 'skipped' ? ', skipped' : ''}`}
                   >
-                    <Text
-                      style={[
-                        styles.mark,
-                        step.state === 'done'
-                          ? styles.markDone
-                          : styles.markOther,
-                      ]}
-                    >
-                      {MARK[step.state] || `${index + 1}`}
-                    </Text>
+                    {step.state === 'done' ? (
+                      <CheckIcon size={16} tone="accent" />
+                    ) : (
+                      <Text style={[styles.mark, styles.markOther]}>
+                        {MARK[step.state] || `${index + 1}`}
+                      </Text>
+                    )}
                     <View style={styles.rowText}>
                       <Text
                         style={[
@@ -188,9 +187,11 @@ export function SetupScreen({
                         {step.hint}
                       </Text>
                     </View>
-                    <Text style={styles.chevron}>
-                      {step.service ? (unfolded ? '⌄' : '›') : '›'}
-                    </Text>
+                    <ChevronIcon
+                      direction={step.service && unfolded ? 'up' : 'right'}
+                      size={16}
+                      tone="faint"
+                    />
                   </Pressable>
                   {/* The same slot on every row, button or not: the chevrons stay in one column. */}
                   {step.state === 'done' ? (
@@ -314,14 +315,7 @@ const createStyles = (palette: Palette) => ({
     fontSize: font.body,
     fontWeight: '700' as const,
   },
-  markDone: { color: palette.accent },
   markOther: { color: palette.textFaint },
-  chevron: {
-    fontSize: font.screen,
-    color: palette.textFaint,
-    width: 16,
-    textAlign: 'center' as const,
-  },
   // A real button, not a word: 36pt tall, the row's other target being the whole row.
   skipSlot: { width: 64 },
   skip: {

@@ -1,3 +1,4 @@
+import { MoreIcon } from './icons';
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { SessionSummary } from '../core/protocol';
@@ -42,7 +43,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
       onPress={() => onMenu(item)}
       accessibilityRole="button"
       accessibilityLabel={`Actions for conversation ${item.title}`}>
-      <Text style={styles.menuGlyph}>⋯</Text>
+      <MoreIcon size={16} tone="faint" />
     </Pressable>
   );
   return (

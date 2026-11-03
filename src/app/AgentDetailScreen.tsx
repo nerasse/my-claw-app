@@ -1,9 +1,10 @@
+import { ChevronIcon } from '../components/icons';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { AgentInfo } from '../core/protocol';
 import { inheritLabel } from './AgentsSettingsScreen';
 import { useModelCatalog } from '../core/model';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { CloseButton } from '../components/CloseButton';
 
@@ -63,7 +64,7 @@ export function AgentDetailScreen({
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Back to agents">
-          <Text style={styles.backGlyph}>‹</Text>
+          <ChevronIcon direction="left" size={22} tone="text" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>{agent.label}</Text>
@@ -96,7 +97,7 @@ export function AgentDetailScreen({
                   {agent.pinned ? `${agent.model} · pinned to this agent` : inheritLabel(agent)}
                 </Text>
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
           </View>
         </View>
@@ -137,7 +138,7 @@ export function AgentDetailScreen({
                     ? 'copy to a custom file you can edit'
                     : 'change this file from the app'}
                 </Text>
-                <Text style={styles.linkGlyph}>›</Text>
+                <ChevronIcon direction="right" size={16} tone="faint" />
               </Pressable>
             </View>
             <Text style={styles.note}>
@@ -171,7 +172,7 @@ export function AgentDetailScreen({
                   </Text>
                 ) : null}
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
             <View style={styles.separator} />
             <Pressable
@@ -195,7 +196,7 @@ export function AgentDetailScreen({
                   </Text>
                 ) : null}
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
             <View style={styles.separator} />
             <Pressable
@@ -214,7 +215,7 @@ export function AgentDetailScreen({
                   {agent.unknownWorkspace ? <Text style={styles.badgeRemoved}>removed</Text> : null}
                 </View>
               </View>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
             <View style={styles.separator} />
             {/* The workspace prompt files this agent sits on. A file-defined agent adds its own
@@ -228,7 +229,7 @@ export function AgentDetailScreen({
               <Text style={styles.rowValue} numberOfLines={1}>
                 {agent.workspace ? `${agent.workspace} workspace` : 'default workspace'}
               </Text>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
             <View style={styles.separator} />
             <Pressable
@@ -244,7 +245,7 @@ export function AgentDetailScreen({
                     ? 'no ceiling'
                     : `${agent.contextCap} tokens`}
               </Text>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
             <View style={styles.separator} />
             <Pressable
@@ -258,7 +259,7 @@ export function AgentDetailScreen({
                   ? 'default'
                   : String(agent.maxIterations)}
               </Text>
-              <Text style={styles.linkGlyph}>›</Text>
+              <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
           </View>
           <Text style={styles.note}>

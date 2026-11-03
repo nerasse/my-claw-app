@@ -1,3 +1,4 @@
+import { CloseIcon } from '../components/icons';
 /**
  * The Android host for a web page: a WebView with JavaScript off.
  *
@@ -15,7 +16,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { DownloadControl } from '../components/DownloadControl';
 import { FullscreenToggle, ViewerStage } from '../components/ViewerChrome';
-import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 
 export function HtmlViewer({
@@ -52,7 +53,7 @@ export function HtmlViewer({
           accessibilityRole="button"
           accessibilityLabel="Close file view"
         >
-          <Text style={styles.closeGlyph}>✕</Text>
+          <CloseIcon size={18} tone="text" />
         </Pressable>
       </View>
 

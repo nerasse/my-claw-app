@@ -1,3 +1,4 @@
+import { MoreIcon } from './icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RunInfo, TextItem } from '../core/chat';
@@ -292,7 +293,7 @@ export const Bubble = React.memo(function BubbleView({
           onPress={() => onMenu(item)}
           accessibilityRole="button"
           accessibilityLabel="Message actions">
-          <Text style={styles.menuGlyph}>⋯</Text>
+          <MoreIcon size={16} tone="faint" />
         </Pressable>
         {!agent && foot !== undefined ? <RunFoot run={foot} /> : null}
       </View>
