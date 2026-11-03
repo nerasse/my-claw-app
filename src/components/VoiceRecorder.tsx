@@ -52,6 +52,9 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
   const [levels, setLevels] = useState<number[]>([]);
   const [warning, setWarning] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
+  const recording = phase === 'recording';
+  const locked = phase === 'locked';
+  const active = recording || locked;
 
   // The pan callbacks are built once and never see a re-render, so every value they read lives
   // in a ref. Reading `phase` there would pin it to 'idle' for the whole gesture.
@@ -62,6 +65,12 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
   const pendingWarningRef = useRef<string | null>(null);
   const nativeEndedRef = useRef(false);
   const slide = useRef(new Animated.Value(0)).current;
+  // Three values, one timeline. A take is a state the whole row is in, not a label swapped in
+  // beside a button: the dot blinks at the rate of the caret, the microphone breathes at the
+  // same rate, and the bar rises into place once. Coherence here is one period, not three.
+  const blink = useRef(new Animated.Value(1)).current;
+  const rise = useRef(new Animated.Value(0)).current;
+  const breathe = useRef(new Animated.Value(0)).current;
 
   const setPhaseBoth = useCallback(
     (next: Phase) => {
@@ -114,6 +123,53 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
       bounciness: 4,
     }).start();
   }, [setPhaseBoth, slide]);
+
+  // A recording that does not move is a recording whose state the eye has to remember. The loop
+  // runs while the take does, on the native driver so it keeps its rhythm while the thread is
+  // busy with the stream.
+  useEffect(() => {
+    const live = phase === 'recording';
+    const native = Platform.OS !== 'web';
+    if (!live) {
+      blink.stopAnimation();
+      breathe.stopAnimation();
+      blink.setValue(1);
+      breathe.setValue(0);
+      return undefined;
+    }
+    // 1.1 s, the same period as the caret on the web: a blink that fought the caret read as two
+    // different ideas of "busy".
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blink, { toValue: 0.25, duration: 550, useNativeDriver: native }),
+        Animated.timing(blink, { toValue: 1, duration: 550, useNativeDriver: native }),
+      ]),
+    );
+    const ring = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathe, { toValue: 1, duration: 550, useNativeDriver: native }),
+        Animated.timing(breathe, { toValue: 0, duration: 550, useNativeDriver: native }),
+      ]),
+    );
+    pulse.start();
+    ring.start();
+    return () => {
+      pulse.stop();
+      ring.stop();
+    };
+  }, [blink, breathe, phase]);
+
+  // The bar arrives once per take, and leaves the same way: an element that appears between two
+  // frames reads as a jolt, and a phone row that jolts while the thumb is held is worse than a
+  // still one.
+  const riseTo = active ? 1 : 0;
+  useEffect(() => {
+    Animated.timing(rise, {
+      toValue: riseTo,
+      duration: 140,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [rise, riseTo]);
 
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
@@ -254,16 +310,19 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     [begin, discard, keep, setPhaseBoth, slide],
   );
 
-  const recording = phase === 'recording';
-  const locked = phase === 'locked';
-  const active = recording || locked;
-
   return (
     <View style={[styles.wrap, active && styles.wrapActive]}>
       {/* Always this slot, so inserting the bar never re-parents the button below. */}
       {active ? (
-        <View style={styles.bar}>
-          <View style={styles.dot} />
+        <Animated.View
+          style={[
+            styles.bar,
+            {
+              opacity: rise,
+              transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [4, 0] }) }],
+            },
+          ]}>
+          <Animated.View style={[styles.dot, { opacity: blink }]} />
           <Text style={styles.timer}>{formatDuration(elapsedMs)}</Text>
           {armed ? (
             <Text style={styles.armed} numberOfLines={1}>
@@ -290,7 +349,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
               {'\u2039 slide to delete'}
             </Text>
           )}
-        </View>
+        </Animated.View>
       ) : null}
 
       {locked ? (
@@ -311,7 +370,12 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
             hero && styles.buttonHero,
             dense && !hero && styles.buttonDense,
             recording && (armed ? styles.buttonArmed : styles.buttonLive),
-            { transform: [{ translateX: slide }] },
+            {
+              transform: [
+                { translateX: slide },
+                { scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
+              ],
+            },
           ]}
           accessibilityRole="button"
           accessibilityLabel={recording ? 'Recording, release to keep' : 'Record voice message'}
@@ -377,26 +441,27 @@ const createStyles = (palette: Palette) => ({
   stopGlyph: { width: 14, height: 14, borderRadius: 3, backgroundColor: palette.accentText },
   glyphIdle: { color: palette.textMuted },
   glyphOnFill: { color: palette.accentText },
+  // One height with the row of controls it replaces, so a take does not resize the composer.
   bar: {
     flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.sm,
-    minHeight: 44,
+    minHeight: 30,
   },
-  dot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: palette.danger },
+  dot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: palette.danger },
   timer: {
-    fontSize: font.meta,
+    fontSize: font.small,
     color: palette.text,
     fontVariant: ['tabular-nums' as const],
-    minWidth: 34,
+    minWidth: 32,
   },
   wave: {
     flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 2,
-    height: 20,
+    height: 18,
   },
   waveBar: { flex: 1, borderRadius: radius.pill, backgroundColor: palette.accentSoft },
   hint: { fontSize: font.small, color: palette.textFaint },

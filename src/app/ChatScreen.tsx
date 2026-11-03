@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, Platform, Pressable, Text, View, type TextInput } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, PanResponder, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
@@ -38,7 +38,7 @@ import { LocationEditor } from '../components/LocationEditor';
 import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import { conversationColumn, useLayout } from '../core/layout';
+import { conversationColumn, isDrawerSwipe, useLayout } from '../core/layout';
 import { ContinueButton } from '../components/ContinueButton';
 import { QuotaWaitBar } from '../components/QuotaWaitBar';
 import type { QuotaRetryWait } from '../core/protocol';
@@ -230,6 +230,25 @@ export function ChatScreen({
     [layout.toolWidth],
   );
   const listRef = useRef<FlatList<ChatRow>>(null);
+  // A right swipe opens the list. Bubbling, never capture: a diff or a carousel that scrolls
+  // sideways claims the gesture first, and the reader of a wrapped block means the block.
+  const drawerSwipeRef = useRef({ open: onOpenDrawer, pinned: layout.pinnedDrawer });
+  drawerSwipeRef.current = { open: onOpenDrawer, pinned: layout.pinnedDrawer };
+  const drawerSwipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          Math.abs(gesture.dx) > 12 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.6 &&
+          !drawerSwipeRef.current.pinned,
+        onPanResponderRelease: (_event, gesture) => {
+          if (isDrawerSwipe(gesture.dx, gesture.dy, drawerSwipeRef.current.pinned)) {
+            drawerSwipeRef.current.open();
+          }
+        },
+      }),
+    [],
+  );
   // Subscribed here rather than handed down: a growing bubble must not re-render the shell that
   // holds every page of the app, only the conversation showing it.
   const items = useChatItems(threadId);
@@ -1471,7 +1490,7 @@ export function ChatScreen({
         <>
           {/* The list itself fills the pane: each row caps its own width above, because a bubble
               and a tool card do not want the same one. */}
-          <View style={[styles.listWrap, toolColumn]} {...selectableProps()}>
+          <View style={[styles.listWrap, toolColumn]} {...selectableProps()} {...drawerSwipe.panHandlers}>
             {/* Inverted: the newest message is index 0 and sits at offset 0, so opening a
                 conversation lands on it with no scrolling at all. scrollToEnd on a list of
                 unmeasured rows aims at an estimated content height and stops short of the last

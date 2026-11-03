@@ -1,4 +1,4 @@
-import { READING_WIDTH, TOOL_WIDTH, conversationColumn } from '../layout';
+import { READING_WIDTH, TOOL_WIDTH, conversationColumn, isDrawerSwipe } from '../layout';
 
 /**
  * The thread and the composer are one column.
@@ -29,5 +29,23 @@ describe('the conversation column', () => {
     expect(TOOL_WIDTH).toBe(READING_WIDTH);
     // ...and still not a 1160 column defended as a reading decision.
     expect(READING_WIDTH).toBeLessThan(1200);
+  });
+});
+
+describe('the swipe that opens the conversation list', () => {
+  test('a rightward, mostly horizontal drag opens it', () => {
+    expect(isDrawerSwipe(120, 10, false)).toBe(true);
+  });
+
+  test('a thumb resting or scrolling does not', () => {
+    expect(isDrawerSwipe(20, 4, false)).toBe(false);
+    // A vertical scroll that drifts: the thread must keep it.
+    expect(isDrawerSwipe(70, 90, false)).toBe(false);
+    // ...and the other way is not a gesture at all.
+    expect(isDrawerSwipe(-120, 10, false)).toBe(false);
+  });
+
+  test('the list is already a column on a desktop: a swipe there is a selection', () => {
+    expect(isDrawerSwipe(200, 5, true)).toBe(false);
   });
 });

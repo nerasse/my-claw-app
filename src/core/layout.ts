@@ -35,6 +35,23 @@ const WIDE_MIN = 1440;
 export const READING_WIDTH = 1100;
 
 /**
+ * Does this drag open the conversation list?
+ *
+ * Rightwards, mostly horizontal, past a margin a thumb cannot hit by accident. The list only
+ * opens this way where it is not already a column: on a desktop it is pinned, and a swipe there
+ * would fight the text selection the same drag is for.
+ *
+ * Bubbling and not capture: a code block or a picture that scrolls sideways claims the gesture
+ * first, which is what the reader of a wrapped diff means by dragging on it.
+ */
+export function isDrawerSwipe(dx: number, dy: number, pinnedDrawer: boolean): boolean {
+  if (pinnedDrawer) return false;
+  if (dx < 56) return false;
+  // A vertical scroll that drifts right is a scroll, not a swipe.
+  return Math.abs(dx) > Math.abs(dy) * 1.6;
+}
+
+/**
  * The one column a conversation is drawn in: its header, its rows and its composer.
  *
  * A function rather than a constant because the failure it prevents is two numbers drifting

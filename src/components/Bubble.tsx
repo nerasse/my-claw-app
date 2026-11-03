@@ -195,15 +195,11 @@ export const Bubble = React.memo(function BubbleView({
         // and hide the reasoning line, the attachments and the tool cards from a screen reader.
         // The ⋯ button is the accessible way to the same menu.
         accessible={false}>
-        {/* Who is talking, once per turn. The agent's message is prose on the thread, not a
-            bubble: a conversation where both sides are cards reads as a chat, and this one is a
-            document with a question at the top of each turn. */}
+        {/* The time, once per turn, and nothing else. The agent's message is prose on the thread
+            rather than a bubble, and naming it said nothing: one agent answers in a conversation,
+            and when it is a sub-agent the header already carries its name. */}
         {agent && !grouped && showTime && !item.command && !item.notice ? (
-          <View style={styles.byline}>
-            <Text style={styles.bylineWho}>my-claw</Text>
-            <Text style={styles.bylineSep}>·</Text>
-            <Text style={styles.bylineTime}>{clock(item.ts)}</Text>
-          </View>
+          <Text style={styles.byline}>{clock(item.ts)}</Text>
         ) : null}
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
@@ -333,10 +329,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // a run of them reads as one column of prose. `bubbleNotice` and `bubbleCommand` keep a plate
   // of their own -- they are not the agent speaking.
   bubbleAgent: { backgroundColor: 'transparent' as const, paddingHorizontal: 0, paddingVertical: 0 },
-  byline: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, marginBottom: 2 },
-  bylineWho: { fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const, color: palette.textMuted },
-  bylineSep: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint },
-  bylineTime: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
+  byline: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, marginBottom: 2 },
   bubbleNotice: {
     backgroundColor: palette.surface,
     borderWidth: 1,
