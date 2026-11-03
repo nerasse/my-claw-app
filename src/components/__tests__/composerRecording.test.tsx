@@ -105,6 +105,7 @@ describe('a take inside the composer', () => {
 
     // The field and the spacer are gone, the microphone stayed: same host instance, same gesture.
     expect(responderNode(mounted) === mic).toBe(true);
+    jest.advanceTimersByTime(800);
 
     await ReactTestRenderer.act(async () => {
       pan.onResponderRelease(touch(300, 700));

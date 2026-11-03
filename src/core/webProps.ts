@@ -9,6 +9,10 @@ export function contextMenuProps(_open: () => void): Partial<ViewProps> {
   return {};
 }
 
+export function recordingGestureProps(): Partial<ViewProps> {
+  return {};
+}
+
 export function selectableProps(): Partial<ViewProps> {
   return {};
 }

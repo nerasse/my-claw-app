@@ -189,12 +189,15 @@ export async function ensureMicPermission(): Promise<MicPermission> {
 
 export type RecordingOutcome =
   | { ok: true; recording: VoiceRecording }
-  | { ok: false; reason: 'too-short' | 'failed' };
+  | { ok: false; reason: 'too-short' | 'empty' | 'failed' };
 
 /**
  * Ends a deliberate hold. A recording under MIN_RECORDING_MS is not staged by the normal gesture
  * path; an Android interruption is handled by VoiceRecorder's status event instead, so a valid
  * file finalized by the notification or recorder error is never silently dropped here.
+ *
+ * A recorder that answers nothing is not a failure: it is a press released before any frame was
+ * written, which the caller drops in silence like a short take.
  */
 export async function finishRecording(): Promise<RecordingOutcome> {
   let recording: VoiceRecording | null;
@@ -203,7 +206,7 @@ export async function finishRecording(): Promise<RecordingOutcome> {
   } catch {
     return { ok: false, reason: 'failed' };
   }
-  if (!recording || recording.sizeBytes === 0) return { ok: false, reason: 'failed' };
+  if (!recording || recording.sizeBytes === 0) return { ok: false, reason: 'empty' };
   if (recording.durationMs < MIN_RECORDING_MS) return { ok: false, reason: 'too-short' };
   return { ok: true, recording };
 }

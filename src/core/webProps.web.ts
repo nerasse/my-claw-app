@@ -17,6 +17,16 @@ export function contextMenuProps(_open: () => void): Partial<ViewProps> {
   return {};
 }
 
+/** Set before touch down: changing touch-action during a drag cannot prevent browser panning. */
+export function recordingGestureProps(): Partial<ViewProps> {
+  const props = {
+    style: { cursor: 'pointer' as const, touchAction: 'none', userSelect: 'none', WebkitTouchCallout: 'none' },
+    onContextMenu: (event: Event) => event.preventDefault(),
+    onDragStart: (event: Event) => event.preventDefault(),
+  };
+  return props;
+}
+
 /**
  * Opts a subtree back into text selection. `Text` ships `user-select: none` in
  * react-native-web, which on a phone stops a tap from selecting a word and on a desktop stops a

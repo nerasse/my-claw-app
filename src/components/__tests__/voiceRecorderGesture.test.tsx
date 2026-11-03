@@ -15,7 +15,7 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Animated, View } from 'react-native';
 import { VoiceRecorder } from '../VoiceRecorder';
-import { deviceBridge } from '../../core/nativeBridge';
+import { deviceBridge, deviceEvents, VOICE_STATUS_EVENT } from '../../core/nativeBridge';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 
@@ -34,13 +34,15 @@ interface Handlers {
  * The responder event PanResponder reads. Coordinates are absolute, and the gesture state it keeps
  * diffs consecutive positions: one touch, moved by `dx`/`dy` since the grant.
  */
+let clock = 0;
 function touch(x: number, y: number, previous?: { x: number; y: number }): unknown {
+  const timestamp = ++clock;
   return {
     nativeEvent: { touches: [{ pageX: x, pageY: y }] },
     touchHistory: {
       numberActiveTouches: 1,
       indexOfSingleActiveTouch: 0,
-      mostRecentTimeStamp: x + y + 1,
+      mostRecentTimeStamp: timestamp,
       touchBank: [
         {
           touchActive: true,
@@ -49,7 +51,7 @@ function touch(x: number, y: number, previous?: { x: number; y: number }): unkno
           startTimeStamp: 0,
           currentPageX: x,
           currentPageY: y,
-          currentTimeStamp: x + y + 1,
+          currentTimeStamp: timestamp,
           previousPageX: previous?.x ?? x,
           previousPageY: previous?.y ?? y,
           previousTimeStamp: 0,
@@ -122,6 +124,7 @@ async function hold(): Promise<Handlers> {
   await ReactTestRenderer.act(async () => {
     pan.onResponderGrant(touch(300, 700));
   });
+  jest.advanceTimersByTime(800);
   return pan;
 }
 
@@ -130,9 +133,9 @@ beforeEach(() => {
   recorded = jest.fn();
   failed = jest.fn();
   active = jest.fn();
-  bridge.startRecording.mockResolvedValue('recording');
-  bridge.stopRecording.mockResolvedValue(TAKE);
-  bridge.cancelRecording.mockResolvedValue(undefined);
+  bridge.startRecording.mockReset().mockResolvedValue('recording');
+  bridge.stopRecording.mockReset().mockResolvedValue(TAKE);
+  bridge.cancelRecording.mockReset().mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -175,6 +178,7 @@ describe('the responder node', () => {
     });
 
     expect(sameNode(idle, mounted)).toBe(true);
+    jest.advanceTimersByTime(800);
     await ReactTestRenderer.act(async () => {
       pan.onResponderRelease(touch(300, 700));
     });
@@ -334,6 +338,133 @@ describe('sliding left', () => {
   });
 });
 
+describe('continuous gestures and start/stop races', () => {
+  it('cancels in one continuous left drag, before lifting the finger', async () => {
+    const pan = await hold();
+    let previous = { x: 300, y: 700 };
+    for (const x of [280, 260, 240, 220, 200]) {
+      await ReactTestRenderer.act(async () => {
+        pan.onResponderMove(touch(x, 700, previous));
+      });
+      previous = { x, y: 700 };
+    }
+    expect(bridge.cancelRecording).toHaveBeenCalledTimes(1);
+    expect(recorded).not.toHaveBeenCalled();
+    await ReactTestRenderer.act(async () => pan.onResponderRelease(touch(200, 700)));
+    expect(bridge.stopRecording).not.toHaveBeenCalled();
+    expect(bridge.cancelRecording).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a deliberate up lock after release and stops exactly once with the button', async () => {
+    const pan = await hold();
+    const node = responderNode(tree!);
+    await ReactTestRenderer.act(async () => {
+      pan.onResponderMove(touch(300, 620, { x: 300, y: 700 }));
+      pan.onResponderRelease(touch(300, 620));
+    });
+    expect(responderNode(tree!) === node).toBe(true);
+    expect(node.props.accessibilityLabel).toBe('Recording, hands free');
+    expect(bridge.stopRecording).not.toHaveBeenCalled();
+    const stop = tree!.root.findAll(n => n.props.accessibilityLabel === 'Stop recording' && typeof n.props.onPress === 'function')[0];
+    expect(stop).toBeDefined();
+    await ReactTestRenderer.act(async () => stop?.props.onPress());
+    expect(bridge.stopRecording).toHaveBeenCalledTimes(1);
+    expect(recorded).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the locked trash button cancel without saving', async () => {
+    const pan = await hold();
+    await ReactTestRenderer.act(async () => {
+      pan.onResponderMove(touch(300, 620, { x: 300, y: 700 }));
+      pan.onResponderRelease(touch(300, 620));
+    });
+    const cancel = tree!.root.findAll(n => n.props.accessibilityLabel === 'Cancel recording' && typeof n.props.onPress === 'function')[0];
+    expect(cancel).toBeDefined();
+    await ReactTestRenderer.act(async () => cancel?.props.onPress());
+    expect(bridge.cancelRecording).toHaveBeenCalledTimes(1);
+    expect(recorded).not.toHaveBeenCalled();
+  });
+
+  it('silently discards a quick tap even when the encoder returns no recording', async () => {
+    bridge.stopRecording.mockResolvedValueOnce(null);
+    const mounted = mount();
+    const pan = handlers(mounted);
+    await ReactTestRenderer.act(async () => pan.onResponderGrant(touch(300, 700)));
+    await ReactTestRenderer.act(async () => pan.onResponderRelease(touch(300, 700)));
+    expect(bridge.stopRecording).toHaveBeenCalledTimes(1);
+    expect(recorded).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it('drops a take the encoder reports as too short', async () => {
+    bridge.stopRecording.mockResolvedValueOnce({ ...TAKE, durationMs: 180 });
+    const pan = await hold();
+    await ReactTestRenderer.act(async () => pan.onResponderRelease(touch(300, 700)));
+    expect(recorded).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it.each(['release', 'cancel', 'terminate'] as const)('handles %s while the native start is pending', async action => {
+    let ready = (_value: string): void => {};
+    bridge.startRecording.mockReturnValueOnce(new Promise(resolve => { ready = resolve; }));
+    const mounted = mount();
+    const pan = handlers(mounted);
+    await ReactTestRenderer.act(async () => pan.onResponderGrant(touch(300, 700)));
+    await ReactTestRenderer.act(async () => {
+      if (action === 'cancel') pan.onResponderMove(touch(200, 700, { x: 300, y: 700 }));
+      if (action === 'terminate') pan.onResponderTerminate(touch(300, 700));
+      else pan.onResponderRelease(touch(200, 700));
+    });
+    await ReactTestRenderer.act(async () => ready('recording'));
+    expect(bridge.cancelRecording).toHaveBeenCalledTimes(1);
+    expect(bridge.stopRecording).not.toHaveBeenCalled();
+    expect(recorded).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+    // The native start that was cancelled released the microphone, so the next press may begin.
+    await ReactTestRenderer.act(async () => pan.onResponderGrant(touch(300, 700)));
+    expect(bridge.startRecording).toHaveBeenCalledTimes(2);
+  });
+
+  it('remembers an up lock performed before native start resolves', async () => {
+    let ready = (_value: string): void => {};
+    bridge.startRecording.mockReturnValueOnce(new Promise(resolve => { ready = resolve; }));
+    const mounted = mount();
+    const pan = handlers(mounted);
+    await ReactTestRenderer.act(async () => pan.onResponderGrant(touch(300, 700)));
+    await ReactTestRenderer.act(async () => {
+      pan.onResponderMove(touch(300, 620, { x: 300, y: 700 }));
+      pan.onResponderRelease(touch(300, 620));
+      ready('recording');
+    });
+    expect(responderNode(mounted).props.accessibilityLabel).toBe('Recording, hands free');
+    expect(bridge.stopRecording).not.toHaveBeenCalled();
+    expect(bridge.cancelRecording).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate a native stop racing with finger release', async () => {
+    const pan = await hold();
+    let stopped = (_value: typeof TAKE): void => {};
+    bridge.stopRecording.mockReturnValueOnce(new Promise(resolve => { stopped = resolve; }));
+    await ReactTestRenderer.act(async () => {
+      pan.onResponderRelease(touch(300, 700));
+      deviceEvents.emit(VOICE_STATUS_EVENT, { state: 'stopped', recording: TAKE });
+      stopped(TAKE);
+    });
+    expect(recorded).toHaveBeenCalledTimes(1);
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it('settles a native interruption without a recording payload', async () => {
+    await hold();
+    await ReactTestRenderer.act(async () => {
+      deviceEvents.emit(VOICE_STATUS_EVENT, { state: 'interrupted', warning: 'Microphone interrupted.' });
+    });
+    expect(active).toHaveBeenLastCalledWith(false);
+    expect(failed).toHaveBeenCalledWith('Microphone interrupted.');
+    expect(recorded).not.toHaveBeenCalled();
+  });
+});
+
 describe('what a take shows', () => {
   it('replaces the idle microphone with the take, on the same node', async () => {
     const mounted = mount();
@@ -345,7 +476,7 @@ describe('what a take shows', () => {
 
     // The very same host instance still owns the gesture, and it now hosts the take.
     expect(sameNode(idle, mounted)).toBe(true);
-    expect(mounted.root.findAllByType(Animated.View).length).toBeGreaterThan(1);
+    expect(mounted.root.findAllByType(Animated.View)).toHaveLength(1);
     expect(mounted.root.findAllByType(View).length).toBeGreaterThan(1);
   });
 });

@@ -74,22 +74,23 @@ test('a new placeholder measures the field again', () => {
   expect(grown).toHaveBeenCalledTimes(1);
 });
 
-// A take owns the row while it records: the field unmounts, and the one that comes back is a new
-// textarea with no inline height. The frame lays it out at the same width as before, so the only
-// thing that changed is the node -- a cancel used to leave the empty composer two rows tall.
-test('the field is measured again when a take gives it back', () => {
+test('recording keeps the same field and geometry instead of moving the microphone', () => {
   tree = render();
   laidOut(tree, 130);
   grown.mockClear();
 
+  const field = tree.root.findByType(TextInput);
   const recorder = tree.root.findAllByType(VoiceRecorder).at(0)!;
   ReactTestRenderer.act(() => recorder.props.onActiveChange(true));
-  expect(tree.root.findAllByType(TextInput)).toHaveLength(0);
+  expect(tree.root.findByType(TextInput) === field).toBe(true);
+  expect(field.props.editable).toBe(false);
 
   ReactTestRenderer.act(() => recorder.props.onActiveChange(false));
   laidOut(tree, 130);
 
-  expect(grown).toHaveBeenCalledTimes(1);
+  expect(grown).not.toHaveBeenCalled();
+  expect(tree.root.findByType(TextInput) === field).toBe(true);
+  expect(field.props.editable).toBe(true);
 });
 
 // The line box is the browser's fix (the caret was cut by a textarea exactly as tall as the

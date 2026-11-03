@@ -164,7 +164,7 @@ export function Composer({
    * the only thing left to do.
    */
   const stopVisible = streaming === true && !recording && nothingToSend;
-  const sendVisible = !recording && !stopVisible && (!micVisible || staged > 0);
+  const sendVisible = !stopVisible && (!micVisible || staged > 0);
   const recordings = attachments?.filter(item => item.audioAsVoice) ?? [];
   const files = attachments?.filter(item => !item.audioAsVoice) ?? [];
 
@@ -245,9 +245,6 @@ export function Composer({
   // The height depends on where the text wraps, which is the field's width as much as its text: a
   // field measured while a column folded or a page opened beside it kept that height until the
   // next keystroke. Only a new width measures again; the height this sets moves the layout too.
-  // A take unmounts the field for the length of the recording, and what comes back is a new
-  // textarea with no inline height: the node is the other half of "nothing changed", or a
-  // cancel left the empty composer two rows tall until the next keystroke.
   const fieldWidth = useRef(0);
   const measuredNode = useRef<unknown>(null);
   const onFieldLayout = useCallback(
@@ -392,11 +389,13 @@ export function Composer({
           the text and the actions is what the POC draws: a message box whose bottom row is the
           controls, so a long message never pushes the send button to the side of the screen. */}
       <View style={[styles.shell, hero && styles.shellHero, dense && !hero && styles.shellDense]}>
-        {recording ? null : (
-        // The frame is the wrapper's, never the field's: border, background and padding on the
-        // input itself scroll away with the text on Android, which is why a long message came to
-        // sit across the rounded edge, cut in the middle of a line.
-        <View style={[styles.field, hero && styles.fieldHero, dense && !hero && styles.fieldDense]} onLayout={onFieldLayout}>
+        {/* Keep the field's space: collapsing it moves the microphone under the held finger. */}
+        <View
+          pointerEvents={recording ? 'none' : 'auto'}
+          accessibilityElementsHidden={recording}
+          importantForAccessibility={recording ? 'no-hide-descendants' : 'auto'}
+          style={[styles.field, hero && styles.fieldHero, dense && !hero && styles.fieldDense, recording && styles.fieldRecording]}
+          onLayout={onFieldLayout}>
           <TextInput
             ref={inputRef}
             // Read back by the window paste listener on web: a paste is for the chat only when the
@@ -404,6 +403,7 @@ export function Composer({
             id={COMPOSER_INPUT_ID}
             style={[styles.input, hero && styles.inputHero, dense && !hero && styles.inputDense]}
             value={value}
+            editable={!recording}
             onChangeText={onChange}
             onFocus={() => onFocusChange?.(true)}
             onBlur={() => onFocusChange?.(false)}
@@ -417,7 +417,6 @@ export function Composer({
             accessibilityLabel="Message to send"
           />
         </View>
-        )}
         <View style={styles.bar}>
         {onPickAttachment && !recording ? (
           <Pressable
@@ -454,9 +453,10 @@ export function Composer({
               hero && styles.sendHero,
               dense && !hero && styles.buttonDense,
               nothingToSend && styles.sendIdle,
+              recording && styles.fieldRecording,
             ]}
             onPress={onSend}
-            disabled={nothingToSend}
+            disabled={nothingToSend || recording}
             accessibilityRole="button"
             accessibilityLabel="Send message">
             <SendIcon
@@ -618,6 +618,7 @@ const createStyles = (palette: Palette) => ({
   shellDense: { borderRadius: 18 },
   // 4 pt between the dots of the two secondary actions, and the send pushed to the far end by
   // `grow`: three controls bunched on the left read as one control.
+  fieldRecording: { opacity: 0 },
   bar: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingTop: 2 },
   grow: { flex: 1 },
   keyhints: { flexDirection: 'row' as const, gap: space.md, paddingHorizontal: space.xs, paddingTop: 2 },

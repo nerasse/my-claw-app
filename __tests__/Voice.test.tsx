@@ -194,22 +194,19 @@ test('releasing the mic stages the note, and sending it is a separate act', asyn
   await unmount(tree);
 });
 
-test('sliding left discards the take instead of sending it', async () => {
+test('sliding left discards the take during the gesture, without lifting first', async () => {
   const tree = await renderApp();
-
 
   const touch = finger(tree);
   await touch.down();
   await touch.move(-120, 0);
-  // Past the point of no return the button says what releasing will do: the label follows the
-  // gesture, which is what a screen reader needs to hear before the finger lifts.
-  await touch.up('Release to delete');
 
+  // The cancel happens while the finger is still down: the take is already gone, so there is
+  // nothing left for a release to decide, and no second gesture is needed.
+  await waitFor(() => labelsOf(tree).includes('Record voice message'));
   expect(bridge.cancelRecording).toHaveBeenCalled();
   expect(bridge.stopRecording).not.toHaveBeenCalled();
   expect(bridge.uploadFile).not.toHaveBeenCalled();
-  // The composer is back, so the gesture left nothing behind.
-  await waitFor(() => labelsOf(tree).includes('Record voice message'));
 
   await unmount(tree);
 });
