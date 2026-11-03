@@ -212,7 +212,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   body: { paddingBottom: space.xl },
   search: {
@@ -265,5 +264,4 @@ const createStyles = (palette: Palette) => ({
   rowMain: { flex: 1, gap: 1 },
   rowTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   rowHint: { fontSize: font.small, color: palette.textFaint },
-  linkGlyph: { fontSize: font.screen, color: palette.textFaint },
 });

@@ -366,7 +366,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   activeRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

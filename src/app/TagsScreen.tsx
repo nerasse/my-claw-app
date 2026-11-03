@@ -133,7 +133,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   addButton: {
     width: 40,
     height: 40,
@@ -176,7 +175,6 @@ const createStyles = (palette: Palette) => ({
   linkMain: { flex: 1, gap: 2 },
   linkTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
   linkTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  linkGlyph: { fontSize: 20, color: palette.textFaint },
   hint: { fontSize: font.small, color: palette.textMuted },
   divider: { height: 1, backgroundColor: palette.border },
   footer: {

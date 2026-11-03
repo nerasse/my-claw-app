@@ -232,3 +232,10 @@ export function AgentIcon(props: IconProps): React.JSX.Element {
     <Icon {...props} d="M4.5 8.5A2.5 2.5 0 0 1 7 6h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 18H7a2.5 2.5 0 0 1-2.5-2.5zM9 10.6a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zm6 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zM9.5 4h5v1.6h-5z" />
   );
 }
+
+/** A pencil: this row can be renamed. Nothing else in the chrome edits a name in place. */
+export function PencilIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon {...props} d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z" />
+  );
+}

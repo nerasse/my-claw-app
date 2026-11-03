@@ -1,4 +1,4 @@
-import { ChevronIcon } from '../components/icons';
+import { ChevronIcon, PencilIcon } from '../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { BackButton, headerStyle } from '../components/BackButton';
@@ -307,7 +307,7 @@ export function AccountScreen({
                 <Text style={styles.cardTitle}>Name</Text>
                 <Text style={styles.hint} numberOfLines={1}>{`${view.name} · id ${provider}`}</Text>
               </View>
-              <Text style={styles.linkGlyph}>✎</Text>
+              <PencilIcon size={16} tone="faint" />
             </Pressable>
             <Pressable
               onPress={onOpenModels}
@@ -329,7 +329,6 @@ export function AccountScreen({
 
 const createStyles = (palette: Palette) => ({
   linkRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md, minHeight: 44 },
-  linkGlyph: { fontSize: 20, color: palette.textFaint },
   root: { flex: 1 },
   header: headerStyle(palette),
   grow: { flex: 1 },

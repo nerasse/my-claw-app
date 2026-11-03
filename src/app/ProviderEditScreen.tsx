@@ -514,7 +514,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
@@ -602,7 +601,6 @@ const createStyles = (palette: Palette) => ({
   link: { gap: space.sm },
   linkMain: { flex: 1, gap: 1 },
   linkText: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  chevron: { fontSize: 22, color: palette.textFaint },
   saveButton: {
     marginTop: space.sm,
     paddingVertical: space.md,

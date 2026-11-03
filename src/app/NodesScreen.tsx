@@ -370,7 +370,6 @@ const createStyles = (palette: Palette) => ({
   },
   approve: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
   busy: { opacity: 0.7 },
-  chevron: { fontSize: font.title, color: palette.textFaint, paddingHorizontal: space.xs },
   buttonText: { fontSize: font.small, color: palette.text, fontWeight: '600' as const },
   sectionLabel: {
     marginTop: space.md,

@@ -376,7 +376,6 @@ const createStyles = (palette: Palette) => ({
   headerText: { flex: 1, gap: 1 },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textFaint },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   body: { paddingBottom: space.xl, gap: space.xs },
   card: {
     borderRadius: radius.lg,
@@ -396,7 +395,6 @@ const createStyles = (palette: Palette) => ({
   linkMain: { flex: 1, gap: 2 },
   linkTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, flexWrap: 'wrap' as const },
   linkTitle: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  linkGlyph: { fontSize: 20, color: palette.textFaint },
   hint: { fontSize: font.small, color: palette.textMuted },
   hintFailed: { color: palette.danger },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: space.md },

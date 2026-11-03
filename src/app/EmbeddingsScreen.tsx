@@ -299,7 +299,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   content: { paddingVertical: space.md, gap: space.sm, paddingBottom: space.xl },
   card: {
@@ -341,7 +340,6 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.bg,
   },
   chosenLabel: { fontSize: font.body, color: palette.text },
-  chevron: { fontSize: font.body, color: palette.textFaint },
   linkButton: { paddingVertical: space.xs, paddingHorizontal: space.sm },
   linkText: { fontSize: font.small, color: palette.danger },
   linkSmall: { fontSize: font.small, color: palette.accent, marginTop: 2 },

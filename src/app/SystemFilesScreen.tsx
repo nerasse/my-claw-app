@@ -824,7 +824,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   closeButton: {
     width: 40,
     height: 40,
@@ -833,7 +832,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 18, lineHeight: 20, color: palette.text },
   headerMain: { flex: 1, gap: 1 },
   titleRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.sm },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
@@ -923,10 +921,8 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  moreGlyph: { fontSize: font.title, color: palette.textMuted, lineHeight: 22 },
   rowName: { fontSize: font.body, color: palette.text },
   rowMeta: { fontSize: font.small, color: palette.textFaint },
-  chevron: { fontSize: font.title, color: palette.textFaint },
   notice: {
     marginTop: space.xs,
     paddingHorizontal: space.sm,

@@ -174,6 +174,5 @@ const createStyles = (palette: Palette) => ({
   },
   linkMain: { flex: 1, gap: 2 },
   linkTitle: { color: palette.text, fontSize: font.body, fontWeight: '600' as const },
-  linkGlyph: { fontSize: 22, color: palette.textFaint },
   separator: { height: 1, backgroundColor: palette.border },
 });
