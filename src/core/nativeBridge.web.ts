@@ -628,10 +628,17 @@ interface Recording {
   context: AudioContext;
   chunks: BlobPart[];
   startedAt: number;
-  levelTimer: ReturnType<typeof setInterval>;
+  levelTimer: ReturnType<typeof setInterval> | null;
+  stoppedAt: number | null;
+  cancelled: boolean;
+  error: Error | null;
+  finished: Promise<void>;
+  finish: () => void;
+  result: Promise<VoiceRecording | null> | null;
 }
 
 let recording: Recording | null = null;
+let startingRecording: object | null = null;
 let player: HTMLAudioElement | null = null;
 let playerUri: string | null = null;
 
@@ -652,80 +659,143 @@ function emitPlayback(playing: boolean): void {
 }
 
 async function startWebRecording(): Promise<string> {
+  if (recording || startingRecording) throw new Error('Recording already active');
   if (!navigator.mediaDevices?.getUserMedia) {
-    // Not a missing permission: an insecure origin has no mediaDevices at all, and the UI hides
-    // the button rather than letting this reach a user.
+    // An insecure origin has no mediaDevices, even before asking for permission.
     throw new Error('NO_MIC_PERMISSION');
   }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {
-    throw new Error('NO_MIC_PERMISSION');
-  });
+  const request = {};
+  startingRecording = request;
+  let stream: MediaStream | null = null;
+  let context: AudioContext | null = null;
+  let current: Recording | null = null;
 
-  const context = new AudioContext();
-  const analyser = context.createAnalyser();
-  analyser.fftSize = 1024;
-  context.createMediaStreamSource(stream).connect(analyser);
-  const samples = new Uint8Array(analyser.fftSize);
-
-  const preferredMimeType = recordingMimeType();
-  const recorder = preferredMimeType
-    ? new MediaRecorder(stream, { mimeType: preferredMimeType })
-    : new MediaRecorder(stream);
-  const chunks: BlobPart[] = [];
-  recorder.ondataavailable = event => {
-    if (event.data.size > 0) chunks.push(event.data);
-  };
-  recorder.start(1000);
-
-  const startedAt = Date.now();
-  // ~16 Hz, the rate the native recorder pushes, so the waveform animates identically.
-  const levelTimer = setInterval(() => {
-    analyser.getByteTimeDomainData(samples);
-    let sum = 0;
-    for (const sample of samples) {
-      const centred = (sample - 128) / 128;
-      sum += centred * centred;
+  try {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      throw new Error('NO_MIC_PERMISSION');
     }
-    const rms = Math.sqrt(sum / samples.length);
-    deviceEvents.emit(VOICE_LEVEL_EVENT, {
-      level: Math.min(1, rms * 3),
-      elapsedMs: Date.now() - startedAt,
-    });
-  }, 62);
+    if (startingRecording !== request) throw new Error('Recording cancelled');
 
-  recording = { recorder, stream, context, chunks, startedAt, levelTimer };
-  return 'recording';
+    context = new AudioContext();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    context.createMediaStreamSource(stream).connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize);
+    const preferredMimeType = recordingMimeType();
+    const recorder = preferredMimeType
+      ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+      : new MediaRecorder(stream);
+    let resolveFinished = (): void => {};
+    const finished = new Promise<void>(resolve => { resolveFinished = resolve; });
+    let released = false;
+    const active: Recording = {
+      recorder, stream, context, chunks: [], startedAt: Date.now(), levelTimer: null,
+      stoppedAt: null, cancelled: false, error: null, finished, result: null,
+      finish: () => {
+        if (released) return;
+        released = true;
+        active.stoppedAt ??= Date.now();
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        recorder.onerror = null;
+        releaseRecordingResources(active.stream, active.context, active.levelTimer);
+        resolveFinished();
+      },
+    };
+    current = active;
+    recorder.ondataavailable = event => {
+      if (event.data.size > 0) active.chunks.push(event.data);
+    };
+    recorder.onstop = active.finish;
+    recorder.onerror = () => {
+      active.error = new Error('Recording failed');
+      active.finish();
+    };
+    recorder.start(1000);
+
+    // Match the native waveform's roughly 16 Hz refresh rate.
+    active.levelTimer = setInterval(() => {
+      analyser.getByteTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) {
+        const centred = (sample - 128) / 128;
+        sum += centred * centred;
+      }
+      const rms = Math.sqrt(sum / samples.length);
+      deviceEvents.emit(VOICE_LEVEL_EVENT, {
+        level: Math.min(1, rms * 3),
+        elapsedMs: Date.now() - active.startedAt,
+      });
+    }, 62);
+
+    recording = active;
+    return 'recording';
+  } catch (error) {
+    if (current) discardWebRecording(current);
+    else releaseRecordingResources(stream, context, null);
+    throw error;
+  } finally {
+    if (startingRecording === request) startingRecording = null;
+  }
 }
 
-function stopTracks(current: Recording): void {
-  clearInterval(current.levelTimer);
-  current.stream.getTracks().forEach(track => track.stop());
-  current.context.close().catch(() => {});
+function releaseRecordingResources(
+  stream: MediaStream | null,
+  context: AudioContext | null,
+  levelTimer: ReturnType<typeof setInterval> | null,
+): void {
+  if (levelTimer !== null) clearInterval(levelTimer);
+  stream?.getTracks().forEach(track => track.stop());
+  context?.close().catch(() => {});
 }
 
-async function stopWebRecording(): Promise<VoiceRecording | null> {
+function discardWebRecording(current: Recording): void {
+  current.cancelled = true;
+  current.chunks.length = 0;
+  try {
+    if (current.recorder.state !== 'inactive') current.recorder.stop();
+  } catch {
+    // A failed stop must not prevent releasing the microphone.
+  } finally {
+    current.finish();
+  }
+}
+
+async function finishWebRecording(current: Recording): Promise<VoiceRecording | null> {
+  try {
+    current.stoppedAt ??= Date.now();
+    if (current.recorder.state === 'inactive') current.finish();
+    else current.recorder.stop();
+    await current.finished;
+    if (current.cancelled) return null;
+    if (current.error) throw current.error;
+
+    const mimeType = current.recorder.mimeType || 'audio/webm';
+    const blob = new Blob(current.chunks, { type: mimeType });
+    if (blob.size === 0) return null;
+    return {
+      uri: URL.createObjectURL(blob),
+      durationMs: current.stoppedAt - current.startedAt,
+      sizeBytes: blob.size,
+      mimeType,
+    };
+  } finally {
+    current.finish();
+    if (recording === current) recording = null;
+  }
+}
+
+function stopWebRecording(): Promise<VoiceRecording | null> {
   const current = recording;
-  recording = null;
-  if (!current) return null;
-
-  const blob = await new Promise<Blob>(resolve => {
-    current.recorder.onstop = () =>
-      resolve(new Blob(current.chunks, { type: current.recorder.mimeType || 'audio/webm' }));
-    current.recorder.stop();
-  });
-  stopTracks(current);
-
-  const durationMs = Date.now() - current.startedAt;
-  // The native side returns null for a tap rather than a hold, and the composer relies on it.
-  if (durationMs < 400 || blob.size === 0) return null;
-  return {
-    uri: URL.createObjectURL(blob),
-    durationMs,
-    sizeBytes: blob.size,
-    mimeType: current.recorder.mimeType || 'audio/webm',
-  };
+  if (!current) {
+    startingRecording = null;
+    return Promise.resolve(null);
+  }
+  current.result ??= finishWebRecording(current);
+  return current.result;
 }
-
 
 export const deviceBridge: DeviceBridgeNative = {
   connect: url => connection.connect(url),
@@ -879,13 +949,11 @@ export const deviceBridge: DeviceBridgeNative = {
   },
   startRecording: () => startWebRecording(),
   stopRecording: () => stopWebRecording(),
-  cancelRecording: () => {
+  cancelRecording: async () => {
+    startingRecording = null;
     const current = recording;
     recording = null;
-    if (!current) return Promise.resolve();
-    current.recorder.stop();
-    stopTracks(current);
-    return Promise.resolve();
+    if (current) discardWebRecording(current);
   },
   playAudio: (uri, rate) => {
     if (player && playerUri === uri) {

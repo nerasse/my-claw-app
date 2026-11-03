@@ -37,23 +37,32 @@ interface Props {
 /**
  * Hold to talk, slide left to discard, slide up to keep recording hands-free.
  *
- * Three things here are the result of getting it wrong first, and they are the rules:
+ * One rule governs this component, and every regression here has been a way of breaking it:
  *
- * 1. **The button that owns the gesture is never replaced.** It is restyled, never unmounted: an
- *    earlier version swapped the subtree when a take began, which destroyed the view holding the
- *    touch responder while the finger was still down. Android dropped the gesture and releasing
- *    did nothing.
- * 2. **A tap is not a take.** See `TAP_MS`.
- * 3. **A lock is deliberate.** Up past 70 pt AND clearly more up than sideways: a thumb sliding
- *    left drifts, and a left drag that locked the take read as a design that ignored the finger.
+ * **The view that owns the touch responder is mounted once and never swapped.** It is the root
+ * `Animated.View`, and it carries `pan.panHandlers` for the whole life of the component. What
+ * changes with the phase is only its appearance and its children.
+ *
+ * Both platforms enforce this, differently and silently:
+ *
+ * - On the web, react-native-web registers a responder node per config. Giving the handlers to a
+ *   different element when a take starts unregisters the old node, and `removeNode` terminates the
+ *   responder that is still under the finger: `onPanResponderTerminate` fires 0 ms into the take.
+ *   The previous revision answered a termination with `keep()`, so every press ended the recording
+ *   the instant it began and the composer showed "Recording failed".
+ * - On Android, unmounting the view that holds the gesture drops it, and the release never comes.
+ *
+ * A termination is therefore never a keep: it is the system taking the gesture away, and the take
+ * is thrown away unless there was no take yet. `onPanResponderTerminationRequest` refuses the
+ * handover outright while the finger is down, so context menus and stray scrolls do not end it.
  *
  * The button sits at the right edge of the composer so that "slide left" drags inward, across the
  * bar, toward the trash mark. Held on the left -- where it started -- the same gesture aimed at
  * the bezel of the phone.
  *
- * A tap is not a take: the recorder is started on touch down (waiting would lose the first
- * syllable), and a take too short to be one is dropped in silence rather than reported as an
- * error. Brushing the edge of the composer must not produce a red line.
+ * A tap is not a take: the recorder starts on touch down (waiting would lose the first syllable),
+ * and a take too short to be one is dropped in silence rather than reported as an error. Brushing
+ * the edge of the composer must not produce a red line.
  */
 export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Props) {
   const styles = useThemedStyles(createStyles);
@@ -66,9 +75,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
   const [warning, setWarning] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
 
-  const recording = phase === 'recording';
-  const locked = phase === 'locked';
-  const active = recording || locked;
+  const active = phase !== 'idle';
 
   // The pan callbacks are built once and never see a re-render, so every value they read lives in
   // a ref. Reading `phase` there would pin it to 'idle' for the whole gesture.
@@ -99,6 +106,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
   const settle = useCallback(() => {
     cancelRef.current = false;
     armedRef.current = false;
+    startingRef.current = false;
     setArmed(false);
     setElapsedMs(0);
     setLevels([]);
@@ -145,7 +153,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
         pendingWarningRef.current = null;
       }
     } catch {
-      onError('Could not start recording.');
+      if (!cancelRef.current) onError('Could not start recording.');
     } finally {
       startingRef.current = false;
     }
@@ -165,6 +173,9 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
       return;
     }
     setPhaseBoth('idle');
+    // A quick second press is a new take, not a second release of this one: the recorder is still
+    // stopping, and `startRecording` refuses while one is live. Hold the next grant until then.
+    startingRef.current = true;
     const outcome = await finishRecording();
     settle();
     if (outcome.ok) {
@@ -180,7 +191,7 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     onError('Recording failed.');
   }, [onError, onRecorded, settle, setPhaseBoth]);
 
-  /** The finger came up (or the system took the gesture): what does that mean? */
+  /** The finger came up: the one deliberate ending. */
   const release = useCallback(() => {
     if (phaseRef.current === 'locked') return;
     if (armedRef.current) {
@@ -190,11 +201,30 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
     keep().catch(() => {});
   }, [discard, keep]);
 
+  /**
+   * The system took the gesture away: an Android scroll parent, a browser context menu, the
+   * window losing focus. It is not a release. Treating it as one is what ended every take the
+   * moment it started, so without a live take it only clears the press, and with one the take is
+   * thrown away.
+   */
+  const terminate = useCallback(() => {
+    if (phaseRef.current === 'locked') return;
+    if (phaseRef.current === 'idle') {
+      cancelRef.current = true;
+      return;
+    }
+    discard();
+  }, [discard]);
+
+  // Built once: a new panHandlers object would re-register the responder node, which is the very
+  // change this component must never make mid-gesture.
   const pan = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
+        // The thumb is already talking: nothing gets to interrupt the take it is holding.
+        onPanResponderTerminationRequest: () => phaseRef.current === 'idle',
         onPanResponderGrant: () => {
           cancelRef.current = false;
           begin().catch(() => {});
@@ -223,9 +253,9 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
           }
         },
         onPanResponderRelease: release,
-        onPanResponderTerminate: release,
+        onPanResponderTerminate: terminate,
       }),
-    [begin, release, setPhaseBoth, slide],
+    [begin, release, setPhaseBoth, slide, terminate],
   );
 
   /* ── lifecycle ─────────────────────────────────────────────────────────────────────────── */
@@ -319,96 +349,99 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
 
   /* ── what is on screen ─────────────────────────────────────────────────────────────────── */
 
-  const size = hero ? styles.buttonHero : dense ? styles.buttonDense : null;
+  // The root carries the geometry of both shapes. Changing a style does not remount an
+  // `Animated.View`, which is the whole point: this node is the responder in every phase.
+  const shape = active ? styles.hostTake : [styles.hostIdle, hero ? styles.hostHero : dense ? styles.hostDense : null];
 
-  // Idle: the button alone, at the composer's right edge.
-  if (!active) {
-    return (
-      <Animated.View
-        {...pan.panHandlers}
-        style={[styles.button, size]}
-        accessibilityRole="button"
-        accessibilityLabel="Record voice message"
-        accessibilityHint="Hold to record, slide left to delete, slide up to keep your hands free">
-        <MicIcon color={styles.glyphIdle.color} size={hero ? 20 : 17} />
-      </Animated.View>
-    );
-  }
-
-  // A take owns the whole row: the mark it can be thrown into, the clock, the level, and the
-  // button that ends it. Nothing else is drawn beside it -- the composer hides the field and the
-  // spacer while this is up.
   return (
     <Animated.View
+      {...pan.panHandlers}
       style={[
-        styles.take,
-        {
-          opacity: rise,
-          transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [4, 0] }) }],
-        },
-      ]}>
-      {locked ? (
-        // Hands free: the trash is a real target now, because there is no thumb on the button to
-        // drag. While holding it is a mark, and a mark that looks pressable but is not is worse
-        // than no mark at all.
-        <Pressable
-          onPress={discard}
-          hitSlop={10}
-          style={styles.trashButton}
-          accessibilityRole="button"
-          accessibilityLabel="Cancel recording">
-          <TrashIcon size={15} color={styles.armed.color} />
-        </Pressable>
+        styles.host,
+        shape,
+        active
+          ? {
+              opacity: rise,
+              transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [4, 0] }) }],
+            }
+          : null,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={
+        phase === 'locked'
+          ? 'Recording, hands free'
+          : armed
+            ? 'Release to delete'
+            : active
+              ? 'Recording, release to keep'
+              : 'Record voice message'
+      }
+      accessibilityHint="Hold to record, slide left to delete, slide up to keep your hands free">
+      {!active ? (
+        <MicIcon color={styles.glyphIdle.color} size={hero ? 20 : 17} />
       ) : (
-        <View style={styles.trashMark}>
-          <TrashIcon size={14} color={armed ? styles.armed.color : styles.trashIdle.color} />
-        </View>
-      )}
-
-      <Animated.View style={[styles.dot, { opacity: blink }]} />
-      <Text style={styles.timer}>{formatDuration(elapsedMs)}</Text>
-
-      {warning ? (
-        <Text style={styles.warning} numberOfLines={1} accessibilityRole="alert">
-          {warning}
-        </Text>
-      ) : (
-        <Waveform levels={levels} styles={styles} />
-      )}
-
-      {locked ? (
-        <Pressable
-          onPress={() => {
-            keep().catch(() => {});
-          }}
-          style={[styles.button, styles.buttonStop]}
-          accessibilityRole="button"
-          accessibilityLabel="Stop recording">
-          <StopIcon size={13} color={styles.stopIcon.color} />
-        </Pressable>
-      ) : (
-        <Animated.View
-          {...pan.panHandlers}
-          style={[
-            styles.button,
-            size,
-            armed ? styles.buttonArmed : styles.buttonLive,
-            {
-              transform: [
-                { translateX: slide },
-                { scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
-              ],
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={armed ? 'Release to delete' : 'Recording, release to keep'}
-          accessibilityHint="Slide left to delete, slide up to keep your hands free">
-          {armed ? (
-            <TrashIcon color={styles.glyphOnFill.color} size={15} />
+        <>
+          {/* Where the take can be thrown: a slot the thumb drags across, filled only past the
+              threshold. Hands free there is no thumb left, so the same slot becomes a target. */}
+          {phase === 'locked' ? (
+            <Pressable
+              onPress={discard}
+              hitSlop={10}
+              style={styles.trashButton}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel recording">
+              <TrashIcon size={15} color={styles.armed.color} />
+            </Pressable>
           ) : (
-            <MicIcon color={styles.glyphOnFill.color} size={15} />
+            <View style={styles.trashMark}>
+              <TrashIcon size={14} color={armed ? styles.armed.color : styles.trashIdle.color} />
+            </View>
           )}
-        </Animated.View>
+
+          <Animated.View style={[styles.dot, { opacity: blink }]} />
+          <Text style={styles.timer}>{formatDuration(elapsedMs)}</Text>
+
+          {warning ? (
+            <Text style={styles.warning} numberOfLines={1} accessibilityRole="alert">
+              {warning}
+            </Text>
+          ) : (
+            <Waveform levels={levels} styles={styles} />
+          )}
+
+          {/* The button that ends the take. While holding it is the swatch under the thumb, and
+              it slides with the gesture because that is the thing being dragged. */}
+          {phase === 'locked' ? (
+            <Pressable
+              onPress={() => {
+                keep().catch(() => {});
+              }}
+              style={[styles.button, styles.buttonStop]}
+              accessibilityRole="button"
+              accessibilityLabel="Stop recording">
+              <StopIcon size={13} color={styles.stopIcon.color} />
+            </Pressable>
+          ) : (
+            <Animated.View
+              style={[
+                styles.button,
+                styles.buttonLive,
+                armed ? styles.buttonArmed : null,
+                {
+                  transform: [
+                    { translateX: slide },
+                    { scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
+                  ],
+                },
+              ]}>
+              {armed ? (
+                <TrashIcon color={styles.glyphOnFill.color} size={15} />
+              ) : (
+                <MicIcon color={styles.glyphOnFill.color} size={15} />
+              )}
+            </Animated.View>
+          )}
+        </>
       )}
     </Animated.View>
   );
@@ -435,12 +468,28 @@ function Waveform({ levels, styles }: { levels: number[]; styles: ReturnType<typ
 }
 
 const createStyles = (palette: Palette) => ({
-  // The take is the row: one height with the controls it replaces, and it fills the width it is
-  // given rather than asking for a share of it.
-  take: {
-    flex: 1,
+  /**
+   * The responder node. It never unmounts, so it carries the geometry of both shapes: a pill in
+   * the composer's row when idle, the full width of that row during a take.
+   */
+  host: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+  },
+  // Idle: the button alone, at the composer's right edge.
+  hostIdle: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    justifyContent: 'center' as const,
+  },
+  hostHero: { width: 40, height: 40 },
+  // Same number as the composer's `buttonDense`: one row, one height, whatever is in it.
+  hostDense: { width: 30, height: 30 },
+  // A take is the row: one height with the controls it replaces, and it fills the width it is
+  // given rather than asking for a share of it.
+  hostTake: {
+    flex: 1,
     gap: space.sm,
     minHeight: 30,
   },
@@ -453,9 +502,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  buttonHero: { width: 40, height: 40 },
-  // Same number as the composer's `buttonDense`: one row, one height, whatever is in it.
-  buttonDense: { width: 30, height: 30 },
   buttonLive: { backgroundColor: palette.accent },
   buttonArmed: { backgroundColor: palette.danger },
   buttonStop: { backgroundColor: palette.accent },
