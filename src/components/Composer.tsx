@@ -429,7 +429,7 @@ export function Composer({
             {uploading || locationBusy ? (
               <ActivityIndicator size="small" color={palette.textFaint} />
             ) : (
-              <PlusIcon size={20} color={palette.accent} />
+              <PlusIcon size={18} color={palette.textMuted} />
             )}
           </Pressable>
         ) : null}
@@ -441,6 +441,7 @@ export function Composer({
             onActiveChange={setRecording}
           />
         ) : null}
+        <View style={styles.grow} />
         {sendVisible ? (
           <Pressable
             style={[
@@ -454,7 +455,7 @@ export function Composer({
             accessibilityRole="button"
             accessibilityLabel="Send message">
             <SendIcon
-              size={hero ? 22 : 20}
+              size={hero ? 20 : 16}
               color={nothingToSend ? palette.textFaint : palette.accentText}
             />
           </Pressable>
@@ -514,7 +515,9 @@ function webLineBox(fontSize: number): { lineHeight?: number } {
 }
 
 const createStyles = (palette: Palette) => ({
-  wrap: { borderTopWidth: 1, borderTopColor: palette.border, paddingTop: space.sm, gap: space.xs },
+  // The composer floats on the thread's own background: a rule above it would draw a second
+  // edge under the last message, and the shell already has the one that matters.
+  wrap: { paddingTop: space.sm, paddingBottom: space.xs, gap: space.xs },
   wrapHero: { borderTopWidth: 0, paddingTop: 0 },
   hint: { fontSize: font.small, color: palette.textMuted, paddingHorizontal: space.xs },
   // Inverted dropdown: sits above the field, never over the keyboard.
@@ -540,11 +543,11 @@ const createStyles = (palette: Palette) => ({
   menuName: { fontSize: font.meta, fontFamily: 'monospace', color: palette.accent, fontWeight: '600' as const },
   menuDesc: { fontSize: font.small, color: palette.textMuted, lineHeight: lineHeightFor(font.small) },
   row: { flexDirection: 'row' as const, alignItems: 'flex-end' as const, gap: space.sm },
+  // A bordered circle: the one shape that says "add" without competing with the accent.
   attach: {
-    width: 44,
-    height: 44,
+    width: 30,
+    height: 30,
     borderRadius: radius.pill,
-    backgroundColor: palette.surfaceAlt,
     borderWidth: 1,
     borderColor: palette.border,
     alignItems: 'center' as const,
@@ -599,16 +602,19 @@ const createStyles = (palette: Palette) => ({
   shell: {
     borderWidth: 1,
     borderColor: palette.border,
-    backgroundColor: palette.surfaceAlt,
-    borderRadius: radius.lg,
-    paddingHorizontal: 6,
-    paddingTop: 4,
-    paddingBottom: 4,
-    gap: 2,
+    backgroundColor: palette.surface,
+    borderRadius: 22,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+    gap: 0,
   },
-  shellHero: { borderRadius: radius.lg },
-  shellDense: { borderRadius: radius.md },
-  bar: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
+  shellHero: { borderRadius: 22 },
+  shellDense: { borderRadius: 18 },
+  // 4 pt between the dots of the two secondary actions, and the send pushed to the far end by
+  // `grow`: three controls bunched on the left read as one control.
+  bar: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingTop: 2 },
+  grow: { flex: 1 },
   keyhints: { flexDirection: 'row' as const, gap: space.md, paddingHorizontal: space.xs, paddingTop: 2 },
   keyhint: { fontSize: font.micro, color: palette.textMeta },
   keycap: {
@@ -621,10 +627,11 @@ const createStyles = (palette: Palette) => ({
   // used to sit across the rounded edge, cut in the middle of a line.
   field: {
     flex: 1,
-    minHeight: 30,
+    minHeight: 26,
     justifyContent: 'center' as const,
-    paddingHorizontal: space.sm,
-    paddingVertical: 6,
+    paddingTop: 2,
+    paddingBottom: 8,
+    paddingHorizontal: 0,
   },
   fieldHero: {
     minHeight: 50,
@@ -636,7 +643,7 @@ const createStyles = (palette: Palette) => ({
     maxHeight: MAX_TEXT_HEIGHT.compact,
     // Android's EditText ships its own padding, and the frame owns the spacing now.
     padding: 0,
-    fontSize: font.body,
+    fontSize: font.title,
     color: palette.text,
     ...webLineBox(font.body),
   },
@@ -645,20 +652,24 @@ const createStyles = (palette: Palette) => ({
     fontSize: 16,
     ...webLineBox(16),
   },
+  // 32, two points over the secondaries: the only saturated shape in the bar, so the eye lands
+  // on it first without it being the biggest thing in the composer.
   send: {
-    width: 44,
-    height: 44,
+    width: 32,
+    height: 32,
     borderRadius: radius.pill,
     backgroundColor: palette.accent,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  sendHero: { width: 50, height: 50 },
-  buttonDense: { width: 36, height: 36 },
+  sendHero: { width: 40, height: 40 },
+  buttonDense: { width: 30, height: 30 },
   // A mouse can scroll a tall field and a desktop has the room: four lines is a phone's ceiling.
   fieldDense: { minHeight: 36, paddingVertical: 6, borderRadius: 18 },
   inputDense: { maxHeight: MAX_TEXT_HEIGHT.dense },
   sendIdle: { backgroundColor: palette.surfaceAlt, borderWidth: 1, borderColor: palette.border },
-  sendStop: { backgroundColor: palette.danger },
-  stopGlyph: { fontSize: 16, lineHeight: 18, color: palette.accentText },
+  // Stop is the ink, not the danger red: interrupting a run is not an error, and a red circle
+  // under every running answer made the app look like it was shouting.
+  sendStop: { backgroundColor: palette.text },
+  stopGlyph: { fontSize: 13, lineHeight: 15, color: palette.bg },
 });

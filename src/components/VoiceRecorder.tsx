@@ -317,11 +317,11 @@ export function VoiceRecorder({ onRecorded, onError, onActiveChange, hero }: Pro
           accessibilityLabel={recording ? 'Recording, release to keep' : 'Record voice message'}
           accessibilityHint="Hold to record, slide left to delete, slide up to keep your hands free">
           {armed ? (
-            <TrashIcon color={styles.glyphOnFill.color} size={hero ? 22 : 20} />
+            <TrashIcon color={styles.glyphOnFill.color} size={hero ? 20 : 17} />
           ) : (
             <MicIcon
               color={recording ? styles.glyphOnFill.color : styles.glyphIdle.color}
-              size={hero ? 22 : 20}
+              size={hero ? 20 : 17}
             />
           )}
         </Animated.View>
@@ -359,24 +359,23 @@ function Waveform({
 const createStyles = (palette: Palette) => ({
   wrap: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   wrapActive: { flex: 1 },
+  // The scale of the composer's bar: the microphone is a secondary action beside the send
+  // button, not a second primary one. Two filled circles of the same size fight for the eye.
   button: {
-    width: 44,
-    height: 44,
+    width: 30,
+    height: 30,
     borderRadius: radius.pill,
-    backgroundColor: palette.surfaceAlt,
-    borderWidth: 1,
-    borderColor: palette.border,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  buttonHero: { width: 50, height: 50 },
+  buttonHero: { width: 40, height: 40 },
   // Same number as the composer's `buttonDense`: one row, one height, whatever is in it.
   buttonDense: { width: 36, height: 36 },
   buttonLive: { backgroundColor: palette.accent, borderColor: palette.accent },
   buttonArmed: { backgroundColor: palette.danger, borderColor: palette.danger },
   buttonStop: { backgroundColor: palette.danger, borderColor: palette.danger },
   stopGlyph: { width: 14, height: 14, borderRadius: 3, backgroundColor: palette.accentText },
-  glyphIdle: { color: palette.accent },
+  glyphIdle: { color: palette.textMuted },
   glyphOnFill: { color: palette.accentText },
   bar: {
     flex: 1,
