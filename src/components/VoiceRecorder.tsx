@@ -37,6 +37,10 @@ interface Props {
 /**
  * Hold to talk, slide left to discard, slide up to keep recording hands-free.
  *
+ * The button sits at the right edge of the composer, which is what makes the discard gesture read:
+ * the thumb drags INWARD, across the bar, toward the trash mark. Held on the left -- where it used
+ * to be, between the attachment button and the spacer -- the same gesture aimed at the bezel.
+ *
  * The button that owns the gesture is mounted once and never replaced, only restyled. An earlier
  * version swapped the whole subtree when recording began, which unmounted the view holding the
  * touch responder while the finger was still down: Android dropped the gesture, and releasing did

@@ -433,6 +433,12 @@ export function Composer({
             )}
           </Pressable>
         ) : null}
+        {/* While a take is running the recorder owns the bar: a spacer beside it split the
+            width in two and the waveform stopped halfway. */}
+        {recording ? null : <View style={styles.grow} />}
+        {/* At the far right, sharing the slot with Send: the microphone sits at the edge of the
+            screen, so sliding left to delete drags INWARD across the bar. Held on the left, that
+            gesture aimed straight at the bezel. */}
         {micVisible ? (
           <VoiceRecorder
             hero={hero}
@@ -441,9 +447,6 @@ export function Composer({
             onActiveChange={setRecording}
           />
         ) : null}
-        {/* While a take is running the recorder owns the bar: a spacer beside it split the
-            width in two and the waveform stopped halfway. */}
-        {recording ? null : <View style={styles.grow} />}
         {sendVisible ? (
           <Pressable
             style={[
