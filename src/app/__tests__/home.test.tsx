@@ -50,7 +50,10 @@ test('boots on the home screen with a new conversation button and a session list
     expect(homeNodes(tree)).toHaveLength(1);
     expect(labelsOf(tree)).toContain('New conversation');
     expect(labelsOf(tree)).toContain('More');
-    expect(textsOf(tree)).toContain('MyClaw');
+    // The wordmark is two tones in one Text: `my` in the ink, `-claw` faint. RN flattens the
+    // outer node's children into an array, so the only string a text walker sees is the tail.
+    expect(textsOf(tree)).toContain('-claw');
+    expect(textsOf(tree)).not.toContain('MyClaw');
 
     await emit({ type: 'session.list.result', sessions });
     await waitFor(() => labelsOf(tree).includes('Conversation Alpha'));

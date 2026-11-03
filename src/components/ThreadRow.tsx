@@ -72,7 +72,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
           ) : unread ? (
             <View style={styles.dot} />
           ) : null}
-          <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
+          <Text style={[styles.title, unread && styles.titleUnread, active && styles.titleActive]} numberOfLines={1}>
             {item.title}
           </Text>
           {/* A blocked run is not "activity", it is a run waiting on this person: it earns a
@@ -80,11 +80,24 @@ export const ThreadRow = React.memo(function ThreadRowRow({
           {question ? <Text style={styles.question}>?</Text> : null}
           <Text style={styles.date}>{formatDate(item.lastMessageAt ?? item.lastActiveAt)}</Text>
         </View>
-        {item.messageCount > 0 ? <Text style={styles.meta}>{item.messageCount} messages</Text> : null}
-        {/* Server-side, so a message begun on another device is findable from this one. */}
-        {item.hasDraft ? <Text style={styles.draft}>draft</Text> : null}
-        {item.workspace && item.workspace !== 'default' ? (
-          <Text style={styles.workspace}>{item.workspace}</Text>
+        {/* One metadata line, and only when it has something to say: the workspace in a chip, a
+            dot, the draft, a dot, the count. The POC stacks nothing -- three separate blocks under
+            one title made a 40 pt row hold a title and three captions, which is a card, not a row
+            of a list. */}
+        {item.workspace !== undefined || item.hasDraft || item.messageCount > 0 ? (
+          <View style={styles.metaRow}>
+            {item.workspace && item.workspace !== 'default' ? (
+              <Text style={styles.workspace} numberOfLines={1}>
+                {item.workspace}
+              </Text>
+            ) : null}
+            {item.workspace && item.workspace !== 'default' && (item.hasDraft || item.messageCount > 0) ? (
+              <Text style={styles.sep}>·</Text>
+            ) : null}
+            {item.hasDraft ? <Text style={styles.meta}>draft</Text> : null}
+            {item.hasDraft && item.messageCount > 0 ? <Text style={styles.sep}>·</Text> : null}
+            {item.messageCount > 0 ? <Text style={styles.meta}>{`${item.messageCount} messages`}</Text> : null}
+          </View>
         ) : null}
       </Pressable>
       {menuButton}
@@ -102,29 +115,60 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.sm,
     overflow: 'hidden' as const,
   },
-  rowActive: { backgroundColor: palette.surfaceRaised },
+  rowActive: { backgroundColor: palette.surfaceAlt, overflow: 'hidden' as const },
   /**
-   * Inset from the row's own edges, as the POC draws it: a bar that runs the full height reads as
-   * a border of the list rather than a position in it, and at 3 pt against a 37 pt row it drew
-   * more attention than the title it points at.
+   * The accent bar of the row the reader is in.
+   *
+   * Full height, 3 pt, no radius of its own: the row's `overflow: hidden` cuts it, so it follows
+   * the row's curve instead of drawing its own above it. The POC carries two versions of this --
+   * `base.css` insets it 2 pt wide and 7 pt from each end, `theme.css` runs it the full height --
+   * and `theme.css` is the one loaded last, so that is the one the validated screen shows. Inset,
+   * against a two-line row, it read as a floating tick rather than as a position.
    */
   activeBar: {
     position: 'absolute' as const,
-    left: 1,
-    top: 7,
-    bottom: 7,
-    width: 2,
-    borderRadius: 2,
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
     backgroundColor: palette.accent,
   },
-  main: { flex: 1, paddingVertical: 5, paddingHorizontal: 8, gap: 1 },
+  main: { flex: 1, paddingVertical: space.sm, paddingHorizontal: 8, gap: 1 },
   mainDense: { paddingVertical: space.xs },
   titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent },
-  title: { flex: 1, fontSize: font.body, color: palette.text },
-  titleUnread: { fontWeight: '700' as const },
-  date: { fontSize: font.micro, color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
+  title: { flex: 1, fontSize: 13.5, color: palette.text },
+  // Unread is heavier, and so is the row you are in: the bar says where you are, the weight says
+  // it again in the type, which is what makes an active row readable at a glance down the column.
+  titleUnread: { fontWeight: '600' as const },
+  titleActive: { fontWeight: '600' as const },
+  date: { fontSize: 10.5, color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
   meta: { fontSize: font.small, color: palette.textMeta },
+  /** One line of facts under the title, the way a row of a list reads. */
+  metaRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    marginTop: 1,
+    overflow: 'hidden' as const,
+  },
+  sep: { fontSize: font.small, color: palette.textFaint },
+  /**
+   * A named workspace, as the POC draws it: a chip of its own tone, not a bordered box.
+   *
+   * The outline was a second frame inside a row that already has a surface and a bar: three
+   * edges for one word. A `surfaceRaised` pill says "this is a label" and takes no room.
+   */
+  workspace: {
+    fontSize: 10,
+    fontWeight: '500' as const,
+    color: palette.textMuted,
+    backgroundColor: palette.surfaceRaised,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    overflow: 'hidden' as const,
+  },
   question: {
     fontSize: font.micro,
     fontWeight: '700' as const,
@@ -138,18 +182,6 @@ const createStyles = (palette: Palette) => ({
     overflow: 'hidden' as const,
   },
   draft: { alignSelf: 'flex-start' as const, fontSize: font.micro, color: palette.accent },
-  /** The named workspace a conversation runs in; the default one stays unlabelled. */
-  workspace: {
-    alignSelf: 'flex-start' as const,
-    fontSize: font.micro,
-    color: palette.textMeta,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    marginTop: 2,
-  },
   menu: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center' as const, justifyContent: 'center' as const },
   menuGlyph: { fontSize: 17, lineHeight: 20, color: palette.textFaint },
 });

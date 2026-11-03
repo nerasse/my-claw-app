@@ -202,6 +202,7 @@ import { dropReasoningAsks, knownReasoning } from '../core/reasoningFetch';
 import { httpOrigin, uuid, withView } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { ContextMeter } from '../components/ContextMeter';
+import { CopyIcon, FilesIcon, FolderIcon, GaugeIcon, InfoIcon, RefreshIcon, TrashIcon } from '../components/icons';
 import { SettingsScreen } from './SettingsScreen';
 import { AppearanceScreen } from './AppearanceScreen';
 import { UpdatesScreen } from './UpdatesScreen';
@@ -2950,6 +2951,7 @@ export function AppShell(): React.JSX.Element {
     (threadId: string | null, close: () => void): Record<SessionEntryKey, SheetEntry> => ({
       refresh: {
         label: 'Refresh',
+        icon: <RefreshIcon size={15} tone="muted" />,
         hint: 'resync this conversation with the server',
         onPress: () => {
           if (threadId) refreshThread(threadId);
@@ -2958,6 +2960,7 @@ export function AppShell(): React.JSX.Element {
       },
       model: {
         label: 'Model…',
+        icon: <GaugeIcon size={15} tone="muted" />,
         shortcut: shortcutHint('model'),
         hint: currentModelLabel
           ? `current: ${currentModelLabel}${currentModelOrigin ? ` · ${currentModelOrigin}` : ''}`
@@ -2988,6 +2991,7 @@ export function AppShell(): React.JSX.Element {
       },
       instructions: {
         label: 'Instructions',
+        icon: <CopyIcon size={15} tone="muted" />,
         hint: 'every layer it loads, nested files included',
         onPress: () => {
           close();
@@ -2996,6 +3000,7 @@ export function AppShell(): React.JSX.Element {
       },
       files: {
         label: 'Session files',
+        icon: <FilesIcon size={15} tone="muted" />,
         shortcut: shortcutHint('attachments'),
         onPress: () => {
           close();
@@ -3006,6 +3011,7 @@ export function AppShell(): React.JSX.Element {
         // Distinct from "Session files", which is this conversation's own attachments: this one is
         // the machine, and it starts where the session works -- docs/files-page.md.
         label: 'System files',
+        icon: <FolderIcon size={15} tone="muted" />,
         hint: 'the machine this runs on',
         shortcut: shortcutHint('files'),
         onPress: () => {
@@ -3016,6 +3022,7 @@ export function AppShell(): React.JSX.Element {
       },
       status: {
         label: 'Status',
+        icon: <InfoIcon size={15} tone="muted" />,
         hint: 'context, tokens, cost',
         onPress: () => {
           close();
@@ -3024,6 +3031,7 @@ export function AppShell(): React.JSX.Element {
       },
       transcript: {
         label: 'Copy transcript',
+        icon: <CopyIcon size={15} tone="muted" />,
         hint: 'messages and tool results, as markdown',
         onPress: () => {
           if (threadId) {
@@ -3143,6 +3151,7 @@ export function AppShell(): React.JSX.Element {
       { type: 'separator' },
       {
         label: 'Delete',
+        icon: <TrashIcon size={15} tone="danger" />,
         danger: true,
         onPress: () => {
           // Always through the confirmation: the drawer used to delete on the first tap.

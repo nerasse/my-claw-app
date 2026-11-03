@@ -691,7 +691,7 @@ export function ModelPickerPage({
           ) : (
           <Pressable
             key={option.key ?? option.label}
-            style={styles.option}
+            style={[styles.option, option.selected === true && styles.optionSelected]}
             onPress={option.onPress}
             accessibilityRole="button"
             accessibilityState={{ selected: option.selected ?? false }}
@@ -755,17 +755,27 @@ const createPageStyles = (palette: Palette) => ({
     backgroundColor: palette.surfaceAlt,
   },
   body: { paddingHorizontal: space.lg, paddingBottom: space.xl },
+  /**
+   * A model row: one metric, no rule under it.
+   *
+   * The hairline between every model turned a catalogue into a table, and at 15 pt a model id is a
+   * heading -- it is data, and the POC sets it at 12.5 in the mono face, with the window at the far
+   * end. The selected row keeps a surface instead of the tick alone, which is what makes the
+   * current model findable in a list of forty.
+   */
   option: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
-    paddingVertical: space.md,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    minHeight: 32,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
   },
+  optionSelected: { backgroundColor: palette.surfaceAlt },
   optionMain: { flex: 1, gap: 1 },
-  optionLabel: { fontSize: font.title, color: palette.text },
-  optionHint: { fontSize: font.small, color: palette.textFaint },
+  optionLabel: { fontSize: 12.5, fontFamily: 'monospace' as const, color: palette.text },
+  optionHint: { fontSize: 10.5, color: palette.textMeta },
   check: {
     fontSize: font.body,
     color: palette.accent,

@@ -1,5 +1,5 @@
 import { CheckIcon } from '../components/icons';
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useDismissKeyboard, useKeyboardHeight, useSheetBottomInset } from '../core/keyboard';
 import { useLayout } from '../core/layout';
@@ -12,6 +12,13 @@ export interface SheetOption {
   /** Identity of the row, when the label is not unique (two providers, one model name). */
   key?: string;
   label: string;
+  /**
+   * The mark the row wears, to the left of its label.
+   *
+   * Optional, and that is the point: a sheet of model names, workspaces or folders has no verb to
+   * mark, and half a menu with icons reads as an unfinished menu. Verbs get one; lists do not.
+   */
+  icon?: React.ReactNode;
   /** Explains what the action does, when the label alone is not the whole answer. */
   hint?: string;
   /** Rendered with a checkmark: this is the option in effect. */
@@ -48,6 +55,23 @@ const keyOfEntry = (entry: SheetEntry): string => {
   if (entry.type === 'note') return entry.key ?? entry.text;
   return entry.key ?? entry.label;
 };
+
+/**
+ * The same key, made unique across a whole list.
+ *
+ * A separator carries no identity of its own, so every one of them answered `separator` and a
+ * sheet with two groups logged "two children with the same key" on every render -- which is a
+ * React warning today and a dropped row the day the behaviour changes.
+ */
+function uniqueKeys(entries: SheetEntry[]): string[] {
+  const seen = new Map<string, number>();
+  return entries.map(entry => {
+    const base = keyOfEntry(entry);
+    const prior = seen.get(base);
+    seen.set(base, (prior ?? 0) + 1);
+    return prior === undefined ? base : `${base}#${prior + 1}`;
+  });
+}
 
 /**
  * How many rows the sheet lays out before it starts batching. The model search caps itself at 40
@@ -109,6 +133,8 @@ export function ActionSheet({
   ];
   const selected = (options ?? []).findIndex(option => option.type === undefined && option.selected);
   const { refFor, propsFor } = useMenuFocus(rows, search ? SEARCH_ROW : selected >= 0 ? selected : rows[0]);
+  // Computed once per options change: `keyExtractor` is read on every render of every row.
+  const keys = useMemo(() => uniqueKeys(options ?? []), [options]);
 
   const renderEntry = useCallback(
     ({ item: option, index }: { item: SheetEntry; index: number }) =>
@@ -125,6 +151,11 @@ export function ActionSheet({
           accessibilityRole="button"
           accessibilityState={{ selected: option.selected ?? false }}
           accessibilityLabel={option.label}>
+          {option.icon ? (
+            // The icon carries its own ink: `tone` is resolved inside each icon, so a danger row
+            // cannot recolour it from here -- the caller passes the danger tone when it wants it.
+            <View style={styles.optionIcon}>{option.icon}</View>
+          ) : null}
           <View style={styles.optionMain}>
             <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>{option.label}</Text>
             {option.hint ? (
@@ -188,7 +219,7 @@ export function ActionSheet({
               {...scrollProps}
               style={styles.scroll}
               data={options}
-              keyExtractor={keyOfEntry}
+              keyExtractor={(_entry, index) => keys[index] ?? String(index)}
               renderItem={renderEntry}
               keyboardShouldPersistTaps="handled"
               // FlatList detaches the rows scrolled out of view on Android by default: a keyboard
@@ -257,9 +288,9 @@ const createStyles = (palette: Palette) => ({
   grabber: {
     alignSelf: 'center' as const,
     width: 34,
-    height: 3,
+    height: 4,
     borderRadius: 2,
-    backgroundColor: palette.border,
+    backgroundColor: palette.surfaceRaised,
     marginBottom: space.sm,
   },
   preview: {
@@ -272,37 +303,48 @@ const createStyles = (palette: Palette) => ({
   },
   scrollWrap: { flexShrink: 1, minHeight: 0 },
   scroll: { flexGrow: 1 },
-  // One metric per rank: a phone row is 46 (a thumb), a desktop dialog row is 34 (a mouse). The
-  // old 40 + 8 either side landed anywhere from 46 to 52 depending on the label's line box.
+  /**
+   * One metric per rank: a phone row is 46 (a thumb), a desktop dialog row is 34 (a mouse). No
+   * rule under it: a sheet is a list of verbs, and a hairline between every pair of them turns
+   * eleven rows into eleven compartments. The only rules in a sheet are the separators the caller
+   * asked for, and they group intentions rather than punctuate each row.
+   */
   option: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: space.md,
-    paddingHorizontal: space.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    paddingHorizontal: 9,
+    borderRadius: radius.sm,
     minHeight: 46,
   },
-  optionDialog: { minHeight: 34 },
+  optionDialog: { minHeight: 34, paddingHorizontal: 9 },
   note: {
-    paddingHorizontal: space.xs,
+    paddingHorizontal: 9,
     paddingVertical: space.sm,
     fontSize: font.small,
     color: palette.textMeta,
   },
   optionMain: { flex: 1, gap: 1 },
-  optionLabel: { fontSize: font.title, color: palette.text },
+  /** The glyph slot: a fixed 15 pt so a menu with icons and one without still share their text. */
+  optionIcon: {
+    width: 15,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  // 13.5, the POC's own row type: at `font.title` a five-word label in a 320 pt sheet read as a
+  // paragraph of headings.
+  optionLabel: { fontSize: 13.5, color: palette.text },
   optionDanger: { color: palette.danger },
-  optionHint: { fontSize: font.small, color: palette.textFaint },
-  check: { fontSize: font.body, color: palette.accent, fontWeight: '700' as const },
+  optionHint: { fontSize: font.small, color: palette.textMeta },
+  check: { color: palette.accent },
   shortcut: {
-    fontSize: font.small,
-    color: palette.textMuted,
-    paddingHorizontal: space.sm,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.border,
+    fontSize: 10.5,
+    fontFamily: 'monospace' as const,
+    color: palette.textMeta,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    backgroundColor: palette.surfaceAlt,
     overflow: 'hidden' as const,
   },
 });

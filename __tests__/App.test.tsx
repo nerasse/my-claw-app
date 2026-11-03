@@ -36,7 +36,10 @@ test('the drawer holds the conversations and leads to the settings', async () =>
   await press(tree, 'Open conversations');
 
   expect(labelsOf(tree)).toContain('More');
-  expect(textsOf(tree)).toContain('MyClaw');
+  // The wordmark is two tones in one Text (`my` in ink, `-claw` faint), and RN flattens the
+  // outer node's children into an array: the tail is the string a text walker sees.
+  expect(textsOf(tree)).toContain('-claw');
+  expect(textsOf(tree)).not.toContain('MyClaw');
   expect(textsOf(tree)).toContain('More');
   await unmount(tree);
 });

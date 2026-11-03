@@ -18,7 +18,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { ChevronIcon, CloseIcon, FilterIcon, FolderIcon, GearIcon, MoreIcon, NewFolderIcon, PlusIcon, SidebarIcon } from '../components/icons';
+import { ChevronIcon, CloseIcon, FilterIcon, FolderIcon, GearIcon, MoreIcon, NewFolderIcon, PlusIcon, SearchIcon, SidebarIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
@@ -37,11 +37,6 @@ const STATE_LABEL: Record<WsState, string> = {
 };
 
 export { STATE_LABEL as CONNECTION_LABEL };
-
-function Separator(): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
-  return <View style={styles.separator} />;
-}
 
 /**
  * One line of the list: a section header, a conversation, or the sentence that says the list is
@@ -79,11 +74,15 @@ type DragSubject =
   | { kind: 'folder'; folder: FolderSummary };
 
 /**
- * The rule the list draws between two entries. `stackLines` sums it in, so a finger lands one
- * pixel lower per line above it -- and the drawing below reads the same number, so the two cannot
- * drift apart.
+ * What the list draws between two entries.
+ *
+ * Nothing, and the number is still here because the drag arithmetic (`stackLines`) and the finger
+ * hit test have to agree on it: a list that draws no rule but sums one in lands half a pixel lower
+ * per row above it. The POC separates a row from its neighbours with its own padding and the
+ * active row's surface; the hairline it used to carry turned twenty rows into twenty compartments
+ * and was the densest line in the whole panel.
  */
-export const SEPARATOR_HEIGHT = 1;
+export const SEPARATOR_HEIGHT = 0;
 
 /** How long a finger has to hold still before moving becomes a drag rather than a scroll. */
 const DRAG_HOLD_MS = 350;
@@ -687,7 +686,9 @@ export function Drawer({
             style={styles.homeButton}
             accessibilityRole="button"
             accessibilityLabel="Home">
-            <Text style={styles.brand}>MyClaw</Text>
+            <Text style={styles.brand}>
+              my<Text style={styles.brandTail}>-claw</Text>
+            </Text>
           </Pressable>
           <View style={styles.headActions}>
             {pinned && onCollapse ? (
@@ -697,7 +698,7 @@ export function Drawer({
                 style={styles.folderButton}
                 accessibilityRole="button"
                 accessibilityLabel="Hide the conversation list">
-                <SidebarIcon size={20} tone="faint" />
+                <SidebarIcon size={15} tone="muted" />
               </Pressable>
             ) : null}
             <Pressable
@@ -706,7 +707,7 @@ export function Drawer({
               style={styles.folderButton}
               accessibilityRole="button"
               accessibilityLabel="New folder">
-              <NewFolderIcon size={22} tone="text" />
+              <NewFolderIcon size={15} tone="muted" />
             </Pressable>
             <Pressable
               onPress={onNewThread}
@@ -714,33 +715,36 @@ export function Drawer({
               style={styles.newButton}
               accessibilityRole="button"
               accessibilityLabel="New conversation">
-              <PlusIcon size={20} tone="accent" />
+              <PlusIcon size={15} tone="accent" />
             </Pressable>
           </View>
         </View>
 
         <View style={styles.searchRow}>
-          <TextInput
-            ref={searchRef}
-            style={styles.search}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="search"
-            placeholderTextColor={palette.textFaint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            accessibilityLabel="Search conversations"
-          />
-          <Pressable
-            onPress={onOpenWorkspaceFilter}
-            hitSlop={8}
-            style={styles.filterButton}
-            accessibilityRole="button"
-            accessibilityLabel={
-              workspaceFilter ? `Filter by workspace, ${workspaceFilter} selected` : 'Filter by workspace'
-            }>
-            <FilterIcon size={18} color={workspaceFilter ? palette.accent : palette.textMuted} />
-          </Pressable>
+          <View style={styles.searchBox}>
+            <SearchIcon size={12} tone="faint" />
+            <TextInput
+              ref={searchRef}
+              style={styles.search}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="search"
+              placeholderTextColor={palette.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="Search conversations"
+            />
+            <Pressable
+              onPress={onOpenWorkspaceFilter}
+              hitSlop={8}
+              style={styles.filterButton}
+              accessibilityRole="button"
+              accessibilityLabel={
+                workspaceFilter ? `Filter by workspace, ${workspaceFilter} selected` : 'Filter by workspace'
+              }>
+              <FilterIcon size={13} color={workspaceFilter ? palette.accent : palette.textMuted} />
+            </Pressable>
+          </View>
         </View>
 
         {/* What is masked, and the tap that stops masking it. A filter with no trace on screen is
@@ -772,7 +776,6 @@ export function Drawer({
                 style={styles.list}
                 data={entries}
                 keyExtractor={item => item.key}
-                ItemSeparatorComponent={Separator}
                 keyboardShouldPersistTaps="handled"
                 // Virtualized by default; tuned so a long list scrolls without re-rendering
                 // everything, and the memoized rows only update when their own props move.
@@ -822,11 +825,18 @@ export function Drawer({
               accessibilityLabel="More">
               <View style={styles.footerMain}>
                 <Text style={styles.footerTitle}>More</Text>
-                <Text style={styles.footerMeta}>
-                  <Text style={{ color: connectionState === 'connected' ? palette.ok : palette.textFaint }}>●</Text>{' '}
-                  {STATE_LABEL[connectionState]}
-                  {pending > 0 ? ` · ${pending} pending` : ''}
-                </Text>
+                <View style={styles.footerStateRow}>
+                  <View
+                    style={[
+                      styles.connDot,
+                      { backgroundColor: connectionState === 'connected' ? palette.ok : palette.warn },
+                    ]}
+                  />
+                  <Text style={styles.footerMeta}>
+                    {STATE_LABEL[connectionState]}
+                    {pending > 0 ? ` · ${pending} pending` : ''}
+                  </Text>
+                </View>
               </View>
               <ChevronIcon direction="right" size={16} tone="faint" />
             </Pressable>
@@ -835,7 +845,7 @@ export function Drawer({
               onPress={onOpenSettings}
               accessibilityRole="button"
               accessibilityLabel="Open settings">
-              <GearIcon size={22} tone="text" />
+              <GearIcon size={15} tone="muted" />
             </Pressable>
           </View>
         </View>
@@ -909,34 +919,46 @@ const createStyles = (palette: Palette) => ({
   head: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
+    gap: 6,
     paddingHorizontal: space.md,
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },
-  brand: { fontSize: 27, fontWeight: '800' as const, color: palette.text, letterSpacing: 0.2 },
+  // The POC's own name: 16.5 / 600, tracking -0.02em, and the second half of the word in the
+  // faint ink. It was 27 / 800 -- a screen title, in a column of navigation.
+  brand: { fontSize: 16.5, fontWeight: '600' as const, color: palette.text, letterSpacing: -0.33 },
+  /** The half of the word that is not the name: same size, not the same weight of ink. */
+  brandTail: { color: palette.textFaint, fontWeight: '400' as const },
   homeButton: {
     padding: 0,
     backgroundColor: 'transparent' as const,
     alignSelf: 'flex-start' as const,
   },
   /** The two ways in: a conversation, or a place to put one. The accent stays on the first. */
-  headActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
+  headActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2 },
+  /**
+   * A header action: 28 pt, no plate.
+   *
+   * These were 40 pt boxes, the new-thread one filled with `accentSoft` and the folder one bare:
+   * one accent surface and one floating glyph in the same row, which read as two different ranks
+   * of control. The POC gives every one of them the same 28 pt square and keeps the accent for the
+   * glyph on the one that creates something.
+   */
   newButton: {
-    width: 40,
-    height: 40,
+    width: 28,
+    height: 28,
     borderRadius: radius.sm,
-    backgroundColor: palette.accentSoft,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
   folderButton: {
-    width: 40,
-    height: 40,
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  sectionRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  sectionRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingTop: space.sm, paddingBottom: space.xxs },
   sectionMenu: {
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
@@ -967,14 +989,20 @@ const createStyles = (palette: Palette) => ({
   sectionFold: { width: 14, fontSize: font.micro, color: palette.textFaint },
   /** The glyph slot, held empty on the section that is not a folder: the names have to line up. */
   sectionGlyph: { width: 15 + space.xs, alignItems: 'center' as const, justifyContent: 'center' as const },
+  /**
+   * A section label: the POC's own shape, which is a quiet line and not a heading.
+   *
+   * It was 10 pt uppercase with 0.5 tracking, and that is the tic the plane avoids: three of these
+   * down a column turned a list of conversations into a stack of table sections. The POC sets
+   * 11 pt in the faint ink, no case change, and lets the count sit at the far end -- the eye finds
+   * "Aujourd'hui" by its position, not by its capitals.
+   */
   sectionLabel: {
     paddingRight: space.md,
-    paddingTop: space.xs,
-    paddingBottom: space.xxs,
-    fontSize: font.micro,
-    color: palette.textMeta,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
+    fontSize: font.small,
+    fontWeight: '500' as const,
+    color: palette.textFaint,
+    letterSpacing: 0.11,
   },
   listArea: { flex: 1 },
   /** The box the drag reads its coordinates in: same bounds as the list it wraps. */
@@ -998,27 +1026,41 @@ const createStyles = (palette: Palette) => ({
   searchRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: space.sm,
+    gap: 6,
     marginHorizontal: space.md,
     marginBottom: space.sm,
   },
+  /**
+   * The search field, drawn the way the POC draws it: a filled 30 pt bar, no border.
+   *
+   * It was a 32 pt pill with a hairline and a magnifier drawn beside it, which is three devices
+   * saying "this is a field" where the surface alone says it. The filter sits inside the same bar,
+   * at its end, instead of being a second 40 pt circle next to it.
+   */
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 7,
+    height: 30,
+    paddingLeft: 9,
+    paddingRight: 4,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceAlt,
+  },
   search: {
     flex: 1,
-    paddingHorizontal: space.md,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.pill,
-    fontSize: font.body,
+    minWidth: 0,
+    paddingVertical: 0,
+    fontSize: font.meta,
     color: palette.text,
   },
   filterButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: palette.surfaceAlt,
   },
   filterChip: {
     flexDirection: 'row' as const,
@@ -1034,7 +1076,6 @@ const createStyles = (palette: Palette) => ({
   },
   filterChipText: { fontSize: font.small, color: palette.text },
   filterChipGlyph: { fontSize: font.small, color: palette.textMuted },
-  separator: { height: SEPARATOR_HEIGHT, backgroundColor: palette.border, marginHorizontal: 0 },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
   /** The rule above the footer rides the same inset as the list separators and the footer's own
    *  hairlines, instead of running the full width of the panel. A borderTop on the footer would
@@ -1060,14 +1101,21 @@ const createStyles = (palette: Palette) => ({
   },
   footerMain: { flex: 1, gap: 1 },
   footerTitle: { fontSize: font.body, color: palette.text },
-  footerMeta: { fontSize: font.small, color: palette.textMuted },
+  footerMeta: { fontSize: 10.5, color: palette.textFaint },
+  footerStateRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginTop: 1 },
+  /** The connection state's own mark: drawn, at 5 pt, in the footer's second line. */
+  connDot: { width: 5, height: 5, borderRadius: 3 },
   footerGlyph: { fontSize: font.screen, color: palette.textFaint },
+  /**
+   * The gear, at the end of the footer row.
+   *
+   * It was a 56×40 tile of `surfaceAlt` -- a button as wide as a word, next to a "More" row that is
+   * just text. The POC draws it as another 28 pt action: the row already has a surface, and a
+   * filled box inside it reads as the primary action of the panel.
+   */
   settingsButton: {
-    width: 56,
-    height: 40,
-    marginLeft: space.sm,
-    borderRadius: radius.sm,
-    backgroundColor: palette.surfaceAlt,
+    width: 28,
+    height: 28,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },

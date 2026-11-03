@@ -17,7 +17,7 @@ interface IconProps {
   /** A literal colour, for an icon drawn over a picture. Prefer `tone` everywhere else. */
   color?: string;
   /** Which ink of the theme to draw with. Resolved here, so no page needs the palette in scope. */
-  tone?: 'text' | 'muted' | 'faint' | 'accent';
+  tone?: 'text' | 'muted' | 'faint' | 'accent' | 'danger';
 }
 
 /**
@@ -32,6 +32,7 @@ function useInk(color: string | undefined, tone: IconProps['tone']): string {
   if (color) return color;
   if (tone === 'text') return palette.text;
   if (tone === 'accent') return palette.accent;
+  if (tone === 'danger') return palette.danger;
   if (tone === 'muted') return palette.textMuted;
   return palette.textFaint;
 }
@@ -100,6 +101,16 @@ export function CopyIcon(props: IconProps): React.JSX.Element {
 /** The funnel: three rules narrowing to a point, the shape everyone reads as "narrow this list". */
 export function FilterIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M10 18h4v-2h-4zM3 6v2h18V6zm3 7h12v-2H6z" />;
+}
+
+/** A magnifier: the one mark a search field wears. */
+export function SearchIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"
+    />
+  );
 }
 
 /** A folder with a plus: the one thing that says "make one of these" without a word. */
@@ -237,5 +248,64 @@ export function AgentIcon(props: IconProps): React.JSX.Element {
 export function PencilIcon(props: IconProps): React.JSX.Element {
   return (
     <Icon {...props} d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z" />
+  );
+}
+
+/**
+ * The marks a sheet's verbs wear.
+ *
+ * Filled paths on the same 24-box as everything else, asked for at 15: a menu row is read at a
+ * glance down its left edge, so each one has to be a different silhouette, not a different
+ * stroke width. `Target` is a move into a folder, `Copy` two sheets, `Download` onto a line,
+ * `Link` two chain halves, `Info` a ring, `Gauge` a dial, `List` three rules.
+ */
+export function MoveIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8zm-2 9h3v-2h2v2h3l-4 4z" />;
+}
+
+export function DuplicateIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11z"
+    />
+  );
+}
+
+export function LinkIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M3.9 12A3.1 3.1 0 0 1 7 8.9h3V7H7a5 5 0 0 0 0 10h3v-1.9H7A3.1 3.1 0 0 1 3.9 12M8 13h8v-2H8zm9-6h-3v1.9h3a3.1 3.1 0 0 1 0 6.2h-3V17h3a5 5 0 0 0 0-10"
+    />
+  );
+}
+
+export function InfoIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m1 15h-2v-6h2zm0-8h-2V7h2z"
+    />
+  );
+}
+
+/** A dial: how full the window is, at a glance. */
+export function GaugeIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M12 4a9 9 0 0 0-7.4 14.1l1.5-1.2A7 7 0 1 1 19 12h2a9 9 0 0 0-9-8m1 2h-2v6.3a1.8 1.8 0 1 0 2 0zm5.4 3.3-1.6 1.2a7 7 0 0 1 .2 1.5h2a9 9 0 0 0-.6-2.7"
+    />
+  );
+}
+
+/** Two overlapping leaves: what a run wrote to disk. */
+export function FilesIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M14 2H6a2 2 0 0 0-2 2v12h2V4h8zm4 4H10a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2m0 14h-8V8h8z"
+    />
   );
 }
