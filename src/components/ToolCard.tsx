@@ -23,6 +23,12 @@ import { runStateOf, stateWord } from '../core/toolState';
  * controls of its own, and a control inside a control is announced as one thing by a screen
  * reader and steals the toggle's touch.
  */
+/**
+ * The head row's type size. 11.5 is the POC's: big enough that a monospace tool name is legible,
+ * small enough that twenty folded cards stay a list rather than a wall.
+ */
+const HEAD_SIZE = 11.5;
+
 export const ToolCard = React.memo(function ToolCardView({
   item,
   threadId,
@@ -160,26 +166,26 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={styles.head}>
           <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
-          <Text style={styles.name}>{item.name}</Text>
+          <Text style={[styles.rowText, styles.name]}>{item.name}</Text>
           {/* One line, every tool, folded. A shell command used to wrap under the head at three
               lines: the densest argument is the one worth the room, the argument went the other
               way, and the POC's rule ("closed, the card is 29 px whatever the tool") is what a
               column of twenty calls needs to stay a list. The command is one tap away. */}
           {!open && preview ? (
-            <Text style={[styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
+            <Text style={[styles.rowText, styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
               {preview}
             </Text>
           ) : (
             <View style={styles.spacer} />
           )}
           {!open && summary.extraArgs > 0 ? <ExtraArgs count={summary.extraArgs} /> : null}
-          {word ? <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]}>{word}</Text> : null}
+          {word ? <Text style={[styles.rowText, styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]}>{word}</Text> : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
             </View>
           ) : null}
-          {running ? <RunningFor since={item.ts} /> : duration ? <Text style={styles.duration}>{duration}</Text> : null}
+          {running ? <RunningFor since={item.ts} /> : duration ? <Text style={[styles.rowText, styles.duration]}>{duration}</Text> : null}
         </View>
       </Pressable>
 
@@ -415,16 +421,22 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     // staircase.
     minHeight: Math.round(29 * scale),
   },
-  chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
-  name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
-  preview: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.textMuted },
+  /**
+   * The head row is one line of type at one size. Four sizes in a 29 pt row (10 for the chevron,
+   * 11 for the summary, 12 for the name, 12 for the duration) each carried their own leading, and
+   * the name sat a pixel below the summary it annotates. 11.5 is the POC's own number.
+   */
+  rowText: { fontSize: scaleFont(HEAD_SIZE, scale), lineHeight: Math.round(HEAD_SIZE * 1.5 * scale) },
+  chevron: { color: palette.textFaint, width: 8 },
+  name: { fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace' },
+  preview: { flex: 1, color: palette.textMuted },
   // A path, a command or a pattern: read in the prose face they look like a sentence that lost
   // its spaces.
-  previewMono: { fontFamily: 'monospace', fontSize: scaleFont(font.micro, scale) },
+  previewMono: { fontFamily: 'monospace' },
   spacer: { flex: 1 },
-  extraArgs: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
-  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
-  state: { fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },
+  extraArgs: { color: palette.textMeta },
+  duration: { color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
+  state: { fontWeight: '600' as const },
   // Two colours, three words: a failure is an error, a stop or a clip is not.
   stateBad: { color: palette.danger },
   stateWarn: { color: palette.warn },
