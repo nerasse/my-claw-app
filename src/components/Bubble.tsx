@@ -287,7 +287,7 @@ export const Bubble = React.memo(function BubbleView({
           message, so the bubble fills the column like a tool card. The run's empreinte rides the
           same line, at the end the marks do not take: it is a signature, and it must never read as
           a caption of the bubble above it. */}
-      <View style={[styles.menuRow, agent ? styles.menuRowAgent : styles.menuRowUser, foot !== undefined ? (agent ? styles.menuRowAgentFoot : styles.menuRowUserFoot) : null]}>
+      <View style={[styles.menuRow, styles.menuRowEnd]}>
         {agent && foot !== undefined ? <RunFoot run={foot} /> : null}
         {/* Button and clock travel as one block. Split, they would land at opposite ends of a row
             the signature also shares, and the stamp has to stay beside the control it follows. */}
@@ -364,12 +364,11 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   error: { fontSize: scaleFont(font.small, scale), color: palette.danger, marginTop: 2 },
   queued: { fontSize: scaleFont(font.small, scale), color: palette.textMeta, marginTop: 2 },
   queuedUser: { color: palette.bubbleUserText, opacity: 0.62 },
+  // One alignment for every case. It used to follow the author, then space itself around the run's
+  // empreinte under the owner's messages -- and an alignment that changes with the row's guest is
+  // an alignment that will put a button somewhere unexpected the next time a guest joins.
   menuRow: { width: '100%' as const, flexDirection: 'row' as const, marginTop: 1 },
-  menuRowAgent: { justifyContent: 'flex-end' as const },
-  menuRowUser: { justifyContent: 'flex-end' as const },
-  /** With an empreinte on the line: the signature takes the end the owner's marks do not. */
-  menuRowAgentFoot: { justifyContent: 'flex-end' as const },
-  menuRowUserFoot: { justifyContent: 'space-between' as const },
+  menuRowEnd: { justifyContent: 'flex-end' as const },
   stamp: { flexDirection: 'row' as const, alignItems: 'center' as const },
   menu: { width: 24, height: 22, alignItems: 'center' as const, justifyContent: 'center' as const },
   // Left margin, not padding: the button keeps its 24px target and the stamp keeps its breath.

@@ -181,6 +181,9 @@ describe('Bubble layout', () => {
     });
     expect(isRowAt(userTree, 'flex-end')).toBe(true);
     expect(isRowAt(userTree, 'flex-start')).toBe(false);
+    // And no variant re-aligns the row around a guest: a run's empreinte can land on the owner's
+    // bubble, and `space-between` there would push the `...` and its clock to the far left again.
+    expect(isRowAt(userTree, 'space-between')).toBe(false);
   });
 
   it('a larger scale raises the message body size', () => {
