@@ -1443,7 +1443,7 @@ export function ChatScreen({
         ) : null}
         <Pressable
           onPress={onOpenMenu}
-          style={styles.headerAction}
+          style={[styles.headerAction, styles.headerActionEnd]}
           hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel="Commands">
@@ -1665,11 +1665,14 @@ const createStyles = (palette: Palette) => ({
     // the phone is the tighter one). A height set in pixels here would fight the phone's, so the
     // frame is a floor and the padding does the rest.
     //
-    // 8, not 12: the strip's first and last icons sat 12 pt inside a column whose bubble starts at
-    // 0, so the header was narrower than everything under it. Eight is the row's own gap, which is
-    // what makes it read as one column with the thread (owner, 2026-11-04).
+    // Zero, and the box's own slack becomes the gutter: an action is a 28 pt box around a 16 pt
+    // glyph, so 6 pt of padding sits inside each of its edges. This is the optical rule behind "it
+    // still looks shifted" -- a strip padded like a text row started the icon's *ink* 14 pt in while
+    // the prose under it started at 6, and the eye aligns ink to ink, not box to box. At 0 the glyph
+    // lands on the thread's own inset and the strip finally reads as one column with it (owner,
+    // 2026-11-04).
     minHeight: 44,
-    paddingHorizontal: 8,
+    paddingHorizontal: 0,
     paddingVertical: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
@@ -1718,6 +1721,17 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
+  /**
+   * The optical correction of the last action, and the whole answer to "the header still looks
+   * shifted".
+   *
+   * With the strip flush (padding 0) the hamburger's ink lands 8.7 pt from the left edge and the
+   * overflow's 12.9 pt from the right: a vertical three-dot glyph fills only 3.2 of its 24 box wide,
+   * so it carries 6.9 pt of empty viewport on each side where the three rules carry 2.7. Two edges
+   * of one row, 4.3 pt apart, is what the eye catches -- not the offset of either one. Pulled out by
+   * that difference, both inks sit at the same distance and the strip reads level.
+   */
+  headerActionEnd: { marginRight: -4 },
   headerText: { flex: 1, minWidth: 0 },
   // 14 and 11, the POC's pair rounded to the app's own scale: the title is a line of the
   // conversation's type, not a screen heading, and at 15 it drew the eye before the answer under it.

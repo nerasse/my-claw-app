@@ -258,13 +258,15 @@ test('a folder header is hung in the gutter, not indented onto its rows', async 
   )[0];
   expect(header).toBeTruthy();
 
-  // Every child of the header's own row is text or an icon: no spacer that would offset the name.
-  const row = tree.root.findAll(
+  // The section row is the one node that cancels the list's inset, and cancelling it is what
+  // lands the chevron's ink on the wordmark's x. If some future pass re-adds a leading block or
+  // drops the margin, the folder names drift back under the rows they head.
+  const sectionRows = tree.root.findAll(
     node => node.props?.style && JSON.stringify(node.props.style).includes('marginLeft'),
   );
-  expect(row.length).toBeGreaterThan(0);
+  expect(sectionRows.length).toBeGreaterThan(0);
 
-  const [flat] = row.map(node =>
+  const [flat] = sectionRows.map(node =>
     (Array.isArray(node.props.style) ? node.props.style : [node.props.style])
       .filter(Boolean)
       .reduce((acc: Record<string, unknown>, entry: Record<string, unknown>) => ({ ...acc, ...entry }), {}),

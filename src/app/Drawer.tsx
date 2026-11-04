@@ -969,16 +969,18 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   /**
-   * A section line, hung in the list's own gutter.
+   * A section line, hung on the wordmark's own gutter.
    *
-   * `marginLeft` cancels the list's 10 pt inset so the disclosure arrow starts where the panel does
-   * and the name lands on the x a conversation's title does -- one column, folders above their
-   * sessions instead of indented under them.
+   * The owner's second read: pulled all the way to the panel edge it was a shade too tight. The
+   * reference is the logo ("aligner avec le logo tout en haut"), and the alignment that matters is
+   * the ink, not the box -- the disclosure chevron is a 14 pt box around a path whose left edge sits
+   * at 7.8 of 24, so 4.5 pt of empty box hangs before the mark. At -5 from the list's 10 pt inset the
+   * chevron's ink lands on the x the wordmark starts at, and the label stays 4 pt from it.
    */
   sectionRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginLeft: -space.md,
+    marginLeft: -5,
     paddingTop: space.sm,
     paddingBottom: space.xxs,
   },
