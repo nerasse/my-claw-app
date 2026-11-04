@@ -219,7 +219,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 14, lineHeight: 16, color: palette.text },
   body: { flex: 1, minHeight: 0, backgroundColor: palette.bg },
   bodyContent: { padding: space.md, paddingBottom: space.xl },
   plainText: {
@@ -240,17 +239,6 @@ const createStyles = (palette: Palette) => ({
     gap: space.sm,
   },
   loadingText: { fontSize: font.small, color: palette.textFaint },
-  bottomBar: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'flex-end' as const,
-    gap: space.md,
-    paddingHorizontal: space.md,
-    paddingTop: space.sm,
-    borderTopWidth: 1,
-    borderTopColor: palette.border,
-    backgroundColor: palette.surface,
-  },
   saved: {
     marginRight: 'auto' as const,
     fontSize: font.small,

@@ -123,7 +123,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: space.sm },
   // The toggle takes the row and yields it: a long label must not push the copy button out.
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1, flexGrow: 1 },
-  chevron: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, width: 8 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
   pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },
   // A left rule marks it as an aside rather than part of the answer.

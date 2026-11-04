@@ -79,3 +79,35 @@ test('a thematic break is drawn in an answer and dropped in a thought', () => {
   // Default tone is the answer's: a caller that says nothing keeps the rule.
   expect(new WrappingRenderer(style, style).hr()).not.toBeNull();
 });
+
+/**
+ * The owner's own turn is markdown on another plate. It reads at the answer's size, but its ink
+ * and its code plates belong to the user bubble: drawn in `text` on a tinted bubble, an owner's
+ * message had no contrast left on the themes whose two surfaces are close.
+ */
+test.each(PALETTES)('a user turn keeps the bubble ink and its own plates (%s)', (_name, palette) => {
+  const user = markedStyles(palette, 'texte', 'user') as unknown as Sheet & {
+    code?: { backgroundColor?: string };
+    codespan?: { backgroundColor?: string; color?: string };
+  };
+  const body = markedStyles(palette, 'texte', 'body') as unknown as Sheet & {
+    codespan?: { backgroundColor?: string };
+  };
+  const aside = markedStyles(palette, 'texte', 'aside') as unknown as Sheet;
+
+  // Reading size, unlike an aside: this is a message, not context about one.
+  expect(user.text?.fontSize).toBe(font.body);
+  expect(user.li?.fontSize).toBe(font.body);
+  expect(aside.text?.fontSize).toBe(font.small);
+
+  for (const key of ['text', 'li', 'strong', 'em', 'strikethrough'] as const) {
+    expect(user[key]?.color).toBe(palette.bubbleUserText);
+  }
+  // The plates leave the page for the bubble's own raised surface, and hold the bubble's ink.
+  expect(user.codespan?.backgroundColor).toBe(palette.surfaceRaised);
+  expect(user.code?.backgroundColor).toBe(palette.surfaceRaised);
+  expect(user.codespan?.color).toBe(palette.bubbleUserText);
+  expect(body.codespan?.backgroundColor).toBe(palette.codeBg);
+  // A link stays the accent: an affordance keeps its colour on any surface.
+  expect(user.link?.color).toBe(palette.accent);
+});

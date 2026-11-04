@@ -434,12 +434,6 @@ const createStyles = (palette: Palette) => ({
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
   },
-  editTarget: {
-    width: 32,
-    height: 32,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
   list: { flex: 1, marginTop: space.md },
   quotaBlock: { marginTop: space.md, marginHorizontal: space.md },
   headerBlock: { gap: space.sm, paddingBottom: space.sm },

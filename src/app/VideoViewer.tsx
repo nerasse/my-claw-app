@@ -97,7 +97,6 @@ const createStyles = (_palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  saveOff: { opacity: 0.5 },
   close: {
     width: 40,
     height: 40,
@@ -106,5 +105,4 @@ const createStyles = (_palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 17, lineHeight: 20, color: '#fff' },
 });

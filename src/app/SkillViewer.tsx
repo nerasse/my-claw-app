@@ -166,7 +166,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   actions: {
     width: 40,
     height: 40,

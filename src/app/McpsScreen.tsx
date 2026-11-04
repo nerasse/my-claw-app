@@ -291,8 +291,6 @@ const createStyles = (palette: Palette) => ({
   },
   addActive: { borderColor: palette.danger, backgroundColor: palette.surfaceAlt },
   addIdle: { borderColor: palette.accent, backgroundColor: palette.surfaceAlt },
-  addTextActive: { fontSize: 18, color: palette.danger },
-  addTextIdle: { fontSize: 18, color: palette.accent },
   body: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
   category: { gap: space.xs },
   section: { fontSize: font.micro, color: palette.textFaint, textTransform: 'uppercase' as const, letterSpacing: 0.5 },

@@ -111,5 +111,4 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingVertical: space.xs,
   },
   moreLabel: { fontSize: scaleFont(font.micro, scale), color: palette.accent, textTransform: 'uppercase' as const, letterSpacing: 0.4 },
-  moreChevron: { fontSize: scaleFont(font.micro, scale), color: palette.accent },
 });

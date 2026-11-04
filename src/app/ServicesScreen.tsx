@@ -446,7 +446,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   title: {
     fontSize: font.title,
     fontWeight: '600' as const,
@@ -512,7 +511,6 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.bg,
   },
   chosenLabel: { fontSize: font.body, color: palette.text },
-  chevron: { fontSize: font.body, color: palette.textFaint },
   chip: {
     paddingHorizontal: space.md,
     paddingVertical: space.xs,

@@ -109,7 +109,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 14, color: palette.text },
   imageStage: {
     height: 240,
     alignItems: 'center' as const,
@@ -119,18 +118,6 @@ const createStyles = (palette: Palette) => ({
   },
   empty: { fontSize: font.meta, color: palette.textFaint },
   size: { fontSize: font.small, color: palette.textFaint, marginTop: space.xs },
-  modalActions: {
-    flexDirection: 'row' as const,
-    justifyContent: 'flex-end' as const,
-    alignItems: 'center' as const,
-    gap: space.md,
-    paddingTop: space.md,
-  },
-  saveFeedback: {
-    color: palette.textFaint,
-    fontSize: font.small,
-    marginRight: 'auto' as const,
-  },
   button: {
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,

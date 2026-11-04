@@ -54,7 +54,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  backGlyph: { fontSize: 26, lineHeight: 28, color: palette.text },
   title: { fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   body: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const },
   empty: { fontSize: font.meta, color: palette.textFaint },

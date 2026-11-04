@@ -590,7 +590,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  layerGlyph: { fontSize: 18, color: palette.accent },
   removeText: { fontSize: font.body, fontWeight: '600' as const, color: palette.danger },
   note: { fontSize: font.micro, color: palette.textFaint, paddingHorizontal: space.xs },
   noteDanger: { fontSize: font.micro, color: palette.danger, paddingHorizontal: space.xs },

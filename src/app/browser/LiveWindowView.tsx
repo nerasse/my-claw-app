@@ -364,7 +364,6 @@ const createStyles = (palette: Palette) => ({
   },
   tabActive: { borderWidth: 1, borderColor: palette.accent },
   tabText: { fontSize: font.small, color: palette.text, maxWidth: 170 },
-  tabClose: { fontSize: font.body, color: palette.textFaint },
   nav: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
   address: {
     flex: 1,

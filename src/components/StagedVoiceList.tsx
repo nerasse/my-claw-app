@@ -101,7 +101,6 @@ const createStyles = (palette: Palette) => ({
     paddingHorizontal: space.md,
     paddingVertical: 4,
   },
-  remove: { fontSize: font.meta, lineHeight: 15, color: palette.textMuted },
   status: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, paddingBottom: 2 },
   failed: { fontSize: font.meta, color: palette.danger },
   retry: { fontSize: font.meta, fontWeight: '600' as const, color: palette.accent },

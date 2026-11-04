@@ -138,8 +138,11 @@ jest.mock('react-native-marked', () => {
         return React.createElement(View, { key: 'hr', style: styles });
       }
     },
-    useMarkdown: value => [
-      React.createElement(Text, { key: 'md' }, String(value)),
+    useMarkdown: (value, opts) => [
+      // The real library flattens `styles.text` over the paragraph's inline runs; a stub that
+      // dropped it would hide the only thing a caller hands the sheet for. Falls back to plain
+      // when a test asks for the parse alone.
+      React.createElement(Text, { key: 'md', style: opts?.styles?.text }, String(value)),
     ],
   };
 });

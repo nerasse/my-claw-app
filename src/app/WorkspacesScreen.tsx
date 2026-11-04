@@ -264,8 +264,6 @@ const createStyles = (palette: Palette) => ({
   },
   addActive: { borderColor: palette.danger, backgroundColor: palette.surfaceAlt },
   addIdle: { borderColor: palette.accent, backgroundColor: palette.surfaceAlt },
-  addTextActive: { fontSize: 18, color: palette.danger },
-  addTextIdle: { fontSize: 18, color: palette.accent },
   body: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
   category: { gap: space.xs },
   section: { fontSize: font.micro, color: palette.textFaint, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
@@ -345,13 +343,6 @@ const createStyles = (palette: Palette) => ({
   saveDisabled: { backgroundColor: palette.surfaceAlt },
   saveText: { fontSize: font.body, fontWeight: '600' as const, color: palette.surface },
   saveTextOff: { fontSize: font.body, fontWeight: '600' as const, color: palette.textFaint },
-  actionButton: {
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
   actionText: { fontSize: font.small, color: palette.textMuted },
   removeButton: {
     paddingHorizontal: space.md,

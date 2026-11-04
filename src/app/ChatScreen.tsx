@@ -1671,7 +1671,6 @@ const createStyles = (palette: Palette) => ({
     borderBottomColor: palette.border,
   },
   // 26, not the menu glyph's 20: the same chevron at the same size as every other screen's back.
-  backGlyph: { fontSize: 14, lineHeight: 20, color: palette.textMuted },
   subRule: {
     height: 1,
     backgroundColor: palette.accent,
@@ -1715,22 +1714,11 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  menuButtonDense: { width: 32, height: 32 },
-  menuButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: palette.surfaceAlt,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  menuGlyph: { fontSize: 20, lineHeight: 22, color: palette.text },
   headerText: { flex: 1, minWidth: 0 },
   // 14 and 11, the POC's pair rounded to the app's own scale: the title is a line of the
   // conversation's type, not a screen heading, and at 15 it drew the eye before the answer under it.
   title: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
   subtitle: { fontSize: font.small, color: palette.textMeta },
-  statusButton: { padding: 2 },
   connBadge: {
     fontSize: font.meta,
     fontWeight: '600' as const,

@@ -144,18 +144,6 @@ export function toolContent(name: string, args: Record<string, unknown>): ToolCo
   return { key, text: value };
 }
 
-/**
- * The rest of the arguments: what the ARGUMENTS fold shows. Returns null when the content
- * argument was the only one, so the caller drops the fold rather than offering an empty `{}`.
- */
-export function labelArgs(name: string, args: Record<string, unknown>): Record<string, unknown> | null {
-  const key = CONTENT_KEYS[name];
-  if (!key || !(key in args)) return Object.keys(args).length > 0 ? args : null;
-  const rest: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(args)) if (k !== key) rest[k] = v;
-  return Object.keys(rest).length > 0 ? rest : null;
-}
-
 /** Tools whose `action`/`mode` says as much as their target, shown ahead of it. */
 const VERB_KEYS: readonly string[] = ['action', 'mode', 'method'];
 

@@ -181,7 +181,5 @@ const createStyles = (palette: Palette) => ({
     paddingVertical: 1,
     overflow: 'hidden' as const,
   },
-  draft: { alignSelf: 'flex-start' as const, fontSize: font.micro, color: palette.accent },
   menu: { paddingHorizontal: space.md, paddingVertical: space.sm, alignItems: 'center' as const, justifyContent: 'center' as const },
-  menuGlyph: { fontSize: 17, lineHeight: 20, color: palette.textFaint },
 });

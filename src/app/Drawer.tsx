@@ -965,7 +965,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  sectionMenuGlyph: { fontSize: 17, lineHeight: 20, color: palette.textFaint },
   /** The same pill a blocked row wears, with the count in it: one vocabulary, two scales. */
   sectionQuestion: {
     fontSize: font.micro,
@@ -1075,7 +1074,6 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.accentSoft,
   },
   filterChipText: { fontSize: font.small, color: palette.text },
-  filterChipGlyph: { fontSize: font.small, color: palette.textMuted },
   empty: { padding: space.lg, fontSize: font.meta, color: palette.textFaint },
   /** The rule above the footer rides the same inset as the list separators and the footer's own
    *  hairlines, instead of running the full width of the panel. A borderTop on the footer would
@@ -1105,7 +1103,6 @@ const createStyles = (palette: Palette) => ({
   footerStateRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginTop: 1 },
   /** The connection state's own mark: drawn, at 5 pt, in the footer's second line. */
   connDot: { width: 5, height: 5, borderRadius: 3 },
-  footerGlyph: { fontSize: font.screen, color: palette.textFaint },
   /**
    * The gear, at the end of the footer row.
    *

@@ -336,7 +336,6 @@ const createStyles = (palette: Palette) => ({
   optionLabel: { fontSize: 13.5, color: palette.text },
   optionDanger: { color: palette.danger },
   optionHint: { fontSize: font.small, color: palette.textMeta },
-  check: { color: palette.accent },
   shortcut: {
     fontSize: 10.5,
     fontFamily: 'monospace' as const,

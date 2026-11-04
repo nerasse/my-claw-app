@@ -103,7 +103,6 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 14, lineHeight: 16, color: palette.text },
   body: { flex: 1 },
   bodyContent: { padding: space.md },
   // Monospace, because the raw source is what is on show: an indented list, a code fence and a

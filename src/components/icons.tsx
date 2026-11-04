@@ -256,20 +256,11 @@ export function PencilIcon(props: IconProps): React.JSX.Element {
  *
  * Filled paths on the same 24-box as everything else, asked for at 15: a menu row is read at a
  * glance down its left edge, so each one has to be a different silhouette, not a different
- * stroke width. `Target` is a move into a folder, `Copy` two sheets, `Download` onto a line,
- * `Link` two chain halves, `Info` a ring, `Gauge` a dial, `List` three rules.
+ * stroke width. `Target` is a move into a folder, `Download` onto a line, `Link` two chain halves,
+ * `Info` a ring, `Gauge` a dial, `List` three rules.
  */
 export function MoveIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8zm-2 9h3v-2h2v2h3l-4 4z" />;
-}
-
-export function DuplicateIcon(props: IconProps): React.JSX.Element {
-  return (
-    <Icon
-      {...props}
-      d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11z"
-    />
-  );
 }
 
 export function LinkIcon(props: IconProps): React.JSX.Element {

@@ -80,6 +80,5 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 14, lineHeight: 16, color: palette.text },
   body: { flex: 1, backgroundColor: '#202124' },
 });

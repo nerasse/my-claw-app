@@ -13,20 +13,35 @@ import { EMPTY_INK, type MarkdownInk } from './markdownInk';
 import { font, lineBoxFor, lineHeightFor, space, useChatFontScale, useTheme, type Palette } from '../theme';
 
 /**
- * How loud the prose is allowed to be.
+ * How loud the prose is allowed to be, and on which surface it sits.
  *
  * `body` is a message: the bubble's ink at reading size. `aside` is context about a message (the
- * model's reasoning, what a compaction kept) and must lose every contest with the answer, so it
- * renders one step down in size and in muted ink. Everything else -- the block rhythm, the
- * emoji-safe line box, the shrink rules -- is identical: an aside is quieter prose, not lesser
+ * model's reasoning, what a compaction kept, a note the system filed) and must lose every contest
+ * with the answer, so it renders one step down in size and in muted ink. `user` is the owner's own
+ * turn: same size as an answer, but the ink and the plates belong to the user bubble, which is a
+ * surface of its own and not the thread's. Everything else -- the block rhythm, the emoji-safe line
+ * box, the shrink rules -- is identical: a tone is quieter prose on another plate, not lesser
  * markdown.
  */
-export type MarkdownTone = 'body' | 'aside';
+export type MarkdownTone = 'body' | 'aside' | 'user';
 
-function toneOf(palette: Palette, tone: MarkdownTone, scale: number): { size: number; color: string } {
-  return tone === 'aside'
-    ? { size: scaleFont(scale, font.small), color: palette.textMuted }
-    : { size: scaleFont(scale, font.body), color: palette.text };
+/**
+ * The ink and the two plates a tone draws with. `plate` backs an inline code span and a fenced
+ * block; on the user bubble it is the palette's "card drawn inside another surface" token, which
+ * is exactly what a code span there is (the same one an attachment chip wears).
+ */
+function toneOf(
+  palette: Palette,
+  tone: MarkdownTone,
+  scale: number,
+): { size: number; color: string; plate: string; plateInk: string } {
+  if (tone === 'aside') {
+    return { size: scaleFont(scale, font.small), color: palette.textMuted, plate: palette.codeBg, plateInk: palette.codeText };
+  }
+  if (tone === 'user') {
+    return { size: scaleFont(scale, font.body), color: palette.bubbleUserText, plate: palette.surfaceRaised, plateInk: palette.bubbleUserText };
+  }
+  return { size: scaleFont(scale, font.body), color: palette.text, plate: palette.codeBg, plateInk: palette.codeText };
 }
 
 function scaleFont(scale: number, size: number): number {
@@ -43,7 +58,7 @@ function codeSizeFor(size: number): number {
  * or the glyph is clamped away on the first or last line. See lineBoxFor.
  */
 export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 'body', scale = 1): MarkedStyles {
-  const { size, color } = toneOf(palette, tone, scale);
+  const { size, color, plate, plateInk } = toneOf(palette, tone, scale);
   const box = lineBoxFor(size, prose);
   // The library flattens every style over its own regular base (16px, #333333); a span that
   // only states its emphasis inherits that base. Restate the full body so bold and italic
@@ -53,7 +68,10 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
     // Inline runs sit in the row that a list item builds (bullet, then content), so they must
     // yield width there or a long item would push its own line off the bubble.
     text: { fontSize: size, color, ...box, flexShrink: 1 },
-    paragraph: { marginVertical: 2, flexShrink: 0 },
+    // In a message the bubble already spaces the prose from its edge; a paragraph margin on top
+    // of that would make an owner's bubble two points taller than the one the POC draws, and one
+    // more per paragraph. Only the answer and the aside need the gap, because they have no plate.
+    paragraph: { marginVertical: tone === 'user' ? 0 : 2, flexShrink: 0 },
     strong: { ...bodyStyle, fontWeight: '700' },
     em: { ...bodyStyle, fontStyle: 'italic' },
     strikethrough: { ...bodyStyle, textDecorationLine: 'line-through' },
@@ -79,13 +97,13 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
       fontFamily: 'monospace',
       fontStyle: 'normal',
       fontWeight: '400',
-      backgroundColor: palette.codeBg,
+      backgroundColor: plate,
       // The plate is not the page: on a theme whose code background is darker than the
       // background, the page ink has no contrast left.
-      color: palette.codeText,
+      color: plateInk,
     },
     code: {
-      backgroundColor: palette.codeBg,
+      backgroundColor: plate,
       borderWidth: 1,
       borderColor: palette.border,
       borderRadius: 6,
@@ -232,15 +250,21 @@ export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: Ma
   // One tint for both surfaces on purpose: a bubble is `surfaceAlt`, so a tint derived from it
   // would vanish in the chat and only show in documents. The accent's soft wash reads on both.
   const ink = useMemo<MarkdownInk>(
-    () => ({ tokens: tokenColors(palette), marker: palette.accent, tableHeader: { backgroundColor: palette.accentSoft } }),
-    [palette],
+    () => ({
+      tokens: tokenColors(palette),
+      // A bullet is a mark, not an action: on the user bubble it takes that bubble's own ink
+      // rather than the accent, which belongs to what can be pressed.
+      marker: tone === 'user' ? palette.bubbleUserText : palette.accent,
+      tableHeader: { backgroundColor: palette.accentSoft },
+    }),
+    [palette, tone],
   );
   const renderer = useMemo(() => {
-    const { size, color } = toneOf(palette, tone, scale);
+    const { size, color, plateInk } = toneOf(palette, tone, scale);
     const codeSize = codeSizeFor(size);
     return new WrappingRenderer(
       // The block's ink, not the prose's: a plate can be darker than the page it sits on.
-      { color: palette.codeText, fontSize: codeSize, lineHeight: lineHeightFor(codeSize) },
+      { color: plateInk, fontSize: codeSize, lineHeight: lineHeightFor(codeSize) },
       { fontSize: size, color, ...lineBoxFor(size, text) },
       tone,
       ink,

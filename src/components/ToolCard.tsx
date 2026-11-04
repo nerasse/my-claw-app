@@ -388,7 +388,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
    * the name sat a pixel below the summary it annotates. 11.5 is the POC's own number.
    */
   rowText: { fontSize: scaleFont(HEAD_SIZE, scale), lineHeight: Math.round(HEAD_SIZE * 1.5 * scale) },
-  chevron: { color: palette.textFaint, width: 8 },
   name: { fontWeight: '500' as const, color: palette.text, fontFamily: 'monospace' },
   preview: { flex: 1, fontSize: scaleFont(11, scale), color: palette.textMuted },
   // A path, a command or a pattern: read in the prose face they look like a sentence that lost

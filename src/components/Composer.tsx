@@ -574,7 +574,6 @@ const createStyles = (palette: Palette) => ({
   chipGlyph: { alignItems: 'center' as const, justifyContent: 'center' as const },
   chipGlyphText: { fontSize: 9, fontWeight: '600' as const, color: palette.textMuted },
   chipText: { flexShrink: 1, fontSize: font.small, color: palette.text },
-  chipRemove: { fontSize: font.meta, lineHeight: 15, color: palette.textMuted },
   chipRetry: { fontSize: font.meta, lineHeight: 15, fontWeight: '600' as const, color: palette.accent },
   chipTrack: {
     position: 'absolute' as const,

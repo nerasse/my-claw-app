@@ -228,7 +228,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   arrowLeft: { left: space.sm },
   arrowRight: { right: space.sm },
   arrowOff: { opacity: 0.25 },
-  arrowGlyph: { color: '#fff', fontSize: scaleFont(font.title, scale), lineHeight: scaleFont(font.title, scale) + 2 },
   counter: {
     position: 'absolute' as const,
     right: space.sm,

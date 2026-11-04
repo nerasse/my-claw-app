@@ -3,7 +3,7 @@
  * the model happened to serialize, so the same tool read differently from one call to the next.
  */
 
-import { labelArgs, shortenPath, summarizeTool, toolContent } from '../toolSummary';
+import { shortenPath, summarizeTool, toolContent } from '../toolSummary';
 import { PREVIEW_GUARD, summarizeArgs } from '../utils';
 
 it('names the argument that identifies the call, not the first one serialized', () => {
@@ -122,17 +122,6 @@ describe('content arguments', () => {
     expect(toolContent('fetch', { url: 'https://x', method: 'POST', body: '{}' })?.text).toBe('{}');
     expect(toolContent('write', { path: '/a', content: '   ' })).toBeNull();
   });
-
-  it('leaves the label arguments to the fold, and never the content one twice', () => {
-    expect(labelArgs('write', { path: '/a.ts', content: 'hello' })).toEqual({ path: '/a.ts' });
-    expect(labelArgs('read', { path: '/a.ts' })).toEqual({ path: '/a.ts' });
-  });
-
-  it('reports no fold at all when the content argument was the only one', () => {
-    // bash: the command is the whole call. An ARGUMENTS fold there offers `{}`.
-    expect(labelArgs('bash', { command: 'ls' })).toBeNull();
-    expect(labelArgs('agents', {})).toBeNull();
-  });
 });
 
 describe('apply_patch edits', () => {
@@ -160,7 +149,6 @@ describe('apply_patch edits', () => {
   it('falls back to the fold on a shape it does not recognise', () => {
     // An older client, a plugin passing something else: better the raw fold than a wrong layout.
     expect(toolContent('apply_patch', { edits: ['not a pair'] })).toBeNull();
-    expect(labelArgs('apply_patch', { path: '/a.ts', edits: ['x'] })).toEqual({ path: '/a.ts' });
   });
 });
 

@@ -314,7 +314,6 @@ const createStyles = (_palette: Palette) => ({
   navLeft: { left: space.md },
   navRight: { right: space.md },
   navOff: { opacity: 0.25 },
-  navGlyph: { color: '#fff', fontSize: 24, lineHeight: 28 },
   counter: { color: '#fff', fontSize: font.small, opacity: 0.8 },
   topBar: {
     position: 'absolute' as const,
@@ -342,7 +341,6 @@ const createStyles = (_palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  closeGlyph: { fontSize: 17, lineHeight: 20, color: '#fff' },
   cacheBox: {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

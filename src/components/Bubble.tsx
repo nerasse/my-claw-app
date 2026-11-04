@@ -132,13 +132,11 @@ export const Bubble = React.memo(function BubbleView({
   }
   flush();
   const textEl = item.text ? (
-    agent && !item.command && !item.notice ? (
-      <AgentMarkdown text={item.streaming ? `${item.text}▍` : item.text} />
-    ) : (
+    item.command || item.notice ? (
       <Text
         style={[
           styles.text,
-          item.command ? styles.textCommand : item.notice ? styles.textNotice : styles.textUser,
+          item.command ? styles.textCommand : styles.textNotice,
           lineBoxFor(bodySize, item.text),
         ]}>
         {item.text}
@@ -146,6 +144,12 @@ export const Bubble = React.memo(function BubbleView({
             caret would only blink on text nobody is writing. */}
         {item.streaming ? item.command ? <CommandElapsed since={item.ts} /> : '▍' : ''}
       </Text>
+    ) : (
+      // Both sides of a conversation are markdown: the owner writes ``` and `code` as readily as
+      // the answer does, and a turn replayed flat read as a different message than the one he
+      // sent. The tone carries the bubble's own ink and plates; the caret is the agent's alone,
+      // because the owner's turn is never written token by token.
+      <AgentMarkdown text={agent && item.streaming ? `${item.text}▍` : item.text} tone={agent ? 'body' : 'user'} />
     )
   ) : waiting ? (
     revealed ? <WaitLine since={item.waitingSince!} /> : null
@@ -355,7 +359,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   queued: { fontSize: scaleFont(font.small, scale), color: palette.textMeta, marginTop: 2 },
   queuedUser: { color: palette.bubbleUserText, opacity: 0.62 },
   time: { fontSize: scaleFont(font.micro, scale), alignSelf: 'flex-end' as const, marginTop: 1 },
-  timeAgent: { color: palette.textMeta },
   timeUser: { color: palette.bubbleUserText, opacity: 0.62 },
   menuRow: { width: '100%' as const, flexDirection: 'row' as const, marginTop: 1 },
   menuRowAgent: { justifyContent: 'flex-end' as const },
@@ -364,5 +367,4 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   menuRowAgentFoot: { justifyContent: 'flex-end' as const },
   menuRowUserFoot: { justifyContent: 'space-between' as const },
   menu: { width: 24, height: 22, alignItems: 'center' as const, justifyContent: 'center' as const },
-  menuGlyph: { fontSize: scaleFont(font.body, scale), lineHeight: scaleFont(font.body, scale) + 2, color: palette.textFaint },
 });
