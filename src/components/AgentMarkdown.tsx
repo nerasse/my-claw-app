@@ -10,6 +10,7 @@ import { QuoteBar } from './QuoteBar';
 import { quoteText } from './markdownText';
 import { highlighted, tokenColors } from './codeeditor/highlight';
 import { EMPTY_INK, type MarkdownInk } from './markdownInk';
+import { codeSpanEmphasis } from '../core/markdownEmphasis';
 import { font, lineBoxFor, lineHeightFor, space, useChatFontScale, useTheme, type Palette } from '../theme';
 
 /**
@@ -270,7 +271,7 @@ export function AgentMarkdown({ text, tone = 'body' }: { text: string; tone?: Ma
       ink,
     );
   }, [palette, text, tone, scale, ink]);
-  const elements = useMarkdown(text, { styles: mdStyles, renderer });
+  const elements = useMarkdown(text, { styles: mdStyles, renderer, tokenizer: codeSpanEmphasis });
   return <View style={styles.wrap}>{elements}</View>;
 }
 

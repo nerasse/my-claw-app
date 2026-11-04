@@ -27,6 +27,27 @@ const HISTORY: HistoryEntry[] = [
     ts: iso(0),
   },
   {
+    id: 'u2',
+    role: 'user',
+    // A turn with a fence, an inline span and a list: the three forms that used to come back
+    // flat, so the harness shows what the owner's bubble does with each of them.
+    text: [
+      'Et le patch du coup :',
+      '',
+      '```ts',
+      'const merged = { ...model.limit, ...global.limit };',
+      '```',
+      '',
+      '- garde `context`',
+      '- garde **`output`**',
+      '',
+      'Paragraphe : **gras**, `mono`, **`gras mono`**, et *`italique mono`*.',
+      '',
+      '> Citation avec **`gras mono`** dedans.',
+    ].join('\n'),
+    ts: iso(500),
+  },
+  {
     id: 'a1',
     role: 'assistant',
     ts: iso(1000),

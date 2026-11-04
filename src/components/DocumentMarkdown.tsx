@@ -10,6 +10,7 @@ import { QuoteBar } from './QuoteBar';
 import { quoteText } from './markdownText';
 import { highlighted, tokenColors } from './codeeditor/highlight';
 import { EMPTY_INK, type MarkdownInk } from './markdownInk';
+import { codeSpanEmphasis } from '../core/markdownEmphasis';
 import { font, lineHeightFor, space, useTheme, type Palette } from '../theme';
 
 /** Document body: a fullscreen reader, not a chat bubble, so one size above the chat. */
@@ -238,7 +239,7 @@ export function DocumentMarkdown({ value }: { value: string }): React.JSX.Elemen
       ),
     [palette.codeText, palette.text, ink, scale],
   );
-  const elements = useMarkdown(value, { styles: mdStyles, renderer });
+  const elements = useMarkdown(value, { styles: mdStyles, renderer, tokenizer: codeSpanEmphasis });
   return <View>{elements}</View>;
 }
 
