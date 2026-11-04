@@ -206,7 +206,9 @@ import {
   ArchiveIcon,
   CalendarIcon,
   ChartIcon,
+  CopyAllIcon,
   CopyIcon,
+  DigestIcon,
   DocIcon,
   EraserIcon,
   FilesIcon,
@@ -221,6 +223,7 @@ import {
   SendIcon,
   SiphonIcon,
   SlidersIcon,
+  SparkIcon,
   TrashIcon,
   WaitResetIcon,
 } from '../components/icons';
@@ -5357,14 +5360,34 @@ export function AppShell(): React.JSX.Element {
                   },
                 ]
               : []),
+            // The answer alone. The reasoning has its own row below, so leaving it in here would
+            // copy it twice and make "with thinking" mean nothing (owner, 2026-11-04).
             {
               label: 'Copy text',
               icon: <CopyIcon size={15} tone="muted" />,
+              hint: 'the answer, without the reasoning',
               onPress: () => {
                 Clipboard.setString(bubbleMenu.text);
                 setBubbleMenu(null);
               },
             },
+            // Both halves at once, which is what a reader pasting a debugging exchange into an
+            // issue wants. Gated on the reasoning alone: a message that only carries a summary
+            // would make this row copy exactly what the row above copies.
+            ...(bubbleMenu.reasoning?.trim()
+              ? [
+                  {
+                    label: 'Copy with thinking',
+                    icon: <CopyAllIcon size={15} tone="muted" />,
+                    hint: 'the answer and the reasoning that led to it',
+                    onPress: () => {
+                      const item = bubbleMenu;
+                      Clipboard.setString(messageSelectionBody({ ...item, details: undefined }));
+                      setBubbleMenu(null);
+                    },
+                  },
+                ]
+              : []),
             // The whole message, reasoning and summary included, as the source it was written
             // in: the viewer is the only place a selection can cross from one block to the next.
             {
@@ -5383,7 +5406,7 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Copy reasoning',
-                    icon: <CopyIcon size={15} tone="muted" />,
+                    icon: <SparkIcon size={15} tone="muted" />,
                     onPress: () => {
                       Clipboard.setString(bubbleMenu.reasoning ?? '');
                       setBubbleMenu(null);
@@ -5395,7 +5418,7 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Copy summary',
-                    icon: <CopyIcon size={15} tone="muted" />,
+                    icon: <DigestIcon size={15} tone="muted" />,
                     onPress: () => {
                       Clipboard.setString(bubbleMenu.details ?? '');
                       setBubbleMenu(null);

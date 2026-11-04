@@ -458,3 +458,45 @@ export function EraserIcon(props: IconProps): React.JSX.Element {
     />
   );
 }
+
+/**
+ * The three marks the message menu adds beside the copy frame.
+ *
+ * A menu is read down its left edge, so these had to differ in **silhouette** rather than in
+ * detail: at 15 px a rule inside a sheet is a smudge, and the first attempts (a bubble of dots, a
+ * sheet with lines) either vanished or duplicated a mark already spent on another thing. So the
+ * pair of copy rows is one family told apart by weight, `Copy text` hollow and
+ * `Copy with thinking` filled, while the two asides take shapes of their own.
+ *
+ * `SparkIcon` is what a thought looks like, and nothing else in the chrome is a star.
+ * `DigestIcon` is a page with one solid band: the document reduced to its gist, distinct from
+ * `DocIcon`, which is a page of writing that was kept whole.
+ */
+export function SparkIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M12 2c.6 5 2.4 6.8 7.4 7.4-5 .6-6.8 2.4-7.4 7.4-.6-5-2.4-6.8-7.4-7.4C9.6 8.8 11.4 7 12 2zM18.5 15c.3 2.2 1 2.9 3.2 3.2-2.2.3-2.9 1-3.2 3.2-.3-2.2-1-2.9-3.2-3.2 2.2-.3 2.9-1 3.2-3.2z"
+    />
+  );
+}
+
+/** The copy frame, filled: the same page as `CopyIcon`, with its reasoning included. */
+export function CopyAllIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M8 3h9a2 2 0 0 1 2 2v11h-2V5H8zM5 7h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"
+    />
+  );
+}
+
+/** A page cut down to one band: what a compaction kept. */
+export function DigestIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M6 2h8l6 6v14H6zm2 2v16h10V9h-4V4zm0 8h8v3H8z"
+    />
+  );
+}

@@ -200,12 +200,9 @@ export const Bubble = React.memo(function BubbleView({
         // and hide the reasoning line, the attachments and the tool cards from a screen reader.
         // The ⋯ button is the accessible way to the same menu.
         accessible={false}>
-        {/* The time, once per turn, and nothing else. The agent's message is prose on the thread
-            rather than a bubble, and naming it said nothing: one agent answers in a conversation,
-            and when it is a sub-agent the header already carries its name. */}
-        {agent && !grouped && showTime && !item.command && !item.notice ? (
-          <Text style={styles.byline}>{clock(item.ts)}</Text>
-        ) : null}
+        {/* The time is drawn in the action row under the bubble now, with the `...` it sits beside:
+            opening an answer with a stamp made the clock read as a title, and the owner reads it as
+            the message's signature instead (2026-11-04). */}
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
@@ -282,23 +279,33 @@ export const Bubble = React.memo(function BubbleView({
         {/* Sent on a socket that called itself open; the receipt is what proves it arrived. */}
         {!agent && item.pending ? <Text style={styles.queuedUser}>sending…</Text> : null}
 
-        {showTime && !agent ? <Text style={[styles.time, styles.timeUser]}>{clock(item.ts)}</Text> : null}
       </Pressable>
 
-      {/* The ⋯ row sits under the bubble on the side the author reads from: right for the agent,
-          left for the owner. It no longer steals width from the message, so the bubble fills the
-          column like a tool card. The run's empreinte rides the same line, always at the right
-          end: it is a signature, and it must never read as a caption of the bubble above it. */}
+      {/* The action row sits under the bubble, its marks on the right on both sides: the button and
+          the clock close the message rather than open it, and a row starting at the far left left
+          the `...` a screen away from the bubble it acts on. It no longer steals width from the
+          message, so the bubble fills the column like a tool card. The run's empreinte rides the
+          same line, at the end the marks do not take: it is a signature, and it must never read as
+          a caption of the bubble above it. */}
       <View style={[styles.menuRow, agent ? styles.menuRowAgent : styles.menuRowUser, foot !== undefined ? (agent ? styles.menuRowAgentFoot : styles.menuRowUserFoot) : null]}>
         {agent && foot !== undefined ? <RunFoot run={foot} /> : null}
-        <Pressable
-          hitSlop={12}
-          style={styles.menu}
-          onPress={() => onMenu(item)}
-          accessibilityRole="button"
-          accessibilityLabel="Message actions">
-          <MoreIcon size={16} tone="faint" />
-        </Pressable>
+        {/* Button and clock travel as one block. Split, they would land at opposite ends of a row
+            the signature also shares, and the stamp has to stay beside the control it follows. */}
+        <View style={styles.stamp}>
+          <Pressable
+            hitSlop={12}
+            style={styles.menu}
+            onPress={() => onMenu(item)}
+            accessibilityRole="button"
+            accessibilityLabel="Message actions">
+            <MoreIcon size={16} tone="faint" />
+          </Pressable>
+          {/* The stamp closes the line, right of the `...`: bottom-right is where a message signs
+              itself, and opening a bubble with the clock made it read as a title (2026-11-04). */}
+          {showTime && !item.command && !item.notice ? (
+            <Text style={styles.menuTime}>{clock(item.ts)}</Text>
+          ) : null}
+        </View>
         {!agent && foot !== undefined ? <RunFoot run={foot} /> : null}
       </View>
       </View>
@@ -338,7 +345,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // a run of them reads as one column of prose. `bubbleNotice` and `bubbleCommand` keep a plate
   // of their own -- they are not the agent speaking.
   bubbleAgent: { width: '100%' as const, backgroundColor: 'transparent' as const, paddingHorizontal: 0, paddingVertical: 0 },
-  byline: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, marginBottom: 2 },
   bubbleNotice: {
     backgroundColor: palette.surface,
     borderWidth: 1,
@@ -358,13 +364,19 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   error: { fontSize: scaleFont(font.small, scale), color: palette.danger, marginTop: 2 },
   queued: { fontSize: scaleFont(font.small, scale), color: palette.textMeta, marginTop: 2 },
   queuedUser: { color: palette.bubbleUserText, opacity: 0.62 },
-  time: { fontSize: scaleFont(font.micro, scale), alignSelf: 'flex-end' as const, marginTop: 1 },
-  timeUser: { color: palette.bubbleUserText, opacity: 0.62 },
   menuRow: { width: '100%' as const, flexDirection: 'row' as const, marginTop: 1 },
   menuRowAgent: { justifyContent: 'flex-end' as const },
-  menuRowUser: { justifyContent: 'flex-start' as const },
-  /** With an empreinte on the line: the signature right, the owner's ⋯ left. */
+  menuRowUser: { justifyContent: 'flex-end' as const },
+  /** With an empreinte on the line: the signature takes the end the owner's marks do not. */
   menuRowAgentFoot: { justifyContent: 'flex-end' as const },
   menuRowUserFoot: { justifyContent: 'space-between' as const },
+  stamp: { flexDirection: 'row' as const, alignItems: 'center' as const },
   menu: { width: 24, height: 22, alignItems: 'center' as const, justifyContent: 'center' as const },
+  // Left margin, not padding: the button keeps its 24px target and the stamp keeps its breath.
+  menuTime: {
+    fontSize: scaleFont(font.micro, scale),
+    color: palette.textMeta,
+    marginLeft: 6,
+    fontVariant: ['tabular-nums' as const],
+  },
 });

@@ -139,8 +139,26 @@ describe('Bubble layout', () => {
     expect(capped).toEqual([]);
   });
 
-  it('lays the message menu under the bubble, on the author side', () => {
-    // Agent (system): the ⋯ row is right-aligned.
+  it('lays the message menu under the bubble, at the end the bubble closes on', () => {
+    // Both sides end at the right. It used to follow the author, so the owner's `...` sat at the
+    // far left of a full-width row while his bubble sat at the right: the button was a screen away
+    // from the message it acts on, and the clock added beside it inherited the same distance
+    // (owner, 2026-11-04: "il devrait etre en bas a droite ... a cote du ... menu de copy").
+    const isRowAt = (tree: ReactTestRenderer.ReactTestRenderer, justify: string): boolean =>
+      tree.root
+        .findAll(
+          node =>
+            node.props.style &&
+            (Array.isArray(node.props.style) ? node.props.style : [node.props.style]).some(
+              (entry: unknown) =>
+                entry &&
+                typeof entry === 'object' &&
+                'justifyContent' in (entry as object) &&
+                (entry as { justifyContent?: unknown }).justifyContent === justify,
+            ),
+          { deep: true },
+        ).length > 0;
+
     const agentTree = render({
       kind: 'text',
       attachments: [],
@@ -150,17 +168,8 @@ describe('Bubble layout', () => {
       streaming: false,
       ts: 1,
     });
-    const agentMenuRow = agentTree.root.findAll(
-      node =>
-        node.props.style &&
-        (Array.isArray(node.props.style) ? node.props.style : [node.props.style]).some(
-          (entry: unknown) => entry && typeof entry === 'object' && 'justifyContent' in (entry as object) && (entry as { justifyContent?: unknown }).justifyContent === 'flex-end',
-        ),
-      { deep: true },
-    );
-    expect(agentMenuRow.length).toBeGreaterThan(0);
+    expect(isRowAt(agentTree, 'flex-end')).toBe(true);
 
-    // User: left-aligned.
     const userTree = render({
       kind: 'text',
       attachments: [],
@@ -170,15 +179,8 @@ describe('Bubble layout', () => {
       streaming: false,
       ts: 1,
     });
-    const userMenuRow = userTree.root.findAll(
-      node =>
-        node.props.style &&
-        (Array.isArray(node.props.style) ? node.props.style : [node.props.style]).some(
-          (entry: unknown) => entry && typeof entry === 'object' && 'justifyContent' in (entry as object) && (entry as { justifyContent?: unknown }).justifyContent === 'flex-start',
-        ),
-      { deep: true },
-    );
-    expect(userMenuRow.length).toBeGreaterThan(0);
+    expect(isRowAt(userTree, 'flex-end')).toBe(true);
+    expect(isRowAt(userTree, 'flex-start')).toBe(false);
   });
 
   it('a larger scale raises the message body size', () => {
