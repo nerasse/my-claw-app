@@ -96,7 +96,8 @@ export function documentMarkdownStyles(palette: Palette, scale = 1): MarkedStyle
       backgroundColor: palette.surfaceAlt,
       borderRadius: 4,
       paddingLeft: space.md,
-      paddingRight: space.sm,
+      // The lane the floating copy button takes, same as the chat sheet's quote.
+      paddingRight: 46,
       paddingVertical: space.xs,
       marginVertical: space.sm,
     },

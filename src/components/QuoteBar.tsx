@@ -1,16 +1,18 @@
 import React from 'react';
 import { View } from 'react-native';
 import { CopyButton } from './CopyButton';
-import { space, useThemedStyles, type Palette } from '../theme';
+import { useThemedStyles, type Palette } from '../theme';
 
 /**
- * How a quote is taken whole, in the idiom of the strip over a fenced block: a 'copy' in the
- * block, where the thing it copies is.
+ * How a quote is taken whole, in the idiom of the strip over a fenced block: a 'copy' where the
+ * thing it copies is.
  *
- * Drawn as the quote's first row, right-aligned, rather than floating over the text: a floating
- * button on a long first line covers the words it is offering (the same call as `CodeBlockBar`,
- * docs/markdown-blocks.md). What it copies is the quote's text, not its markdown -- see
- * `quoteText`.
+ * Pinned inside the quote's top-right corner rather than drawn as a row above it. As a row it cost
+ * the quote a whole line of empty height, which read as a gap between the bar and the words: the
+ * POC reserves the corner with a padding-right on the quote and floats the button in it (measured
+ * 2026-11-04). Overlaying the text is not the risk here it is on a code block's first line -- the
+ * quote's own padding keeps that lane free. What it copies is the quote's text, not its markdown:
+ * see `quoteText`.
  */
 export function QuoteBar({ value }: { value: string }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -22,5 +24,5 @@ export function QuoteBar({ value }: { value: string }): React.JSX.Element {
 }
 
 const createStyles = (_palette: Palette) => ({
-  bar: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const, marginBottom: space.xs },
+  bar: { position: 'absolute' as const, top: 2, right: 2 },
 });

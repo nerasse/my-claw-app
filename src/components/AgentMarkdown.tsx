@@ -116,6 +116,10 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
       borderLeftWidth: 3,
       borderLeftColor: palette.accent,
       paddingLeft: space.sm,
+      // The lane its copy button floats in: without it the button lands on the first line's words
+      // on a narrow bubble (the POC reserves 62 px; this is the same idea at our scale).
+      paddingRight: 46,
+      paddingVertical: 2,
       marginVertical: space.xs,
       flexShrink: 0,
     },
