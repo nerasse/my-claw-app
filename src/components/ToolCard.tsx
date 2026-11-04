@@ -5,12 +5,13 @@ import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatSpan, summarizeArgs } from '../core/utils';
-import { summarizeTool, toolContent, labelArgs } from '../core/toolSummary';
+import { summarizeTool, toolContent } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, diffCounts, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 import { useElapsed } from './CommandElapsed';
 import { runStateOf, stateWord } from '../core/toolState';
+import { toolRows } from '../core/toolRows';
 
 /**
  * One executed tool, collapsed to a single dense line and expanded on tap to show the
@@ -42,10 +43,6 @@ export const ToolCard = React.memo(function ToolCardView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
-  // The arguments are a second fold inside the first. What the owner opens a card for is the
-  // result; the call that produced it is context, and for an edit tool it is the whole patch
-  // again as escaped JSON, pushing the readable diff off the screen. So: folded until asked.
-  const [argsOpen, setArgsOpen] = useState(false);
   // Whether the current expansion came from the auto-open below rather than a tap: the settle
   // only folds back what it itself unfolded.
   const autoOpened = useRef(false);
@@ -58,16 +55,12 @@ export const ToolCard = React.memo(function ToolCardView({
   // turn around it.
   const summary = useMemo(() => summarizeTool(item.name, item.args, summarizeArgs(item.args)), [item.name, item.args]);
   const preview = summary.detail;
-  // Only once unfolded: a thread full of collapsed cards must not stringify every argument list
-  // on every streaming delta.
+  // Only once unfolded: a thread full of collapsed cards must not parse every output on every
+  // streaming delta.
   // The argument whose value is the subject of the call (bash.command, write.content...): its own
   // block, unfolded, because folding it away is what made a written file invisible. See
   // core/toolSummary. Only computed on an open card.
   const content = useMemo(() => (open ? toolContent(item.name, item.args) : null), [open, item.name, item.args]);
-  // Everything else, and nothing twice: the fold holds the arguments minus the content one, and
-  // is dropped entirely when that leaves nothing to show.
-  const rest = useMemo(() => (open ? labelArgs(item.name, item.args) : null), [open, item.name, item.args]);
-  const args = open && argsOpen && rest ? JSON.stringify(rest, null, 2) : '';
   const running = item.running === true;
   // The run ended before this call reported: a terminal state of its own, and not a failure. The
   // store froze the duration at the run's end, so the head draws that number like any settled
@@ -87,7 +80,9 @@ export const ToolCard = React.memo(function ToolCardView({
   // `read` answers raw characters, and an `offset` starts the answer mid-file: numbering from 1
   // there would claim the excerpt's first line is the file's first line. No offset, real numbers.
   const numbered = item.name === 'read' && !Number(item.args?.offset ?? 0);
-  const listing = item.name === 'ls' ? parseListing(item.output) : null;
+  // A list-shaped answer (ls, search, web_search) drawn as rows: the POC's second column form.
+  // Parsed only on an open card, and only for the three tools that answer with one.
+  const rows = useMemo(() => (open ? toolRows(item.name, item.output) : null), [open, item.name, item.output]);
 
   // Stream-expansion is owned by the server pref: with expandTools on, the card opens when the
   // tool starts and stays open (the result is on screen). With it off, the card is NEVER opened
@@ -147,11 +142,7 @@ export const ToolCard = React.memo(function ToolCardView({
   useEffect(() => {
     if (open && item.truncated && threadId) requestToolOutput(threadId, item.id);
   }, [open, item.truncated, item.id, threadId]);
-  // A closed card forgets that its arguments were unfolded: reopening it shows the output first,
-  // the same way it did the first time.
-  useEffect(() => {
-    if (!open) setArgsOpen(false);
-  }, [open]);
+  // A closed card forgets nothing: there is no second fold left to reset.
 
   return (
     <View style={[styles.card, open && styles.cardOpen]}>
@@ -212,40 +203,9 @@ export const ToolCard = React.memo(function ToolCardView({
               </ScrollableBlock>
             </>
           ) : null}
-          {rest ? (
-          <Pressable
-            onPress={() => setArgsOpen(value => !value)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: argsOpen }}
-            accessibilityLabel={`Arguments of ${item.name}`}
-            accessibilityHint={argsOpen ? 'Hide the arguments' : 'Show the arguments'}>
-            <View style={styles.outputHead}>
-              <ChevronIcon direction={argsOpen ? 'down' : 'right'} size={14} tone="faint" />
-              <Text style={styles.label}>arguments</Text>
-              {!argsOpen && preview ? (
-                <Text style={styles.preview} numberOfLines={1}>
-                  {preview}
-                </Text>
-              ) : (
-                <View style={styles.spacer} />
-              )}
-              {!argsOpen && summary.extraArgs > 0 ? <ExtraArgs count={summary.extraArgs} /> : null}
-            </View>
-          </Pressable>
-          ) : null}
-          {argsOpen && rest ? (
-            <>
-              <View style={styles.argsActions}>
-                <BlockActions title={`${item.name} arguments`} value={args} />
-              </View>
-              <ScrollableBlock title={`${item.name} arguments`} style={styles.code}>
-                <Text style={styles.codeText}>{args}</Text>
-              </ScrollableBlock>
-            </>
-          ) : null}
           <View style={styles.outputHead}>
             <Text style={styles.label}>
-              {hasDiff ? 'diff' : `output${item.truncated ? ' · truncated' : ''}`}
+              {rows ? 'results' : hasDiff ? 'diff' : `output${item.truncated ? ' · truncated' : ''}`}
               {counts ? (
                 <>
                   <Text style={styles.diffAdd}>{`  +${counts.added}`}</Text>
@@ -255,32 +215,45 @@ export const ToolCard = React.memo(function ToolCardView({
             </Text>
             <BlockActions title={`${item.name} output`} value={item.output} />
           </View>
-          {/* The plate is drawn only when there is something in it: a `split` that parsed no hunk
-              still exists as an object, and rendering around it put an empty grey block under every
-              `output` label of every card. */}
-          {split && split.diff.length > 0 ? (
+          {/* A list is a table: `ls`, `search` and `web_search` answer with rows, and a row reads
+              faster than a monospace block the eye has to align itself. Every other shape keeps
+              the block -- the parser answers null for anything it does not recognise. */}
+          {rows ? (
             <ScrollableBlock title={`${item.name} output`} style={styles.code}>
-              <DiffView parts={split} />
-            </ScrollableBlock>
-          ) : null}
-          {!hasDiff && listing ? (
-            <ScrollableBlock title={`${item.name} output`} style={styles.code}>
-              {listing.map(entry => (
-                <View key={entry.name} style={styles.tableRow}>
-                  <Text style={styles.tableKind}>{entry.kind}</Text>
-                  <Text style={styles.tableName} numberOfLines={1}>
-                    {entry.name}
+              {rows.map((row, index) => (
+                <View key={index} style={styles.tableRow}>
+                  <Text style={styles.tableRowLeft} numberOfLines={1}>
+                    {row.left}
                   </Text>
+                  <View style={styles.tableRowMain}>
+                    <Text style={[styles.tableRowText, row.mono && styles.codeText]} numberOfLines={1}>
+                      {row.text}
+                    </Text>
+                    {row.sub ? (
+                      <Text style={styles.tableRowSub} numberOfLines={2}>
+                        {row.sub}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {row.right ? <Text style={styles.tableRowRight}>{row.right}</Text> : null}
                 </View>
               ))}
             </ScrollableBlock>
           ) : null}
-          {!hasDiff && !listing && numbered ? (
+          {/* The plate is drawn only when there is something in it: a `split` that parsed no hunk
+              still exists as an object, and rendering around it put an empty grey block under every
+              `output` label of every card. */}
+          {!rows && split && split.diff.length > 0 ? (
+            <ScrollableBlock title={`${item.name} output`} style={styles.code}>
+              <DiffView parts={split} />
+            </ScrollableBlock>
+          ) : null}
+          {!rows && !hasDiff && numbered ? (
             <ScrollableBlock title={`${item.name} output`} style={styles.code}>
               <NumberedText text={item.output} />
             </ScrollableBlock>
           ) : null}
-          {!hasDiff && !listing && !numbered ? (
+          {!rows && !hasDiff && !numbered ? (
             <ScrollableBlock title={`${item.name} output`} style={styles.code}>
               <Text style={styles.codeText}>{item.output.trim() || (interrupted ? '(no result: the run ended)' : '(empty)')}</Text>
             </ScrollableBlock>
@@ -311,23 +284,6 @@ function NumberedText({ text }: { text: string }): React.JSX.Element {
       ))}
     </View>
   );
-}
-
-/**
- * `ls` answers `d name` / `f name`, one entry per line (`src/tools/ls.ts` in the server). That is
- * a table: the kind in its own column, the name in the other, instead of one monospace string
- * where the eye has to find the space. Any other shape falls back to the plain block.
- */
-function parseListing(output: string): Array<{ kind: string; name: string }> | null {
-  const lines = output.trim().split('\n').filter(line => line !== '');
-  if (lines.length === 0) return null;
-  const parsed: Array<{ kind: string; name: string }> = [];
-  for (const line of lines) {
-    const match = /^([df]) (.+)$/.exec(line);
-    if (!match) return null;
-    parsed.push({ kind: match[1] === 'd' ? 'dir' : 'file', name: match[2]! });
-  }
-  return parsed;
 }
 
 /**
@@ -449,9 +405,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   body: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },
   label: { fontSize: scaleFont(9.5, scale), fontWeight: '500' as const, color: palette.textMeta, letterSpacing: 0.57, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, height: Math.round(18 * scale) },
-  // Right-aligned under the fold's own row: the buttons belong to the block below them, and a
-  // row that is empty on web (BlockActions renders nothing there) must not leave a gap.
-  argsActions: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const },
   // The plate is the container's, the face is the text's. The POC draws one material for
   // everything machine -- no border, just the `code-bg` step, the same one the closed output of a
   // bash call used to wear with a frame around it.
@@ -472,14 +425,12 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     color: palette.textFaint,
     textAlign: 'right' as const,
   },
-  tableRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.sm },
-  tableKind: {
-    width: Math.round(30 * scale),
-    fontSize: scaleFont(font.micro, scale),
-    color: palette.textMeta,
-    fontVariant: ['tabular-nums' as const],
-  },
-  tableName: { flex: 1, fontFamily: 'monospace', fontSize: scaleFont(font.small, scale), color: palette.codeText },
+  tableRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, paddingVertical: 3, paddingHorizontal: 8 },
+  tableRowLeft: { fontFamily: 'monospace', fontSize: scaleFont(font.micro, scale), color: palette.textMeta, minWidth: 46 },
+  tableRowMain: { flex: 1, minWidth: 0 },
+  tableRowText: { fontSize: scaleFont(11.5, scale), color: palette.text },
+  tableRowSub: { fontSize: scaleFont(font.micro, scale), color: palette.textMuted },
+  tableRowRight: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
   codeText: {
     fontFamily: 'monospace',
     fontSize: scaleFont(font.small, scale),

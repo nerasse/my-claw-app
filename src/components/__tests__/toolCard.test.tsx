@@ -10,7 +10,6 @@ import React from 'react';
 import { Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { ToolCard } from '../ToolCard';
-import { summarizeArgs } from '../../core/utils';
 import type { ToolItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
@@ -119,11 +118,14 @@ describe('ToolCard expansion pref', () => {
 });
 
 /**
- * The arguments are a fold of their own inside the card. An `apply_patch` call carries the whole
- * patch twice -- once as escaped JSON in the arguments, once as a readable diff in the output --
- * and the JSON was pushing the diff off the screen.
+ * An unfolded card, and what it puts on screen.
+ *
+ * The POC gives each tool its own body -- a command block, a written file, numbered lines, a diff,
+ * a table of results -- and carries no arguments fold at all: what a reader opens a card for is the
+ * result. A second fold inside the first was the app's own addition, and the JSON it held for an
+ * `apply_patch` was the whole patch again, pushing the readable diff off the screen.
  */
-describe('ToolCard arguments fold', () => {
+describe('ToolCard body', () => {
   const PATCH = { path: '/tmp/a.ts', edits: [{ old: 'a\nb', new: 'c\nd' }] };
 
   function texts(tree: ReactTestRenderer.ReactTestRenderer): string[] {
@@ -131,14 +133,6 @@ describe('ToolCard arguments fold', () => {
       .findAllByType(Text)
       .map(t => (typeof t.props.children === 'string' ? t.props.children : ''))
       .filter(Boolean);
-  }
-
-  function toggleArgs(tree: ReactTestRenderer.ReactTestRenderer, name = 'bash') {
-    ReactTestRenderer.act(() => {
-      tree.root
-        .find(node => node.props.accessibilityLabel === `Arguments of ${name}` && typeof node.props.onPress === 'function')
-        .props.onPress();
-    });
   }
 
   // A shell command is the densest argument drawn here. It gets its own lines under the head,
@@ -164,20 +158,17 @@ describe('ToolCard arguments fold', () => {
     expect(pathPreview!.props.numberOfLines).toBe(1);
   });
 
-  it('shows the output and only a preview of the arguments when the card opens', () => {
+  // The POC carries no arguments fold at all: what a reader opens a card for is the result, and
+  // every tool has its own body. A second fold inside the first was the app's own addition.
+  it('draws the result only, never the serialized call', () => {
     const tree = renderTool(makeItem({ args: PATCH, output: 'Patched, +3', running: true }), { expandTools: true });
     expect(bodyVisible(tree)).toBe(true);
     const shown = texts(tree);
     expect(shown).toContain('Patched, +3');
-    // The preview line, not the serialized call.
-    expect(shown).toContain(summarizeArgs(PATCH).text);
     expect(shown.some(t => t.includes('"edits"'))).toBe(false);
+    expect(shown).not.toContain('arguments');
   });
 
-  // `+N` says the call carried N arguments more than the one on screen. Glued to the preview it
-  // sat at the tail of a `flex: 1` line clipped at the pixel, so the denser the call the surer
-  // the count was the first thing cut -- and a reader had no way to tell a one-argument call from
-  // a nine-argument one.
   it('keeps the count of the hidden arguments out of the line the layout clips', () => {
     const item = makeItem({ name: 'mcp__thing__do', args: { first: 'x'.repeat(400), second: 2, third: 3 } });
     const tree = renderTool(item);
@@ -193,24 +184,6 @@ describe('ToolCard arguments fold', () => {
     );
   });
 
-  it('unfolds the arguments on tap and folds them back', () => {
-    const tree = renderTool(makeItem({ args: PATCH, output: 'ok', running: true }), { expandTools: true });
-    toggleArgs(tree);
-    expect(texts(tree).some(t => t.includes('"edits"'))).toBe(true);
-    toggleArgs(tree);
-    expect(texts(tree).some(t => t.includes('"edits"'))).toBe(false);
-  });
-
-  it('forgets an unfolded argument list when the card itself closes', () => {
-    const tree = renderTool(makeItem({ args: PATCH, output: 'ok', running: true }), { expandTools: true });
-    toggleArgs(tree);
-    expect(texts(tree).some(t => t.includes('"edits"'))).toBe(true);
-    // The pref goes off: the card folds, and reopening it must start on the output again.
-    updateItem(tree, makeItem({ args: PATCH, output: 'ok', running: false }));
-    expect(bodyVisible(tree)).toBe(false);
-    updateItem(tree, makeItem({ args: PATCH, output: 'ok', running: false }), { expandTools: true });
-    expect(texts(tree).some(t => t.includes('"edits"'))).toBe(false);
-  });
 });
 
 describe('content argument block', () => {
@@ -233,14 +206,15 @@ describe('content argument block', () => {
     const shown = labels(tree);
     expect(shown).toContain('content');
     expect(shown).toContain('export const a = 1;');
-    // The path is a label: it stays in the fold.
-    expect(shown).toContain('arguments');
+    // Nothing folded beside it: the POC has no arguments fold, and a `write` shows what it wrote.
+    expect(shown).not.toContain('arguments');
   });
 
-  it('keeps a label-only tool exactly as it was', () => {
+  it('keeps a label-only tool exactly as it was: numbered lines, no block of arguments', () => {
     const tree = renderTool(makeItem({ name: 'read', args: { path: '/tmp/a.ts' }, output: 'body', running: true }), { expandTools: true });
     const shown = labels(tree);
-    expect(shown).toContain('arguments');
+    expect(shown).toContain('body');
+    expect(shown).not.toContain('arguments');
     expect(shown).not.toContain('content');
   });
 });
