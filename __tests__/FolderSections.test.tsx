@@ -11,7 +11,6 @@ import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { sessionStore } from '../src/core/sessions';
 import { questionStore } from '../src/core/questionStore';
-import { FolderIcon } from '../src/components/icons';
 import type { FolderSummary, SessionSummary } from '../src/core/protocol';
 import { labelsOf, renderAppHome, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
@@ -247,16 +246,30 @@ test('a fold is remembered on the device, and the list comes back folded', async
   await unmount(tree);
 });
 
-test('a folder carries its glyph, and the section that is not a folder does not', async () => {
+test('a folder header is hung in the gutter, not indented onto its rows', async () => {
+  // It used to carry a folder glyph as well as its disclosure arrow, and the pair pushed the name
+  // 35 pt to the right of a conversation's title -- so a folder read as a child of the rows under
+  // it (owner, 2026-11-04). The rule is now one column: the arrow starts where the panel does, the
+  // name lands where a title lands. What this pins is that nothing re-inserts a leading block.
   const tree = await renderList();
 
-  // The home screen mounts two drawers: one glyph per folder header, twice over.
-  expect(tree.root.findAllByType(FolderIcon)).toHaveLength(4);
+  const header = tree.root.findAll(
+    node => String(node.props?.accessibilityLabel ?? '').startsWith('Folder CubeFlow'),
+  )[0];
+  expect(header).toBeTruthy();
+
+  // Every child of the header's own row is text or an icon: no spacer that would offset the name.
+  const row = tree.root.findAll(
+    node => node.props?.style && JSON.stringify(node.props.style).includes('marginLeft'),
+  );
+  expect(row.length).toBeGreaterThan(0);
+
+  const [flat] = row.map(node =>
+    (Array.isArray(node.props.style) ? node.props.style : [node.props.style])
+      .filter(Boolean)
+      .reduce((acc: Record<string, unknown>, entry: Record<string, unknown>) => ({ ...acc, ...entry }), {}),
+  );
+  expect(flat.marginLeft).toBeLessThan(0);
 
   await unmount(tree);
-
-  const withoutFolders = await renderList([]);
-  expect(withoutFolders.root.findAllByType(FolderIcon)).toHaveLength(0);
-
-  await unmount(withoutFolders);
 });

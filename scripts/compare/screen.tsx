@@ -160,7 +160,7 @@ function Root(): React.JSX.Element {
         onOpenFile={() => {}}
         onOpenMenu={() => {}}
         onCommandEntered={() => false}
-        streaming={false}
+        streaming
         onStop={() => {}}
         onQuestionReply={() => {}}
         onNewThread={() => {}}

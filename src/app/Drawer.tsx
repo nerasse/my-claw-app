@@ -18,7 +18,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FolderSummary, SessionSummary } from '../core/protocol';
 import { ThreadRow } from '../components/ThreadRow';
-import { ChevronIcon, CloseIcon, FilterIcon, FolderIcon, GearIcon, MoreIcon, NewFolderIcon, PlusIcon, SearchIcon, SidebarIcon } from '../components/icons';
+import { ChevronIcon, CloseIcon, FilterIcon, GearIcon, MoreIcon, NewFolderIcon, PlusIcon, SearchIcon, SidebarIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useDismissKeyboard } from '../core/keyboard';
 import { drawerSections, sectionBadge, type SectionBadge } from '../core/folders';
@@ -576,17 +576,17 @@ export function Drawer({
               accessibilityRole={folder ? 'button' : undefined}
               accessibilityState={folder ? { expanded: !item.folded } : undefined}
               accessibilityLabel={folder ? `Folder ${folder.name}${badgeWords(item.badge)}` : undefined}>
-              {/* A folder reads as a folder before its name is read: the same glyph the file tree
-                  uses, in the same muted colour as the heading it sits on. The unfiled section
-                  keeps the room without the glyph -- it is not a folder. */}
+              {/* A folder reads as the section that owns the rows under it, not as a row among
+                  them: its disclosure arrow sits in the list's own gutter and its name lands on the
+                  x a conversation's title does, so the column reads as one structure. The folder
+                  glyph is gone from here -- with an arrow, a name, a count and a ⋯ the line already
+                  says "section", and the second glyph was what pushed the name 35 pt in and made
+                  folders look like children of the rows below them (owner, 2026-11-04). */}
               {folder ? (
                 <ChevronIcon direction={item.folded ? 'down' : 'right'} size={14} tone="faint" />
               ) : (
                 <Text style={styles.sectionFold}>{''}</Text>
               )}
-              <View style={styles.sectionGlyph}>
-                {folder ? <FolderIcon size={15} tone="faint" /> : null}
-              </View>
               <Text style={styles.sectionLabel} numberOfLines={1}>
                 {item.label}
               </Text>
@@ -698,7 +698,7 @@ export function Drawer({
                 style={styles.folderButton}
                 accessibilityRole="button"
                 accessibilityLabel="Hide the conversation list">
-                <SidebarIcon size={15} tone="muted" />
+                <SidebarIcon size={16} tone="muted" />
               </Pressable>
             ) : null}
             <Pressable
@@ -707,7 +707,7 @@ export function Drawer({
               style={styles.folderButton}
               accessibilityRole="button"
               accessibilityLabel="New folder">
-              <NewFolderIcon size={15} tone="muted" />
+              <NewFolderIcon size={17} tone="muted" />
             </Pressable>
             <Pressable
               onPress={onNewThread}
@@ -715,7 +715,7 @@ export function Drawer({
               style={styles.newButton}
               accessibilityRole="button"
               accessibilityLabel="New conversation">
-              <PlusIcon size={15} tone="accent" />
+              <PlusIcon size={17} tone="accent" />
             </Pressable>
           </View>
         </View>
@@ -929,36 +929,59 @@ const createStyles = (palette: Palette) => ({
   brand: { fontSize: 16.5, fontWeight: '600' as const, color: palette.text, letterSpacing: -0.33 },
   /** The half of the word that is not the name: same size, not the same weight of ink. */
   brandTail: { color: palette.textFaint, fontWeight: '400' as const },
+  /**
+   * The wordmark takes the room, and the actions sit against the far edge.
+   *
+   * `flex: 1` on the button, not on a spacer: the name is the one element here that may be
+   * truncated, and a spacer would have left it at its natural width while the gap collected all
+   * the slack in the middle (owner: "les icônes … je voudrais que tu les mettes stack à droite"
+   * par rapport au titre).
+   */
   homeButton: {
+    flex: 1,
+    minWidth: 0,
     padding: 0,
     backgroundColor: 'transparent' as const,
-    alignSelf: 'flex-start' as const,
   },
   /** The two ways in: a conversation, or a place to put one. The accent stays on the first. */
   headActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2 },
   /**
-   * A header action: 28 pt, no plate.
+   * A header action: 30 pt, no plate.
    *
    * These were 40 pt boxes, the new-thread one filled with `accentSoft` and the folder one bare:
    * one accent surface and one floating glyph in the same row, which read as two different ranks
-   * of control. The POC gives every one of them the same 28 pt square and keeps the accent for the
-   * glyph on the one that creates something.
+   * of control. The POC gives every one of them the same square and keeps the accent for the glyph
+   * on the one that creates something. At 28 the two 15 pt drawn glyphs read smaller than the
+   * wordmark beside them (owner, 2026-11-04), so the box and the pair of glyphs grew together.
    */
   newButton: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     borderRadius: radius.sm,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
   folderButton: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     borderRadius: radius.sm,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  sectionRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingTop: space.sm, paddingBottom: space.xxs },
+  /**
+   * A section line, hung in the list's own gutter.
+   *
+   * `marginLeft` cancels the list's 10 pt inset so the disclosure arrow starts where the panel does
+   * and the name lands on the x a conversation's title does -- one column, folders above their
+   * sessions instead of indented under them.
+   */
+  sectionRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginLeft: -space.md,
+    paddingTop: space.sm,
+    paddingBottom: space.xxs,
+  },
   sectionMenu: {
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
@@ -984,10 +1007,8 @@ const createStyles = (palette: Palette) => ({
   sectionActivityCount: { fontSize: font.micro, color: palette.textMeta },
   /** Indented onto the rows it heads, and the fold glyph takes the same room whether the section
    *  can be folded or not: the unfiled heading has to sit where the folder names do. */
-  sectionHeader: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: space.md },
+  sectionHeader: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
   sectionFold: { width: 14, fontSize: font.micro, color: palette.textFaint },
-  /** The glyph slot, held empty on the section that is not a folder: the names have to line up. */
-  sectionGlyph: { width: 15 + space.xs, alignItems: 'center' as const, justifyContent: 'center' as const },
   /**
    * A section label: the POC's own shape, which is a quiet line and not a heading.
    *

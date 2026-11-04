@@ -1664,8 +1664,12 @@ const createStyles = (palette: Palette) => ({
     // 44 min, the POC's own strip (48 on the web, 44 on a phone; `compact.css` is explicit that
     // the phone is the tighter one). A height set in pixels here would fight the phone's, so the
     // frame is a floor and the padding does the rest.
+    //
+    // 8, not 12: the strip's first and last icons sat 12 pt inside a column whose bubble starts at
+    // 0, so the header was narrower than everything under it. Eight is the row's own gap, which is
+    // what makes it read as one column with the thread (owner, 2026-11-04).
     minHeight: 44,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: space.sm,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,

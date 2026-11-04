@@ -1,4 +1,4 @@
-import { CloseIcon, PlusIcon, SendIcon } from './icons';
+import { CloseIcon, PlusIcon, SendIcon, StopIcon } from './icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -476,7 +476,7 @@ export function Composer({
               // loader and the same word every other surface shows.
               <ActivityIndicator size="small" color={palette.accentText} />
             ) : (
-              <Text style={styles.stopGlyph}>■</Text>
+              <StopIcon size={dense ? 13 : 14} color={palette.bg} />
             )}
           </Pressable>
         ) : null}
@@ -676,5 +676,4 @@ const createStyles = (palette: Palette) => ({
   // Stop is the ink, not the danger red: interrupting a run is not an error, and a red circle
   // under every running answer made the app look like it was shouting.
   sendStop: { backgroundColor: palette.text },
-  stopGlyph: { fontSize: 13, lineHeight: 15, color: palette.bg },
 });
