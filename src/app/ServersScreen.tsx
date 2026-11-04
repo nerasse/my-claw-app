@@ -1,3 +1,4 @@
+import { PencilIcon, TrashIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type { WsStatusPayload } from '../core/types';
@@ -43,8 +44,8 @@ export function ServersScreen({
       preview: serverName(profile),
       options: [
         { label: 'Switch to this server', onPress: () => { overlayStore.close(); serversStore.switchTo(profile.id).catch(() => {}); } },
-        { label: 'Rename', onPress: () => { overlayStore.close(); setRenaming(profile); setName(profile.name); } },
-        { label: 'Forget this server', danger: true, onPress: () => { overlayStore.close(); serversStore.forget(profile.id); } },
+        { label: 'Rename', icon: <PencilIcon size={15} tone="muted" />, onPress: () => { overlayStore.close(); setRenaming(profile); setName(profile.name); } },
+        { label: 'Forget this server', icon: <TrashIcon size={15} tone="danger" />, danger: true, onPress: () => { overlayStore.close(); serversStore.forget(profile.id); } },
       ],
     });
 

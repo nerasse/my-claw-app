@@ -200,8 +200,11 @@ test('the header menu answers the same list, in the same order', async () => {
   await pressLabel(tree, 'Conversation Infra maison');
   await pressLabel(tree, 'Commands');
 
-  // Model leads (only the conversation on screen knows its own), then the shared list.
-  expect(labelsOf(tree)).toContain('Model…');
+  // The picker is the title bar's own button at this width, so the menu opens straight onto the
+  // shared list (only the conversation on screen knows its own model, and that is what the button
+  // is for). The narrow case is pinned in `__tests__/ModelButton.test.tsx`.
+  expect(labelsOf(tree)).toContain('Change model');
+  expect(labelsOf(tree)).not.toContain('Model…');
   expect(actionOrder(tree)).toEqual(CONVERSATION_ACTIONS);
 
   await pressLabel(tree, 'Status');

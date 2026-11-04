@@ -6,6 +6,7 @@ import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { ActionSheet } from '../components/ActionSheet';
+import { TrashIcon } from '../components/icons';
 import { CloseButton } from '../components/CloseButton';
 import { useDismissKeyboard } from '../core/keyboard';
 
@@ -466,7 +467,7 @@ export function NodeScreen({
       {removingMcp && node ? (
         <ActionSheet
           preview={`Stop "${removingMcp.name}" on "${node.name}"? The machine closes the server and drops its tools; nothing else changes.`}
-          options={[{ label: "Remove", danger: true, onPress: removeMcp }]}
+          options={[{ label: "Remove", danger: true, icon: <TrashIcon tone="danger" />, onPress: removeMcp }]}
           onClose={() => setRemovingMcp(null)}
         />
       ) : null}
@@ -478,6 +479,7 @@ export function NodeScreen({
             {
               label: 'Revoke',
               danger: true,
+              icon: <TrashIcon tone="danger" />,
               onPress: () => {
                 nodesStore.revoke(node.nodeId);
                 setConfirming(false);

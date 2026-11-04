@@ -108,7 +108,10 @@ beforeEach(() => {
   bridge.prefsGetAll.mockResolvedValue({ themeMode: 'dark', lastThreadId: THREAD });
 });
 
-test('the menu reads Stopping… while a stop is in flight, sends nothing, and reads Stop once the run ends', async () => {
+test('the composer read Stopping… while a stop is in flight, sent nothing, and reads Stop once the run ends', async () => {
+  // The composer's corner is the only door now (owner, 2026-11-04: "vire l'action stop du menu de
+  // session ... on a déjà le bouton stop en bas"). What this keeps pinning is the cycle: one stop
+  // per run, a press while one travels sends nothing, and the end of the run is what lifts the mark.
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.startRun(THREAD, 'r1');
@@ -116,14 +119,10 @@ test('the menu reads Stopping… while a stop is in flight, sends nothing, and r
   });
   await waitFor(() => labelsOf(tree).includes('Stop generating'));
 
-  // The stop goes out from the menu entry.
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Stop'));
-  await pressLabel(tree, 'Stop');
+  await pressLabel(tree, 'Stop generating');
   await waitFor(() => stopFrames().length === 1);
 
-  // The entry now says one is in flight, and pressing it sends nothing.
-  await pressLabel(tree, 'Commands');
+  // One in flight: the corner wears the word and a press sends nothing more.
   await waitFor(() => labelsOf(tree).includes('Stopping…'));
   const sent = stopFrames().length;
   await pressLabel(tree, 'Stopping…');
@@ -141,8 +140,6 @@ test('the menu reads Stopping… while a stop is in flight, sends nothing, and r
     chatStore.startStream(THREAD, 's2', 'u2');
   });
   await waitFor(() => labelsOf(tree).includes('Stop generating'));
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Stop'));
   expect(labelsOf(tree)).not.toContain('Stopping…');
 
   await settleAndUnmount(tree);
@@ -210,23 +207,19 @@ test('a stop while a question waits cancels the question; the next press is the 
     ts: new Date().toISOString(),
   });
 
-  // First press: the request goes out (it cancels the question), and the entry still says Stop --
+  // First press: the request goes out (it cancels the question), and the corner still says Stop --
   // nothing was marked in flight, so nothing swallows what comes next.
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Stop'));
-  await pressLabel(tree, 'Stop');
+  await pressLabel(tree, 'Stop generating');
   await waitFor(() => stopFrames().length === 1);
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Stop'));
+  expect(labelsOf(tree)).toContain('Stop generating');
   expect(labelsOf(tree)).not.toContain('Stopping…');
 
   // The server confirms the cancellation: the question is gone, the run carries on.
   await emit({ type: 'question.resolved', id: 'q1', threadId: THREAD, reason: 'canceled' });
 
   // Second press: this one is the abort, and it claims the cycle.
-  await pressLabel(tree, 'Stop');
+  await pressLabel(tree, 'Stop generating');
   await waitFor(() => stopFrames().length === 2);
-  await pressLabel(tree, 'Commands');
   await waitFor(() => labelsOf(tree).includes('Stopping…'));
 
   await emit({ type: 'chat.run.end', threadId: THREAD, reason: 'aborted' });
@@ -294,7 +287,7 @@ function pressables(tree: Tree, label: string): ReactTestRenderer.ReactTestInsta
  * pressed anything reads "Stopping…" -- in the menu and in the composer -- and pressing either
  * sends nothing, exactly like a second stop of a cycle taken here.
  */
-test('a stop taken on another surface reads Stopping… in the menu and the composer, and neither sends', async () => {
+test('a stop taken on another surface reads Stopping… in the composer, and it sends nothing', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.startRun(THREAD, 'r1');
@@ -318,14 +311,13 @@ test('a stop taken on another surface reads Stopping… in the menu and the comp
   });
   expect(stopFrames().length).toBe(stops);
 
-  // The session menu reads the same word, and it too sends nothing.
+  // The session menu no longer carries the action at all: one door, and the composer's corner is
+  // the one on screen while a run is live (owner, 2026-11-04).
   await pressLabel(tree, 'Commands');
-  await waitFor(() => pressables(tree, 'Stopping…').length === 2);
-  await pressLabel(tree, 'Stopping…');
-  await ReactTestRenderer.act(async () => {
-    await new Promise<void>(resolve => setTimeout(resolve, 20));
-  });
-  expect(stopFrames().length).toBe(stops);
+  await waitFor(() => labelsOf(tree).includes('Instructions'));
+  // Exactly one, and it is the composer's: the menu holds no stop row at all now.
+  expect(pressables(tree, 'Stopping…')).toHaveLength(1);
+  expect(labelsOf(tree)).not.toContain('Stop');
 
   // The end of the run is what takes the state down.
   await emit({ type: 'chat.run.end', threadId: THREAD, reason: 'aborted' });

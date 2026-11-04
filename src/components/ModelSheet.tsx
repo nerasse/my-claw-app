@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronIcon } from '../components/icons';
+import { CheckIcon, ChevronIcon, PencilIcon } from '../components/icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ActionSheet, type SheetEntry } from './ActionSheet';
@@ -529,6 +529,7 @@ export function useModelPickerFlow({
       }
       rows.push({
         label: 'Custom…',
+        icon: <PencilIcon size={15} tone="muted" />,
         hint: contextWindow === undefined ? 'enter a positive token ceiling' : `up to ${shortTokens(contextWindow)} tokens`,
         onPress: () => onStateChange({ ...state, stage: 'context-custom', trail: [...state.trail, 'context'] }),
       });

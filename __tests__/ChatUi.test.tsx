@@ -969,13 +969,15 @@ test('the Commands menu reads the instructions before the files they produced', 
   // A row is both a composite and a host node with the same label: keep one of each pair.
   const rows = labelsOf(tree)
     .filter(label =>
-      ['Refresh', 'Model…', 'Instructions', 'Session files', 'Status'].includes(label),
+      ['Refresh', 'Instructions', 'Session files', 'Status'].includes(label),
     )
     .filter((label, index, all) => label !== all[index - 1]);
-  // Refresh leads: same first row as the drawer's own sheet, whichever menu was opened. Model
-  // follows because only the conversation on screen can answer for it.
+  // Refresh leads: same first row as the drawer's own sheet, whichever menu was opened. Model is
+  // absent on purpose: this harness is wide enough for the title bar's own picker button, and one
+  // action is reachable one way at a time (`app/modelButton.ts`).
   expect(rows[0]).toBe('Refresh');
-  expect(rows[1]).toBe('Model…');
+  expect(rows).not.toContain('Model…');
+  expect(labelsOf(tree)).toContain('Change model');
   expect(rows.indexOf('Instructions')).toBeLessThan(rows.indexOf('Session files'));
 
   await pressLabel(tree, 'Session files');

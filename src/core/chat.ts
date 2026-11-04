@@ -2367,17 +2367,6 @@ export function useChatItems(threadId: string | null): ChatItem[] {
 }
 
 /**
- * How many rows the conversation has, for a reader that only needs the count.
- *
- * A growing bubble does not change it, so a shell subscribed to this bails out on every frame of
- * a stream instead of re-rendering, which is the whole point of not handing it the list.
- */
-export function useChatItemCount(threadId: string | null): number {
-  const snapshot = useCallback(() => (threadId ? chatStore.getItems(threadId).length : 0), [threadId]);
-  return useSyncExternalStore(subscribeToChat, snapshot);
-}
-
-/**
  * The sends still waiting to get out, as a key that changes only when the set does.
  *
  * The retry loop lives in the shell, and a shell handed the items re-renders for every streamed

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ActionSheet, type SheetEntry } from './ActionSheet';
+import { CheckIcon, CloseIcon } from './icons';
 import type { ApprovalDecision, ApprovalRequestFrame } from '../core/protocol';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 
@@ -68,6 +69,7 @@ export function ApprovalSheet({
     {
       key: 'once',
       label: 'Allow once',
+      icon: <CheckIcon size={15} tone="accent" />,
       hint: 'This call only.',
       onPress: () => onDecide('allow-once'),
     },
@@ -76,6 +78,7 @@ export function ApprovalSheet({
           {
             key: 'session',
             label: `Always allow ${request.toolName} here`,
+            icon: <CheckIcon size={15} tone="muted" />,
             hint: 'Every later call in this conversation runs without asking.',
             onPress: () => onDecide('allow-session'),
           } as SheetEntry,
@@ -85,6 +88,7 @@ export function ApprovalSheet({
     {
       key: 'deny',
       label: 'Deny',
+      icon: <CloseIcon size={15} tone="danger" />,
       danger: true,
       hint: 'The tool call fails and the agent is told.',
       onPress: () => onDecide('deny'),

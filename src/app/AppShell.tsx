@@ -12,12 +12,10 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { connection } from '../core/connection';
 import {
   chatStore,
-  useChatItemCount,
   useWaitingSendsKey,
   useSpawnCards,
   useActiveRun,
   useCompacting,
-  useStopping,
   useHistoryPage,
   useUnreadThreads,
   useRunningThreads,
@@ -176,6 +174,7 @@ import {
   useThreadModel,
   withoutEndpoint,
 } from '../core/model';
+import { showsModelButton } from './modelButton';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
@@ -202,7 +201,29 @@ import { dropReasoningAsks, knownReasoning } from '../core/reasoningFetch';
 import { httpOrigin, uuid, withView } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
 import { ContextMeter } from '../components/ContextMeter';
-import { CopyIcon, FilesIcon, FolderIcon, GaugeIcon, InfoIcon, RefreshIcon, TrashIcon } from '../components/icons';
+import {
+  AgentIcon,
+  ArchiveIcon,
+  CalendarIcon,
+  ChartIcon,
+  CopyIcon,
+  DocIcon,
+  EraserIcon,
+  FilesIcon,
+  FolderIcon,
+  GearIcon,
+  InfoIcon,
+  MoveToFolderIcon,
+  OpenInNewIcon,
+  PencilIcon,
+  RefreshIcon,
+  SearchIcon,
+  SendIcon,
+  SiphonIcon,
+  SlidersIcon,
+  TrashIcon,
+  WaitResetIcon,
+} from '../components/icons';
 import { SettingsScreen } from './SettingsScreen';
 import { AppearanceScreen } from './AppearanceScreen';
 import { UpdatesScreen } from './UpdatesScreen';
@@ -354,7 +375,7 @@ Object.freeze(EMPTY_UNAVAILABLE);
 const WORKSPACE_SEARCH_FROM = 9;
 
 /** The session-level actions both menus draw from; see `sessionEntries`. */
-type SessionEntryKey = 'refresh' | 'model' | 'tune' | 'stop' | 'instructions' | 'files' | 'systemFiles' | 'status' | 'transcript';
+type SessionEntryKey = 'refresh' | 'model' | 'tune' | 'instructions' | 'files' | 'systemFiles' | 'status' | 'transcript';
 
 /**
  * The chat on screen is a sub-agent rather than a conversation. Carries the parent so the header
@@ -931,7 +952,6 @@ export function AppShell(): React.JSX.Element {
     });
   }, []);
 
-  const itemCount = useChatItemCount(activeThread);
   const historyPage = useHistoryPage(activeThread);
   const sessions = useSessions();
   const folders = useFolders();
@@ -968,10 +988,6 @@ export function AppShell(): React.JSX.Element {
   const running = useActiveRun(activeThread);
   const compacting = useCompacting(activeThread);
   const streaming = running || compacting !== undefined;
-  // A stop is in flight on the thread on screen: the session menu entry reads "Stopping…" and
-  // sends nothing until the run ends -- the end of the run is what lifts the mark it reads.
-  const stopping = useStopping(activeThread);
-
   // Frame handlers run outside React: they need the thread on screen right now, not the one
   // captured when the listener was registered.
   const activeThreadRef = useRef<string | null>(null);
@@ -2960,7 +2976,7 @@ export function AppShell(): React.JSX.Element {
       },
       model: {
         label: 'Model…',
-        icon: <GaugeIcon size={15} tone="muted" />,
+        icon: <SlidersIcon size={15} tone="muted" />,
         shortcut: shortcutHint('model'),
         hint: currentModelLabel
           ? `current: ${currentModelLabel}${currentModelOrigin ? ` · ${currentModelOrigin}` : ''}`
@@ -2972,26 +2988,16 @@ export function AppShell(): React.JSX.Element {
       },
       tune: {
         label: 'Effort / window…',
+        icon: <SlidersIcon size={15} tone="muted" />,
         hint: currentModelLabel ? `tune ${currentModelLabel}` : undefined,
         onPress: () => {
           close();
           setTuneOpen(true);
         },
       },
-      stop: {
-        // While a stop is in flight the entry says so, and pressing it sends nothing: the server
-        // answers nothing to a second request until the abort of the cycle lands, so the only
-        // thing a second frame could produce is a second bubble for the one stop. It reads Stop
-        // again the moment the run ends -- the end of the run is what lifts the mark.
-        label: threadId !== null && threadId === activeThread && stopping ? 'Stopping…' : 'Stop',
-        onPress: () => {
-          if (threadId && chatStore.claimStop(threadId)) connection.send(encodeChatStop(threadId));
-          close();
-        },
-      },
       instructions: {
         label: 'Instructions',
-        icon: <CopyIcon size={15} tone="muted" />,
+        icon: <DocIcon size={15} tone="muted" />,
         hint: 'every layer it loads, nested files included',
         onPress: () => {
           close();
@@ -3041,7 +3047,7 @@ export function AppShell(): React.JSX.Element {
         },
       },
     }),
-    [refreshThread, currentModelLabel, currentModelOrigin, openModel, openSessionInstructions, openFilesFor, openStatus, transcriptTitleOf, activeThread, stopping],
+    [refreshThread, currentModelLabel, currentModelOrigin, openModel, openSessionInstructions, openFilesFor, openStatus, transcriptTitleOf],
   );
 
   const refreshAction = useCallback(
@@ -3075,6 +3081,7 @@ export function AppShell(): React.JSX.Element {
                 shared.systemFiles,
       {
         label: 'Change workspace',
+        icon: <MoveToFolderIcon size={15} tone="muted" />,
         hint: `current: ${workspaceOf(target.threadId)}`,
         onPress: () => {
           setWorkspacePicker({ threadId: target.threadId });
@@ -3085,6 +3092,7 @@ export function AppShell(): React.JSX.Element {
       { type: 'separator' },
       {
         label: 'Retry when the quota returns',
+        icon: <WaitResetIcon size={15} tone="muted" />,
         hint: retry?.waiting
           ? `waiting · retry at ${formatReset(retry.waiting.at)}`
           : (retry?.enabled ?? target.quotaRetry === true)
@@ -3101,6 +3109,7 @@ export function AppShell(): React.JSX.Element {
         // Siphon: the model is not picked here, the sheet is -- and it opens on this
         // conversation's root, which is the only session that carries the pin.
         label: 'Siphon',
+        icon: <SiphonIcon size={15} tone="muted" />,
         hint: siphonHint(siphon),
         selected: siphon !== undefined,
         onPress: () => {
@@ -3112,6 +3121,7 @@ export function AppShell(): React.JSX.Element {
       { type: 'separator' },
       {
         label: 'Move to folder…',
+        icon: <MoveToFolderIcon size={15} tone="muted" />,
         hint: folderOf(target) ?? 'not in a folder',
         onPress: () => {
           setThreadToFile(target);
@@ -3120,6 +3130,7 @@ export function AppShell(): React.JSX.Element {
       },
       {
         label: 'Rename…',
+        icon: <PencilIcon size={15} tone="muted" />,
         onPress: () => {
           // The rename sheet needs the current name to start from, so it is handed the thread
           // as a value: closing the menu first would drop the one it was opened for.
@@ -3132,6 +3143,7 @@ export function AppShell(): React.JSX.Element {
       target.archived
         ? {
             label: 'Unarchive',
+            icon: <RefreshIcon size={15} tone="muted" />,
             hint: 'put it back in the list',
             onPress: () => {
               setThreadArchived(target.threadId, false);
@@ -3140,6 +3152,7 @@ export function AppShell(): React.JSX.Element {
           }
         : {
             label: 'Archive',
+            icon: <FilesIcon size={15} tone="muted" />,
             hint: 'file it away, nothing is deleted',
             onPress: () => {
               setThreadArchived(target.threadId, true);
@@ -3187,6 +3200,7 @@ export function AppShell(): React.JSX.Element {
       {
         key: 'all',
         label: 'All workspaces',
+        icon: <FolderIcon size={15} tone="muted" />,
         selected: workspaceFilter === null,
         onPress: () => {
           setWorkspaceFilter(null);
@@ -3225,6 +3239,7 @@ export function AppShell(): React.JSX.Element {
         { type: 'separator' as const },
         {
           label: 'Manage workspaces…',
+          icon: <GearIcon size={15} tone="muted" />,
           onPress: () => {
             setWorkspacePicker(null);
             openSettings();
@@ -3313,7 +3328,17 @@ export function AppShell(): React.JSX.Element {
     ...(activeSummary ? [refreshAction(activeSummary, () => setCommandMenuOpen(false))] : []),
     ...(() => {
       const shared = sessionEntries(activeThread, () => setCommandMenuOpen(false));
-      return [shared.model, shared.tune, ...(streaming ? [shared.stop] : [])];
+      // The model picker is a control of the title bar wherever the bar has room for it, and the
+      // entry leaves this menu on exactly that condition (owner, 2026-11-04: "on le vire de la
+      // liste du menu … quand il est affiché"). One predicate, `app/modelButton.ts`: two would let
+      // the picker live in both places on one window and in neither on the next.
+      //
+      // Stop is gone from here (owner, 2026-11-04: "vire l'action stop du menu de session … on a
+      // déjà le bouton stop en bas"). The composer's corner is where a run is interrupted, and it
+      // is on screen exactly when the action applies; repeating it one tap deeper, in a menu that
+      // covers the very button it duplicates, was a second door onto one action. The drawer's own
+      // conversation menu never had it either.
+      return [...(showsModelButton(layout.width) ? [] : [shared.model]), shared.tune];
     })(),
     // Model and Stop sit here because only the conversation on screen can answer for them: the
     // app knows the live model and the running turn of the one in front of it, not of a thread
@@ -3347,16 +3372,25 @@ export function AppShell(): React.JSX.Element {
     offline ? status.state : null,
     threadModel ? (modelProvider ? `${modelProvider} / ${currentModelLabel}` : currentModelLabel) : null,
     effortLabel,
-    // The share lives in exactly one place. Where the gauge is drawn (560 pt and up) it is
-    // already there, three figures wide; repeating it here put the same number twice in one
-    // strip. Below that the gauge is gone and this is the only place left for it -- to a tenth,
-    // because on a 1M window a turn moves it by a couple of hundred tokens.
-    contextShare === null || layout.width >= 560 ? null : `${contextShare.toFixed(1)}%`,
+    // "N items" is gone (owner, 2026-11-04: "le x item dans le header de session est useless").
+    // The count was a size, not a state: the thread is on screen and scrollable, so it never told
+    // anyone anything they could act on, and on a phone it was the last thing pushing the share
+    // out of the one line that can afford it.
     pending > 0 ? `${pending} pending` : null,
-    itemCount > 0 ? `${itemCount} items` : null,
+    // Where the model came from, when this conversation did not choose it. The picker no longer
+    // carries it as a hint -- the menu row that held it is gone wherever the title bar has the
+    // button -- and without it, picking the global default looks like a no-op with no explanation,
+    // which is how the incident hid for two days.
+    currentModelOrigin,
   ]
     .filter(Boolean)
     .join(' · ');
+  // The share lives in exactly one place. Where the gauge is drawn (560 pt and up) it is already
+  // there, three figures wide; repeating it on the facts line put the same number twice in one
+  // strip. Below that the gauge is gone and this is the only place left for it -- handed over as
+  // its own run so that a long provider id truncates the name and never the figure (2026-11-04).
+  const shareLabel =
+    contextShare === null || layout.width >= 560 ? undefined : `${contextShare.toFixed(1)}%`;
   const meter =
     threadModel?.context?.used !== undefined && threadModel.context.effective !== undefined && contextShare !== null ? (
       <ContextMeter
@@ -3454,11 +3488,13 @@ export function AppShell(): React.JSX.Element {
         {
           target: { source: 'custom' as const },
           label: 'Custom',
+          icon: <FolderIcon size={15} tone="muted" />,
           hint: 'shared tier, visible from every workspace',
         },
         ...workspaces.map(workspace => ({
           target: { source: 'workspace' as const, workspace: workspace.key },
           label: `Workspace · ${workspace.key}`,
+          icon: <FolderIcon size={15} tone="muted" />,
           hint: workspace.path,
         })),
       ].filter(choice => !isHere(choice.target));
@@ -3511,6 +3547,7 @@ export function AppShell(): React.JSX.Element {
     return [
       {
         label: 'Copy to…',
+        icon: <CopyIcon size={15} tone="muted" />,
         hint:
           skill.source === 'built-in'
             ? 'fork the shipped skill, the original keeps being synced'
@@ -3527,6 +3564,7 @@ export function AppShell(): React.JSX.Element {
         : [
             {
               label: 'Move to…',
+              icon: <MoveToFolderIcon size={15} tone="muted" />,
               hint: 'the original is removed once the copy landed',
               onPress: () => {
                 setSkillTargets({ skill, mode: 'move' });
@@ -4102,6 +4140,7 @@ export function AppShell(): React.JSX.Element {
             threadId={activeThread ?? ''}
             title={title}
             subtitle={subtitle}
+            share={shareLabel}
             meter={meter}
             connectionState={status.state}
             locationEnabled={locationEnabled}
@@ -4144,6 +4183,7 @@ export function AppShell(): React.JSX.Element {
             onOpenArchive={openArchiveViewer}
             onOpenFile={openFileViewer}
             onOpenMenu={() => setCommandMenuOpen(true)}
+            onOpenModel={openModel}
             onCommandEntered={dispatchCommand}
             onQuestionReply={replyToQuestion}
             onTagCommand={dispatchTagCommand}
@@ -5273,6 +5313,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Replace',
+              icon: <RefreshIcon size={15} tone="danger" />,
               danger: true,
               onPress: () =>
                 sendSkillTransfer(
@@ -5299,6 +5340,7 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Hand back to…',
+                    icon: <AgentIcon size={15} tone="muted" />,
                     hint: 'returns it to the conversations that called this sub-agent',
                     onPress: () => {
                       const item = bubbleMenu;
@@ -5317,6 +5359,7 @@ export function AppShell(): React.JSX.Element {
               : []),
             {
               label: 'Copy text',
+              icon: <CopyIcon size={15} tone="muted" />,
               onPress: () => {
                 Clipboard.setString(bubbleMenu.text);
                 setBubbleMenu(null);
@@ -5326,6 +5369,7 @@ export function AppShell(): React.JSX.Element {
             // in: the viewer is the only place a selection can cross from one block to the next.
             {
               label: 'Select text',
+              icon: <SearchIcon size={15} tone="muted" />,
               hint: 'opens the message where any part of it can be picked',
               onPress: () => {
                 const target = { title: 'Message', body: messageSelectionBody(bubbleMenu) };
@@ -5339,6 +5383,7 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Copy reasoning',
+                    icon: <CopyIcon size={15} tone="muted" />,
                     onPress: () => {
                       Clipboard.setString(bubbleMenu.reasoning ?? '');
                       setBubbleMenu(null);
@@ -5350,6 +5395,7 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Copy summary',
+                    icon: <CopyIcon size={15} tone="muted" />,
                     onPress: () => {
                       Clipboard.setString(bubbleMenu.details ?? '');
                       setBubbleMenu(null);
@@ -5423,12 +5469,14 @@ export function AppShell(): React.JSX.Element {
               {
                 key: 'ask',
                 label: count > 0 ? `Send for action (${count})` : 'Send for action',
+                icon: <SendIcon size={15} tone="muted" />,
                 hint: 'lands as a message, so the agent there acts on it',
                 onPress: () => deliver('ask'),
               },
               {
                 key: 'note',
                 label: count > 0 ? `File as a note (${count})` : 'File as a note',
+                icon: <InfoIcon size={15} tone="muted" />,
                 hint: 'visible in the conversation, never sent to a model',
                 onPress: () => deliver('note'),
               },
@@ -5450,7 +5498,8 @@ export function AppShell(): React.JSX.Element {
               return [
                 shared.model,
                 shared.tune,
-                ...(streaming ? [shared.stop] : []),
+                // No Stop here either: the composer's corner has it while a run is live, and the
+                // sub-agent's own conversation draws that composer.
                 shared.instructions,
                 shared.files,
       shared.systemFiles,
@@ -5462,6 +5511,7 @@ export function AppShell(): React.JSX.Element {
             { type: 'separator' as const },
             {
               label: 'Copy id',
+              icon: <CopyIcon size={15} tone="muted" />,
               onPress: () => {
                 Clipboard.setString(subagentView.id);
                 setSubagentMenuOpen(false);
@@ -5471,6 +5521,9 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Workspace',
+                    // A copy, not a folder: the row puts the path on the clipboard, and beside
+                    // Copy id above it the two read as one pair of copies.
+                    icon: <CopyIcon size={15} tone="muted" />,
                     hint: subagentView.workspaceDir,
                     onPress: () => {
                       // The path, not a browser: it answers "where does this agent write", which
@@ -5483,6 +5536,7 @@ export function AppShell(): React.JSX.Element {
               : []),
             {
               label: 'Clear memory',
+              icon: <EraserIcon size={15} tone="muted" />,
               hint: 'archives the transcript, keeps the agent and its workspace',
               onPress: () => {
                 setSubagentMenuOpen(false);
@@ -5491,6 +5545,7 @@ export function AppShell(): React.JSX.Element {
             },
             {
               label: 'Delete',
+              icon: <TrashIcon size={15} tone="danger" />,
               hint: 'removes the agent and its transcript for good',
               danger: true,
               onPress: () => {
@@ -5550,6 +5605,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Archived',
+              icon: <ArchiveIcon size={15} tone="muted" />,
               hint: archivedSessions.length > 0 ? `${archivedSessions.length} conversations` : undefined,
               onPress: () => {
                 setMoreOpen(false);
@@ -5561,6 +5617,7 @@ export function AppShell(): React.JSX.Element {
               // Sub-agents, not "Agents": the orchestrator is the conversation itself, and the
               // Agents settings page is where every agent, the orchestrator included, is set.
               label: 'Sub-agents',
+              icon: <AgentIcon size={15} tone="muted" />,
               hint: 'shared workers',
               onPress: () => {
                 setMoreOpen(false);
@@ -5570,6 +5627,7 @@ export function AppShell(): React.JSX.Element {
             },
             {
               label: 'Jobs',
+              icon: <CalendarIcon size={15} tone="muted" />,
               hint: 'scheduled tasks',
               shortcut: shortcutHint('jobs'),
               onPress: () => {
@@ -5580,6 +5638,7 @@ export function AppShell(): React.JSX.Element {
             },
             {
               label: 'Browser',
+              icon: <OpenInNewIcon size={15} tone="muted" />,
               hint: 'take the session over',
               shortcut: shortcutHint('browser'),
               onPress: () => {
@@ -5593,6 +5652,7 @@ export function AppShell(): React.JSX.Element {
               // Beside Settings rather than beside the conversation actions: this reads the whole
               // install, deleted conversations included, and belongs to no thread at all.
               label: 'Statistics',
+              icon: <ChartIcon size={15} tone="muted" />,
               hint: 'every conversation, deleted included',
               onPress: () => {
                 setMoreOpen(false);
@@ -5606,6 +5666,7 @@ export function AppShell(): React.JSX.Element {
               // at that session's workspace instead, which is the only difference between the two
               // entries -- docs/files-page.md.
               label: 'Files',
+              icon: <FolderIcon size={15} tone="muted" />,
               hint: 'every file on this machine',
               shortcut: shortcutHint('files'),
               onPress: () => {
@@ -5617,6 +5678,7 @@ export function AppShell(): React.JSX.Element {
             },
             {
               label: 'Settings',
+              icon: <GearIcon size={15} tone="muted" />,
               hint: `${CONNECTION_LABEL[status.state]}${pending > 0 ? ` · ${pending} pending` : ''}`,
               shortcut: shortcutHint('settings'),
               onPress: () => {
@@ -5630,6 +5692,7 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Keyboard shortcuts',
+                    icon: <InfoIcon size={15} tone="muted" />,
                     shortcut: shortcutHint('help'),
                     onPress: () => {
                       setMoreOpen(false);
@@ -5728,6 +5791,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Discard changes',
+              icon: <TrashIcon size={15} tone="danger" />,
               danger: true,
               onPress: () => {
                 setTagEditorDiscard(false);
@@ -5747,6 +5811,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Delete',
+              icon: <TrashIcon size={15} tone="danger" />,
               danger: true,
               onPress: deleteTagConfirmed,
             },
@@ -5770,6 +5835,7 @@ export function AppShell(): React.JSX.Element {
               : [
                   {
                     label: 'Delete',
+                    icon: <TrashIcon size={15} tone="danger" />,
                     danger: true,
                     onPress: () => deleteProviderConfirmed(false, false),
                   },
@@ -5778,6 +5844,7 @@ export function AppShell(): React.JSX.Element {
               ? [
                   {
                     label: 'Delete and remove its key from .env',
+                    icon: <TrashIcon size={15} tone="danger" />,
                     danger: true,
                     onPress: () => deleteProviderConfirmed(true, false),
                   },
@@ -5794,6 +5861,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: `Rename to "${providerRename.to}"`,
+              icon: <PencilIcon size={15} tone="muted" />,
               onPress: confirmProviderRename,
             },
           ]}
@@ -5864,6 +5932,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Rename',
+              icon: <PencilIcon size={15} tone="muted" />,
               onPress: () => {
                 setFolderToRename(folderMenu);
                 setFolderMenu(null);
@@ -5871,6 +5940,7 @@ export function AppShell(): React.JSX.Element {
             },
             {
               label: 'Delete folder',
+              icon: <TrashIcon size={15} tone="danger" />,
               onPress: () => {
                 setFolderToDelete(folderMenu);
                 setFolderMenu(null);
@@ -5890,6 +5960,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Delete',
+              icon: <TrashIcon size={15} tone="danger" />,
               danger: true,
               onPress: () => {
                 connection.send(encodeFolderRemove(folderToDelete.id)).catch(() => {});
@@ -5908,6 +5979,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             ...folders.map(folder => ({
               label: folder.name,
+              icon: <FolderIcon size={15} tone="muted" />,
               hint: folder.id === threadToFile.folderId ? 'current' : undefined,
               onPress: () => {
                 fileThread(threadToFile.threadId, folder.id);
@@ -5916,6 +5988,7 @@ export function AppShell(): React.JSX.Element {
             })),
             {
               label: 'No folder',
+              icon: <FolderIcon size={15} tone="muted" />,
               hint: threadToFile.folderId ? undefined : 'current',
               onPress: () => {
                 fileThread(threadToFile.threadId, null);
@@ -5950,6 +6023,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Delete',
+              icon: <TrashIcon size={15} tone="danger" />,
               danger: true,
               onPress: () => {
                 deleteThread(confirmDelete);
@@ -5968,6 +6042,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Delete',
+              icon: <TrashIcon size={15} tone="danger" />,
               danger: true,
               onPress: () => {
                 setFilesError(null);
@@ -6094,6 +6169,7 @@ export function AppShell(): React.JSX.Element {
           options={[
             {
               label: 'Delete',
+              icon: <TrashIcon size={15} tone="danger" />,
               danger: true,
               onPress: () => deleteJob(jobToDelete),
             },

@@ -6,6 +6,7 @@ import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { ActionSheet } from '../components/ActionSheet';
+import { TrashIcon } from '../components/icons';
 import { PairScanner } from '../components/PairScanner';
 import { scannerSupported } from '../core/platform';
 import { CloseButton } from '../components/CloseButton';
@@ -351,6 +352,7 @@ export function DevicesScreen({
             {
               label: 'Revoke',
               danger: true,
+              icon: <TrashIcon tone="danger" />,
               onPress: () => {
                 devicesStore.revoke(confirming.deviceId);
                 setConfirming(null);

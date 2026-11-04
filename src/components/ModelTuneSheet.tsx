@@ -57,10 +57,8 @@ export function ModelTuneSheet({
   if (effortActive) {
     options.push(
       {
-        label: 'Effort',
-        hint: `current: ${effort!.level ? effortLabel(effort!.level) : 'default (inherit)'}`,
-        selected: true,
-        onPress: () => {},
+        type: 'note' as const,
+        text: `Effort · current: ${effort!.level ? effortLabel(effort!.level) : 'default (inherit)'}`,
       },
       ...effortLevels.map(level => ({
         label: effortLabel(level),
@@ -82,22 +80,15 @@ export function ModelTuneSheet({
     );
   } else {
     options.push(
-      {
-        label: 'Effort',
-        hint: 'not supported by this model',
-        selected: true,
-        onPress: () => {},
-      },
+      { type: 'note' as const, text: 'Effort · not supported by this model' },
       { type: 'separator' as const },
     );
   }
 
   // Cap rows: the full window and the lowered ceilings, when there is something to arbitrate.
   options.push({
-    label: 'Context',
-    hint: context ? contextSummary(context.raw, context.effective) : undefined,
-    selected: true,
-    onPress: () => {},
+    type: 'note' as const,
+    text: context ? `Context · ${contextSummary(context.raw, context.effective)}` : 'Context',
   });
   if (tiers.length > 0) {
     options.push(

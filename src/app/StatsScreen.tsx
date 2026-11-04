@@ -1,4 +1,4 @@
-import { ChevronIcon } from '../components/icons';
+import { ChartIcon, CheckIcon, ChevronIcon, FilesIcon, FolderIcon, GaugeIcon, GearIcon, InfoIcon, SlidersIcon } from '../components/icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { font, radius, space, type Palette, useThemedStyles } from '../theme';
@@ -69,14 +69,14 @@ const PERIODS: readonly StatsPeriod[] = ['7d', '30d', '90d', 'all'];
 
 type StatsTab = 'overview' | 'models' | 'conversations' | 'cache' | 'reliability' | 'tools' | 'advanced';
 
-const TABS: ReadonlyArray<{ key: StatsTab; label: string }> = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'models', label: 'Models' },
-  { key: 'conversations', label: 'Conversations' },
-  { key: 'cache', label: 'Cache' },
-  { key: 'reliability', label: 'Reliability' },
-  { key: 'tools', label: 'Tools' },
-  { key: 'advanced', label: 'Advanced' },
+const TABS: ReadonlyArray<{ key: StatsTab; label: string; icon: React.ReactNode }> = [
+  { key: 'overview', label: 'Overview', icon: <InfoIcon size={15} tone="muted" /> },
+  { key: 'models', label: 'Models', icon: <ChartIcon size={15} tone="muted" /> },
+  { key: 'conversations', label: 'Conversations', icon: <FilesIcon size={15} tone="muted" /> },
+  { key: 'cache', label: 'Cache', icon: <GaugeIcon size={15} tone="muted" /> },
+  { key: 'reliability', label: 'Reliability', icon: <CheckIcon size={15} tone="muted" /> },
+  { key: 'tools', label: 'Tools', icon: <GearIcon size={15} tone="muted" /> },
+  { key: 'advanced', label: 'Advanced', icon: <SlidersIcon size={15} tone="muted" /> },
 ];
 
 /** How many conversations the ranking draws before it folds the rest into one line. */
@@ -397,6 +397,7 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
     const options: SheetEntry[] = [
       {
         label: 'Everything',
+        icon: <FolderIcon size={15} tone="muted" />,
         hint: 'drop this dimension',
         selected: filter[sheet] === undefined,
         onPress: () => {
@@ -521,6 +522,7 @@ export function StatsScreen({ onClose }: { onClose: () => void }): React.JSX.Ele
             accessibilityRole="tab"
             accessibilityState={{ selected: entry.key === tab }}
             accessibilityLabel={entry.label}>
+            {entry.icon}
             <Text style={[styles.tabText, entry.key === tab && styles.tabTextOn]}>{entry.label}</Text>
           </Pressable>
         ))}
@@ -1152,7 +1154,7 @@ const createStyles = (palette: Palette) => ({
   chipClear: { borderColor: palette.warn },
   chipClearText: { fontSize: font.micro, color: palette.warn },
   tabs: { flexDirection: 'row' as const, gap: space.md, paddingTop: space.md, alignItems: 'center' as const },
-  tab: { paddingBottom: space.xs, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tab: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingBottom: space.xs, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabOn: { borderBottomColor: palette.accent },
   tabText: { fontSize: font.meta, color: palette.textMuted },
   tabTextOn: { color: palette.text, fontWeight: '600' as const },

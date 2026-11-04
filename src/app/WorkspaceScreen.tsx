@@ -1,4 +1,4 @@
-import { ChevronIcon, MoreIcon } from '../components/icons';
+import { ChevronIcon, GearIcon, MoreIcon, PlusIcon } from '../components/icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type { InstructionEntry, NestedInstruction, WorkspaceEntry } from '../core/protocol';
@@ -212,6 +212,7 @@ export function WorkspaceScreen({
   if (menuEntry && menuEntry.origin !== 'own' && menuEntry.origin !== 'off') {
     fileMenuOptions.push({
       label: menuEntry.bytes > 0 ? 'Create from template' : 'Create file',
+      icon: <PlusIcon size={15} tone="muted" />,
       hint:
         menuEntry.bytes > 0
           ? `save a copy of the content this workspace reads${menuEntry.from ? ` from ${menuEntry.from}` : ''}`
@@ -226,6 +227,7 @@ export function WorkspaceScreen({
   if (menuEntry?.inherit !== undefined) {
     fileMenuOptions.push({
       label: 'Layer settings',
+      icon: <GearIcon size={15} tone="muted" />,
       onPress: () => {
         const entry = menuEntry;
         setMenuEntry(null);

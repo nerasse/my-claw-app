@@ -5,6 +5,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { ActionSheet } from '../src/components/ActionSheet';
+import { CheckIcon } from '../src/components/icons';
 
 function renderSheet(): ReactTestRenderer.ReactTestRenderer {
   let tree!: ReactTestRenderer.ReactTestRenderer;
@@ -119,6 +120,42 @@ describe('a physical keyboard on Android (docs/keyboard.md)', () => {
   test("the backdrop is a tap's way out, never a keyboard stop", () => {
     const tree = render([{ label: 'One', onPress: () => {} }]);
     expect(row(tree, 'Close menu').props.focusable).toBe(false);
+    ReactTestRenderer.act(() => tree.unmount());
+  });
+});
+
+describe('the glyph slot', () => {
+  /**
+   * Every row reserves it, iconed or not.
+   *
+   * Drawn only on the rows that carried a glyph, the labels of a mixed menu formed two columns:
+   * seven rows started 20 pt right of the other four and the list read as unfinished (owner,
+   * 2026-11-04). The slot is the one thing that keeps a menu's labels on one x.
+   */
+  test('a row without an icon still holds the slot, so every label starts at the same x', () => {
+    let tree!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      tree = ReactTestRenderer.create(
+        <ActionSheet
+          options={[
+            { label: 'With glyph', icon: <CheckIcon size={15} tone="muted" />, onPress: () => {} },
+            { label: 'Bare', onPress: () => {} },
+          ]}
+          onClose={() => {}}
+        />,
+      );
+    });
+
+    const slots = tree.root.findAll(
+      node =>
+        node.props?.style != null &&
+        JSON.stringify(node.props.style).includes('"width":15') &&
+        node.props.accessibilityLabel === undefined,
+      { deep: true },
+    );
+    // One per option, plus none for the backdrop: the sheet draws two rows here.
+    expect(slots.length).toBeGreaterThanOrEqual(2);
+
     ReactTestRenderer.act(() => tree.unmount());
   });
 });

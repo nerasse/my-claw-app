@@ -77,10 +77,11 @@ test('the model picker drops the keyboard instead of hiding behind it', async ()
     defaultModel: 'fast-1',
   });
 
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'));
+  // The picker is a title-bar control at this width (ChatScreen), and opening it must still take
+  // the keyboard down: that is the whole assertion below, whatever the door was.
+  await waitFor(() => labelsOf(tree).includes('Change model'));
   dismiss.mockClear();
-  await pressLabel(tree, 'Model…');
+  await pressLabel(tree, 'Change model');
 
   await waitFor(() => labelsOf(tree).includes('Fast'));
   expect(dismiss).toHaveBeenCalled();

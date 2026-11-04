@@ -151,11 +151,14 @@ export function ActionSheet({
           accessibilityRole="button"
           accessibilityState={{ selected: option.selected ?? false }}
           accessibilityLabel={option.label}>
-          {option.icon ? (
-            // The icon carries its own ink: `tone` is resolved inside each icon, so a danger row
-            // cannot recolour it from here -- the caller passes the danger tone when it wants it.
-            <View style={styles.optionIcon}>{option.icon}</View>
-          ) : null}
+          {/* The slot is always drawn, empty or not. It used to exist only on the rows that
+              carried a glyph, so a menu of eleven rows where seven had an icon started those seven
+              20 pt further right: the labels formed two columns and the list read as unfinished
+              (owner, 2026-11-04: "tu as pas mis des icons pour toutes options et ça fait très
+              moche"). One slot for every row keeps the text on one x, iconed menus and plain ones
+              alike. The icon carries its own ink: `tone` is resolved inside each icon, so a danger
+              row cannot recolour it from here. */}
+          <View style={styles.optionIcon}>{option.icon ?? null}</View>
           <View style={styles.optionMain}>
             <Text style={[styles.optionLabel, option.danger && styles.optionDanger]}>{option.label}</Text>
             {option.hint ? (

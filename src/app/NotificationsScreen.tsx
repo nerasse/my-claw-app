@@ -1,4 +1,4 @@
-import { ChevronIcon } from '../components/icons';
+import { ChevronIcon, DownloadIcon } from '../components/icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
@@ -199,7 +199,7 @@ export function NotificationsScreen({
   const optionsFor = (usage: NotificationUsage): SheetEntry[] => {
     const entries: SheetEntry[] = [
       { label: 'System sound', hint: "pick one of the phone's sounds", onPress: () => pick(usage, 'system') },
-      { label: 'Import a file', hint: 'copy an audio file into the app', onPress: () => pick(usage, 'file') },
+      { label: 'Import a file', icon: <DownloadIcon size={15} tone="muted" />, hint: 'copy an audio file into the app', onPress: () => pick(usage, 'file') },
     ];
     if (usage === 'ordinary') {
       entries.push({ label: 'Silent', hint: 'no sound; the notification still arrives', onPress: () => pick(usage, 'silent') });

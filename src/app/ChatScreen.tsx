@@ -1,4 +1,4 @@
-import { AgentIcon, ChevronIcon, MenuIcon, MoreIcon } from '../components/icons';
+import { AgentIcon, CameraIcon, ChevronIcon, FolderIcon, ImageIcon, MapIcon, MenuIcon, MoreIcon, PasteIcon, PinIcon, SlidersIcon } from '../components/icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, PanResponder, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
@@ -18,6 +18,7 @@ import { requestRunItems } from '../core/runItems';
 import { dataUriType } from '../core/dataUri';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
+import { showsModelButton } from './modelButton';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
 import { recordDiag } from '../core/diagnostics';
@@ -98,6 +99,7 @@ export function ChatScreen({
   threadId,
   title,
   subtitle,
+  share,
   meter,
   connectionState,
   mediaBase,
@@ -121,6 +123,7 @@ export function ChatScreen({
   onOpenArchive,
   onOpenFile,
   onOpenMenu,
+  onOpenModel,
   onCommandEntered,
   onTagCommand,
   streaming,
@@ -145,6 +148,14 @@ export function ChatScreen({
   threadId: string;
   title: string;
   subtitle: string;
+  /**
+   * The context share, as its own run on the facts line, where the gauge is not drawn.
+   *
+   * It used to be the last field of `subtitle` and shared its `numberOfLines`: a long provider id
+   * cut the two together, so the one number that is a reading disappeared behind a label (owner,
+   * 2026-11-04). Separate, the name yields and this does not.
+   */
+  share?: string;
   /** The context gauge, drawn only where the title bar has the room for three numbers. */
   meter?: React.ReactNode;
   connectionState: WsState;
@@ -173,6 +184,15 @@ export function ChatScreen({
   onOpenFile: (target: { url: string; filename: string; sizeBytes?: number }) => void;
   /** The command menu of the app (model, stop, clear, ...). */
   onOpenMenu: () => void;
+  /**
+   * The model picker, as a control of its own in the title bar.
+   *
+   * Drawn only where the bar has the room for it (`MODEL_BUTTON_MIN_WIDTH`), which is also the
+   * condition under which the command menu drops its own Model… entry: one action is reachable one
+   * way at a time. Where the bar is too narrow the entry stays in the menu, and the icon disappears,
+   * so nothing is ever offered twice or lost.
+   */
+  onOpenModel?: () => void;
   /** A slash command was chosen; true when the app handled it natively. */
   onCommandEntered: (command: string) => boolean;
   /** A submitted /tag text was handled natively; true keeps it out of the wire. */
@@ -218,6 +238,9 @@ export function ChatScreen({
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
   const layout = useLayout();
+  // The model picker takes the bar's fourth slot only where the text block can keep a name whole.
+  // See `app/modelButton.ts` for the measurement and for why the menu reads the same predicate.
+  const showModelButton = showsModelButton(layout.width);
   // A conversation is prose: past ~90 characters a line stops being readable, however wide the
   // window is. The column is centred inside the pane rather than stretched across it.
   const column = useMemo(() => conversationColumn(layout.readingWidth), [layout.readingWidth]);
@@ -1404,9 +1427,21 @@ export function ChatScreen({
           <Text style={styles.title} numberOfLines={1}>
             {title}
           </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
+          <View style={styles.subRow}>
+            {/* The model name absorbs every point of pressure, and the share does not: it is the
+                one figure that moves on its own and the one a narrow header must never lose. As a
+                single string both were cut together, so a long provider id ate the percentage
+                (owner, 2026-11-04: "des fois on voit pas le % de context sur mobile avec les noms
+                de modèle ou provider long"). Two runs, one ellipsis, one integer. */}
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+            {share ? (
+              <Text style={[styles.subtitle, styles.share]} numberOfLines={1}>
+                {`${subtitle ? ' · ' : ''}${share}`}
+              </Text>
+            ) : null}
+          </View>
         </View>
         {/* The gauge carries the share, so the metadata line above drops it: one figure, one
             place. Below 560 pt there is no room for three numbers and the share stays in the
@@ -1439,6 +1474,20 @@ export function ChatScreen({
               ]}>
               {connectionState === 'connecting' ? 'connecting' : 'offline'}
             </Text>
+          </Pressable>
+        ) : null}
+        {/* The model picker, where the bar has room for a fourth control. It sits before the
+            overflow, at the same size and in the same ink, so the strip keeps one vocabulary of
+            actions. `showModelButton` is the same predicate the menu uses to drop its Model…
+            entry, so the picker is never offered twice. */}
+        {showModelButton && onOpenModel ? (
+          <Pressable
+            onPress={onOpenModel}
+            style={styles.headerAction}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Change model">
+            <SlidersIcon size={16} tone="muted" />
           </Pressable>
         ) : null}
         <Pressable
@@ -1622,14 +1671,14 @@ export function ChatScreen({
         <ActionSheet
           preview="add to this message"
           options={[
-            { label: 'Photo from gallery', onPress: pickPhotos },
-            { label: 'Take a photo', onPress: takePhoto },
-            { label: 'File', onPress: pickFiles },
+            { label: 'Photo from gallery', icon: <ImageIcon size={15} tone="muted" />, onPress: pickPhotos },
+            { label: 'Take a photo', icon: <CameraIcon size={15} tone="muted" />, onPress: takePhoto },
+            { label: 'File', icon: <FolderIcon size={15} tone="muted" />, onPress: pickFiles },
             ...(clipboardImage
-              ? [{ label: 'Paste image', hint: 'The image currently in the clipboard', onPress: pasteImage }]
+              ? [{ label: 'Paste image', icon: <PasteIcon size={15} tone="muted" />, hint: 'The image currently in the clipboard', onPress: pasteImage }]
               : []),
             ...(locationEnabled
-              ? [{ label: 'Share current location', hint: 'One-shot GPS position with approximate address', onPress: shareLocation }]
+              ? [{ label: 'Share current location', icon: <PinIcon size={15} tone="muted" />, hint: 'One-shot GPS position with approximate address', onPress: shareLocation }]
               : []),
           ]}
           onClose={() => setAttachOpen(false)}
@@ -1641,8 +1690,8 @@ export function ChatScreen({
           preview="Current location"
           onClose={closeLocationSheet}
           options={[
-            { label: 'Open in OpenStreetMap', onPress: () => Linking.openURL(locationMapUrl(location)).catch(() => {}) },
-            { label: 'Remove location', danger: true, onPress: removeLocation },
+            { label: 'Open in OpenStreetMap', icon: <MapIcon size={15} tone="muted" />, onPress: () => Linking.openURL(locationMapUrl(location)).catch(() => {}) },
+            { label: 'Remove location', icon: <MapIcon size={15} tone="danger" />, danger: true, onPress: removeLocation },
           ]}>
           <LocationEditor
             value={locationDraft}
@@ -1732,6 +1781,15 @@ const createStyles = (palette: Palette) => ({
    * that difference, both inks sit at the same distance and the strip reads level.
    */
   headerActionEnd: { marginRight: -4 },
+  /**
+   * The facts line: the model takes the room, the share keeps its own.
+   *
+   * `flexShrink: 1` on the name and `flexShrink: 0` on the share is the whole fix. As one string
+   * the two were cut together by `numberOfLines={1}`, so any long provider id took the percentage
+   * with it -- the one number on this line that is a reading rather than a label.
+   */
+  subRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, minWidth: 0 },
+  share: { flexShrink: 0 as const, fontVariant: ['tabular-nums' as const] },
   headerText: { flex: 1, minWidth: 0 },
   // 14 and 11, the POC's pair rounded to the app's own scale: the title is a line of the
   // conversation's type, not a screen heading, and at 15 it drew the eye before the answer under it.

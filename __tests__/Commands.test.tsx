@@ -106,10 +106,14 @@ test('the ⋮ menu opens the command menu with the conversation actions', async 
 
   // The thread has messages, so conversation actions show alongside app-level ones.
   await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'));
+  await waitFor(() => labelsOf(tree).includes('Instructions'));
 
   const texts = textsOf(tree);
-  expect(texts).toContain('Model…');
+  // This harness is 750 pt wide, so the picker lives in the title bar (ChatScreen's own control)
+  // and the menu must not offer it a second time. The narrow case is pinned in
+  // `__tests__/ModelButton.test.tsx`.
+  expect(labelsOf(tree)).toContain('Change model');
+  expect(texts).not.toContain('Model…');
   // New conversations live on the + in the drawer (and the /new command); Files has its own
   // header button. Duplicating them here was noise.
   expect(labelsOf(tree)).toContain('New conversation');
@@ -126,9 +130,8 @@ test('the model picker lists models with the current one checked and applies on 
     chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
   });
   await waitFor(() => allTexts(tree).includes('hello'), 60);
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
-  await pressLabel(tree, 'Model…');
+  // The picker is a control of the title bar at this width, so that is where it is opened from.
+  await pressLabel(tree, 'Change model');
 
   // The sheet asks the server; the server answers with the catalog and the thread state.
   await emit({ type: 'model.list.result', models: [
@@ -163,9 +166,8 @@ test('the chat picker walks model, effort and window, and the last decision appl
     chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
   });
   await waitFor(() => allTexts(tree).includes('hello'), 60);
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
-  await pressLabel(tree, 'Model…');
+  // The picker is a control of the title bar at this width, so that is where it is opened from.
+  await pressLabel(tree, 'Change model');
 
   await emit({
     type: 'model.list.result',
@@ -214,9 +216,8 @@ test('the level that turns reasoning off is not read as the row that inherits it
     chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
   });
   await waitFor(() => allTexts(tree).includes('hello'), 60);
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
-  await pressLabel(tree, 'Model…');
+  // The picker is a control of the title bar at this width, so that is where it is opened from.
+  await pressLabel(tree, 'Change model');
 
   // A ladder published by the model itself, bottom rung included (server-side docs/model-metadata.md).
   await emit({
@@ -282,9 +283,8 @@ async function openChatPicker(
     chatStore.addUserMessage(THREAD, messageId, 'hello', []);
   });
   await waitFor(() => allTexts(tree).includes('hello'), 60);
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
-  await pressLabel(tree, 'Model…');
+  // The picker is a control of the title bar at this width, so that is where it is opened from.
+  await pressLabel(tree, 'Change model');
   await emit({ type: 'model.list.result', models, defaultModel: 'fast-1' });
   await emit({
     type: 'model.result',
@@ -395,9 +395,8 @@ test('a group whose models all live in sub-groups is still reachable', async () 
     chatStore.addUserMessage(THREAD, 'u1', 'hello', []);
   });
   await waitFor(() => allTexts(tree).includes('hello'), 60);
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'), 60);
-  await pressLabel(tree, 'Model…');
+  // The picker is a control of the title bar at this width, so that is where it is opened from.
+  await pressLabel(tree, 'Change model');
 
   // Nothing sits directly in "Claude": requiring an exact depth made the whole provider vanish.
   await emit({ type: 'model.list.result', models: [
@@ -734,7 +733,7 @@ test('emptying a conversation is gone: archive files it away, delete destroys it
   await waitFor(() => allTexts(tree).includes('hello there'));
 
   await pressLabel(tree, 'Commands');
-  await waitFor(() => labelsOf(tree).includes('Model…'));
+  await waitFor(() => labelsOf(tree).includes('Instructions'));
   expect(labelsOf(tree)).not.toContain('Clear history');
 
   // Nothing may reach for the frame either: the server no longer answers it.
@@ -908,9 +907,12 @@ test('the model row says when the chat only inherits the model, and from where',
     source: 'agent',
     effort: { level: '', levels: [], supported: false },
   });
-  await pressLabel(tree, 'Commands');
-  await waitFor(() => textsOf(tree).some(t => t.includes('current: Strong')), 60);
-  expect(textsOf(tree).some(t => t.includes('from the agent config'))).toBe(true);
+  // The picker is the title bar's own button at this width, so there is no menu row to carry the
+  // hint. The facts line under the title is where the origin stays readable: it is the same fact,
+  // on the surface the owner already scans. What the old row existed to prevent -- picking the
+  // global default and watching nothing change, with no explanation -- needs that word somewhere.
+  await waitFor(() => textsOf(tree).some(t => t.includes('from the agent config')), 60);
+  expect(labelsOf(tree)).toContain('Change model');
   await settleAndUnmount(tree);
 });
 

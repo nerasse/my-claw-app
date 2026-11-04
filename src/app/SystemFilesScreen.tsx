@@ -10,7 +10,7 @@ import { DEFAULT_EDITOR_FONT_SIZE } from '../components/codeeditor/protocol';
 import { DocumentMarkdown } from '../components/DocumentMarkdown';
 import { DocZoomControl } from '../components/DocZoomControl';
 import { languageForFile } from '../components/codeeditor/document';
-import { ChevronIcon, CloseIcon, FolderIcon, MoreIcon } from '../components/icons';
+import { ChevronIcon, CloseIcon, FolderIcon, MoreIcon, CopyIcon, DownloadIcon, MoveToFolderIcon, NewFolderIcon, OpenInNewIcon, PencilIcon, PlusIcon, SendIcon, TrashIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { useHardwareBack } from '../core/hardwareBack';
 import { useDismissKeyboard } from '../core/keyboard';
@@ -389,6 +389,7 @@ export function SystemFilesScreen({
     const options: SheetEntry[] = [
       {
         label: 'Open',
+        icon: <OpenInNewIcon size={15} tone="muted" />,
         hint: dir ? 'walk into this folder' : 'read this file',
         onPress: fromSheet(() => openEntry(entry)),
       },
@@ -398,16 +399,19 @@ export function SystemFilesScreen({
         { type: 'separator', key: 'create' },
         {
           label: 'New file…',
+          icon: <PlusIcon size={15} tone="muted" />,
           hint: `created empty in ${entry.name}`,
           onPress: fromSheet(() => setPrompt({ kind: 'new-file', dir: entry.path })),
         },
         {
           label: 'New folder…',
+          icon: <NewFolderIcon size={15} tone="muted" />,
           hint: `created in ${entry.name}`,
           onPress: fromSheet(() => setPrompt({ kind: 'new-dir', dir: entry.path })),
         },
         {
           label: 'Send files here…',
+          icon: <SendIcon size={15} tone="muted" />,
           hint: 'upload from this device into that folder',
           onPress: fromSheet(() => {
             sendFiles(entry.path);
@@ -415,6 +419,7 @@ export function SystemFilesScreen({
         },
         {
           label: 'Download as ZIP…',
+          icon: <DownloadIcon size={15} tone="muted" />,
           hint: 'the whole folder, in one file',
           onPress: fromSheet(() => {
             download(entry);
@@ -425,11 +430,13 @@ export function SystemFilesScreen({
       options.push(
         {
           label: 'Edit',
+          icon: <PencilIcon size={15} tone="muted" />,
           hint: 'binary and oversized files open read-only',
           onPress: fromSheet(() => fsStore.openFile(entry.path, { edit: true })),
         },
         {
           label: 'Download…',
+          icon: <DownloadIcon size={15} tone="muted" />,
           hint: Platform.OS === 'web' ? 'save it with the browser' : 'choose where it goes on this device',
           onPress: fromSheet(() => {
             download(entry);
@@ -439,17 +446,18 @@ export function SystemFilesScreen({
     }
     options.push(
       { type: 'separator', key: 'arrange' },
-      { label: 'Rename…', onPress: fromSheet(() => setPrompt({ kind: 'rename', entry })) },
-      { label: 'Move…', onPress: fromSheet(() => setPrompt({ kind: 'move', entry })) },
+      { label: 'Rename…', icon: <PencilIcon size={15} tone="muted" />, onPress: fromSheet(() => setPrompt({ kind: 'rename', entry })) },
+      { label: 'Move…', icon: <MoveToFolderIcon size={15} tone="muted" />, onPress: fromSheet(() => setPrompt({ kind: 'move', entry })) },
       {
         label: 'Copy path',
+        icon: <CopyIcon size={15} tone="muted" />,
         onPress: fromSheet(() => {
           Clipboard.setString(entry.path);
           fsStore.setNotice(`path copied: ${entry.path}`);
         }),
       },
       { type: 'separator', key: 'danger' },
-      { label: dir ? 'Delete folder…' : 'Delete…', danger: true, onPress: fromSheet(() => askDelete(entry)) },
+      { label: dir ? 'Delete folder…' : 'Delete…', icon: <TrashIcon size={15} tone="danger" />, danger: true, onPress: fromSheet(() => askDelete(entry)) },
     );
     return options;
   }, [askDelete, download, fromSheet, openEntry, sendFiles, sheetEntry]);
@@ -791,6 +799,7 @@ export function SystemFilesScreen({
           options={[
             {
               label: confirm.confirmLabel,
+              icon: <TrashIcon size={15} tone="danger" />,
               hint: confirm.hint,
               danger: true,
               onPress: () => {

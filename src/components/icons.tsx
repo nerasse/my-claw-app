@@ -300,3 +300,161 @@ export function FilesIcon(props: IconProps): React.JSX.Element {
     />
   );
 }
+
+/**
+ * The picker glyph the menu's Model… row and the title bar's model button share: two sliders.
+ *
+ * Drawn because the row had none while its neighbours did, and a sheet with four icons and seven
+ * bare labels reads as a list that lost half its entries (owner, 2026-11-04: "tu as pas mis des
+ * icons pour toutes options et ça fait très moche"). Where an action already has a mark elsewhere in
+ * the chrome, it wears the same one here: a menu is read down its left edge.
+ */
+export function SlidersIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M4 7.5h7.2M15.4 7.5H20M4 16.5h3.4M11.6 16.5H20M13.3 5.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4zM9.5 14.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"
+    />
+  );
+}
+
+/** A folder with an arrow into it: moving a conversation, not opening one. */
+export function MoveToFolderIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8zm1.5 4.5L16 12l-4.5 3.5v-2.3H7.5v-2.4h4z"
+    />
+  );
+}
+
+/** A clock with a returning arrow: a quota that comes back on its own. */
+export function WaitResetIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M12 4a8 8 0 1 0 7.4 11h-2.2A6 6 0 1 1 12 6c1.5 0 2.9.55 3.95 1.46L13 10.5h7V3.5l-2.5 2.5A7.96 7.96 0 0 0 12 4m-1 3h2v5.4l3.4 2-1 1.7-4.4-2.6z"
+    />
+  );
+}
+
+/** Pipes that meet at one point: what Siphon does to a conversation's traffic. */
+export function SiphonIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M3 5h5.2c2.6 0 4.3 1.6 5.5 4.2.9 2 1.8 3.3 3.6 3.3H20v2h-2.7c-2.9 0-4.4-2.2-5.5-4.6C10.8 7.8 9.7 7 8.2 7H3zm0 10h5.2c1 0 1.8-.3 2.5-.9l1.3 1.6c-1 .9-2.3 1.3-3.8 1.3H3zm14.2-3.5a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6z"
+    />
+  );
+}
+
+/**
+ * The marks the attachment and file sheets were missing.
+ *
+ * Same 24-box, same fill, asked for at 15 like every other menu glyph: a sheet is read down its
+ * left edge, so each of these has to be a different silhouette rather than a different weight.
+ * `Image` is a frame with a horizon, `Camera` a body with a lens, `Pin` a drop with a hole,
+ * `Map` a folded sheet with a road, `Paste` a clipboard taking something in.
+ */
+export function ImageIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m0 2v9.6l3.6-3.6 3 3 4.4-4.4 4 4V6zm4 1.5a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6"
+    />
+  );
+}
+
+export function CameraIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M9 3h6l1.6 2H20a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3.4zM12 8a5 5 0 1 0 0 10 5 5 0 0 0 0-10m0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6"
+    />
+  );
+}
+
+/** Where something is: a drop with a hole in it. */
+export function PinIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7m0 4.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5"
+    />
+  );
+}
+
+/** A folded sheet with a road on it: opening the position somewhere else. */
+export function MapIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M9 2 3 4.5v18L9 20l6 2.5 6-2.5v-18L15 4.5zM8 4.8l8 3.2v11.2l-8-3.2zm2 4.4v1.8c1.6 0 2.6.7 3.2 1.7l1.5-1c-.9-1.5-2.5-2.5-4.7-2.5m0 4.2v1.8c.7 0 1.1.3 1.4.8l1.5-.9c-.6-1-1.6-1.7-2.9-1.7"
+    />
+  );
+}
+
+/** A clipboard taking something in: pasting what is already on it. */
+export function PasteIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M9 2h6v2h2a2 2 0 0 1 2 2v3h-2V6H7v14h10v-3h2v3a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2zm9 8.5L22 14l-4 3.5v-2.2h-5v-2.6h5z"
+    />
+  );
+}
+
+/**
+ * The marks that tell two neighbours apart, taken from the vocabulary a coding agent's own UI
+ * uses: a calendar for what runs on a schedule, bars for a reading over time, a sheet of text for
+ * written instructions, a box for something filed away, an eraser for a memory let go.
+ *
+ * These exist because the first pass reused whatever was to hand: Jobs and Statistics both wore
+ * the gauge, Instructions and Copy transcript both wore the copy mark. Two different things with
+ * one silhouette is worse than no icon at all -- the left edge stops being readable and becomes
+ * decoration (owner, 2026-11-04: "choisis des icônes pertinents, comme les icônes d'un Claude Code,
+ * d'un Codex ou d'un Open Code").
+ */
+export function CalendarIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M7 2v2h10V2h2v2h1a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V2zm13 8H4v10h16zM6 12h3v3H6z"
+    />
+  );
+}
+
+/** Three bars on a baseline: a figure read over time, not a dial read now. */
+export function ChartIcon(props: IconProps): React.JSX.Element {
+  return <Icon {...props} d="M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7zM2 21h20v2H2z" />;
+}
+
+/** A page of text: what was written down, as opposed to what was copied out of it. */
+export function DocIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 2.8L17.2 9H13zM7 12h10v2H7zm0 4h10v2H7zm0-8h4v2H7z"
+    />
+  );
+}
+
+/** A lidded box: filed away, still there, out of the list. */
+export function ArchiveIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M3 3h18v4H3zm1 6h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm5 3v2h6v-2z"
+    />
+  );
+}
+
+/** An eraser held at an angle: a thing removed, and the surface left clean behind it. */
+export function EraserIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M15.1 3.5a2 2 0 0 1 2.8 0l2.6 2.6a2 2 0 0 1 0 2.8l-7.6 7.6H21v2H8.6l-3.7-3.7a2 2 0 0 1 0-2.8zM9 12.2 5.8 15.4l2.8 2.8H12z"
+    />
+  );
+}
