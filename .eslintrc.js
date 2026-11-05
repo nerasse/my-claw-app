@@ -1,7 +1,18 @@
 module.exports = {
   root: true,
   // Build output: bundled code is not source, and linting 3 MB of it says nothing.
-  ignorePatterns: ['dist-web/', 'android/', 'ios/'],
+  // The three harness folders are previews, not the app: a comparison screen sizes its boxes with
+  // inline styles on purpose and imports the icons it draws, and they are neither bundled nor
+  // shipped. `npm run lint` runs `eslint .`, so covering them made CI red for eight runs over
+  // inline heights in a throwaway file while every real suite was green (found 2026-11-05).
+  ignorePatterns: [
+    'dist-web/',
+    'android/',
+    'ios/',
+    'scripts/compare/',
+    'scripts/chrome-sheet/',
+    'scripts/voice-recorder-e2e/',
+  ],
   extends: '@react-native',
   overrides: [
     {

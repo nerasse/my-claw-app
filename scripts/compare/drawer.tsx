@@ -10,7 +10,7 @@ import { AppRegistry, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Drawer } from '../../src/app/Drawer';
 import { ActionSheet, type SheetEntry } from '../../src/components/ActionSheet';
-import { CopyIcon, DownloadIcon, FilesIcon, FolderIcon, GaugeIcon, InfoIcon, LinkIcon, MoreIcon, MoveIcon, PencilIcon, RefreshIcon, TrashIcon } from '../../src/components/icons';
+import { CopyIcon, DownloadIcon, FolderIcon, GaugeIcon, InfoIcon, LinkIcon, MoreIcon, MoveIcon, PencilIcon, TrashIcon } from '../../src/components/icons';
 import { ThemeProvider } from '../../src/theme/ThemeProvider';
 import { useThemedStyles, font, space, type Palette } from '../../src/theme';
 import type { FolderSummary, SessionSummary } from '../../src/core/protocol';
