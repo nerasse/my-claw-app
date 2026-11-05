@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { shortTokens } from '../core/context';
-import { radius, useThemedStyles, type Palette } from '../theme';
+import { control, radius, useThemedStyles, type Palette } from '../theme';
 
 /**
  * How full the window is: the share, the two numbers it is a share of, and a track.
@@ -35,8 +35,14 @@ export function ContextMeter({
     <View
       style={styles.wrap}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={`${percent}% of the context window used: ${shortTokens(used)} of ${shortTokens(effective)} tokens`}
-      // The tap opens the context picker: the gauge is the number people ask about.
+      // What the press does is part of the label: this gauge is the one control in the bar that
+      // does not look like a button, so a reader who cannot see the bar is told where it leads.
+      accessibilityLabel={`${percent}% of the context window used: ${shortTokens(used)} of ${shortTokens(effective)} tokens${onPress ? '. Effort and window' : ''}`}
+      // The tap opens the effort and window sheet, not the model picker: the picker has its own
+      // button in this same bar wherever the bar has room for it, and two doors onto one sheet is
+      // how the gauge ended up opening something the neighbouring button already did (owner,
+      // 2026-11-04: "quand on clique sur l'item de contexte, ça ouvre le model picker alors que ça
+      // devrait ouvrir le truc effort / window").
       {...(onPress ? { onStartShouldSetResponder: () => true, onResponderRelease: onPress } : {})}>
       <View style={styles.track}>
         <View style={[styles.fill, percent > 90 && styles.fillFull, { width: `${fill}%` }]} />
@@ -55,7 +61,8 @@ const createStyles = (palette: Palette) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 8,
-    height: 28,
+    // The toolbar's box, shared with the sub-agent counter beside it and the actions after it.
+    height: control.height,
     paddingLeft: 9,
     paddingRight: 10,
     borderRadius: radius.sm,

@@ -86,6 +86,17 @@ export const space = {
   xl: 20,
 } as const;
 
+/**
+ * The box of one control in a toolbar.
+ *
+ * A single number, because two chips and a button in the same row each picked their own: the
+ * context gauge stood 28 tall beside a sub-agent counter at 24, and the pair read as two rows that
+ * had drifted into one strip. The ink still sets its own size; only the box is shared.
+ */
+export const control = {
+  height: 28,
+} as const;
+
 export const radius = {
   sm: 6,
   md: 10,

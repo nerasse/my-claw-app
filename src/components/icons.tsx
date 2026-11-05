@@ -308,12 +308,17 @@ export function FilesIcon(props: IconProps): React.JSX.Element {
  * bare labels reads as a list that lost half its entries (owner, 2026-11-04: "tu as pas mis des
  * icons pour toutes options et ça fait très moche"). Where an action already has a mark elsewhere in
  * the chrome, it wears the same one here: a menu is read down its left edge.
+ *
+ * The two rules are **rectangles**, not the two line segments they were: this icon set fills its
+ * paths, and an `h7.2` segment has no area to fill, so only the two knobs ever came out -- the
+ * title bar's model button drew as a pair of stray dots for a day (owner's screenshot, 2026-11-04).
+ * A stroke would need its own renderer; a 1.8 tall rect is the same shape with area.
  */
 export function SlidersIcon(props: IconProps): React.JSX.Element {
   return (
     <Icon
       {...props}
-      d="M4 7.5h7.2M15.4 7.5H20M4 16.5h3.4M11.6 16.5H20M13.3 5.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4zM9.5 14.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"
+      d="M4 6.6h7v1.8H4zM15.4 6.6H20v1.8h-4.6zM4 15.6h3.4v1.8H4zM11.6 15.6H20v1.8h-8.4zM13.3 5.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4zm-3.8 9a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"
     />
   );
 }

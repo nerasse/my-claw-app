@@ -47,7 +47,7 @@ import type { QuotaRetryWait } from '../core/protocol';
 import { watchFileDrop } from '../core/fileDrop';
 import { selectableProps } from '../core/webProps';
 import { RowBoundary } from './RowBoundary';
-import { font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
+import { control, font, radius, space, useTheme, useThemedStyles, type Palette } from '../theme';
 
 /** The map without one key, without touching the one it came from. */
 function without<T>(map: Record<string, T>, key: string): Record<string, T> {
@@ -1476,18 +1476,20 @@ export function ChatScreen({
             </Text>
           </Pressable>
         ) : null}
-        {/* The model picker, where the bar has room for a fourth control. It sits before the
-            overflow, at the same size and in the same ink, so the strip keeps one vocabulary of
-            actions. `showModelButton` is the same predicate the menu uses to drop its Model…
-            entry, so the picker is never offered twice. */}
+        {/* The model picker, where the bar has room for a fourth control. It wears the same box as
+            the two chips before it -- same height, same fill, same corner -- so the strip reads as
+            one row of controls: a bare 28 pt glyph between a 28 pt gauge and a 24 pt counter was
+            "des items qui n'ont pas la même hauteur" (owner, 2026-11-04). `showModelButton` is the
+            same predicate the menu uses to drop its Model… entry, so the picker is never offered
+            twice. */}
         {showModelButton && onOpenModel ? (
           <Pressable
             onPress={onOpenModel}
-            style={styles.headerAction}
+            style={styles.controlChip}
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Change model">
-            <SlidersIcon size={16} tone="muted" />
+            <SlidersIcon size={15} tone="muted" />
           </Pressable>
         ) : null}
         <Pressable
@@ -1736,9 +1738,27 @@ const createStyles = (palette: Palette) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 5,
-    height: Math.round(24),
+    // The context gauge's own box, so the two sit level in one strip. It was 24, and a 24 beside a
+    // 28 read as two rows that had drifted into one (owner, 2026-11-04: "des items qui n'ont pas la
+    // même hauteur").
+    height: control.height,
     paddingHorizontal: 8,
     borderRadius: radius.sm,
+    backgroundColor: palette.surfaceAlt,
+  },
+  /**
+   * An action that stands in the bar as a control of its own: the gauge, the counter, the model.
+   *
+   * Same box as the two chips beside it and the same fill, which is the whole point: `headerAction`
+   * draws nothing behind its glyph, so a model button wearing it between two filled chips read as
+   * a pair of floating dots rather than as the third control of the row.
+   */
+  controlChip: {
+    width: control.height,
+    height: control.height,
+    borderRadius: radius.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     backgroundColor: palette.surfaceAlt,
   },
   agentsCount: {
@@ -1764,8 +1784,8 @@ const createStyles = (palette: Palette) => ({
    * makes it a target.
    */
   headerAction: {
-    width: Math.round(28),
-    height: Math.round(28),
+    width: control.height,
+    height: control.height,
     borderRadius: radius.sm,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

@@ -159,6 +159,9 @@ function Root(): React.JSX.Element {
         onOpenArchive={() => {}}
         onOpenFile={() => {}}
         onOpenMenu={() => {}}
+        // The model button is drawn from `showsModelButton(width)`, so a harness wide enough to
+        // show it is the only way to see the icon the owner's screenshot caught as two dots.
+        onOpenModel={() => {}}
         onCommandEntered={() => false}
         streaming
         onStop={() => {}}

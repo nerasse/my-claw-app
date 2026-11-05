@@ -3400,7 +3400,10 @@ export function AppShell(): React.JSX.Element {
         used={threadModel.context.used}
         effective={threadModel.context.effective}
         percent={contextShare}
-        onPress={openModel}
+        // Effort and window, not the model picker: the picker has its own button in this same bar,
+        // and the gauge is the reading these two overrides act on. The menu's "Effort / window…"
+        // row and this tap are the same sheet from two places, which is the point.
+        onPress={() => setTuneOpen(true)}
       />
     ) : undefined;
   const hint = offline

@@ -4,7 +4,7 @@ import { lightPalette, type Palette } from './palettes';
 import { DEFAULT_THEME_ID, resolveTheme, type ThemeId, type ThemeMode } from './themes';
 import type { CustomTheme } from './customPalette';
 
-export { space, radius, font, DRAWER_WIDTH, lineHeightFor, lineBoxFor } from './palettes';
+export { space, radius, control, font, DRAWER_WIDTH, lineHeightFor, lineBoxFor } from './palettes';
 export type { Palette } from './palettes';
 export {
   DEFAULT_THEME_ID,
