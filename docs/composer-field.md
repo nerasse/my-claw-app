@@ -1,78 +1,45 @@
-# The composer's field
+# The field the owner types in
 
-One rule: **the frame is a wrapper, the text is the child**. Border, background and padding live
-on a `View`; the `TextInput` inside carries only typography and its own ceiling.
+The composer is one frame: a border and a radius around a text field, with the actions on the row
+under it. Two things about that field have been wrong in ways the web could not show.
 
-```
-View  (styles.field)     border 1, background, padding 9, minHeight 44, radius pill
-└── TextInput (styles.input)  padding 0, fontSize, color, maxHeight = MAX_TEXT_HEIGHT.<variant>
-```
+## It is sized by its text, never by the bar under it
 
-## Why, three measured bugs
+The field sits in a column whose height comes from its content. It used to carry `flex: 1`, which
+gives a child a flex basis of 0: the field then took its height from whatever the actions bar
+measured and stayed **one line tall** while the EditText scrolled inside it.
 
-**Android, the text crossed the border.** With the border and the padding on the `TextInput`
-itself, an EditText past its `maxHeight` scrolls its own padding away with the text: the lines came
-to sit on the rounded edge, the top one sliced in half. Nothing clips it back, because that padding
-is inside the scrollable area. Moving the frame out is the only fix.
+The web hid this for months. `autoGrow` (`core/webProps.web.ts`) writes an explicit pixel height on
+a textarea whenever the text changes, which overrides the flex sizing -- so every browser rendered
+a growing field and the phone rendered a single line, whatever was typed (owner, 2026-11-05).
+Android has no such helper: a `TextInput` with `multiline` grows itself, but only up to the space
+its parent gives it.
 
-**Web, a permanent two-pixel offset.** `autoGrow` sized the textarea from `scrollHeight`, which is
-content plus padding and **excludes the borders**, while react-native-web sets
-`box-sizing: border-box` on every element it renders (`View/index.js`). The box was therefore short
-by exactly the border: the field scrolled by 2px for good and the first line was sliced by the top
-edge. It moved with the caret, which is what made it look intermittent. `autoGrow` now adds the
-computed border widths back.
+The field is therefore `flexGrow: 0, flexShrink: 1`. The text sizes the field, the field sizes the
+shell. `MAX_TEXT_HEIGHT` is the ceiling, and it is the same number in the stylesheet and in
+`autoGrow`, which is why there is one of it.
 
-**Web, two ceilings that disagreed.** `autoGrow` was called with 180 (240 in hero) while the
-stylesheet capped the field at `maxHeight: 112` (200 in dense, and hero inherited 112). Off a
-desktop, the inline height was clamped by the CSS while `overflowY` was left `hidden`, because the
-overflow test used the other number: a fifth line was neither visible nor reachable by scrolling.
-There is now one constant, `MAX_TEXT_HEIGHT`, read by the stylesheet and by the effect.
+`__tests__/composerHeight.test.tsx` pins the style (no `flex`, `flexGrow: 0`) next to the measure
+timing it already covered.
 
-## Numbers
+## A field that scrolls says so
 
-`MAX_TEXT_HEIGHT` is the **text** ceiling, padding excluded:
+Past the ceiling the text scrolls, and a field that scrolls gives no sign of it: the text simply
+stops at the frame's edge, and the lines below are there only if you think to drag.
 
-| Variant | Text | Frame padding | Field at the ceiling |
-| --- | --- | --- | --- |
-| compact (phone) | 94 | 9 + 9 | 114 |
-| dense (desktop, fine pointer) | 188 | 6 + 6 | 202 |
-| hero (empty conversation) | 218 | 11 + 11 | 242 |
+The browser draws its own scrollbar, so the web needed nothing. Android draws none inside an
+`EditText`, so the composer draws the same 3 pt thumb every list in the app draws
+(`ScrollIndicator`), fed from `onContentSizeChange` and `onScroll`, and only while the text is
+taller than the ceiling. Two rules worth keeping:
 
-Empty, the frame is 44 tall on purpose: the exact height of the send and attach buttons beside it.
+- It is hidden on the web (`Platform.OS !== 'web'`), where a second bar beside the browser's own
+  would be one too many.
+- It rides the field's frame, not the window: absolute inside the shell, so a long message never
+  puts a bar beside the send button.
 
-`autoGrow` also forces `rows = 1`. A textarea is two rows tall by default and that intrinsic height
-is a floor `scrollHeight` never goes under, so one line of text measured as two and the composer
-stood 8pt taller than the round buttons next to it.
+## Ceilings
 
-## Measured, in a real Chromium
-
-A harness rendering the composer alone, bundled with `metro.config.web.js` and driven by
-playwright-core:
-
-| Content | Text box | Frame | overflow-y | scrollTop |
-| --- | --- | --- | --- | --- |
-| one line | 16 | 44 | hidden | 0 |
-| two lines | 32 | 52 | hidden | 0 |
-| twelve lines | 94 | 114 | auto | 0 until the caret moves |
-
-`scrollHeight == clientHeight` under the ceiling is the assertion that matters: it is what says the
-field is not scrolling behind its own border.
-
-## Why the composer is the only field whose first letter got cut
-
-The frame carries the padding and the `TextInput` carries none, and that is deliberate: an
-`EditText` past its ceiling scrolls its own padding away with the text, so the vertical padding has
-to live outside it. The horizontal padding is on the wrapper for the same reason.
-
-Android 15 (API 35) changed how a `TextView` sizes and offsets a line -- it uses the glyphs' visual
-bounds rather than their advances -- and left the pre-15 behaviour one attribute away. The app
-restores the pre-15 world in `android/app/src/main/res/values/styles.xml` (see `TextViewStyle`),
-but React Native hands a `TextInput` to the platform's own `EditText` and never lays its text out
-itself, so the fix it shipped for `Text` does not reach a field. `EditTextStyle` therefore needs the
-same two attributes, and did not have them.
-
-With the new default, a field that carries no padding of its own has its first glyph drawn at a
-slightly negative x and clipped. Every other field in the app pads its own `TextInput`, which is
-why the cut was only ever seen here: the composer's text sits at x=0 of the `EditText`, and a dozen
-input fields elsewhere never showed it. Restoring the pre-15 attributes puts the advances back in
-charge.
+`MAX_TEXT_HEIGHT` is per variant, and the phone's is deliberately short of the thread: 94 pt is
+about four lines. Past that the message is a page, not a line, and the field would eat the
+conversation it is written into. A desktop gets 188 (a mouse can scroll, and there is room) and the
+hero variant on an empty thread gets 218.

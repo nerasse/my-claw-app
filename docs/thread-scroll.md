@@ -67,6 +67,28 @@ zero. On an inverted list offset zero is the **newest** message, so its worst ca
 bottom of the thread -- where a reader near the end already is -- not the jump away from the tapped
 row that was reported. Worth knowing, not worth a workaround.
 
+## A thread shorter than the screen
+
+`onEndReached` is what pages a conversation, and an inverted list only has an end when its content
+is taller than the viewport. A thread of two or three turns has no scroll range at all, so the
+callback fires once at mount -- before the page frame that carries `hasMore` has landed -- and then
+never again: there is no gesture left to make. The owner opened a conversation, saw three turns,
+and could not reach anything older (2026-11-05).
+
+So the screen asks by itself. `useScrollIndicator` already measured both figures for its thumb and
+now reports them (`onMeasure`); when the content does not fill the viewport, the list sends the
+same `onLoadOlder` the gesture would have. Two details are the whole fix:
+
+- The ask is keyed on the **cursor**, not on the content height. The page that says `hasMore`
+  arrives after the first measure, and a flag latched on the height would treat that as "already
+  asked" and never send.
+- The guards stay the store's (`hasMore`, `loading`). The screen is not a second pager; it is the
+  one reach the list cannot make itself. A page arriving makes the content taller, the measure
+  changes, and the next ask is refused by nothing older.
+
+`__tests__/olderPageReach.test.tsx` pins the three cases: a short thread with older work asks once,
+an exhausted history asks nothing, and a page already in flight is not asked for again.
+
 ## What was not taken
 
 `react-native-streaming-message-list` (doctolib-lab) implements the ChatGPT "the answer snaps to the
