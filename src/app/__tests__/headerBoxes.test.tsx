@@ -105,6 +105,29 @@ test('the model button wears the same box as the chips beside it', () => {
   expect(model.backgroundColor).toBeDefined();
 });
 
+/**
+ * The order of the controls, left to right.
+ *
+ * The owner reads the row as a narrowing: what the run costs (the gauge), what it runs on (the
+ * model), who it has working (the agents), then the menu (2026-11-05: "mettre les sous-agents
+ * tout à droite, puis à sa gauche l'icône des modèles, puis à sa gauche la barre de contexte").
+ *
+ * Order is asserted on the tree rather than on a screenshot because a swap is invisible to every
+ * other test here: all four boxes keep their geometry, and only their sequence changes.
+ */
+test('the controls run window, model, agents, menu', () => {
+  const tree = mount();
+  const labels = tree.root
+    .findAll(node => typeof node.props.accessibilityLabel === 'string', { deep: true })
+    .map(node => node.props.accessibilityLabel as string)
+    .filter(label => label === 'Change model' || label === 'Commands' || /^3 sub-agents/.test(label));
+  // A Pressable is in the tree twice, composite then its host view: those two are adjacent, so
+  // collapsing runs of the same label keeps the order and loses only the duplicate wrapper.
+  const order = labels.filter((label, index) => label !== labels[index - 1]);
+
+  expect(order).toEqual(['Change model', '3 sub-agents, 1 running', 'Commands']);
+});
+
 test('the gauge opens the effort and window sheet, not the picker', () => {
   const onTune = jest.fn();
   const onModel = jest.fn();

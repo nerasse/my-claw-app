@@ -1447,22 +1447,6 @@ export function ChatScreen({
             ) : null}
           </View>
         </View>
-        {/* The gauge carries the share, so the metadata line above drops it: one figure, one
-            place. Below 560 pt there is no room for three numbers and the share stays in the
-            line, which is the one thing a phone header can afford. */}
-        {layout.width >= 560 ? meter : null}
-        {showAgentsButton && subagentCount && subagentCount.total > 0 && onAgentsPress ? (
-          <Pressable
-            onPress={onAgentsPress}
-            hitSlop={10}
-            style={styles.agentsButton}
-            accessibilityRole="button"
-            accessibilityLabel={`${subagentCount.total} sub-agent${subagentCount.total === 1 ? '' : 's'}${subagentCount.running > 0 ? `, ${subagentCount.running} running` : ''}`}>
-            <AgentIcon size={13} tone="muted" />
-            <Text style={styles.agentsCount}>{subagentCount.total}</Text>
-            {subagentCount.running > 0 ? <View style={styles.agentsLive} /> : null}
-          </Pressable>
-        ) : null}
         {connectionState !== 'connected' ? (
           <Pressable
             onPress={onStatusPress}
@@ -1480,6 +1464,10 @@ export function ChatScreen({
             </Text>
           </Pressable>
         ) : null}
+        {/* The gauge carries the share, so the metadata line above drops it: one figure, one
+            place. Below 560 pt there is no room for three numbers and the share stays in the
+            line, which is the one thing a phone header can afford. */}
+        {layout.width >= 560 ? meter : null}
         {/* The model picker, where the bar has room for a fourth control. It wears the same box as
             the two chips before it -- same height, same fill, same corner -- so the strip reads as
             one row of controls: a bare 28 pt glyph between a 28 pt gauge and a 24 pt counter was
@@ -1494,6 +1482,25 @@ export function ChatScreen({
             accessibilityRole="button"
             accessibilityLabel="Change model">
             <SlidersIcon size={15} tone="muted" />
+          </Pressable>
+        ) : null}
+        {/* The counter closes the group of controls, innermost to outermost: what the run costs
+            (the gauge), what it runs on (the model), who it has working (the agents), then the
+            menu. It sat before the model button, which put the widest badge in the middle of the
+            strip and left the two one-glyph controls on either side of it; the owner reads the
+            row left to right as a narrowing: window, model, workers (2026-11-05: "mettre les
+            sous-agents tout à droite, puis à sa gauche l'icône des modèles, puis à sa gauche la
+            barre de contexte"). */}
+        {showAgentsButton && subagentCount && subagentCount.total > 0 && onAgentsPress ? (
+          <Pressable
+            onPress={onAgentsPress}
+            hitSlop={10}
+            style={styles.agentsButton}
+            accessibilityRole="button"
+            accessibilityLabel={`${subagentCount.total} sub-agent${subagentCount.total === 1 ? '' : 's'}${subagentCount.running > 0 ? `, ${subagentCount.running} running` : ''}`}>
+            <AgentIcon size={13} tone="muted" />
+            <Text style={styles.agentsCount}>{subagentCount.total}</Text>
+            {subagentCount.running > 0 ? <View style={styles.agentsLive} /> : null}
           </Pressable>
         ) : null}
         <Pressable
