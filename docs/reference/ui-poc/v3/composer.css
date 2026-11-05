@@ -1,0 +1,142 @@
+/* ============================================================
+   V2 · le composeur
+   Une seule forme : un champ haut, des actions en pied de champ,
+   un bouton d'envoi rond et plein. Le contour se renforce au focus
+   au lieu de changer de couleur, et rien ne bouge d'un pixel.
+   ============================================================ */
+
+/* Le conteneur est plus large que la colonne de lecture : le champ
+   déborde un peu de mesure, comme le font les trois références. */
+.composer-wrap {
+  /* même gouttière que le fil : les deux bords doivent coïncider */
+  padding: 10px var(--gutter) 14px;
+  background: var(--bg);
+  border-top: 0;
+}
+
+.composer {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 12px 12px 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  transition: border-color 120ms ease;
+}
+.composer:focus-within {
+  border-color: var(--accent);
+}
+
+/* Le champ : une ligne de texte réelle, pas un placeholder grisé
+   collé au bord. Le caret est un vrai trait qui bat. */
+.composer .field {
+  display: block;
+  min-height: 26px;
+  padding: 2px 0 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+.composer .field.placeholder { color: var(--faint); }
+.composer .caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 1.15em;
+  margin-left: 1px;
+  background: var(--accent);
+  vertical-align: -0.22em;
+  animation: blink 1.1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .composer .caret { animation: none; } }
+
+/* Échelle propre au composeur, volontairement distincte de .action :
+     30  joindre et micro — deux actions secondaires, au même poids
+     32  envoi — l'action primaire, 2 px de plus, et la seule forme saturée
+   Une seule forme pleine par barre : c'est ce qui fait lire l'envoi d'abord. */
+
+.composer .bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 2px;
+}
+.composer .bar .grow { flex: 1; }
+
+/* Joindre : un cercle bordé, comme les trois références. */
+.composer .join {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.composer .join:hover { background: var(--surface-2); color: var(--ink); }
+
+/* Le micro reste nu, à côté : deux cercles pleins côte à côte
+   se disputent l'œil, et le micro n'est pas une action primaire. */
+.composer .voice {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.composer .voice:hover { background: var(--surface-2); color: var(--ink); }
+
+/* Envoyer : rond, plein, lumineux. C'est la seule forme saturée de l'écran. */
+.composer .send {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  flex: 0 0 auto;
+  transition: transform 90ms ease, opacity 120ms ease;
+}
+.composer .send:hover { opacity: 0.9; }
+.composer .send:active { transform: scale(0.94); }
+.composer .send.stop { background: var(--ink); color: var(--bg); }
+.composer .send svg { width: 16px; height: 16px; }
+
+.composer .join:focus-visible,
+.composer .voice:focus-visible,
+.composer .send:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Les pièces jointes vivent au-dessus du champ, dans le cadre. */
+.composer .attaches { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 8px; }
+
+.hint {
+  max-width: var(--content-max);
+  margin: 7px auto 0;
+  padding: 0 var(--gutter);
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--faint);
+}
+.hint .k {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 9px;
+  margin-right: 3px;
+}

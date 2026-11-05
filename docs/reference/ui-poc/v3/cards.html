@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="fr" data-theme="sable" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my-claw — les cartes du fil</title>
+<link rel="stylesheet" href="themes.css">
+<link rel="stylesheet" href="cards.css">
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13.5px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .page-head { padding: 30px 32px 0; max-width: var(--content-max); margin:0 auto; }
+  .page-head h1 { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .page-head p { font-size: 13px; color: var(--muted); margin: 0 0 4px; max-width: 82ch; }
+  .page-head .meta { font-size: 11.5px; color: var(--faint); margin-top: 10px; }
+  .toolbar { position: sticky; top:0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 32px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; max-width:none; }
+  .toolbar a { font-size:11.5px; color:var(--muted); text-decoration:none; padding:4px 9px; border-radius:var(--r-sm); border:1px solid var(--line); background:var(--surface); }
+  .toolbar a:hover { color:var(--ink); }
+  .toolbar .sp { flex:1; }
+  .toolbar .themer-menu { top: calc(100% + 4px); }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a href="index.html">le chat</a>
+  <a href="menus.html">les menus</a>
+  <a href="themes.html">les thèmes</a>
+  <a href="settings.html">apparence</a>
+  <span class="sp"></span>
+  <div class="themer">
+    <button class="action" id="themer-btn" aria-label="Thème" aria-haspopup="true" aria-expanded="false">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <div class="themer-menu" id="themer-menu" hidden role="menu"></div>
+  </div>
+</div>
+
+<div class="page-head">
+  <h1>Les cartes du fil</h1>
+  <p>Toutes les formes qui peuvent apparaître dans une conversation, y compris celles qui n'ont aujourd'hui aucun rendu propre. Une seule métrique : 29 px d'en-tête, rayon 6, un pas de ton, aucune bordure colorée qui déplace le contenu.</p>
+  <div class="meta">9 outils rendus à l'identique dans l'app · 6 formes dédiées · 7 états seuils</div>
+</div>
+
+<div class="cards"><div class="cards-inner">
+
+  <!-- ══════════ 1. outils génériques ══════════ -->
+  <div class="sec">
+    <h2>Un outil, une ligne</h2>
+    <p class="note">Le nom en mono, le résumé qui prend la place restante, la durée à droite. Le résumé est en mono quand c'est une commande ou un chemin, en prose quand c'est une intention. Fermée, la carte fait 29 px quel que soit l'outil.</p>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">bash</span>
+        <span class="sum mono">bun test tests/llm/resolver.test.ts</span>
+        <span class="extra">+1</span>
+        <span class="time">1,8 s</span>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">read</span>
+        <span class="sum mono">src/llm/resolver.ts</span>
+        <span class="extra">220–268</span>
+        <span class="time">12 ms</span>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">search</span>
+        <span class="sum mono">mergedLimit</span>
+        <span class="extra">7 hits</span>
+        <span class="time">34 ms</span>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9l7-7 7 7M12 2v16"/></svg></span>
+        <span class="name">web_search</span>
+        <span class="sum">quota reset endpoint anthropic</span>
+        <span class="time">2,4 s</span>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">memory</span>
+        <span class="sum">remember · convention stop</span>
+        <span class="time">8 ms</span>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:14px">Les outils qui n'ont aujourd'hui aucun rendu dédié et passent tous par le même bloc mono — <code>ls</code>, <code>search</code>, <code>read</code>, <code>web_search</code>, <code>memory</code>, <code>skills</code>, <code>agents</code>, <code>cron</code>, <code>quota</code> — gagnent ici une ligne de résumé qui dit déjà l'essentiel. Déplier reste le même geste.</p>
+  </div>
+
+  <!-- ══════════ 2. états ══════════ -->
+  <div class="sec">
+    <h2>Les cinq états d'une carte</h2>
+    <p class="note">L'app écrit <code>failed</code> pour un outil et <code>error</code> pour un sous-agent, <code>interrupted</code> en minuscules ici et <code>· Interrupted</code> en majuscules là. Un seul vocabulaire : <b>en cours</b>, <b>fait</b>, <b>échoué</b>, <b>arrêté</b>, <b>tronqué</b>.</p>
+    <div class="legend-row">
+      <span><i style="background:var(--accent)"></i> en cours</span>
+      <span><i style="background:var(--ok)"></i> fait</span>
+      <span><i style="background:var(--danger)"></i> échoué</span>
+      <span><i style="background:var(--warn)"></i> arrêté</span>
+      <span><i style="background:var(--faint)"></i> tronqué</span>
+    </div>
+
+    <div style="height:12px"></div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="spin"></span>
+        <span class="name">bash</span>
+        <span class="sum mono">cargo build --release</span>
+        <span class="time">2 min 41</span>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">bash</span>
+        <span class="sum mono">bun test tests/llm/resolver.test.ts</span>
+        <span class="time">1,8 s</span>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">bash</span>
+        <span class="sum mono">bun test tests/llm/limits.test.ts</span>
+        <span class="state failed">échoué</span>
+        <span class="time">2,1 s</span>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">bash</span>
+        <span class="sum mono">sleep 300</span>
+        <span class="state stop">arrêté</span>
+        <span class="time">8,0 s</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 3. bash déplié ══════════ -->
+  <div class="sec">
+    <h2>Déplié · commande et sortie</h2>
+    <p class="note">Deux blocs, deux labels en micro-majuscules, le copier dans la tête du bloc — jamais en pied de carte, où il faudrait le chercher. La commande est en <code>--code-bg</code>, la sortie aussi : une seule matière pour tout ce qui est machine.</p>
+
+    <div class="tool open">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z" transform="rotate(90 12 12)"/></svg></span>
+        <span class="name">bash</span>
+        <span class="sum mono">bun test tests/llm/resolver.test.ts</span>
+        <span class="time">1,8 s</span>
+      </div>
+      <div class="tool-body">
+        <div class="blk">
+          <div class="blk-head">
+            <span class="lbl">commande</span><span class="grow"></span>
+            <button class="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>copier</button>
+          </div>
+          <div class="code">bun test tests/llm/resolver.test.ts</div>
+        </div>
+        <div class="blk">
+          <div class="blk-head">
+            <span class="lbl">sortie</span><span class="grow"></span>
+            <button class="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>copier</button>
+          </div>
+          <div class="code">bun test v1.3.13
+tests/llm/resolver.test.ts:
+<span class="ok">✓</span> a partial model limit inherits the field it does not name
+<span class="ok">✓</span> an explicit output wins over the global cap
+<span class="ok">✓</span> both fields merge when one side is absent
+
+ 44 pass, 0 fail, 44 expect() calls</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 4. write / read ══════════ -->
+  <div class="sec">
+    <h2>Déplié · écriture et lecture</h2>
+    <p class="note"><code>write</code> montre son contenu ; <code>read</code> montre des lignes numérotées. Aujourd'hui les deux tombent dans le même bloc mono sans numéros, ce qui rend un fichier de 220 lignes impossible à citer.</p>
+
+    <div class="tool open">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z" transform="rotate(90 12 12)"/></svg></span>
+        <span class="name">write</span>
+        <span class="sum mono">src/theme/tokens.ts</span>
+        <span class="extra">+38</span>
+        <span class="time">6 ms</span>
+      </div>
+      <div class="tool-body">
+        <div class="blk">
+          <div class="blk-head"><span class="lbl">contenu</span><span class="grow"></span>
+            <button class="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>copier</button>
+          </div>
+          <div class="code">export const themes = ['sable', 'lin', 'charbon'] as const
+export type ThemeName = (typeof themes)[number]
+
+export const palette: Record&lt;ThemeName, Tokens&gt; = {
+  sable: { accent: '#8a3a2e', danger: '#a51f4b' },
+  …
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tool open">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z" transform="rotate(90 12 12)"/></svg></span>
+        <span class="name">read</span>
+        <span class="sum mono">src/llm/resolver.ts</span>
+        <span class="extra">220–232</span>
+        <span class="time">4 ms</span>
+      </div>
+      <div class="tool-body">
+        <div class="blk">
+          <div class="blk-head"><span class="lbl">lignes 220–232</span><span class="grow"></span>
+            <button class="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>copier</button>
+          </div>
+          <div class="code">220  function mergedLimit(model?: ModelDef): Limit {
+221    const merged = { ...config.llm.limit }
+222    if (model?.limit?.context) merged.context = model.limit.context
+223    if (model?.limit?.output) merged.output = model.limit.output
+224    return merged
+225  }</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 5. diff ══════════ -->
+  <div class="sec">
+    <h2>Déplié · patch</h2>
+    <p class="note">Le seul outil que l'app rend vraiment à part. Deux choses manquent et coûtent une relecture : le nombre de lignes qui bougent, et un bloc qui a la même métrique que les autres. Ici le compteur <b>+11 −3</b> est dans la tête, et le diff partage la taille du bloc de code.</p>
+
+    <div class="tool open">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z" transform="rotate(90 12 12)"/></svg></span>
+        <span class="name">apply_patch</span>
+        <span class="sum mono">src/llm/resolver.ts</span>
+        <span class="extra">2 edits</span>
+        <span class="time">9 ms</span>
+      </div>
+      <div class="tool-body">
+        <div class="blk">
+          <div class="blk-head">
+            <span class="lbl">diff</span>
+            <span class="diff-count"><span class="a">+11</span><span class="d">−3</span></span>
+            <span class="grow"></span>
+            <button class="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>copier</button>
+          </div>
+          <div class="diff"><span class="file">--- a/src/llm/resolver.ts</span><span class="file">+++ b/src/llm/resolver.ts</span><span class="hunk">@@ -220,9 +220,17 @@ function mergedLimit</span><span class="ctx">   const merged = { ...config.llm.limit }</span><span class="del">-  return model?.limit ?? merged.limit</span><span class="add">+  if (model?.limit?.context) merged.context = model.limit.context</span><span class="add">+  if (model?.limit?.output) merged.output = model.limit.output</span><span class="add">+  return merged</span></div>
+        </div>
+        <div class="blk">
+          <div class="blk-head"><span class="lbl">résultat</span></div>
+          <div class="code">Patched src/llm/resolver.ts (2 edits, 120 -> 131 lines, +11).
+edits[0]: 1 occurrence(s) replaced</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tool">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span class="name">apply_patch</span>
+        <span class="sum mono">src/llm/resolver.ts</span>
+        <span class="state failed">échoué</span>
+        <span class="time">3 ms</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 6. tableaux ══════════ -->
+  <div class="sec">
+    <h2>Déplié · sortie tabulaire</h2>
+    <p class="note">Quand la sortie est une liste — <code>ls</code>, <code>search</code>, <code>web_search</code> — un tableau de deux colonnes se lit dix fois plus vite qu'un bloc mono. Le compteur à droite dit combien de résultats, ce qui évite de compter les lignes.</p>
+
+    <div class="tool open">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z" transform="rotate(90 12 12)"/></svg></span>
+        <span class="name">search</span>
+        <span class="sum mono">mergedLimit</span>
+        <span class="extra">7 hits</span>
+        <span class="time">34 ms</span>
+      </div>
+      <div class="tool-body">
+        <div class="rows">
+          <div class="r hit"><span class="k">resolver.ts</span><span class="v m">220: function mergedLimit(model?: ModelDef)</span><span class="n">1</span></div>
+          <div class="r hit"><span class="k">resolver.ts</span><span class="v m">245: return model?.limit ?? merged.limit</span><span class="n">1</span></div>
+          <div class="r"><span class="k">limits.ts</span><span class="v m">88: const mergedLimit = pick(model, global)</span><span class="n">1</span></div>
+          <div class="r"><span class="k">docs/</span><span class="v m">context-window.md:41 mergedLimit inherits per field</span><span class="n">1</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tool open">
+      <div class="tool-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9l7-7 7 7M12 2v16"/></svg></span>
+        <span class="name">web_search</span>
+        <span class="sum">quota reset endpoint anthropic</span>
+        <span class="time">2,4 s</span>
+      </div>
+      <div class="tool-body">
+        <div class="rows">
+          <div class="r hit"><span class="k">docs</span><span class="v">Rate limits · claude docs</span><span class="n">anthropic.com</span></div>
+          <div class="r hit"><span class="k">issue</span><span class="v">usage_limit_reached exposes resets_at · #412</span><span class="n">github.com</span></div>
+          <div class="r"><span class="k">blog</span><span class="v">Reading the reset header instead of polling</span><span class="n">dev.to</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 7. sous-agents ══════════ -->
+  <div class="sec">
+    <h2>Sous-agents</h2>
+    <p class="note">Trois états, un seul vocabulaire. La porte <b>›</b> ouvre l'agent comme une conversation — c'est le seul endroit où une carte est un lien, donc le seul qui porte l'accent.</p>
+
+    <div class="sub running">
+      <div class="sub-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:13px;height:13px;color:var(--faint)"><rect x="4.5" y="7" width="15" height="11" rx="2.5"/><path d="M9 11.5h.01M15 11.5h.01M9.5 4.5h5"/></svg>
+        <span class="name">researcher</span>
+        <span class="kind">research · run</span>
+        <span class="grow"></span>
+        <span class="badge run"><span class="dot"></span>en cours</span>
+        <span class="time">1 min 12</span>
+      </div>
+      <div class="sub-door"><span class="grow">thèmes de couleur connus, palettes réelles, sources</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:13px;height:13px;color:var(--faint)"><rect x="4.5" y="7" width="15" height="11" rx="2.5"/><path d="M9 11.5h.01M15 11.5h.01M9.5 4.5h5"/></svg>
+        <span class="name">menus-inventory</span>
+        <span class="kind">research · run</span>
+        <span class="grow"></span>
+        <span class="badge done"><span class="dot"></span>fait</span>
+        <span class="time">3 min 08</span>
+      </div>
+      <div class="sub-door"><span class="grow">inventaire des menus : 60+ ActionSheet, trois formes de drawer</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+
+    <div class="sub">
+      <div class="sub-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" style="width:13px;height:13px;color:var(--faint)"><rect x="4.5" y="7" width="15" height="11" rx="2.5"/><path d="M9 11.5h.01M15 11.5h.01M9.5 4.5h5"/></svg>
+        <span class="name">browser</span>
+        <span class="kind">browser · chatgpt</span>
+        <span class="grow"></span>
+        <span class="badge err"><span class="dot"></span>échoué</span>
+        <span class="time">41 s</span>
+      </div>
+      <div class="sub-door"><span class="grow">capture de l'input de ChatGPT et Claude pour la refonte</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+  </div>
+
+  <!-- ══════════ 8. raisonnement ══════════ -->
+  <div class="sec">
+    <h2>Raisonnement et attente</h2>
+    <p class="note">Une ligne, pas une carte. Le texte est italique et se replie sur une ligne : c'est un aperçu, pas une réponse. Le compteur de tokens et la durée sont à droite, en chiffres tabulaires pour qu'ils ne dansent pas.</p>
+
+    <div class="reason">
+      <span class="lbl">raisonnement</span>
+      <span class="txt">2 modèles concernés, le test encode l'ancien comportement, il faut le réécrire sans changer son intention…</span>
+      <span class="tokens">1,2k · 12 s</span>
+    </div>
+
+    <div class="tool open" style="margin-top:10px">
+      <div class="tool-head" style="border-bottom:1px solid var(--line)">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z" transform="rotate(90 12 12)"/></svg></span>
+        <span class="name" style="font-family:var(--sans);color:var(--muted);font-weight:400">raisonnement</span>
+        <span class="sum" style="font-style:italic">le champ output disparaît dès qu'un modèle ne déclare que context</span>
+        <span class="extra">1,2k</span>
+        <span class="time">12 s</span>
+      </div>
+      <div class="tool-body">
+        <div style="border-left:2px solid var(--line); padding:2px 0 2px 9px; font-size:12.5px; color:var(--muted); line-height:1.6">
+          Le résolveur fusionnait par objet entier, donc un modèle qui ne déclare que <span style="font-family:var(--mono);font-size:11px">context</span> perdait <span style="font-family:var(--mono);font-size:11px">output</span> au lieu d'hériter du plafond global. Deux chemins sont touchés : les lignes 245 et 265.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 9. compaction ══════════ -->
+  <div class="sec">
+    <h2>Frontière de compaction</h2>
+    <p class="note">Ce n'est pas une carte, c'est une règle. Elle coupe le fil en deux périodes et dit combien de tours ont été résumés. Une compaction arrêtée garde sa propre formulation et son propre type, pour ne jamais être lue comme un plafond.</p>
+    <div class="rule-mark">Contexte compacté · 18 tours résumés · 3,4 s</div>
+    <div class="rule-mark" style="color:var(--warn)">Compaction arrêtée · 4 tours conservés</div>
+  </div>
+
+  <!-- ══════════ 10. groupe de run ══════════ -->
+  <div class="sec">
+    <h2>Groupe de run</h2>
+    <p class="note">Quand un tour enchaîne beaucoup d'outils, ils se replient sous une barre. La barre dit <b>combien</b> et <b>avec quoi ça a commencé</b> — c'est ce qui permet de sauter un run sans le déplier.</p>
+    <div class="run-group">
+      <div class="run-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z"/></svg></span>
+        <span><b>4 appels</b> · bash</span>
+        <span class="grow"></span>
+        <span class="st">2 min 41</span>
+      </div>
+    </div>
+    <div class="run-group">
+      <div class="run-head">
+        <span class="chev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l8 7-8 7z" transform="rotate(90 12 12)"/></svg></span>
+        <span><b>12 appels</b> · read</span>
+        <span class="grow"></span>
+        <span class="st" style="color:var(--danger)">· échoué</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 11. question ══════════ -->
+  <div class="sec">
+    <h2>Question</h2>
+    <p class="note">La seule carte qui attend une action. Elle porte l'accent, mais par son contour et non par un aplat : un formulaire n'est pas un bouton. Les options sont dessinées, pas des glyphes — <code>☐</code> manque sur certains appareils.</p>
+
+    <div class="ask">
+      <div class="head">
+        <span class="t">Question 1 sur 2</span>
+        <span class="w">attend ta réponse</span>
+        <span class="grow"></span>
+        <span style="font-size:10.5px;color:var(--faint)">1 / 2 répondues</span>
+      </div>
+      <p class="q">Quelle palette retenir comme défaut ?</p>
+      <div class="opt on">
+        <span class="box"></span>
+        <span><span class="lab">Sable + oxblood</span><div class="desc">Sable chaud, accent rouille. Le plus chaleureux.</div></span>
+      </div>
+      <div class="opt">
+        <span class="box"></span>
+        <span><span class="lab">Lin + olive</span><div class="desc">Neutre-chaud, olive. Le plus calme en session longue.</div></span>
+      </div>
+      <div class="foot">
+        <span class="grow"></span>
+        <button class="primary">Suivant</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 12. quota ══════════ -->
+  <div class="sec">
+    <h2>Quota bloqué</h2>
+    <p class="note">Un run en attente n'est ni en cours ni échoué : il est suspendu. La barre donne l'heure réelle de reprise, pas un « bientôt », et deux issues explicites.</p>
+    <div class="quota">
+      <span class="live-dot"></span>
+      <span class="what">Attente du quota · semaine</span>
+      <span class="when">reprise à 14:20 · dans 12 min</span>
+      <span class="grow"></span>
+      <button class="primary">Réessayer</button>
+      <button>Annuler</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 13. bulles non-outil ══════════ -->
+  <div class="sec">
+    <h2>Ce qui n'est pas un outil</h2>
+    <p class="note">Erreur, message en file, note vocale. L'erreur ne prend pas un fond rouge plein — elle prend un filet et le texte en danger, parce qu'un aplat rouge dans un fil se lit comme une alerte de sécurité.</p>
+
+    <div class="err-line"><span class="g"></span><span>Le provider a refusé la requête : quota hebdomadaire atteint. Le run reprendra sur le compte suivant à 14:20.</span></div>
+
+    <div style="height:10px"></div>
+    <div class="queued">en file · sera envoyé après l'arrêt du run</div>
+    <div style="height:14px"></div>
+
+    <div class="voice">
+      <span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg></span>
+      <span class="wave"><i style="height:5px"></i><i style="height:9px" class="on"></i><i style="height:13px" class="on"></i><i style="height:7px" class="on"></i><i style="height:11px" class="on"></i><i style="height:4px"></i><i style="height:8px" class="on"></i><i style="height:12px" class="on"></i><i style="height:6px"></i><i style="height:9px" class="on"></i><i style="height:4px"></i><i style="height:7px" class="on"></i><i style="height:10px"></i><i style="height:5px"></i><i style="height:8px" class="on"></i><i style="height:3px"></i></span>
+      <span class="len">0:11</span>
+    </div>
+  </div>
+
+</div></div>
+
+<script>
+/* Même sélecteur que le reste de la maquette : voir index.html pour le détail. */
+(function () {
+  var THEMES = [
+    ['sable','Sable',['#f6f4f1','#efe8e2','#8a3a2e','#191714']],
+    ['lin','Lin',['#f5f4ef','#eae9dc','#5c6b32','#191a15']],
+    ['charbon','Charbon',['#f6f5f3','#e9e6df','#242220','#181614']],
+    ['catppuccin','Catppuccin',['#eff1f5','#ccd0da','#8839ef','#4c4f69']],
+    ['gruvbox','Gruvbox',['#fbf1c7','#ebdbb2','#076678','#3c3836']],
+    ['rose-pine','Rosé Pine',['#faf4ed','#f2e9e1','#907aa9','#464261']],
+    ['everforest','Everforest',['#fdf6e3','#efebd4','#3a94c5','#5c6a72']],
+    ['kanagawa','Kanagawa',['#f2ecbc','#d5cea3','#4d699b','#545464']],
+    ['tokyo-night','Tokyo Night',['#e1e2e7','#c4c8da','#2e7de9','#3760bf']],
+    ['flexoki','Flexoki',['#fffcf0','#dad8ce','#24837b','#100f0f']]
+  ];
+  var root=document.documentElement, btn=document.getElementById('themer-btn'), menu=document.getElementById('themer-menu');
+  function th(){return root.getAttribute('data-theme')||'sable';}
+  function md(){return root.getAttribute('data-mode')||'light';}
+  function apply(t,m){root.setAttribute('data-theme',t);root.setAttribute('data-mode',m);try{localStorage.setItem('myclaw-theme',t+':'+m);}catch(e){}draw();}
+  function draw(){
+    var h='<div class="themer-head">Mode</div><div class="themer-mode">'
+      +'<button data-mode="light" aria-pressed="'+(md()==='light')+'">clair</button>'
+      +'<button data-mode="dark" aria-pressed="'+(md()==='dark')+'">sombre</button>'
+      +'<button data-mode="amoled" aria-pressed="'+(md()==='amoled')+'">AMOLED</button></div>'
+      +'<div class="themer-sep"></div><div class="themer-head">Palette</div>';
+    THEMES.forEach(function(t){
+      h+='<button class="themer-item" role="menuitemradio" aria-checked="'+(t[0]===th())+'" data-theme="'+t[0]+'">'
+        +'<span class="themer-sw">'+t[2].map(function(c){return '<i style="background:'+c+'"></i>';}).join('')+'</span>'
+        +'<span>'+t[1]+'</span></button>';
+    });
+    menu.innerHTML=h;
+    menu.querySelectorAll('[data-mode]').forEach(function(b){b.onclick=function(){apply(th(),b.getAttribute('data-mode'));};});
+    menu.querySelectorAll('.themer-item').forEach(function(b){b.onclick=function(){apply(b.getAttribute('data-theme'),md());menu.hidden=true;};});
+  }
+  btn.onclick=function(e){e.stopPropagation();menu.hidden=!menu.hidden;};
+  document.addEventListener('click',function(e){if(!menu.hidden&&!menu.contains(e.target))menu.hidden=true;});
+  var q=new URLSearchParams(location.search), saved=null;
+  try{saved=localStorage.getItem('myclaw-theme');}catch(e){}
+  apply(q.get('theme')||(saved?saved.split(':')[0]:'sable'), q.get('mode')||(saved?saved.split(':')[1]:'light'));
+})();
+</script>
+</body>
+</html>

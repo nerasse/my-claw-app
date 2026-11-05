@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr" data-theme="sable" data-mode="light">
+<head>
+<meta charset="utf-8">
+<title>Sélection — variantes</title>
+<link rel="stylesheet" href="themes.css">
+<style>
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13.5px; -webkit-font-smoothing:antialiased; }
+.row { display:block; width:100%; padding:6px 8px; border-radius:var(--r-md); text-align:left; position:relative; }
+.row:hover { background: var(--surface-2); }
+.row-top { display:flex; align-items:center; gap:6px; }
+.row-title { flex:1; font-size:13.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.row-time { font-size:10.5px; color:var(--faint); font-variant-numeric:tabular-nums; }
+.row-meta { display:flex; gap:5px; margin-top:2px; padding-left:12px; font-size:11px; color:var(--faint); }
+.spin { width:11px; height:11px; flex:0 0 11px; border-radius:50%; border:1.5px solid var(--surface-3); border-top-color:var(--accent); }
+.dot { width:5px; height:5px; border-radius:50%; background:var(--faint); flex:0 0 5px; }
+.col { width:296px; padding:12px 8px; }
+.wrap { display:flex; gap:0; }
+.lab { font-size:10px; color:var(--faint); text-transform:uppercase; letter-spacing:.05em; padding:0 0 6px 8px; }
+h1 { font-size:20px; margin:0; padding:20px 20px 4px; font-weight:600; letter-spacing:-.02em;}
+p.n { margin:0; padding:0 20px 16px; color:var(--muted); font-size:12.5px; max-width:80ch;}
+
+/* A — aucune barre : la surface et le poids disent la sélection */
+.a .row.on { background: var(--surface-2); }
+.a .row.on .row-title { font-weight: 600; }
+
+/* B — barre pleine hauteur, collée au bord, rayon de la ligne */
+.b .row.on { background: var(--surface-2); overflow:hidden; }
+.b .row.on::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent); }
+.b .row.on .row-title { font-weight: 600; }
+
+/* C — barre pleine hauteur, à l'intérieur du padding, bouts arrondis */
+.c .row.on { background: var(--surface-2); }
+.c .row.on::before { content:''; position:absolute; left:2px; top:0; bottom:0; width:3px; background:var(--accent); border-radius:2px; }
+.c .row.on .row-title { font-weight: 600; }
+
+/* D — pas de barre, mais le titre prend l'accent */
+.d .row.on { background: var(--surface-2); }
+.d .row.on .row-title { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>L'indicateur de sélection — quatre formes</h1>
+<p class="n">L'ancienne barre flottait : 2 px de large, posée à 1 px du bord, avec 7 px de vide en haut et en bas. Elle n'appartenait à rien. Les quatre-ci tiennent compte du rayon de la ligne.</p>
+<div class="wrap">
+  <div class="col a"><div class="lab">A · surface seule</div>
+    <div class="row on"><div class="row-top"><span class="spin"></span><span class="row-title">Refonte UI — trois directions</span><span class="row-time">14:02</span></div><div class="row-meta"><span>my-claw</span><span>·</span><span>41 msg</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Refonte page téléchargements</span><span class="row-time">11:38</span></div><div class="row-meta"><span>dl-hub</span><span>·</span><span>brouillon</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Quotas : fenêtre 5 h fantôme</span><span class="row-time">08:47</span></div></div>
+  </div>
+  <div class="col b"><div class="lab">B · barre au bord</div>
+    <div class="row on"><div class="row-top"><span class="spin"></span><span class="row-title">Refonte UI — trois directions</span><span class="row-time">14:02</span></div><div class="row-meta"><span>my-claw</span><span>·</span><span>41 msg</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Refonte page téléchargements</span><span class="row-time">11:38</span></div><div class="row-meta"><span>dl-hub</span><span>·</span><span>brouillon</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Quotas : fenêtre 5 h fantôme</span><span class="row-time">08:47</span></div></div>
+  </div>
+  <div class="col c"><div class="lab">C · barre dedans</div>
+    <div class="row on"><div class="row-top"><span class="spin"></span><span class="row-title">Refonte UI — trois directions</span><span class="row-time">14:02</span></div><div class="row-meta"><span>my-claw</span><span>·</span><span>41 msg</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Refonte page téléchargements</span><span class="row-time">11:38</span></div><div class="row-meta"><span>dl-hub</span><span>·</span><span>brouillon</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Quotas : fenêtre 5 h fantôme</span><span class="row-time">08:47</span></div></div>
+  </div>
+  <div class="col d"><div class="lab">D · titre accentué</div>
+    <div class="row on"><div class="row-top"><span class="spin"></span><span class="row-title">Refonte UI — trois directions</span><span class="row-time">14:02</span></div><div class="row-meta"><span>my-claw</span><span>·</span><span>41 msg</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Refonte page téléchargements</span><span class="row-time">11:38</span></div><div class="row-meta"><span>dl-hub</span><span>·</span><span>brouillon</span></div></div>
+    <div class="row"><div class="row-top"><span class="dot"></span><span class="row-title">Quotas : fenêtre 5 h fantôme</span><span class="row-time">08:47</span></div></div>
+  </div>
+</div>
+</body>
+</html>

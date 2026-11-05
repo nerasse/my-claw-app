@@ -7,10 +7,11 @@ several of its tokens exist only because a stylesheet is free and a `Palette` is
 Everything below was checked against `v0.6.183` (`4c03f94`). Line numbers will drift; the symbols are
 the contract.
 
-The reference implementation is the POC at `~/dev/ui-poc/v3/` (served at `ui-poc.claw.kssimi.fr`):
-`index.html` the chat, `cards.html` the tool cards, `menus.html` the menus, `settings.html` Appearance,
-`themes.html` the palette gallery, `sel.html` the selection variants. `~/dev/ui-poc/tools/themes.py` is
-the palette generator this plan ports. The POC is deleted once every lot is integrated.
+The reference implementation was the POC at `~/dev/ui-poc/v3/`, served at `ui-poc.claw.kssimi.fr`. Its
+sources live in `docs/reference/ui-poc/` now that every lot is integrated: `index.html` the chat,
+`cards.html` the tool cards, `menus.html` the menus, `settings.html` Appearance, `themes.html` the
+palette gallery, `sel.html` the selection variants, and `tools/themes.py`, the palette generator this
+plan ports. The screenshots and the live service are gone; the CSS is the half worth keeping.
 
 ## 0. What the POC decides, and what it only suggests
 

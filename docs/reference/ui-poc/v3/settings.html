@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="fr" data-theme="sable" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my-claw — Réglages › Apparence</title>
+<link rel="stylesheet" href="themes.css">
+<link rel="stylesheet" href="theme.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13.5px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+
+  /* ---------- la page ---------- */
+  .page { max-width: 760px; margin: 0 auto; padding: 26px 24px 70px; }
+  .back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted); text-decoration: none;
+    margin-bottom: 16px;
+  }
+  .back:hover { color: var(--ink); }
+  .back svg { width: 12px; height: 12px; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 4px; }
+  .lede { font-size: 12.5px; color: var(--muted); margin: 0 0 26px; max-width: 62ch; }
+
+  h2 {
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 8px;
+  }
+  .sect { margin-bottom: 26px; }
+  .sect .note { font-size: 11.5px; color: var(--faint); margin: 6px 0 0; max-width: 66ch; }
+
+  /* ---------- les modes ----------
+     Quatre choix, pas deux : « Système » n'est pas un thème, c'est une règle, et
+     AMOLED n'est pas « plus sombre », c'est un autre compromis (fond éteint,
+     élévation par le trait). Les mélanger dans un même contrôle à deux états
+     obligeait à deviner. */
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .mode {
+    display: flex; flex-direction: column; gap: 7px;
+    padding: 9px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    cursor: pointer;
+    text-align: left;
+    font: inherit; color: inherit;
+  }
+  .mode:hover { border-color: color-mix(in srgb, var(--muted) 40%, var(--line)); }
+  .mode[aria-pressed='true'] {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  /* La vignette d'un mode est peinte dans SON mode, jamais dans le mode courant :
+     c'est le seul moyen de montrer AMOLED sans l'appliquer. */
+  .mode .sw { height: 34px; border-radius: 5px; overflow: hidden; display: flex; flex-direction: column; }
+  .mode .sw i { display: block; }
+  .mode .sw .bar { height: 5px; }
+  .mode .sw .body { flex: 1; display: flex; align-items: center; padding: 0 5px; }
+  .mode .sw .dot { width: 22px; height: 4px; border-radius: 2px; }
+  .mode .nm { display: flex; align-items: baseline; gap: 5px; }
+  .mode .nm b { font-size: 12px; font-weight: 550; }
+  .mode .nm span { font-size: 9.5px; color: var(--faint); }
+
+  /* ---------- les palettes ---------- */
+  .palettes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .pal {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    cursor: pointer; text-align: left; font: inherit; color: inherit;
+  }
+  .pal:hover { border-color: color-mix(in srgb, var(--muted) 40%, var(--line)); }
+  .pal[aria-checked='true'] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .pal .sw { display: flex; border-radius: 4px; overflow: hidden; flex: 0 0 auto; }
+  .pal .sw i { width: 12px; height: 26px; }
+  .pal .txt { flex: 1; min-width: 0; }
+  .pal .txt b { display: block; font-size: 12.5px; font-weight: 550; }
+  .pal .txt span { display: block; font-size: 10.5px; color: var(--faint); }
+  .pal .tick { flex: 0 0 auto; color: var(--accent); opacity: 0; }
+  .pal[aria-checked='true'] .tick { opacity: 1; }
+
+  /* ---------- aperçu ---------- */
+  .preview {
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .preview .bar {
+    display: flex; align-items: center; gap: 7px;
+    height: 34px; padding: 0 11px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    font-size: 11.5px;
+  }
+  .preview .bar .t { font-weight: 550; }
+  .preview .bar .meta { color: var(--faint); font-size: 10.5px; }
+  .preview .bar .grow { flex: 1; }
+  .preview .bar .pill { font-size: 10px; color: var(--muted); padding: 1px 6px; border-radius: 20px; background: var(--surface-2); }
+  .preview .body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .preview .msg { font-size: 12.5px; }
+  .preview .user { align-self: flex-end; max-width: 82%; padding: 6px 9px; border-radius: 10px 10px 3px 10px; background: var(--msg-user-bg); color: var(--msg-user-ink); border: 1px solid color-mix(in srgb, var(--msg-user-ink) 8%, transparent); }
+  .preview .a1 { color: var(--ink); }
+  .preview .tool { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); font-size: 11px; }
+  .preview .tool .n { font-family: var(--mono); font-weight: 500; }
+  .preview .tool .s { flex: 1; color: var(--muted); font-family: var(--mono); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview .tool .tm { color: var(--faint); font-size: 10px; }
+  .preview .code { font-family: var(--mono); font-size: 10.5px; background: var(--code-bg); color: var(--code-ink); border-radius: 5px; padding: 6px 8px; }
+  .preview .states { display: flex; gap: 10px; font-size: 10.5px; }
+  .preview .states span { display: inline-flex; align-items: center; gap: 4px; }
+  .preview .states i { width: 7px; height: 7px; border-radius: 50%; }
+
+  /* ---------- la note AMOLED ---------- */
+  .amoled-note {
+    display: flex; gap: 8px;
+    margin-top: 8px; padding: 8px 10px;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    font-size: 11.5px; color: var(--muted);
+    max-width: 70ch;
+  }
+  .amoled-note svg { flex: 0 0 13px; width: 13px; height: 13px; margin-top: 2px; color: var(--faint); }
+
+  @media (max-width: 640px) {
+    .page { padding: 18px 14px 60px; }
+    .modes { grid-template-columns: repeat(2, 1fr); }
+    .palettes { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <a class="back" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg>
+    Réglages
+  </a>
+  <h1>Apparence</h1>
+  <p class="lede">Le mode décide de la luminosité, la palette décide des teintes. Les deux sont indépendants : chaque palette existe dans les quatre modes, et aucune n'est obtenue en inversant une autre.</p>
+
+  <div class="sect">
+    <h2>Mode</h2>
+    <div class="modes" id="modes"></div>
+    <p class="note" id="mode-note"></p>
+  </div>
+
+  <div class="sect">
+    <h2>Aperçu</h2>
+    <div class="preview">
+      <div class="bar">
+        <span class="t">Refonte UI — trois directions</span>
+        <span class="meta">anthropic / opus-5</span>
+        <span class="grow"></span>
+        <span class="pill" id="pv-mode">clair</span>
+      </div>
+      <div class="body">
+        <div class="msg user">Corrige le résolveur, il perd <code>output</code>.</div>
+        <div class="msg a1">Le résolveur fusionnait les limites par objet.</div>
+        <div class="tool"><span class="n">bash</span><span class="s">bun test tests/llm/resolver.test.ts</span><span class="tm">1,8 s</span></div>
+        <div class="code">$ bun test<span style="color:var(--ok)">  ✓ 44 pass</span></div>
+        <div class="states">
+          <span><i style="background:var(--accent)"></i>en cours</span>
+          <span><i style="background:var(--ok)"></i>fait</span>
+          <span><i style="background:var(--warn)"></i>arrêté</span>
+          <span><i style="background:var(--danger)"></i>échoué</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sect">
+    <h2>Palette</h2>
+    <div class="palettes" id="palettes"></div>
+  </div>
+</div>
+
+<script>
+var THEMES = [
+  {s:'sable', n:'Sable', src:'rouille sur sable', sw:['#f6f4f1','#efe8e2','#8a3a2e','#191714']},
+  {s:'lin', n:'Lin', src:'olive sur lin', sw:['#f5f4ef','#eae9dc','#5c6b32','#191a15']},
+  {s:'charbon', n:'Charbon', src:'encre seule', sw:['#f6f5f3','#e9e6df','#242220','#181614']},
+  {s:'catppuccin', n:'Catppuccin', src:'mauve pastel', sw:['#eff1f5','#ccd0da','#8839ef','#4c4f69']},
+  {s:'gruvbox', n:'Gruvbox', src:'papier et bleu', sw:['#fbf1c7','#ebdbb2','#076678','#3c3836']},
+  {s:'rose-pine', n:'Rosé Pine', src:'violet rosé', sw:['#faf4ed','#f2e9e1','#907aa9','#464261']},
+  {s:'everforest', n:'Everforest', src:'forêt', sw:['#fdf6e3','#efebd4','#3a94c5','#5c6a72']},
+  {s:'kanagawa', n:'Kanagawa', src:'encre et papier', sw:['#f2ecbc','#d5cea3','#4d699b','#545464']},
+  {s:'tokyo-night', n:'Tokyo Night', src:'indigo', sw:['#e1e2e7','#c4c8da','#2e7de9','#3760bf']},
+  {s:'flexoki', n:'Flexoki', src:'papier éditorial', sw:['#fffcf0','#dad8ce','#24837b','#100f0f']}
+];
+
+/* Les quatre modes, chacun peint dans son propre mode — la seule façon de
+   montrer AMOLED sans l'appliquer à la page. */
+var MODES = [
+  {m:'system', n:'Système', sub:'suit l’appareil', note:'Suit le réglage du système et bascule seul au coucher du soleil. C’est le défaut.', bg:'#f6f4f1', bar:'#fdfbf8', dot:'#8a3a2e', dark:'#14120f'},
+  {m:'light', n:'Clair', sub:'', note:'Clair en toutes circonstances, même la nuit.', bg:'#f6f4f1', bar:'#fdfbf8', dot:'#8a3a2e', dark:'#14120f'},
+  {m:'dark', n:'Sombre', sub:'', note:'Fond profond légèrement teinté. Les surfaces montent d’un pas pour séparer les cartes.', bg:'#14120f', bar:'#1b1815', dot:'#e08a72', dark:'#14120f'},
+  {m:'amoled', n:'AMOLED', sub:'téléphone', note:'Fond noir pur : les pixels s’éteignent, la consommation baisse sur dalle OLED. La surface remonte à peine (#0d0d0d) et c’est le trait qui sépare les cartes, pas le remplissage. À éviter sur LCD, où ça n’économise rien et durcit les bords.', bg:'#000000', bar:'#0d0d0d', dot:'#e08a72', dark:'#000000'}
+];
+
+var root = document.documentElement;
+var curTheme = 'sable', curMode = 'system';
+
+function modeOf() {
+  if (curMode !== 'system') return curMode;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function drawModes() {
+  document.getElementById('modes').innerHTML = MODES.map(function (m) {
+    var isOn = m.m === curMode || (m.m === 'system' && curMode === 'system');
+    return '<button class="mode" aria-pressed="' + isOn + '" data-mode="' + m.m + '">'
+      + '<span class="sw" style="background:' + m.bg + '">'
+      + '<i class="bar" style="background:' + m.bar + '"></i>'
+      + '<span class="body"><i class="dot" style="background:' + (m.m === 'light' || m.m === 'system' ? m.dot : m.dot) + '"></i></span>'
+      + '</span>'
+      + '<span class="nm"><b>' + m.n + '</b><span>' + m.sub + '</span></span>'
+      + '</button>';
+  }).join('');
+  document.querySelectorAll('.mode').forEach(function (b) {
+    b.onclick = function () { curMode = b.getAttribute('data-mode'); apply(); };
+  });
+  var sel = MODES.filter(function (m) { return m.m === curMode; })[0];
+  document.getElementById('mode-note').textContent = sel ? sel.note : '';
+}
+
+function drawPalettes() {
+  document.getElementById('palettes').innerHTML = THEMES.map(function (t) {
+    return '<button class="pal" role="radio" aria-checked="' + (t.s === curTheme) + '" data-pal="' + t.s + '">'
+      + '<span class="sw">' + t.sw.map(function (c) { return '<i style="background:' + c + '"></i>'; }).join('') + '</span>'
+      + '<span class="txt"><b>' + t.n + '</b><span>' + t.src + '</span></span>'
+      + '<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="width:14px;height:14px"><path d="M5 12.5l4.5 4.5L19 7"/></svg>'
+      + '</button>';
+  }).join('');
+  document.querySelectorAll('.pal').forEach(function (b) {
+    b.onclick = function () { curTheme = b.getAttribute('data-pal'); apply(); };
+  });
+}
+
+function apply() {
+  root.setAttribute('data-theme', curTheme);
+  root.setAttribute('data-mode', modeOf());
+  try { localStorage.setItem('myclaw-theme', curTheme + ':' + curMode); } catch (e) {}
+  var label = { light: 'clair', dark: 'sombre', amoled: 'AMOLED' }[modeOf()] || 'clair';
+  document.getElementById('pv-mode').textContent = label;
+  drawModes();
+  drawPalettes();
+}
+
+(function () {
+  var q = new URLSearchParams(location.search);
+  var saved = null;
+  try { saved = localStorage.getItem('myclaw-theme'); } catch (e) {}
+  curTheme = q.get('theme') || (saved ? saved.split(':')[0] : 'sable');
+  curMode = q.get('mode') || (saved ? saved.split(':')[1] : 'system');
+  apply();
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if (curMode === 'system') apply();
+    });
+  }
+})();
+</script>
+</body>
+</html>

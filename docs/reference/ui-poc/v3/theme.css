@@ -1,0 +1,110 @@
+/* Un reset minimal, ici et pas dans chaque page : `min-height: 34px` additionnée
+   au padding donnait 46 px de ligne de menu, et `width: 320px` 332 — un
+   content-box se mesure sans son cadre. Toutes les mesures de cette maquette
+   (lignes, feuilles, tiroirs) supposent border-box. */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ============================================================
+   my-claw · thème
+   Le sélecteur de thème, et les deux choses que les tokens ne
+   peuvent pas décider : l'indicateur de sélection et la bulle.
+   ============================================================ */
+
+/* ---------- la sélection ----------
+   L'ancienne barre était un trait de 2 px posé à left:1px avec 7 px de vide
+   en haut et en bas : un tic flottant, sans contact avec le bord de la ligne,
+   qui se lisait comme un artefact. Trois changements :
+     - elle touche les deux bords (top:0 / bottom:0), donc elle appartient à
+       la ligne au lieu de flotter dedans ;
+     - elle passe à 3 px, l'épaisseur à laquelle un bord se lit comme un bord ;
+     - elle prend le rayon de la ligne, en haut et en bas, au lieu d'avoir
+       ses propres bouts arrondis qui ne coïncidaient avec rien.
+   Le fond monte aussi d'un pas de plus : la barre seule est un repère, le
+   fond est la surface — c'est la surface qui dit « tu es ici ». */
+/* Le point qui a coûté une passe : la barre ne porte AUCUN rayon propre. C'est
+   le `overflow: hidden` de la ligne qui la découpe, donc elle épouse le rayon de
+   la ligne au lieu d'avoir sa propre courbe au-dessus. Une barre arrondie
+   elle-même dépassait de la courbe de la ligne et se lisait comme un onglet. */
+.row.active {
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.row.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+.row.active .row-title { font-weight: 600; }
+/* Une ligne survolée qui n'est pas la ligne courante garde un ton plus bas
+   que la ligne courante : sans cet ordre, le survol écrase la sélection. */
+.row.active:hover { background: var(--surface-2); }
+
+/* ---------- la bulle user ----------
+   Une surface de sa propre famille, pas l'accent. L'accent sur un aplat de
+   bulle occupait 1,42 % de l'écran ; ici 0,1 %. */
+.bubble { background: var(--msg-user-bg); color: var(--msg-user-ink); }
+.bubble code { background: color-mix(in srgb, var(--msg-user-ink) 10%, transparent); }
+.msg.user .bubble { border: 1px solid color-mix(in srgb, var(--msg-user-ink) 8%, transparent); }
+
+/* ---------- le sélecteur de thème ---------- */
+.themer {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.themer-menu {
+  position: absolute;
+  top: calc(100% + 6px); right: 0;
+  z-index: 50;
+  width: 260px;
+  max-height: 420px; overflow-y: auto;
+  padding: 5px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 32px -8px color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.themer-menu[hidden] { display: none; }
+.themer-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  background: none; border: 0;
+  font: inherit; font-size: var(--f-body);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.themer-item:hover { background: var(--surface-2); }
+.themer-item[aria-checked='true'] { background: var(--surface-2); font-weight: 550; }
+.themer-sw { display: flex; gap: 0; border-radius: 3px; overflow: hidden; flex: 0 0 auto; }
+.themer-sw i { width: 9px; height: 15px; }
+.themer-item .tick { margin-left: auto; color: var(--accent); opacity: 0; }
+.themer-item[aria-checked='true'] .tick { opacity: 1; }
+.themer-sep { height: 1px; background: var(--line); margin: 5px 8px; }
+.themer-head {
+  padding: 5px 8px 3px;
+  font-size: 10px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--faint);
+}
+.themer-mode {
+  display: flex; gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  margin: 2px 6px 5px;
+}
+.themer-mode button {
+  flex: 1;
+  padding: 4px 0;
+  border: 0; border-radius: 4px;
+  background: none;
+  font: inherit; font-size: var(--f-small);
+  color: var(--muted);
+  cursor: pointer;
+}
+.themer-mode button[aria-pressed='true'] { background: var(--surface); color: var(--ink); font-weight: 550; }

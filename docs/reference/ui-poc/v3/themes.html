@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="fr" data-theme="sable" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my-claw — les thèmes</title>
+<link rel="stylesheet" href="themes.css">
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13.5px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .toolbar { position: sticky; top:0; z-index: 30; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 32px; display:flex; gap:8px; align-items:center; }
+  .toolbar a { font-size:11.5px; color:var(--muted); text-decoration:none; padding:4px 9px; border-radius:var(--r-sm); border:1px solid var(--line); background:var(--surface); }
+  .toolbar a:hover { color:var(--ink); }
+  .toolbar .sp { flex:1; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 30px 32px 90px; }
+  h1 { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .sub { font-size: 13px; color: var(--muted); margin: 0 0 4px; max-width: 86ch; }
+  .meta { font-size: 11.5px; color: var(--faint); margin: 10px 0 26px; }
+  h2 { font-size: 11px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); margin: 26px 0 10px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); gap: 14px; }
+  .card { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: var(--surface); }
+  /* Chaque vignette est peinte avec SES tokens : un thème se juge sur son propre écran,
+     pas sur une bande de couleurs posée sur le thème courant. */
+  .card .demo { padding: 12px; display: flex; flex-direction: column; gap: 7px; }
+  .card .nm { display: flex; align-items: baseline; gap: 7px; padding: 9px 12px; border-bottom: 1px solid; font-size: 12.5px; font-weight: 600; }
+  .card .nm .tag { font-weight: 400; font-size: 10px; opacity: .7; }
+  .card .nm .modes { margin-left: auto; font-weight: 400; font-size: 10px; opacity: .6; }
+  .d-title { font-size: 13px; font-weight: 550; }
+  .d-meta { font-size: 10.5px; }
+  .d-bubble { align-self: flex-end; max-width: 88%; padding: 5px 8px; border-radius: 10px 10px 3px 10px; font-size: 11.5px; }
+  .d-mark { font-family: var(--mono); font-size: 10.5px; padding: 5px 7px; border-radius: 4px; white-space: pre; overflow: hidden; }
+  .d-rowline { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .d-swatch { display: flex; gap: 0; border-radius: 4px; overflow: hidden; height: 16px; }
+  .d-swatch i { flex: 1; }
+  .card .foot { padding: 8px 12px; font-size: 10.5px; border-top: 1px solid; display: flex; gap: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  th { text-align: left; font-weight: 500; color: var(--faint); font-size: 10.5px; padding: 0 9px 7px 0; }
+  td { padding: 6px 9px 6px 0; border-top: 1px solid var(--line); }
+  td.n { font-variant-numeric: tabular-nums; }
+  .ok { color: var(--ok); }
+  .bad { color: var(--danger); }
+  code { font-family: var(--mono); font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a href="index.html">le chat</a>
+  <a href="cards.html">les cartes</a>
+  <a href="settings.html">apparence</a>
+  <a href="menus.html">les menus</a>
+  <span class="sp"></span>
+  <div class="themer">
+    <button class="action" id="themer-btn" aria-label="Thème" aria-haspopup="true" aria-expanded="false">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <div class="themer-menu" id="themer-menu" hidden role="menu"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h1>Les thèmes</h1>
+  <p class="sub">Dix palettes, chacune en clair et en sombre, toutes ramenées au même contrat de tokens. Les valeurs de base sont celles que publient les projets ; les paliers de surface, le <code>faint</code> remonté à 4,5:1 et les fonds de bulle sont calculés, jamais choisis à l'œil.</p>
+  <p class="meta">Sable par défaut · 10 palettes × 2 modes · 20 jeux de tokens · contrastes calculés sur les 10 rôles</p>
+
+  <h2>Les palettes</h2>
+  <div class="grid" id="gallery"></div>
+
+  <h2>Le contrat : ce qui est mesuré</h2>
+  <p class="sub" style="margin-bottom:10px">Chaque paire doit passer 4,5:1, y compris <code>faint</code> — ici le texte faible est un horodatage, donc du texte. Et l'accent ne doit jamais tomber sur le rouge d'erreur : en dessous de ΔE 25, une erreur se lit comme un état normal.</p>
+  <table id="report"></table>
+</div>
+
+<script>
+var THEMES = [
+  {s:'sable', n:'Sable', src:'my-claw · A', sw:['#f6f4f1','#efe8e2','#8a3a2e','#191714'], dark:['#14120f','#262019','#e08a72','#eae5dd']},
+  {s:'lin', n:'Lin', src:'my-claw · B', sw:['#f5f4ef','#eae9dc','#5c6b32','#191a15'], dark:['#12130f','#23261a','#a8bd6e','#e8e9e1']},
+  {s:'charbon', n:'Charbon', src:'my-claw · C', sw:['#f6f5f3','#e9e6df','#242220','#181614'], dark:['#131210','#262421','#e8e4dd','#e9e6e1']},
+  {s:'catppuccin', n:'Catppuccin', src:'Latte / Mocha', sw:['#eff1f5','#ccd0da','#8839ef','#4c4f69'], dark:['#1e1e2e','#313244','#cba6f7','#cdd6f4']},
+  {s:'gruvbox', n:'Gruvbox', src:'Light / Dark', sw:['#fbf1c7','#ebdbb2','#076678','#3c3836'], dark:['#282828','#3c3836','#fe8019','#ebdbb2']},
+  {s:'rose-pine', n:'Rosé Pine', src:'Dawn / Main', sw:['#faf4ed','#f2e9e1','#907aa9','#464261'], dark:['#191724','#1f1d2e','#c4a7e7','#e0def4']},
+  {s:'everforest', n:'Everforest', src:'Light / Dark', sw:['#fdf6e3','#efebd4','#3a94c5','#5c6a72'], dark:['#2d353b','#343f44','#7fbbb3','#d3c6aa']},
+  {s:'kanagawa', n:'Kanagawa', src:'Lotus / Wave', sw:['#f2ecbc','#d5cea3','#4d699b','#545464'], dark:['#1f1f28','#2a2a37','#7e9cd8','#dcd7ba']},
+  {s:'tokyo-night', n:'Tokyo Night', src:'Day / Night', sw:['#e1e2e7','#c4c8da','#2e7de9','#3760bf'], dark:['#1a1b26','#1f2335','#7aa2f7','#c0caf5']},
+  {s:'flexoki', n:'Flexoki', src:'Paper / Base 950', sw:['#fffcf0','#dad8ce','#24837b','#100f0f'], dark:['#100f0f','#1c1b1a','#3aa99f','#cecdc3']}
+];
+
+/* Une vignette = un vrai bout d'écran peint avec les tokens du thème, pas une
+   bande de couleurs. Le mode sombre montre le même fragment, redécidé. */
+function card(t) {
+  function demo(mode) {
+    return '<div class="demo" data-theme="' + t.s + '" data-mode="' + mode + '" style="background:var(--bg);color:var(--ink)">'
+      + '<div class="d-title">Refonte UI — trois directions</div>'
+      + '<div class="d-meta" style="color:var(--faint)">my-claw · 41 msg · 14:02</div>'
+      + '<div class="d-bubble" style="background:var(--msg-user-bg);color:var(--msg-user-ink)">Corrige le résolveur, il perd output.</div>'
+      + '<div class="d-mark" style="background:var(--code-bg);color:var(--code-ink)">$ bun test<span style="color:var(--ok)"> ✓ ok</span></div>'
+      + '<div class="d-rowline"><span style="width:5px;height:5px;border-radius:50%;background:var(--accent)"></span><span style="color:var(--muted)">en cours</span><span style="margin-left:auto;color:var(--faint)">1,8 s</span></div>'
+      + '</div>';
+  }
+  return '<div class="card" data-theme="' + t.s + '" data-mode="light" style="background:var(--surface);border-color:var(--line)">'
+    + '<div class="nm" style="border-color:var(--line);color:var(--ink)">' + t.n
+    + '<span class="tag" style="color:var(--faint)">' + t.src + '</span>'
+    + '<span class="modes" style="color:var(--faint)">clair + sombre</span></div>'
+    + demo('light') + demo('dark')
+    + '<div class="foot" style="border-color:var(--line);background:var(--bg)">'
+    + '<span class="d-swatch" style="flex:1">' + t.sw.map(function (c) { return '<i style="background:' + c + '"></i>'; }).join('') + '</span>'
+    + '<span class="d-swatch" style="flex:1">' + t.dark.map(function (c) { return '<i style="background:' + c + '"></i>'; }).join('') + '</span>'
+    + '</div></div>';
+}
+
+document.getElementById('gallery').innerHTML = THEMES.map(card).join('');
+
+/* Le rapport : contrastes et collision, lus dans les tokens réellement appliqués. */
+var probe = document.createElement('div');
+probe.style.cssText = 'position:absolute;left:-9999px;top:0';
+document.body.appendChild(probe);
+
+function tokens(theme, mode) {
+  probe.setAttribute('data-theme', theme);
+  probe.setAttribute('data-mode', mode);
+  var cs = getComputedStyle(probe);
+  function g(n) { return cs.getPropertyValue(n).trim(); }
+  return { bg: g('--bg'), ink: g('--ink'), muted: g('--muted'), faint: g('--faint'),
+           accent: g('--accent'), danger: g('--danger'), ok: g('--ok'),
+           bubBg: g('--msg-user-bg'), bubInk: g('--msg-user-ink'),
+           accInk: g('--accent-ink'), codeBg: g('--code-bg'), codeInk: g('--code-ink') };
+}
+function hex(v) {
+  if (v.charAt(0) === '#') return v;
+  var m = v.match(/\d+/g).slice(0, 3);
+  return '#' + m.map(function (x) { return (+x).toString(16).padStart(2, '0'); }).join('');
+}
+function lum(h) {
+  h = hex(h).replace('#', '');
+  var r = parseInt(h.slice(0,2),16)/255, g = parseInt(h.slice(2,4),16)/255, b = parseInt(h.slice(4,6),16)/255;
+  function f(u) { return u <= 0.03928 ? u/12.92 : Math.pow((u+0.055)/1.055, 2.4); }
+  return 0.2126*f(r) + 0.7152*f(g) + 0.0722*f(b);
+}
+function ratio(a, b) { var la = lum(a), lb = lum(b); return (Math.max(la,lb)+0.05)/(Math.min(la,lb)+0.05); }
+function lab(h) {
+  h = hex(h).replace('#','');
+  var r = parseInt(h.slice(0,2),16)/255, g = parseInt(h.slice(2,4),16)/255, b = parseInt(h.slice(4,6),16)/255;
+  function f(u) { return u <= 0.04045 ? u/12.92 : Math.pow((u+0.055)/1.055, 2.4); }
+  r=f(r);g=f(g);b=f(b);
+  var X=(r*0.4124+g*0.3576+b*0.1805)/0.9505, Y=r*0.2126+g*0.7152+b*0.0722, Z=(r*0.0193+g*0.1192+b*0.9505)/1.089;
+  function t(v) { return v > 0.008856 ? Math.cbrt(v) : 7.787*v+16/116; }
+  return [116*t(Y), 500*(t(X)-t(Y)), 200*(t(Y)-t(Z))];
+}
+function dE(a, b) {
+  var x = lab(a), y = lab(b);
+  return Math.sqrt(Math.pow(x[0]-y[0],2) + Math.pow(x[1]-y[1],2) + Math.pow(x[2]-y[2],2));
+}
+
+var rows = '<tr><th>palette</th><th>mode</th><th>encre</th><th>douce</th><th>faible</th><th>accent</th><th>ok</th><th>danger</th><th>bulle</th><th>accent/danger ΔE</th></tr>';
+var failures = 0;
+THEMES.forEach(function (t) {
+  ['light','dark'].forEach(function (mode) {
+    var k = tokens(t.s, mode);
+    var vals = [ratio(k.ink,k.bg), ratio(k.muted,k.bg), ratio(k.faint,k.bg), ratio(k.accent,k.bg),
+                ratio(k.ok,k.bg), ratio(k.danger,k.bg), ratio(k.bubInk,k.bubBg)];
+    var de = dE(k.accent, k.danger);
+    var bad = vals.some(function (v) { return v < 4.5; }) || de < 25;
+    if (bad) failures++;
+    rows += '<tr><td>' + t.n + '</td><td>' + (mode === 'light' ? 'clair' : 'sombre') + '</td>'
+      + vals.map(function (v) { return '<td class="n ' + (v >= 4.5 ? 'ok' : 'bad') + '">' + v.toFixed(1) + '</td>'; }).join('')
+      + '<td class="n ' + (de >= 25 ? 'ok' : 'bad') + '">' + de.toFixed(0) + '</td></tr>';
+  });
+});
+rows += '<tr><td colspan="10" style="color:var(--' + (failures ? 'danger' : 'ok') + ');padding-top:10px">'
+  + (failures ? failures + ' paire(s) sous le seuil' : 'les 20 jeux passent les 8 seuils') + '</td></tr>';
+document.getElementById('report').innerHTML = rows;
+
+/* Le sélecteur. */
+(function () {
+  var root=document.documentElement, btn=document.getElementById('themer-btn'), menu=document.getElementById('themer-menu');
+  function th(){return root.getAttribute('data-theme')||'sable';}
+  function md(){return root.getAttribute('data-mode')||'light';}
+  function apply(t,m){root.setAttribute('data-theme',t);root.setAttribute('data-mode',m);try{localStorage.setItem('myclaw-theme',t+':'+m);}catch(e){}draw();}
+  function draw(){
+    var h='<div class="themer-head">Mode</div><div class="themer-mode">'
+      +'<button data-mode="light" aria-pressed="'+(md()==='light')+'">clair</button>'
+      +'<button data-mode="dark" aria-pressed="'+(md()==='dark')+'">sombre</button>'
+      +'<button data-mode="amoled" aria-pressed="'+(md()==='amoled')+'">AMOLED</button></div>'
+      +'<div class="themer-sep"></div><div class="themer-head">Palette</div>';
+    THEMES.forEach(function(t){
+      h+='<button class="themer-item" role="menuitemradio" aria-checked="'+(t.s===th())+'" data-theme="'+t.s+'">'
+        +'<span class="themer-sw">'+t.sw.map(function(c){return '<i style="background:'+c+'"></i>';}).join('')+'</span>'
+        +'<span>'+t.n+'</span></button>';
+    });
+    menu.innerHTML=h;
+    menu.querySelectorAll('[data-mode]').forEach(function(b){b.onclick=function(){apply(th(),b.getAttribute('data-mode'));};});
+    menu.querySelectorAll('.themer-item').forEach(function(b){b.onclick=function(){apply(b.getAttribute('data-theme'),md());menu.hidden=true;};});
+  }
+  btn.onclick=function(e){e.stopPropagation();menu.hidden=!menu.hidden;};
+  document.addEventListener('click',function(e){if(!menu.hidden&&!menu.contains(e.target))menu.hidden=true;});
+  var q=new URLSearchParams(location.search), saved=null;
+  try{saved=localStorage.getItem('myclaw-theme');}catch(e){}
+  apply(q.get('theme')||(saved?saved.split(':')[0]:'sable'), q.get('mode')||(saved?saved.split(':')[1]:'light'));
+})();
+</script>
+</body>
+</html>

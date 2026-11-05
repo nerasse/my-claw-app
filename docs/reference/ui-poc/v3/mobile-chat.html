@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="fr" data-theme="sable" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390, initial-scale=1">
+<title>my-claw — conversation</title>
+<link rel="stylesheet" href="themes.css">
+<link rel="stylesheet" href="phone.css">
+<link rel="stylesheet" href="compact.css">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="phone">
+  <div class="pstatus">
+    <span>9:41</span>
+    <span class="right">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3.5 9.5a13 13 0 0117 0M6.5 13a8.5 8.5 0 0111 0M9.5 16.4a4 4 0 015 0"/><circle cx="12" cy="19.6" r="1" fill="currentColor" stroke="none"/></svg>
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="8.5" width="17" height="7" rx="2"/><rect x="4.5" y="10.5" width="10.5" height="3" rx="1" fill="currentColor" stroke="none"/><path d="M21.3 11.2v1.6" stroke-linecap="round"/></svg>
+      84%
+    </span>
+  </div>
+
+  <div class="pbar">
+    <button class="action" aria-label="Conversations">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h11"/></svg>
+    </button>
+    <div class="block">
+      <div class="t">Refonte UI — trois directions</div>
+      <div class="s">
+        <span class="prov">anthropic</span><span class="mdot">/</span><span class="v">opus-5</span><span class="dot">·</span><span>xhigh</span><span class="dot">·</span><span class="pct" title="72,4k tokens sur une fenêtre effective de 175,4k">41%</span>
+      </div>
+    </div>
+    <button class="action" aria-label="Actions">
+      <svg class="i" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18.5" r="1.5"/></svg>
+    </button>
+  </div>
+
+  <div class="pthread">
+    <div class="msg user"><div class="bubble">Corrige le tout, le résolveur perd <code>output</code> dès qu'un modèle ne déclare que <code>context</code>.</div></div>
+
+    <div class="msg">
+      <div class="byline"><span class="who">my-claw</span><span class="sep">·</span><span>14:01</span></div>
+      <div class="reason"><span class="lbl">raisonnement</span><span class="txt">2 modèles concernés, le test encode l'ancien comportement…</span></div>
+      <div class="prose">
+        <p>Le résolveur fusionnait les limites par objet : dès qu'un modèle déclarait <code>context</code>, son <code>output</code> disparaissait au lieu d'hériter du global.</p>
+        <h3>Ce qui change</h3>
+        <ul>
+          <li>La fusion se fait <strong>champ par champ</strong>, plus par objet entier.</li>
+          <li>Un modèle qui ne nomme pas <code>output</code> hérite du plafond global.</li>
+        </ul>
+        <blockquote>
+          <button class="copy qcopy" aria-label="Copier la citation">
+            <svg class="i-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 6.5A2.5 2.5 0 0012.5 4H6a2 2 0 00-2 2v6.5A2.5 2.5 0 006.5 15"/></svg>
+            copier
+          </button>
+          <p>Un modèle déclaré avec seulement <code>context</code> perdait son <code>output</code> silencieusement.</p>
+        </blockquote>
+      </div>
+    </div>
+
+    <div class="msg">
+      <div class="tool">
+        <div class="tool-head">
+          <span class="name">bash</span>
+          <span class="args">bun test resolver.test.ts</span>
+          <span class="right">
+            <span class="verdict"><svg class="i-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 6.5"/></svg></span>
+          </span>
+        </div>
+        <div class="code-bar">
+          <span>sortie</span>
+          <span class="right">
+            <button class="copy" aria-label="Copier la sortie">
+              <svg class="i-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 6.5A2.5 2.5 0 0012.5 4H6a2 2 0 00-2 2v6.5A2.5 2.5 0 006.5 15"/></svg>
+              copier
+            </button>
+          </span>
+        </div>
+<pre><span class="tk-str">✓</span> inherits the field it does not name
+<span class="tk-str">✓</span> an explicit output wins
+<span class="tk-str">✓</span> both fields merge
+
+ <span class="tk-num">44</span> pass, <span class="tk-num">0</span> fail</pre>
+      </div>
+    </div>
+
+    <div class="msg">
+      <div class="prose"><p>Les deux points tiennent. Je n'ai pas touché <code>mimo</code> : une ligne de config.</p></div>
+    </div>
+  </div>
+
+  <div class="pcomposer-wrap">
+    <div class="pcomposer">
+      <div class="field">Regarde le diff<span class="caret"></span></div>
+      <div class="bar">
+        <button class="join" aria-label="Joindre">
+          <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"/></svg>
+        </button>
+        <button class="voice" aria-label="Vocal">
+          <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9.25" y="3.5" width="5.5" height="10" rx="2.75"/><path d="M6.75 11.5a5.25 5.25 0 0010.5 0M12 16.75V20"/></svg>
+        </button>
+        <span class="grow"></span>
+        <button class="send" aria-label="Envoyer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="phint">
+      <span><span class="k">↵</span>envoyer</span>
+      <span><span class="k">/</span>commandes</span>
+    </div>
+  </div>
+  <div class="home"></div>
+</div>
+<script>
+/* Le mobile ne choisit pas son thème non plus : il lit ?theme= / ?mode= pour une
+   capture, sinon la préférence posée dans Réglages › Apparence. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var saved = null;
+  try { saved = localStorage.getItem('myclaw-theme'); } catch (e) {}
+  document.documentElement.setAttribute('data-theme', q.get('theme') || (saved ? saved.split(':')[0] : 'sable'));
+  document.documentElement.setAttribute('data-mode', q.get('mode') || (saved ? saved.split(':')[1] : 'light'));
+})();
+</script>
+</body>
+</html>

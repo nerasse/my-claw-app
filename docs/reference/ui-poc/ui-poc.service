@@ -1,0 +1,14 @@
+[Unit]
+Description=my-claw UI directions POC (static)
+After=network.target
+
+[Service]
+User=neras
+Group=neras
+WorkingDirectory=/home/neras/dev/ui-poc
+ExecStart=/usr/bin/python3 /home/neras/dev/ui-poc/serve/serve.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

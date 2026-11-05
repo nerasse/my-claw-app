@@ -1,0 +1,164 @@
+/* ============================================================
+   Mode compact
+   S'applique quand la place manque : un téléphone, ou une fenêtre
+   de bureau étroite. Ce n'est pas une seconde interface : c'est la
+   même, resserrée sur les quatre choses qui coûtent de la hauteur
+   et de la largeur.
+
+     · la barre d'état et l'en-tête fusionnent
+     · les faits du fil passent sur une ligne (modèle · effort · ctx)
+     · le composeur perd ses raccourcis clavier, qui n'ont pas de sens
+       sans clavier
+     · les espacements verticaux tombent d'un cran, les cibles tactiles
+       restent à 40 px minimum
+
+   Le déclencheur est la largeur, pas la plateforme : une fenêtre de
+   navigateur à 420 px est un téléphone, une tablette en paysage n'en
+   est pas un. */
+@media (max-width: 560px) {
+  /* --- en-tête : une seule ligne, 48 px au total --- */
+  .pstatus { height: 34px; flex-basis: 34px; padding: 0 16px; font-size: 11px; }
+  .pstatus .i { width: 12px; height: 12px; }
+
+  .pbar { height: 40px; flex-basis: 40px; padding: 0 8px 0 4px; gap: 6px; }
+  .pbar .action { width: 30px; height: 30px; }
+  .pbar .t { font-size: 14px; }
+  .pbar .s { font-size: 10px; margin-top: 0; }
+
+  /* La bande de contexte garde ses trois informations : la barre, le rapport,
+     le pourcentage. Rien ne se masque ici — c'est la ligne qui a été déplacée
+     hors de la barre de titre pour leur faire de la place. */
+  .pctxbar { padding: 0 12px 7px; }
+  .pctx { height: 21px; padding: 0; gap: 6px; font-size: 10px; }
+  .pctx .track { width: 52px; height: 5px; }
+
+  /* --- fil : plus de lignes visibles, mêmes tailles de texte --- */
+  .pthread { padding: 4px var(--mgutter) 0; }
+  .msg { margin-bottom: 11px; }
+  .byline { margin-bottom: 4px; }
+  .reason { margin-bottom: 6px; }
+
+  /* --- liste : une ligne = un titre, la méta seulement si elle dit un état --- */
+  .plist { padding: 0 6px; }
+  .group { padding: 10px 8px 3px; }
+  .row { padding: 8px 8px; min-height: 40px; }
+  .row-title { font-size: 13px; }
+  .row-meta { font-size: 10.5px; }
+
+  /* --- composeur : la barre de raccourcis disparaît --- */
+  .phint { display: none; }
+  .pcomposer-wrap { padding: 6px var(--mgutter) 2px; }
+  .pcomposer { padding: 8px 8px 6px 12px; border-radius: 17px; }
+  .pcomposer .field { font-size: 14px; min-height: 22px; padding-bottom: 6px; }
+  .pcomposer .join, .pcomposer .voice { width: 28px; height: 28px; }
+  .pcomposer .send { width: 30px; height: 30px; }
+  .home { height: 4px; margin: 4px auto 4px; }
+}
+
+/* Fenêtre de bureau étroite : la même économie, sans le cadre téléphone.
+   La liste est la première chose à céder : à 720 px elle prenait 296, soit 41 %
+   de la fenêtre, et laissait 424 px au fil. Elle se resserre, puis se replie. */
+@media (min-width: 561px) and (max-width: 900px) {
+  .side { width: 240px; flex-basis: 240px; }
+  .side-name { font-size: 15px; }
+  .row-title { font-size: 12.5px; }
+}
+
+/* Une fenêtre de navigateur réduite à la largeur d'un téléphone garde la même
+   économie que le rail : la liste est un rail, le fil prend le reste. */
+@media (max-width: 560px) {
+  .shell { --gutter: 12px; }
+  .side { width: 52px; flex-basis: 52px; }
+  .side .side-name,
+  .side .side-search,
+  .side .side-list,
+  .side .server,
+  .side .more .label { display: none; }
+  .side .side-head { flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
+  .side .side-head .actions { flex-direction: column; gap: 3px; }
+  .side .side-foot { padding: 6px 0; }
+  .side .foot-row { flex-direction: column; align-items: center; gap: 4px; }
+  .side .more { flex: 0 0 auto; padding: 5px; }
+
+  /* L'en-tête à 390 : le titre veut la place, la jauge perd son mot et son chiffre
+     (la barre suffit), les pastilles se resserrent. */
+  /* À 390 l'en-tête ne peut pas tout dire. Le titre et le modèle restent : ce sont
+     les deux choses qu'on cherche des yeux. La jauge de contexte passe à la ligne
+     de faits, qui redevient visible — un chiffre suffit, sans barre. */
+  .topbar { padding: 0 6px; gap: 4px; }
+  .topbar .title { font-size: 13px; }
+  .topbar .sub { display: flex; font-size: 10px; }
+  .agents { padding: 0 6px; height: 22px; }
+  .action { width: 26px; height: 26px; }
+
+  /* Sur une fenêtre étroite, le contexte tient sur la ligne de métadonnées : le
+     rapport et la barre disparaissent, la part suffit. Un en-tête sur deux lignes
+     coûtait plus que la donnée qu'il portait. */
+  /* Une seule des deux formes est visible : la jauge dans la barre au-delà de
+     560, le pourcentage dans la ligne de métadonnées en dessous. */
+  .topbar .ctx { display: none; }
+  .ctx-sub { display: inline; }
+  .topbar .sub { display: flex; font-size: 10px; }
+  /* Deux lignes : le titre + les actions, puis la bande de contexte. La hauteur est
+     fixée, pas déduite : `auto` laissait la barre déborder sur le fil. */
+  .topbar {
+    flex-wrap: nowrap;
+    height: 44px;
+    flex-basis: 44px;
+    align-content: center;
+    padding: 0 6px;
+    gap: 4px;
+  }
+  /* Le titre passe sur deux lignes de hauteur mais une seule de texte : il prend
+     toute la place que les actions veulent bien lui laisser, et le modèle est déjà
+     répété dans la bande de contexte (il n'y est pas, mais le picker le montre). */
+  .topbar .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar .title-block { flex: 1 1 auto; min-width: 0; max-width: calc(100% - 132px); }
+
+  .composer-wrap { padding: 8px 12px 6px; }
+  /* les raccourcis clavier n'ont pas de clavier : ils disparaissent ici aussi */
+  .hint { display: none; }
+}
+
+@media (min-width: 561px) and (max-width: 780px) {
+  .shell { --gutter: 16px; }
+  /* Repliée au rail : le fil récupère 184 px. C'est la même règle que le bouton
+     « replier » du bureau, appliquée par la place et non par un clic. */
+  .side { width: 56px; flex-basis: 56px; }
+  .side .side-name,
+  .side .side-search,
+  .side .side-list,
+  .side .server,
+  .side .more .label { display: none; }
+  .side .side-head { flex-direction: column; align-items: center; padding: 10px 0; gap: 6px; }
+  .side .side-head .actions { flex-direction: column; gap: 4px; }
+  /* dans le rail, la conversation nouvelle reste l'action marquée */
+  .side .side-head .actions .action.primary { background: var(--accent-soft); }
+  .side .side-foot { padding: 8px 0; }
+  .side .foot-row { flex-direction: column; align-items: center; gap: 6px; }
+  .side .more { flex: 0 0 auto; padding: 6px; }
+}
+
+@media (min-width: 561px) and (max-width: 900px) {
+  .shell { --gutter: 18px; }
+  .topbar { height: 44px; flex-basis: 44px; }
+  .topbar .sub { display: none; }
+  .ctx { height: 22px; font-size: 10.5px; }
+  .hint { display: none; }
+  .pane, .grip { display: none; }
+}
+
+/* Le panneau ouvert coûte 440 px au fil. Entre 1100 et 1500, il cède de la place
+   au fil plutôt que de le comprimer : c'est la conversation qu'on lit, le panneau
+   qu'on consulte. Au-delà, il reprend sa largeur. */
+@media (min-width: 1100px) and (max-width: 1500px) {
+  .pane { width: 380px; flex-basis: 380px; }
+}
+@media (min-width: 1100px) and (max-width: 1300px) {
+  .pane { width: 340px; flex-basis: 340px; }
+}
+
+/* Le composeur ne chevauche jamais le fil : il est dans le flux, opaque, et le fil
+   s'arrête à son bord. Une marge basse de 18 px laisse respirer la dernière ligne. */
+.thread { padding-bottom: 18px; }
+.composer-wrap { position: relative; z-index: 1; background: var(--bg); }
