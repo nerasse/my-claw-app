@@ -100,3 +100,50 @@ test('the native field keeps the platform line box', () => {
 
   expect(StyleSheet.flatten(tree.root.findByType(TextInput).props.style).lineHeight).toBeUndefined();
 });
+
+/**
+ * The field grows with its text on every platform.
+ *
+ * It did not on a phone: the frame was `flex: 1` inside a column whose height comes from its
+ * content, so the field took its size from the actions bar and stayed one line tall while the
+ * EditText scrolled inside it. The web hid it for months, `autoGrow` writing an explicit height
+ * in pixels; Android has no such helper. The owner saw a single line whatever he typed
+ * (2026-11-05).
+ */
+test('the field is sized by its text, not by the bar under it', () => {
+  tree = render();
+
+  const frameStyle = StyleSheet.flatten(frame(tree).props.style);
+  expect(frameStyle.flex).toBeUndefined();
+  expect(frameStyle.flexGrow).toBe(0);
+});
+
+test('the field says so when its text no longer fits', () => {
+  tree = render();
+  laidOut(tree, 130, 94);
+  expect(tree.root.findAllByProps({ testID: 'composer-field-scrollbar' })).toHaveLength(0);
+
+  const input = tree.root.findByType(TextInput);
+  ReactTestRenderer.act(() =>
+    input.props.onContentSizeChange({ nativeEvent: { contentSize: { width: 130, height: 400 } } }),
+  );
+
+  // Drawn from the two heights it was given: the track and the thumb inside it.
+  const bar = tree.root.findAllByProps({ testID: 'composer-field-scrollbar' });
+  expect(bar.length).toBeGreaterThan(0);
+  expect(StyleSheet.flatten(bar[0]!.props.style)).toMatchObject({ position: 'absolute', width: 3 });
+});
+
+test('the mark goes away when the text fits again', () => {
+  tree = render();
+  laidOut(tree, 130, 94);
+  const input = tree.root.findByType(TextInput);
+  ReactTestRenderer.act(() =>
+    input.props.onContentSizeChange({ nativeEvent: { contentSize: { width: 130, height: 400 } } }),
+  );
+  ReactTestRenderer.act(() =>
+    tree?.root.findByType(TextInput).props.onContentSizeChange({ nativeEvent: { contentSize: { width: 130, height: 48 } } }),
+  );
+
+  expect(tree.root.findAllByProps({ testID: 'composer-field-scrollbar' })).toHaveLength(0);
+});

@@ -81,8 +81,8 @@ export function pointerHoverProps(onHover: (hovering: boolean) => void): Partial
   } as Partial<ViewProps>;
 }
 
-export function autoGrow(node: unknown, maxHeight: number): void {
-  if (!(node instanceof HTMLTextAreaElement)) return;
+export function autoGrow(node: unknown, maxHeight: number): boolean {
+  if (!(node instanceof HTMLTextAreaElement)) return false;
   // A textarea is two rows tall by default, and that intrinsic height is a floor `scrollHeight`
   // never goes under: one line of text measured as two, and the composer stood 8pt taller than
   // the round buttons beside it.
@@ -100,4 +100,5 @@ export function autoGrow(node: unknown, maxHeight: number): void {
   if (placeholder) node.placeholder = placeholder;
   node.style.height = `${Math.min(needed, maxHeight)}px`;
   node.style.overflowY = needed > maxHeight ? 'auto' : 'hidden';
+  return needed > maxHeight;
 }

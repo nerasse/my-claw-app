@@ -12,7 +12,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
-import { chatStore, isSubAgentTool, useChatItems, useCompacting, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { requestRunItems } from '../core/runItems';
 import { dataUriType } from '../core/dataUri';
@@ -315,6 +315,11 @@ export function ChatScreen({
   const [following, setFollowing] = useState(true);
   /** Where the list is, because the reveal has to know what it is lifting from. */
   const offsetRef = useRef(0);
+  /**
+   * The list's viewport and the height of what it holds, from the scroll indicator's own measure.
+   * A thread that does not fill the viewport has nothing to scroll and no end to reach.
+   */
+  const [listMeasure, setListMeasure] = useState<{ viewport: number; content: number }>();
   const commands = useCommands();
   const inCommandRef = useRef(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>(() => draftAttachmentsOf(threadId));
@@ -1368,8 +1373,32 @@ export function ChatScreen({
     onScroll: handleScroll,
     onScrollEndDrag: endGesture,
     onMomentumScrollEnd: endGesture,
+    onMeasure: setListMeasure,
     inverted: true,
   });
+
+  /**
+   * A thread shorter than the screen has no scroll range, so it has no end to reach: `onEndReached`
+   * fires once at mount, the cursor that says there is older work usually arrives after that, and
+   * no gesture is ever left to ask again. The reader sits on three turns with the beginning of
+   * their conversation behind them and no way to reach it (owner, 2026-11-05).
+   *
+   * So the list asks by itself when the content it holds does not fill the viewport, keyed on the
+   * cursor rather than on the height: the page that says `hasMore` lands after the first measure,
+   * and a guard latched on the content height would call that a second ask and never make it. The
+   * store is the only guard that matters -- a page in flight, or nothing older to ask for, and
+   * this is a no-op. It is not a second pager, it is the one reach the list cannot make itself.
+   */
+  const historyPage = useHistoryPage(threadId);
+  const askedToFill = useRef<number | null>(null);
+  useEffect(() => {
+    if (listMeasure === undefined || loadingOlder) return;
+    if (!historyPage.hasMore) return;
+    if (listMeasure.content > listMeasure.viewport + 1) return;
+    if (askedToFill.current === historyPage.nextBefore) return;
+    askedToFill.current = historyPage.nextBefore;
+    onLoadOlder();
+  }, [historyPage.hasMore, historyPage.nextBefore, listMeasure, loadingOlder, onLoadOlder]);
 
   return (
     <View style={styles.screen}>

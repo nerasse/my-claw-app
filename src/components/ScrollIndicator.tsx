@@ -33,6 +33,11 @@ export interface ScrollIndicatorOptions {
   onContentSizeChange?: (width: number, height: number) => void;
   onLayout?: (event: LayoutChangeEvent) => void;
   /**
+   * The viewport and the content it holds, once both are known. The list needs this to tell a
+   * thread that fills the screen from one that does not: only the first has an end to reach.
+   */
+  onMeasure?: (measure: { viewport: number; content: number }) => void;
+  /**
    * The list this bar belongs to is inverted, so offset 0 is its bottom. The bar is a sibling of
    * the list rather than a child, so it is outside the flip the list applies to itself: without
    * this it would ride to the top while the reader sits on the newest message.
@@ -46,6 +51,7 @@ export function useScrollIndicator({
   onMomentumScrollEnd,
   onContentSizeChange,
   onLayout,
+  onMeasure,
   inverted = false,
 }: ScrollIndicatorOptions = {}): {
   scrollProps: {
@@ -125,6 +131,10 @@ export function useScrollIndicator({
     },
     [onContentSizeChange],
   );
+
+  useEffect(() => {
+    if (viewport > 0 && content > 0) onMeasure?.({ viewport, content });
+  }, [content, onMeasure, viewport]);
 
   const handleScrollEndDrag = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {

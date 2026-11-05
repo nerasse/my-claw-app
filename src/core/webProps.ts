@@ -21,7 +21,17 @@ export function onAccentProps(): Partial<ViewProps> {
   return {};
 }
 
-export function autoGrow(_node: unknown, _maxHeight: number): void {}
+/**
+ * Grows a text field to its content, up to a ceiling. Web only: the browser's textarea has one
+ * height, while an Android EditText grows within its `maxHeight` by itself.
+ *
+ * True when the field now scrolls, which is what the composer's overflow mark reads: a field that
+ * scrolls gives no sign of it, and the lines below the frame are there only if you think to drag.
+ * The phone answers for itself with the input's own content height.
+ */
+export function autoGrow(_node: unknown, _maxHeight: number): boolean {
+  return false;
+}
 
 /**
  * Pointer movement on a surface whose own controls hide themselves (the full-screen viewers).

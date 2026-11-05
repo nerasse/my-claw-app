@@ -147,6 +147,18 @@ export function Composer({
   const nothingToSend = (empty && staged === 0) || uploading === true;
   const [recording, setRecording] = useState(false);
   /**
+   * Whether the field holds more lines than its ceiling shows.
+   *
+   * A field that scrolls gives no sign of it: the text simply stops at the frame's edge, and the
+   * lines below are there only if you think to drag. One line of ink at the bottom of the frame
+   * says so, and it goes away the moment the whole message fits.
+   */
+  const [overflowing, setOverflowing] = useState(false);
+  /** The field's own frame, its text's height, and where it is scrolled to: the thumb's inputs. */
+  const [fieldHeight, setFieldHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  /**
    * The microphone is offered as long as nothing has been typed, so several notes can be
    * recorded in a row. It only steps aside for a written message, which is the one case where
    * the two would compete for the same corner. Once anything is staged the send arrow appears
@@ -240,7 +252,10 @@ export function Composer({
       : MAX_TEXT_HEIGHT.compact;
   const placeholder = hero ? (questionPending ? 'Answer the pending questions' : 'Ask anything') : questionPending ? 'Answer the pending questions' : 'message';
   useEffect(() => {
-    autoGrow(inputRef.current, maxTextHeight);
+    // `autoGrow` is the web's: it writes the explicit height a textarea needs, and answers whether
+    // the field now scrolls. On Android the EditText grows within `maxHeight` on its own, so the
+    // answer comes from the input's own content height instead.
+    setOverflowing(autoGrow(inputRef.current, maxTextHeight));
   }, [value, maxTextHeight, placeholder]);
   // The height depends on where the text wraps, which is the field's width as much as its text: a
   // field measured while a column folded or a page opened beside it kept that height until the
@@ -254,7 +269,9 @@ export function Composer({
       if (width === fieldWidth.current && node === measuredNode.current) return;
       fieldWidth.current = width;
       measuredNode.current = node;
-      autoGrow(node, maxTextHeight);
+      // A narrower field wraps earlier, so the answer changes with the width too.
+      setOverflowing(autoGrow(node, maxTextHeight));
+      setFieldHeight(e.nativeEvent.layout.height);
     },
     [maxTextHeight],
   );
@@ -415,8 +432,23 @@ export function Composer({
             multiline
             blurOnSubmit={false}
             accessibilityLabel="Message to send"
+            // Android grows the EditText itself, and reports the text's own height: past the
+            // ceiling the frame clips it, and nothing said so (owner, 2026-11-05). Read from
+            // the same event the typeahead uses, so the mark appears as the line is typed.
+            onContentSizeChange={e => {
+              const height = e.nativeEvent.contentSize.height;
+              setContentHeight(height);
+              setOverflowing(height > maxTextHeight);
+            }}
+            onScroll={e => setScrollOffset(e.nativeEvent.contentOffset.y)}
           />
         </View>
+        {/* The field scrolls, and says so. Android draws no scrollbar inside an EditText, so
+            the app draws the same thin thumb every list here draws. Web keeps the browser's own:
+            two bars for one field would be one too many. */}
+        {overflowing && Platform.OS !== 'web' ? (
+          <FieldScrollBar viewport={fieldHeight} content={contentHeight} offset={scrollOffset} />
+        ) : null}
         <View style={styles.bar}>
         {onPickAttachment && !recording ? (
           <Pressable
@@ -505,6 +537,9 @@ export function Composer({
  * How tall the text may grow before it scrolls inside its frame, per variant. Text only: the
  * padding and the border belong to the wrapper, so this is the number the stylesheet caps the
  * field at and the number the browser's autoGrow stops at, and there is only one of it.
+ *
+ * `compact` is the phone's ceiling and it is deliberately short of the thread: past four lines the
+ * message is a page, not a line, and the field would eat the conversation it is written into.
  */
 const MAX_TEXT_HEIGHT = { compact: 94, dense: 188, hero: 218 };
 
@@ -630,8 +665,15 @@ const createStyles = (palette: Palette) => ({
   // The field carries no frame of its own any more: the shell around it does. Border, radius and
   // background on the input scroll away with the text on Android, which is why a long message
   // used to sit across the rounded edge, cut in the middle of a line.
+  //
+  // No `flex: 1`. The shell is a column whose height comes from its content, and a growing child
+  // has a flex basis of 0: the field then measured the actions bar and stayed one line tall while
+  // the EditText scrolled inside it. The web hid that for months, `autoGrow` writing an explicit
+  // height in pixels; Android has no such helper, so the phone showed a single line whatever was
+  // typed (owner, 2026-11-05). Here the text sizes the field, and the field sizes the shell.
   field: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
     minHeight: 26,
     justifyContent: 'center' as const,
     paddingTop: 2,
@@ -667,6 +709,10 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
+  // The field's own scrollbar: 3 pt, the same width every list in the app draws, riding the
+  // right edge of the frame rather than of the window.
+  track: { position: 'absolute' as const, width: 3 },
+  thumb: { width: 3, borderRadius: 2, opacity: 0.55 },
   sendHero: { width: 40, height: 40 },
   buttonDense: { width: 30, height: 30 },
   // A mouse can scroll a tall field and a desktop has the room: four lines is a phone's ceiling.
@@ -677,3 +723,42 @@ const createStyles = (palette: Palette) => ({
   // under every running answer made the app look like it was shouting.
   sendStop: { backgroundColor: palette.text },
 });
+
+/**
+ * The field's own scrollbar, on the platforms that draw none.
+ *
+ * An Android `EditText` scrolls its text with no thumb and no track: past the ceiling a long
+ * message just stops at the frame's edge, and the lines below it are there only if you think to
+ * drag. This is the same 3 pt bar every list in the app draws (`ScrollIndicator`), sized from the
+ * field's frame and its text, positioned against the field rather than the keyboard bar.
+ */
+function FieldScrollBar({
+  viewport,
+  content,
+  offset,
+}: {
+  viewport: number;
+  content: number;
+  offset: number;
+}): React.JSX.Element | null {
+  const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
+  const { dense } = useLayout();
+  if (viewport <= 0 || content <= viewport) return null;
+  const height = Math.max(24, (viewport * viewport) / content);
+  const travel = Math.max(viewport - height, 0);
+  const max = Math.max(content - viewport, 1);
+  const y = Math.min(Math.max((offset / max) * travel, 0), travel);
+  const inset = dense ? 6 : 8;
+  return (
+    <View
+      // Only on a platform that draws none of its own: the web keeps the browser's.
+      testID="composer-field-scrollbar"
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.track, { top: inset, right: inset, height }]}>
+      <View style={[styles.thumb, { height, backgroundColor: palette.textFaint, transform: [{ translateY: y }] }]} />
+    </View>
+  );
+}
