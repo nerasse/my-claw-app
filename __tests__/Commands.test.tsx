@@ -440,8 +440,10 @@ test('an approval request opens a sheet; allowing once answers the server', asyn
 
   await waitFor(() => labelsOf(tree).includes('Allow once'));
   expect(allTexts(tree).some(text => text.includes('rm -rf'))).toBe(true);
-  // bash is per-invocation: the server refuses a session grant for it, so it is not offered.
-  expect(labelsOf(tree).some(label => label.startsWith('Always allow'))).toBe(false);
+  // bash is per-invocation: the server refuses a session grant for it, so that one is not offered.
+  // The standing grant is a different decision (one exact call, one machine) and stays on the menu.
+  expect(labelsOf(tree).includes('Always allow bash here')).toBe(false);
+  expect(labelsOf(tree).includes('Always allow this exact call')).toBe(true);
 
   await pressLabel(tree, 'Allow once');
   await waitFor(() =>

@@ -190,6 +190,8 @@ export interface BackLayers {
   setBrowserOpen: (value: false) => void;
   statsOpen: boolean;
   closeStats: () => void;
+  approvalsOpen: boolean;
+  closeApprovals: () => void;
   systemFilesOpen: boolean;
   closeSystemFiles: () => void;
   filesOpen: boolean;
@@ -329,6 +331,8 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setBrowserOpen,
     statsOpen,
     closeStats,
+    approvalsOpen,
+    closeApprovals,
     systemFilesOpen,
     closeSystemFiles,
     filesOpen,
@@ -659,6 +663,10 @@ export function closeTopLayer(layers: BackLayers): boolean {
   // the next opening asks again instead of drawing figures from the last visit.
   if (statsOpen) {
     closeStats();
+    return true;
+  }
+  if (approvalsOpen) {
+    closeApprovals();
     return true;
   }
   if (systemFilesOpen) {

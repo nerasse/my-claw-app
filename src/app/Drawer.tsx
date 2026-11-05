@@ -145,6 +145,7 @@ export function Drawer({
   onMoveToFolder,
   onReorderFolders,
   onOpenMore,
+  approvalCount = 0,
   onOpenSettings,
   home,
   onCollapse,
@@ -191,6 +192,8 @@ export function Drawer({
   onReorderFolders: (order: string[]) => void;
   /** The one footer entry: opens the sheet with Archived, Agents, Jobs and Settings. */
   onOpenMore: () => void;
+  /** Prompts waiting on the owner right now: badged on that entry, so he sees a queue, not a menu. */
+  approvalCount?: number;
   /** Jump straight to Settings from the home footer. */
   onOpenSettings: () => void;
   /** Full-screen list on phone/tablet when no thread is open. */
@@ -824,7 +827,14 @@ export function Drawer({
               accessibilityRole="button"
               accessibilityLabel="More">
               <View style={styles.footerMain}>
-                <Text style={styles.footerTitle}>More</Text>
+                <View style={styles.footerTitleRow}>
+                  <Text style={styles.footerTitle}>More</Text>
+                  {approvalCount > 0 ? (
+                    <View style={styles.approvalBubble}>
+                      <Text style={styles.approvalBubbleText}>{approvalCount > 9 ? '9+' : approvalCount}</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <View style={styles.footerStateRow}>
                   <View
                     style={[
@@ -1121,6 +1131,17 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
   },
   footerMain: { flex: 1, gap: 1 },
+  footerTitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
+  approvalBubble: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: palette.accent,
+  },
+  approvalBubbleText: { fontSize: 11, fontWeight: '600' as const, color: palette.accentText },
   footerTitle: { fontSize: font.body, color: palette.text },
   footerMeta: { fontSize: 10.5, color: palette.textFaint },
   footerStateRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginTop: 1 },

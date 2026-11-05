@@ -7,6 +7,7 @@ import { subAgentCallersStore, subAgentStore } from './subagents';
 import { sessionStore } from './sessions';
 import { commandStore } from './commands';
 import { questionStore } from './questionStore';
+import { approvalGrantsStore } from './approvalGrants';
 import { undoStore } from './undoStore';
 import { acknowledgeDiagnostics } from './diagnostics';
 import { devicesStore } from './devices';
@@ -885,6 +886,9 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       break;
     case 'approval.history.result':
       setApprovalHistory(frame);
+      break;
+    case 'approval.grants.result':
+      approvalGrantsStore.set(frame.grants);
       break;
     case 'question.ask':
       // The store owns it, not this screen: the form is drawn in the conversation and has to

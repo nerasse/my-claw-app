@@ -70,3 +70,43 @@ describe('frameRouter approval frames', () => {
     expect(state.approvals).toEqual([]);
   });
 });
+
+describe('standing grants', () => {
+  it('the grants list is the server\'s whole answer, and it lands in its own store', () => {
+    const { approvalGrantsStore } = require('../approvalGrants') as typeof import('../approvalGrants');
+    const { serverHandlers } = makeHandlers();
+    routeServerFrame(
+      { type: 'approval.grants.result', grants: [{ tool: 'bash', origin: 'node-1', args: '{"command":"df -h"}' }] },
+      serverHandlers,
+    );
+    expect(approvalGrantsStore.snapshot()).toEqual([
+      { tool: 'bash', origin: 'node-1', args: '{"command":"df -h"}' },
+    ]);
+  });
+
+  it('a request carries where it runs, whether it waits, and the sentence the agent wrote', () => {
+    const { state, serverHandlers } = makeHandlers();
+    routeServerFrame(
+      {
+        type: 'approval.request',
+        id: 'a9',
+        threadId: 'projet',
+        toolName: 'bash',
+        args: { command: 'df -h' },
+        expiresAt: 0,
+        allowSessionOffered: false,
+        allowAlwaysOffered: true,
+        origin: { kind: 'node', nodeId: 'node-1', name: 'archy' },
+        requestedAt: Date.now(),
+        waitForever: true,
+        headline: 'check the disks on archy',
+      },
+      serverHandlers,
+    );
+    expect(state.approvals[0]).toMatchObject({
+      waitForever: true,
+      headline: 'check the disks on archy',
+      origin: { kind: 'node', name: 'archy' },
+    });
+  });
+});

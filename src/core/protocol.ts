@@ -766,9 +766,16 @@ export interface SessionWorkspaceSetResultFrame {
   workspace: string;
 }
 
-export type ApprovalDecision = 'allow-once' | 'allow-session' | 'deny';
+export type ApprovalDecision = 'allow-once' | 'allow-session' | 'allow-always' | 'deny';
 
 export type ApprovalOutcome = ApprovalDecision | 'expired' | 'cancelled';
+
+/** Where an approval's call would run: this server's machine, or a paired node. */
+export interface ApprovalOriginFrame {
+  kind: 'local' | 'node';
+  nodeId?: string;
+  name?: string;
+}
 
 export interface ApprovalRequestFrame {
   type: 'approval.request';
@@ -777,6 +784,7 @@ export interface ApprovalRequestFrame {
   toolName: string;
   args: Record<string, unknown>;
   replyToId?: string;
+  /** 0 (with `waitForever`) when the prompt has no timer. */
   expiresAt: number;
   /**
    * Whether "always allow in this conversation" is on offer. False for the per-invocation tools
@@ -784,6 +792,16 @@ export interface ApprovalRequestFrame {
    * a button that lies.
    */
   allowSessionOffered?: boolean;
+  /** Whether "always allow this exact call" is on offer (same tool, same args, same machine). */
+  allowAlwaysOffered?: boolean;
+  /** The machine the call would run on. */
+  origin?: ApprovalOriginFrame;
+  /** When the prompt was raised, for the "waiting since" line on the page. */
+  requestedAt?: number;
+  /** The agent asked by itself: the run waits until the owner answers. */
+  waitForever?: boolean;
+  /** The sentence the asking agent wrote. */
+  headline?: string;
 }
 
 /** One pending approval, as `approval.pending` carries it: a request without the frame envelope. */
@@ -915,6 +933,21 @@ export interface ApprovalHistoryResultFrame {
   threadId?: string;
   entries: ApprovalHistoryEntry[];
   stats: { total: number; allowed: number; denied: number; expired: number };
+}
+
+/** One standing grant: an exact call the owner allowed for good on one machine. */
+export interface ApprovalGrantFrame {
+  tool: string;
+  /** `local` or a node id. */
+  origin: string;
+  /** Canonical JSON of the call's arguments. */
+  args: string;
+  createdAt?: string;
+}
+
+export interface ApprovalGrantsResultFrame {
+  type: 'approval.grants.result';
+  grants: ApprovalGrantFrame[];
 }
 
 export interface DiagSnapshotResultFrame {
@@ -3046,6 +3079,7 @@ export type ServerFrame =
   | ApprovalPendingFrame
   | ApprovalResolvedFrame
   | ApprovalHistoryResultFrame
+  | ApprovalGrantsResultFrame
   | QuestionAskFrame
   | QuestionPendingFrame
   | QuestionResolvedFrame
@@ -3226,6 +3260,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'approval.pending',
   'approval.resolved',
   'approval.history.result',
+  'approval.grants.result',
   'question.ask',
   'question.pending',
   'question.resolved',
@@ -3591,6 +3626,16 @@ export function encodeDraftFileRemove(threadId: string, id: string): string {
 
 export function encodeApprovalResponse(id: string, decision: ApprovalDecision): string {
   return JSON.stringify({ type: 'approval.response', id, decision });
+}
+
+/** The standing grants, asked when the approvals page opens. */
+export function encodeApprovalGrants(): string {
+  return JSON.stringify({ type: 'approval.grants' });
+}
+
+/** Withdrawing one standing grant: that exact call asks again from its next invocation. */
+export function encodeApprovalGrantRemove(grant: { tool: string; origin: string; args: string }): string {
+  return JSON.stringify({ type: 'approval.grant.remove', tool: grant.tool, origin: grant.origin, args: grant.args });
 }
 
 /** The owner answered a question card: one array of selections per question, in order. */

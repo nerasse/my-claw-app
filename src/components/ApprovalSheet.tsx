@@ -31,6 +31,12 @@ function secondsLeft(expiresAt: number, now: number): number {
   return Math.max(0, Math.ceil((expiresAt - now) / 1000));
 }
 
+/** The machine a prompt belongs to, as the sheet's meta row says it. */
+function originLabelOf(request: ApprovalRequestFrame): string {
+  if (!request.origin || request.origin.kind === 'local') return 'this machine';
+  return request.origin.name ?? request.origin.nodeId ?? 'node';
+}
+
 /**
  * The approval prompt. Three grants, never two: "just this once" and "always in this
  * conversation" are different decisions and the sheet has to let the owner say which one he
@@ -84,6 +90,19 @@ export function ApprovalSheet({
           } as SheetEntry,
         ]
       : []),
+    ...(request.allowAlwaysOffered !== false
+      ? [
+          {
+            key: 'always',
+            label: 'Always allow this exact call',
+            icon: <CheckIcon size={15} tone="muted" />,
+            hint: request.origin?.kind === 'node'
+              ? `Same arguments on ${request.origin.name ?? 'that node'}, forever.`
+              : 'Same arguments, on this machine, forever.',
+            onPress: () => onDecide('allow-always'),
+          } as SheetEntry,
+        ]
+      : []),
     { type: 'separator' as const, key: 'sep' },
     {
       key: 'deny',
@@ -97,18 +116,27 @@ export function ApprovalSheet({
 
   return (
     <ActionSheet
-      preview={`${request.toolName} wants to run`}
+      preview={request.headline ?? `${request.toolName} wants to run`}
       options={options}
       onClose={onDismiss}>
       <View style={styles.body}>
         <View style={styles.metaRow}>
-          <Text
-            style={[styles.timer, remaining <= 15 ? styles.timerUrgent : null]}
-            accessibilityLabel={`${remaining} seconds left to answer`}>
-            {remaining > 0 ? `${remaining}s to answer` : 'expired'}
-          </Text>
+          {request.waitForever ? (
+            <Text style={styles.timer}>waiting for you (no timeout)</Text>
+          ) : (
+            <Text
+              style={[styles.timer, remaining <= 15 ? styles.timerUrgent : null]}
+              accessibilityLabel={`${remaining} seconds left to answer`}>
+              {remaining > 0 ? `${remaining}s to answer` : 'expired'}
+            </Text>
+          )}
+          {request.origin ? <Text style={styles.origin}>{originLabelOf(request)}</Text> : null}
           {pending > 0 ? <Text style={styles.queued}>{pending} more waiting</Text> : null}
         </View>
+
+        {request.headline ? (
+          <Text style={styles.headline}>{request.toolName}</Text>
+        ) : null}
 
         {headline ? (
           <Text style={styles.headline} selectable>
@@ -140,6 +168,7 @@ const createStyles = (palette: Palette) =>
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     timer: { fontSize: font.small, color: palette.textMuted },
     timerUrgent: { color: palette.danger },
+    origin: { fontSize: font.small, color: palette.textMuted },
     queued: { fontSize: font.small, color: palette.textMuted },
     headline: {
       fontSize: font.body,

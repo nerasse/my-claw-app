@@ -37,6 +37,7 @@ import {
   encodeAccounts,
   type AccountKind,
   encodeApprovalResponse,
+  encodeApprovalGrants,
   encodeQuestionReply,
   encodeUndoCancel,
   encodeApprovalHistory,
@@ -218,6 +219,7 @@ import {
   MoveToFolderIcon,
   OpenInNewIcon,
   PencilIcon,
+  CheckIcon,
   RefreshIcon,
   SearchIcon,
   SendIcon,
@@ -299,6 +301,7 @@ import {
   setSettingsPage,
   setAgentsGlobalOpen,
   setAgentsOpen,
+  setApprovalsOpen,
   setArchivesOpen,
   setBrowserOpen,
   setFilesOpen,
@@ -314,6 +317,8 @@ import { PagePane, PinnedColumn, ViewerPane } from './DesktopColumns';
 import { AgentsScreen } from './AgentsScreen';
 import { StatusScreen } from './StatusScreen';
 import { StatsScreen } from './StatsScreen';
+import { ApprovalsScreen } from './ApprovalsScreen';
+import { useApprovalGrants } from '../core/approvalGrants';
 import { SystemFilesScreen } from './SystemFilesScreen';
 import { JobsScreen } from './JobsScreen';
 import { JobsEditorScreen } from './JobsEditorScreen';
@@ -576,6 +581,7 @@ export function AppShell(): React.JSX.Element {
   const browserOpen = right.page === 'browser';
   const statusOpen = right.page === 'status';
   const statsOpen = right.page === 'stats';
+  const approvalsOpen = right.page === 'approvals';
   const systemFilesOpen = right.page === 'system-files';
   const instructionsPageOpen = right.page === 'instructions';
   const jobsOpen = right.window === 'jobs';
@@ -940,6 +946,7 @@ export function AppShell(): React.JSX.Element {
   // A run can ask several times in a row; each answer clears one, in order.
   const [approvals, setApprovals] = useState<ApprovalRequestFrame[]>([]);
   const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryResultFrame | null>(null);
+  const approvalGrants = useApprovalGrants();
   // Which conversations hold a question waiting, for the badge in the thread list. The questions
   // themselves are read by the conversation that draws them, not here: a pending ask must not
   // re-render the shell of every page.
@@ -1227,6 +1234,28 @@ export function AppShell(): React.JSX.Element {
   const closeStats = useCallback(() => {
     statsStore.close();
     setStatsOpen(false);
+  }, []);
+
+  /**
+   * The approvals page reads live state only (the pending queue, the journal, the grants), so
+   * closing it drops nothing but the pane itself; opening it asks for both server-side lists.
+   */
+  const closeApprovals = useCallback(() => {
+    setApprovalsOpen(false);
+  }, []);
+
+  const openApprovals = useCallback(() => {
+    setMoreOpen(false);
+    setDrawerOpen(false);
+    setApprovalsOpen(true);
+    connection.send(encodeApprovalHistory()).catch(() => {});
+    connection.send(encodeApprovalGrants()).catch(() => {});
+  }, []);
+
+  /** Answering from the page: same frame the sheet sends, the server broadcasts the resolution. */
+  const decideApproval = useCallback((id: string, decision: Parameters<typeof encodeApprovalResponse>[1]) => {
+    connection.send(encodeApprovalResponse(id, decision)).catch(() => {});
+    setApprovals(current => current.filter(entry => entry.id !== id));
   }, []);
 
   /**
@@ -1796,6 +1825,8 @@ export function AppShell(): React.JSX.Element {
         setBrowserOpen,
         statsOpen,
         closeStats,
+        approvalsOpen,
+        closeApprovals,
         systemFilesOpen,
         closeSystemFiles,
         filesOpen,
@@ -1858,6 +1889,8 @@ export function AppShell(): React.JSX.Element {
       statusOpen,
       statsOpen,
       closeStats,
+      approvalsOpen,
+      closeApprovals,
       systemFilesOpen,
       closeSystemFiles,
       subagentAction,
@@ -1951,11 +1984,12 @@ export function AppShell(): React.JSX.Element {
     setFilesOpen(false);
     if (systemFilesOpen) closeSystemFiles();
     if (statsOpen) closeStats();
+    if (approvalsOpen) closeApprovals();
     if (statusOpen) closeStatus();
     setAgentsOpen(false);
     setAgentsGlobalOpen(false);
     if (!layout.pinnedDrawer) setDrawerOpen(false);
-  }, [settingsOpen, jobsOpen, systemFilesOpen, statsOpen, statusOpen, closeSettings, closeJobs, closeSystemFiles, closeStats, closeStatus, layout.pinnedDrawer]);
+  }, [settingsOpen, jobsOpen, systemFilesOpen, statsOpen, approvalsOpen, statusOpen, closeSettings, closeJobs, closeSystemFiles, closeStats, closeApprovals, closeStatus, layout.pinnedDrawer]);
   // The cross of a settings page (the index has none: its Back is that already); the jobs layers
   // get their own below, which they sit inside. Not during the first run: the setup is the app.
   const settingsClose = useMemo(
@@ -4439,6 +4473,7 @@ export function AppShell(): React.JSX.Element {
             onMoveToFolder={fileThread}
             onReorderFolders={reorderFolders}
             onOpenMore={() => setMoreOpen(true)}
+            approvalCount={approvals.length}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
           />
@@ -4475,6 +4510,7 @@ export function AppShell(): React.JSX.Element {
             onMoveToFolder={fileThread}
             onReorderFolders={reorderFolders}
             onOpenMore={() => setMoreOpen(true)}
+            approvalCount={approvals.length}
             onOpenSettings={openSettingsFromDrawer}
             onHome={handleHome}
           />
@@ -5174,6 +5210,15 @@ export function AppShell(): React.JSX.Element {
             <StatusScreen onClose={closeStatus} />
           ) : statsOpen ? (
             <StatsScreen onClose={closeStats} />
+          ) : approvalsOpen ? (
+            <ApprovalsScreen
+              approvals={approvals}
+              history={approvalHistory}
+              grants={approvalGrants}
+              onDecide={decideApproval}
+              onBack={closeApprovals}
+              onRefreshHistory={() => connection.send(encodeApprovalHistory()).catch(() => {})}
+            />
           ) : systemFilesOpen ? (
             <SystemFilesScreen deviceInfo={deviceInfo} onClose={closeSystemFiles} />
           ) : instructionsPageOpen ? (
@@ -5311,6 +5356,7 @@ export function AppShell(): React.JSX.Element {
         onMoveToFolder={fileThread}
         onReorderFolders={reorderFolders}
         onOpenMore={() => setMoreOpen(true)}
+        approvalCount={approvals.length}
         onOpenSettings={openSettingsFromDrawer}
         onHome={handleHome}
       />
@@ -5706,6 +5752,14 @@ export function AppShell(): React.JSX.Element {
                 setDrawerOpen(false);
                 setStatsOpen(true);
               },
+            },
+            {
+              // Every prompt waiting on him, every machine, plus the calls allowed for good. Here
+              // rather than in Settings because it is a queue he has to clear, not a preference.
+              label: 'Approvals',
+              icon: <CheckIcon size={15} tone={approvals.length > 0 ? 'accent' : 'muted'} />,
+              hint: approvals.length > 0 ? `${approvals.length} waiting` : 'waiting, past, and always allowed',
+              onPress: openApprovals,
             },
             {
               // Beside the statistics rather than beside the conversation actions: this reads the

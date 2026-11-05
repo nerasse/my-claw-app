@@ -28,7 +28,7 @@ import type { SettingsPage } from '../app/settingsPages';
  */
 
 /** The pages that live in the column. */
-export type PaneKind = 'none' | 'settings' | 'files' | 'system-files' | 'status' | 'stats' | 'archives' | 'instructions' | 'browser';
+export type PaneKind = 'none' | 'settings' | 'files' | 'system-files' | 'status' | 'stats' | 'approvals' | 'archives' | 'instructions' | 'browser';
 
 /** The pages that take the whole window: they are not a column, and they cover it. */
 export type WindowKind = 'jobs' | 'agents' | 'agents-global';
@@ -93,7 +93,7 @@ export type ViewerState =
   | { kind: 'skill'; url: string; skill: unknown };
 
 const EMPTY: RightPaneState = { page: 'none', window: null, viewer: null, expanded: false, settingsPage: 'index' };
-const COLUMN_KINDS: readonly PaneKind[] = ['settings', 'files', 'system-files', 'status', 'stats', 'archives', 'instructions', 'browser'];
+const COLUMN_KINDS: readonly PaneKind[] = ['settings', 'files', 'system-files', 'status', 'stats', 'approvals', 'archives', 'instructions', 'browser'];
 const VIEWER_KINDS: readonly ViewerKind[] = ['image', 'text', 'video', 'svg', 'pdf', 'html', 'office', 'archive', 'file', 'skill'];
 
 let state: RightPaneState = EMPTY;
@@ -243,6 +243,10 @@ export const setStatusOpen = (open: boolean): void => {
 export const setStatsOpen = (open: boolean): void => {
   if (open) rightPane.show('stats');
   else rightPane.closeIf('stats');
+};
+export const setApprovalsOpen = (open: boolean): void => {
+  if (open) rightPane.show('approvals');
+  else rightPane.closeIf('approvals');
 };
 export const setSystemFilesOpen = (open: boolean): void => {
   if (open) rightPane.show('system-files');

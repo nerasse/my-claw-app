@@ -10,6 +10,7 @@ import { CloseButton } from '../components/CloseButton';
 const OUTCOME_LABEL: Record<ApprovalOutcome, string> = {
   'allow-once': 'allowed once',
   'allow-session': 'allowed for the conversation',
+  'allow-always': 'allowed for good',
   deny: 'denied',
   expired: 'not answered',
   cancelled: 'cancelled',
@@ -57,10 +58,13 @@ export function ApprovalHistoryScreen({
   history,
   onBack,
   onRefresh,
+  embedded,
 }: {
   history: ApprovalHistoryResultFrame | null;
   onBack: () => void;
   onRefresh: () => void;
+  /** Drawn inside another page that owns the header and the tabs: no title, no back. */
+  embedded?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { scrollProps, indicator } = useScrollIndicator();
@@ -83,12 +87,12 @@ export function ApprovalHistoryScreen({
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <BackButton onPress={onBack} label="Back to tools" />
-        <Text style={styles.title}>Tool approvals</Text>
+        {embedded ? null : <BackButton onPress={onBack} label="Back to tools" />}
+        {embedded ? null : <Text style={styles.title}>Tool approvals</Text>}
         <Pressable onPress={onRefresh} accessibilityRole="button" accessibilityLabel="Refresh" hitSlop={12}>
           <Text style={styles.refresh}>↻</Text>
         </Pressable>
-        <CloseButton />
+        {embedded ? null : <CloseButton />}
       </View>
 
       {stats ? (
@@ -157,7 +161,7 @@ export function ApprovalHistoryScreen({
 }
 
 function outcomeStyle(outcome: ApprovalOutcome): 'outcomeAllow' | 'outcomeDeny' | 'outcomeIdle' {
-  if (outcome === 'allow-once' || outcome === 'allow-session') return 'outcomeAllow';
+  if (outcome === 'allow-once' || outcome === 'allow-session' || outcome === 'allow-always') return 'outcomeAllow';
   if (outcome === 'deny') return 'outcomeDeny';
   return 'outcomeIdle';
 }
