@@ -1800,6 +1800,9 @@ const createStyles = (palette: Palette) => ({
     borderRadius: radius.sm,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    // A control is never squeezed by the text beside it: the title and the facts line are the
+    // two things that give way (the ⋮ staying put is what keeps the facts line out from under it).
+    flexShrink: 0 as const,
   },
   /**
    * The optical correction of the last action, and the whole answer to "the header still looks
@@ -1821,11 +1824,11 @@ const createStyles = (palette: Palette) => ({
    */
   subRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, minWidth: 0 },
   share: { flexShrink: 0 as const, fontVariant: ['tabular-nums' as const] },
-  headerText: { flex: 1, minWidth: 0 },
+  headerText: { flex: 1, minWidth: 0, overflow: 'hidden' as const },
   // 14 and 11, the POC's pair rounded to the app's own scale: the title is a line of the
   // conversation's type, not a screen heading, and at 15 it drew the eye before the answer under it.
   title: { fontSize: font.body, fontWeight: '600' as const, color: palette.text },
-  subtitle: { fontSize: font.small, color: palette.textMeta },
+  subtitle: { fontSize: font.small, color: palette.textMeta, flexShrink: 1 as const, minWidth: 0 },
   connBadge: {
     fontSize: font.meta,
     fontWeight: '600' as const,

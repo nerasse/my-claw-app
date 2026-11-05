@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 
 /** The flattened style of the host view under an accessible node. */
-function boxOf(tree: ReactTestRenderer.ReactTestRenderer, label: string): Record<string, number> {
+function boxOf(tree: ReactTestRenderer.ReactTestRenderer, label: string): Record<string, unknown> {
   const node = tree.root.findAll(
     n => n.props.accessibilityLabel === label && typeof n.type !== 'string',
   )[0];
@@ -85,9 +85,9 @@ function boxOf(tree: ReactTestRenderer.ReactTestRenderer, label: string): Record
 }
 
 /** `style` is an object or an array of them (and nested arrays): read it the way RN does. */
-function flatten(style: unknown): Record<string, number> {
+function flatten(style: unknown): Record<string, unknown> {
   if (Array.isArray(style)) return Object.assign({}, ...style.map(flatten));
-  return (style ?? {}) as Record<string, number>;
+  return (style ?? {}) as Record<string, unknown>;
 }
 
 test('the model button wears the same box as the chips beside it', () => {
@@ -159,4 +159,23 @@ test('the gauge is the toolbar box too', () => {
   });
   const wrap = tree.root.findAll(n => n.props.accessibilityLabel?.includes('of the context window'))[0];
   expect(flatten(wrap.props.style).height).toBe(control.height);
+});
+
+/**
+ * The facts line gives way, it does not run under the ⋮.
+ *
+ * With `flexShrink: 0` on the subtitle (the RN default for a Text), the line kept its intrinsic
+ * width and painted outside its column: on a phone, `provider / model · effort · from the … · 1.9%`
+ * ended under the three-dot button. The owner's rule is that this must never happen, so the
+ * geometry is asserted rather than eyeballed: the text column shrinks, clips, and the controls keep
+ * their box whatever the title or the model name is.
+ */
+test('the title and facts lines shrink, so nothing lands under the menu', () => {
+  const tree = mount({ subtitle: 'opencode_go / DeepSeek V4.1 Flash · max · from the parent · 1.9%' });
+  const screen = tree.root.findAll(n => typeof n.type !== 'string')[0]!;
+  const styles = screen.findAll(n => typeof n.type !== 'string' && n.props.style).map(n => flatten(n.props.style));
+  const subtitle = styles.filter(s => s.fontSize !== undefined && s.flexShrink === 1);
+  expect(subtitle.length).toBeGreaterThan(0);
+  expect(styles.some(s => s.flex === 1 && s.overflow === 'hidden')).toBe(true);
+  expect(boxOf(tree, 'Commands').flexShrink).toBe(0);
 });
