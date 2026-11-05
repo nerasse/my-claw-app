@@ -174,7 +174,7 @@ import {
   useThreadModel,
   withoutEndpoint,
 } from '../core/model';
-import { showsModelButton } from './modelButton';
+import { showsAgentsButton, showsModelButton } from './headerControls';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
@@ -3333,7 +3333,7 @@ export function AppShell(): React.JSX.Element {
       const shared = sessionEntries(activeThread, () => setCommandMenuOpen(false));
       // The model picker is a control of the title bar wherever the bar has room for it, and the
       // entry leaves this menu on exactly that condition (owner, 2026-11-04: "on le vire de la
-      // liste du menu … quand il est affiché"). One predicate, `app/modelButton.ts`: two would let
+      // liste du menu … quand il est affiché"). One predicate, `app/headerControls.ts`: two would let
       // the picker live in both places on one window and in neither on the next.
       //
       // Stop is gone from here (owner, 2026-11-04: "vire l'action stop du menu de session … on a
@@ -3343,6 +3343,27 @@ export function AppShell(): React.JSX.Element {
       // conversation menu never had it either.
       return [...(showsModelButton(layout.width) ? [] : [shared.model]), shared.tune];
     })(),
+    // The roster, where the title bar dropped its badge. Same rule as the model picker one line up:
+    // `showsAgentsButton` admits the counter, and this entry exists on exactly the windows that
+    // said no. A phone header cannot afford a 50 pt badge that also costs the model name its tail,
+    // and the owner never reached for the counter there anyway (2026-11-05: "c'est useless d'avoir
+    // le bouton de la liste des sous-agents tout en haut sur mobile, je l'utilise jamais").
+    ...(activeThread && !showsAgentsButton(layout.width) && subagentCount.total > 0
+      ? [
+          {
+            label: 'Sub-agents',
+            icon: <AgentIcon size={15} tone="muted" />,
+            hint:
+              subagentCount.running > 0
+                ? `${subagentCount.total} · ${subagentCount.running} running`
+                : `${subagentCount.total} in this conversation`,
+            onPress: () => {
+              setCommandMenuOpen(false);
+              setAgentsOpen(true);
+            },
+          } satisfies SheetEntry,
+        ]
+      : []),
     // Model and Stop sit here because only the conversation on screen can answer for them: the
     // app knows the live model and the running turn of the one in front of it, not of a thread
     // picked in the drawer. Everything below is the shared conversation list.

@@ -18,7 +18,7 @@ import { requestRunItems } from '../core/runItems';
 import { dataUriType } from '../core/dataUri';
 import { useThreadQuestions } from '../core/questionStore';
 import { isGrouped } from '../core/grouping';
-import { showsModelButton } from './modelButton';
+import { showsAgentsButton, showsModelButton } from './headerControls';
 import type { DeviceInfo } from '../core/device';
 import { connection } from '../core/connection';
 import { recordDiag } from '../core/diagnostics';
@@ -239,8 +239,12 @@ export function ChatScreen({
   const { palette } = useTheme();
   const layout = useLayout();
   // The model picker takes the bar's fourth slot only where the text block can keep a name whole.
-  // See `app/modelButton.ts` for the measurement and for why the menu reads the same predicate.
+  // See `app/headerControls.ts` for the measurement and for why the menu reads the same predicate.
   const showModelButton = showsModelButton(layout.width);
+  // And the sub-agent badge, at a higher bar: it costs the facts line twice, a 50 pt badge and the
+  // name beside it. Below its threshold the roster moves into the session menu, which `AppShell`
+  // reads off this same predicate.
+  const showAgentsButton = showsAgentsButton(layout.width);
   // A conversation is prose: past ~90 characters a line stops being readable, however wide the
   // window is. The column is centred inside the pane rather than stretched across it.
   const column = useMemo(() => conversationColumn(layout.readingWidth), [layout.readingWidth]);
@@ -1447,7 +1451,7 @@ export function ChatScreen({
             place. Below 560 pt there is no room for three numbers and the share stays in the
             line, which is the one thing a phone header can afford. */}
         {layout.width >= 560 ? meter : null}
-        {subagentCount && subagentCount.total > 0 && onAgentsPress ? (
+        {showAgentsButton && subagentCount && subagentCount.total > 0 && onAgentsPress ? (
           <Pressable
             onPress={onAgentsPress}
             hitSlop={10}

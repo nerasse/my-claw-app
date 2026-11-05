@@ -17,7 +17,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter, useWindowDimensions } from 'react-native';
 import { chatStore } from '../src/core/chat';
 import { deviceBridge } from '../src/core/nativeBridge';
-import { MODEL_BUTTON_MIN_WIDTH } from '../src/app/modelButton';
+import { AGENTS_BUTTON_MIN_WIDTH, MODEL_BUTTON_MIN_WIDTH } from '../src/app/headerControls';
 import { labelsOf, press, renderApp, unmount, waitFor, type Tree } from '../test-utils/render';
 
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions');
@@ -79,6 +79,69 @@ test('the button opens the picker, which lists the catalogue the server answers'
   // The sheet is open and holds the catalogue: that is the button reaching the same picker the
   // menu entry used to. Which frame asked for it is the picker's business, not this test's.
   await waitFor(() => labelsOf(tree).includes('M1'));
+
+  await unmount(tree);
+});
+
+/**
+ * The same rule for the roster, at a higher bar.
+ *
+ * The sub-agent badge costs the facts line twice -- a 50 pt badge, and the model name beside it is
+ * what gives way. Measured at 560 with a long provider id the name is cut with the badge and whole
+ * without it; at 720 the block keeps room for the name and the badge together. So below 720 the
+ * roster lives in the session menu, which is where the owner said he actually looked for it
+ * ("c'est useless d'avoir le bouton de la liste des sous-agents tout en haut sur mobile", 2026-11-05).
+ */
+async function seedAgents(tree: Tree, total = 2, running = 1): Promise<void> {
+  const agents = Array.from({ length: total }, (_, index) => ({
+    id: `subagent/worker-${index}`,
+    displayName: `worker-${index}`,
+    type: 'general',
+    status: index < running ? ('running' as const) : ('idle' as const),
+    messageCount: 3,
+    visibility: 'private' as const,
+    parentThreadId: THREAD,
+  }));
+  await ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', {
+      text: JSON.stringify({ type: 'subagents.list.result', threadId: THREAD, agents }),
+    });
+  });
+}
+
+test('wide, the roster is the badge in the bar and leaves the menu', async () => {
+  const tree = await openConversation(AGENTS_BUTTON_MIN_WIDTH + 80);
+  await seedAgents(tree);
+
+  await waitFor(() => labelsOf(tree).some(label => label.startsWith('2 sub-agents')));
+  await press(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Instructions'));
+  expect(labelsOf(tree)).not.toContain('Sub-agents');
+
+  await unmount(tree);
+});
+
+test('narrow, the badge goes and the menu carries the roster', async () => {
+  const tree = await openConversation(AGENTS_BUTTON_MIN_WIDTH - 80);
+  await seedAgents(tree);
+
+  // No badge in the bar at all: that is the space the model name gets back.
+  expect(labelsOf(tree).some(label => /^\d+ sub-agents?/.test(label))).toBe(false);
+
+  await press(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Sub-agents'));
+  expect(labelsOf(tree)).toContain('Sub-agents');
+
+  await unmount(tree);
+});
+
+test('a conversation with no sub-agent offers the roster nowhere, whatever the width', async () => {
+  const tree = await openConversation(AGENTS_BUTTON_MIN_WIDTH - 80);
+  await seedAgents(tree, 0, 0);
+
+  await press(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Instructions'));
+  expect(labelsOf(tree)).not.toContain('Sub-agents');
 
   await unmount(tree);
 });
