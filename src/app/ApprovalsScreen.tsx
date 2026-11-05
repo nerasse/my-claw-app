@@ -3,10 +3,12 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { ApprovalDecision, ApprovalGrantFrame, ApprovalHistoryResultFrame, ApprovalRequestFrame } from '../core/protocol';
 import { encodeApprovalGrantRemove } from '../core/protocol';
 import { connection } from '../core/connection';
-import { BackButton, headerStyle } from '../components/BackButton';
-import { CloseButton } from '../components/CloseButton';
+import { headerStyle } from '../components/BackButton';
+import { ChevronIcon } from '../components/icons';
 import { useScrollIndicator } from '../components/ScrollIndicator';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
+import { readableCall } from '../core/approvalGrants';
+import { useNodes } from '../core/nodes';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 
 type Tab = 'waiting' | 'history' | 'allowed';
@@ -29,8 +31,8 @@ function originKeyOf(request: ApprovalRequestFrame): string {
   return request.origin?.kind === 'node' ? request.origin.nodeId ?? request.origin.name ?? 'node' : 'local';
 }
 
-function originLabelOf(key: string): string {
-  return key === 'local' ? 'this machine' : key;
+function originLabelOf(key: string, nodeNames: Record<string, string>): string {
+  return key === 'local' ? 'this machine' : nodeNames[key] ?? key;
 }
 
 function waitingFor(request: ApprovalRequestFrame): string {
@@ -69,6 +71,11 @@ export function ApprovalsScreen({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { scrollProps, indicator } = useScrollIndicator();
+  const nodes = useNodes();
+  const nodeNames = useMemo(
+    () => Object.fromEntries(nodes.nodes.map(node => [node.nodeId, node.name])),
+    [nodes.nodes],
+  );
   const [tab, setTab] = useState<Tab>(approvals.length > 0 ? 'waiting' : 'history');
   const [machine, setMachine] = useState<string>('all');
   const [tool, setTool] = useState<string>('all');
@@ -95,9 +102,24 @@ export function ApprovalsScreen({
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <BackButton onPress={onBack} label="Back" />
-        <Text style={styles.title}>Approvals</Text>
-        <CloseButton />
+        <Pressable
+          onPress={onBack}
+          hitSlop={8}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close approvals">
+          <ChevronIcon direction="left" size={22} tone="text" />
+        </Pressable>
+        <View style={styles.headerMain}>
+          <Text style={styles.title}>Approvals</Text>
+          <Text style={styles.headerSub}>
+            {approvals.length > 0
+              ? `${approvals.length} waiting on you${grants.length > 0 ? ` · ${grants.length} allowed for good` : ''}`
+              : grants.length > 0
+                ? `nothing waiting · ${grants.length} allowed for good`
+                : 'nothing waiting'}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.tabs}>
@@ -128,7 +150,7 @@ export function ApprovalsScreen({
               {machines.map(key => (
                 <Chip
                   key={key}
-                  label={originLabelOf(key)}
+                  label={originLabelOf(key, nodeNames)}
                   active={machine === key}
                   onPress={() => setMachine(key)}
                 />
@@ -189,7 +211,7 @@ export function ApprovalsScreen({
               <View key={`${grant.tool}:${grant.origin}:${grant.args}`} style={styles.card}>
                 <View style={styles.cardHead}>
                   <Text style={styles.tool}>{grant.tool}</Text>
-                  <Text style={styles.meta}>{originLabelOf(grant.origin)}</Text>
+                  <Text style={styles.meta}>{originLabelOf(grant.origin, nodeNames)}</Text>
                   <Pressable
                     hitSlop={8}
                     accessibilityRole="button"
@@ -201,7 +223,7 @@ export function ApprovalsScreen({
                   </Pressable>
                 </View>
                 <Text style={styles.args} selectable>
-                  {grant.args}
+                  {readableCall(grant.args)}
                 </Text>
               </View>
             ))
@@ -243,6 +265,9 @@ function Action({ label, danger, onPress }: { label: string; danger?: boolean; o
 const createStyles = (palette: Palette) => ({
   root: { flex: 1, backgroundColor: palette.bg },
   header: headerStyle(palette),
+  headerMain: { flex: 1, gap: 1 },
+  backButton: { paddingRight: space.xs },
+  headerSub: { fontSize: font.small, color: palette.textMuted },
   title: { fontSize: font.title, color: palette.text, fontWeight: '600' as const },
   tabs: { flexDirection: 'row' as const, gap: space.xs, paddingHorizontal: space.md, paddingBottom: space.sm },
   tab: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.sm, backgroundColor: palette.surfaceAlt },

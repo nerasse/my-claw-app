@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { composeNodeDescription, nodesStore, useNodes } from '../core/nodes';
+import { readableCall, useApprovalGrants, approvalGrantsStore } from '../core/approvalGrants';
+import { connection } from '../core/connection';
+import { encodeApprovalGrantRemove, encodeApprovalGrants } from '../core/protocol';
 import type { NodeMcpConfig, NodeMcpEntry } from '../core/protocol';
 import { BackButton, headerStyle } from '../components/BackButton';
 import { font, radius, space, useThemedStyles, type Palette } from '../theme';
@@ -52,6 +55,11 @@ export function NodeScreen({
   const { scrollProps, indicator } = useScrollIndicator();
   const state = useNodes();
   const node = state.nodes.find(candidate => candidate.nodeId === nodeId) ?? null;
+  const grants = useApprovalGrants().filter(grant => grant.origin === nodeId);
+  // A grant written from another window (or the approvals page) must not be missing here.
+  useEffect(() => {
+    connection.send(encodeApprovalGrants()).catch(() => {});
+  }, []);
   const [name, setName] = useState(node?.name ?? '');
   const [description, setDescription] = useState(node?.description ?? '');
   const [seededFor, setSeededFor] = useState<string | null>(null);
@@ -442,6 +450,42 @@ export function NodeScreen({
             </View>
 
             <View style={styles.card}>
+              <Text style={styles.cardTitle}>Allowed for good</Text>
+              <Text style={styles.hint}>
+                Calls you allowed once and for all on this machine, exact arguments only. Withdrawing one makes it ask
+                again. Everything waiting, here and elsewhere, is on the Approvals page.
+              </Text>
+              {grants.length === 0 ? (
+                <Text style={styles.detail}>{node.approval ? 'Nothing yet: each call asks first.' : 'Nothing yet.'}</Text>
+              ) : (
+                grants.map(grant => (
+                  <View key={`${grant.tool}:${grant.args}`} style={styles.grantRow}>
+                    <View style={styles.switchLabel}>
+                      <Text style={styles.toolName}>{grant.tool}</Text>
+                      <Text style={styles.grantArgs} selectable numberOfLines={2}>
+                        {readableCall(grant.args)}
+                      </Text>
+                    </View>
+                    <Pressable
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Withdraw the standing grant for ${grant.tool}`}
+                      onPress={() => {
+                        approvalGrantsStore.set(
+                          approvalGrantsStore.snapshot().filter(
+                            entry => !(entry.tool === grant.tool && entry.origin === grant.origin && entry.args === grant.args),
+                          ),
+                        );
+                        connection.send(encodeApprovalGrantRemove(grant)).catch(() => {});
+                      }}>
+                      <Text style={styles.withdraw}>withdraw</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View style={styles.card}>
               <Text style={styles.cardTitle}>This machine</Text>
               <Text style={styles.detail}>{node.online ? 'online now' : since(node.lastSeenAt)}</Text>
               <Text style={styles.detail}>{[node.os, node.arch].filter(Boolean).join(' ') || 'no facts yet'}</Text>
@@ -508,6 +552,9 @@ const createStyles = (palette: Palette) => ({
   root: { flex: 1, backgroundColor: palette.bg },
   header: headerStyle(palette),
 
+  grantRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, paddingVertical: space.xs },
+  grantArgs: { fontSize: font.small, color: palette.textMuted, fontFamily: 'monospace' as const },
+  withdraw: { fontSize: font.small, color: palette.danger },
   title: { flexShrink: 1, fontSize: font.title, fontWeight: '600' as const, color: palette.text },
   content: { paddingVertical: space.md, gap: space.sm, paddingBottom: space.xl },
   card: {

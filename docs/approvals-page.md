@@ -26,6 +26,12 @@ from one screen.
 
 The tab opens on `Waiting` when something is pending, on `History` otherwise.
 
+## From a node's page
+
+Settings → Nodes → one machine has an "Allowed for good" card: the standing grants whose `origin`
+is that node, with `withdraw` per row. It is the same list as the `Always allowed` tab, narrowed to
+the machine you are already reading about.
+
 ## What does not change
 
 The sheet stays the surface for the prompt in front of you: a question that must be answered to
