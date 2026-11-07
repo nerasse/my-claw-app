@@ -73,8 +73,25 @@ test('Up on an empty field recalls the last message, and leaves a written one al
   expect(webIntent(event({ key: 'ArrowUp' }).event, idle)).toBeNull();
 });
 
-test('a phone keeps Enter as a line break and only answers the arrows for the menu', () => {
+test('a phone keeps Enter as a line break, and its arrows serve the menu first', () => {
   expect(nativeIntent(event({ key: 'Enter' }).event, idle)).toBeNull();
   expect(nativeIntent(event({ key: 'ArrowUp' }).event, { menuOpen: true, empty: false })).toBe('menu-up');
-  expect(nativeIntent(event({ key: 'ArrowUp' }).event, { menuOpen: false, empty: true })).toBeNull();
+  // An empty field asks for the last message, hardware keyboard or not.
+  expect(nativeIntent(event({ key: 'ArrowUp' }).event, { menuOpen: false, empty: true })).toBe('recall');
+  // A written one keeps its caret: Up does nothing there.
+  expect(nativeIntent(event({ key: 'ArrowUp' }).event, idle)).toBeNull();
+});
+
+test('a recalled message walked with the arrows, the way a terminal walks its history', () => {
+  const recalled = { menuOpen: false, empty: false, historyArmed: true };
+  // Up leaves for an older message, Down returns, both without the browser moving the caret.
+  expect(webIntent(event({ key: 'ArrowUp' }).event, recalled)).toBe('recall');
+  expect(webIntent(event({ key: 'ArrowDown' }).event, recalled)).toBe('recall-newer');
+  // The same keys on a draft the owner wrote stay the caret's own.
+  expect(webIntent(event({ key: 'ArrowUp' }).event, idle)).toBeNull();
+  expect(webIntent(event({ key: 'ArrowDown' }).event, idle)).toBeNull();
+  // A hardware keyboard on a phone gets the same history.
+  expect(nativeIntent(event({ key: 'ArrowUp' }).event, { ...recalled, empty: false })).toBe('recall');
+  expect(nativeIntent(event({ key: 'ArrowDown' }).event, recalled)).toBe('recall-newer');
+  expect(nativeIntent(event({ key: 'ArrowDown' }).event, idle)).toBeNull();
 });

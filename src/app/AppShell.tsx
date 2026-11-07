@@ -5402,9 +5402,18 @@ export function AppShell(): React.JSX.Element {
         />
       ) : null}
 
-      {bubbleMenu ? (
+      {bubbleMenu ? (() => {
+        // A voice note keeps its words beside the file, so the menu's preview and its copies read
+        // the transcript: a bubble that is only a recording used to open a sheet with nothing in
+        // it and copy an empty string (owner, 2026-11-07).
+        const copyText = messageSelectionBody({
+          text: bubbleMenu.text,
+          attachments: bubbleMenu.attachments,
+          transcripts: bubbleMenu.transcripts,
+        });
+        return (
         <ActionSheet
-          preview={bubbleMenu.text}
+          preview={copyText}
           options={[
             // Handing an answer to the parent is a message in the parent conversation, so it is a
             // plain send there: the server injects it into a running parent or starts a fresh run,
@@ -5437,7 +5446,7 @@ export function AppShell(): React.JSX.Element {
               icon: <CopyIcon size={15} tone="muted" />,
               hint: 'the answer, without the reasoning',
               onPress: () => {
-                Clipboard.setString(bubbleMenu.text);
+                Clipboard.setString(copyText);
                 setBubbleMenu(null);
               },
             },
@@ -5499,7 +5508,8 @@ export function AppShell(): React.JSX.Element {
           ]}
           onClose={() => setBubbleMenu(null)}
         />
-      ) : null}
+        );
+      })() : null}
 
       {handoff && subagentView ? (() => {
         // Derived, never stored: the pre-pick needs the session ids, and those only arrive with the

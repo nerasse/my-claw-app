@@ -67,6 +67,8 @@ export function Composer({
   stopping,
   questionPending,
   onRecallLast,
+  onRecallNewer,
+  recallArmed,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -129,10 +131,18 @@ export function Composer({
    */
   stopping?: boolean;
   /**
-   * Up arrow on an empty field: bring back the last message sent, to fix a typo and send it
-   * again. A desktop habit, and there is no arrow key to press on a phone.
+   * Up arrow: bring back the last message sent, to fix a typo and send it again. A desktop habit,
+   * and there is no arrow key to press on a phone -- unless one is plugged in.
    */
   onRecallLast?: () => void;
+  /** Down arrow on a recalled message: the next one, then back to an empty field. */
+  onRecallNewer?: () => void;
+  /**
+   * The field holds a recalled message exactly as it came back. Up then means "one older" and
+   * Down "one newer", the way a terminal walks its history; a draft the owner wrote is left
+   * alone, because there the arrows belong to the caret.
+   */
+  recallArmed?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const { palette } = useTheme();
@@ -146,6 +156,14 @@ export function Composer({
   // and send a second, empty message beside the first.
   const nothingToSend = (empty && staged === 0) || uploading === true;
   const [recording, setRecording] = useState(false);
+  /**
+   * Where the caret sits, for the history arrows only.
+   *
+   * On a recalled message the caret has to be able to reach the line above before an Up arrow
+   * may leave for an older message: a multi-line note is read line by line first. A one-line
+   * recall has no line above it, so the same key walks the history straight away.
+   */
+  const [caretAtStart, setCaretAtStart] = useState(true);
   /**
    * Whether the field holds more lines than its ceiling shows.
    *
@@ -209,10 +227,12 @@ export function Composer({
     onSend();
   }, [insert, menu, onSend, selected]);
 
+  const historyArmed = recallArmed === true && (!value.includes('\n') || caretAtStart);
+
   const onKeyPress = useCallback(
     (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
       const menuOpen = (menu?.length ?? 0) > 0;
-      switch (editorIntent(event, { menuOpen, empty: value.length === 0 })) {
+      switch (editorIntent(event, { menuOpen, empty: value.length === 0, historyArmed })) {
         case 'submit':
           submitOrSelect();
           return;
@@ -228,10 +248,13 @@ export function Composer({
         case 'recall':
           onRecallLast?.();
           return;
+        case 'recall-newer':
+          onRecallNewer?.();
+          return;
         default:
       }
     },
-    [insert, menu, onRecallLast, selected, submitOrSelect, value.length],
+    [historyArmed, insert, menu, onRecallLast, onRecallNewer, selected, submitOrSelect, value.length],
   );
 
   /**
@@ -435,6 +458,10 @@ export function Composer({
             // Android grows the EditText itself, and reports the text's own height: past the
             // ceiling the frame clips it, and nothing said so (owner, 2026-11-05). Read from
             // the same event the typeahead uses, so the mark appears as the line is typed.
+            onSelectionChange={e => {
+              const { start, end } = e.nativeEvent.selection;
+              setCaretAtStart(start === 0 && end === 0);
+            }}
             onContentSizeChange={e => {
               const height = e.nativeEvent.contentSize.height;
               setContentHeight(height);

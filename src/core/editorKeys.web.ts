@@ -1,11 +1,16 @@
 /// <reference lib="dom" />
 import type { NativeSyntheticEvent, TextInputKeyPressEventData } from 'react-native';
 
-export type EditorIntent = 'submit' | 'complete' | 'menu-up' | 'menu-down' | 'recall' | null;
+export type EditorIntent = 'submit' | 'complete' | 'menu-up' | 'menu-down' | 'recall' | 'recall-newer' | null;
 
 export interface EditorState {
   menuOpen: boolean;
   empty: boolean;
+  /**
+   * The field already holds a recalled message and the caret cannot walk any higher in it: Up
+   * reaches one message further back instead of doing nothing.
+   */
+  historyArmed?: boolean;
 }
 
 /**
@@ -49,15 +54,23 @@ export function editorIntent(
       synthetic.preventDefault?.();
       return 'menu-up';
     }
-    if (state.empty) {
+    if (state.empty || state.historyArmed) {
       synthetic.preventDefault?.();
       return 'recall';
     }
     return null;
   }
-  if (key === 'ArrowDown' && state.menuOpen) {
-    synthetic.preventDefault?.();
-    return 'menu-down';
+  if (key === 'ArrowDown') {
+    if (state.menuOpen) {
+      synthetic.preventDefault?.();
+      return 'menu-down';
+    }
+    // Only a recalled line is walked forward: a draft the owner is writing keeps its own Down.
+    if (state.historyArmed) {
+      synthetic.preventDefault?.();
+      return 'recall-newer';
+    }
+    return null;
   }
   return null;
 }

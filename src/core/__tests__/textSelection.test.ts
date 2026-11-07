@@ -24,3 +24,27 @@ test('an absent block leaves no heading and no hole behind it', () => {
   // A bubble that is only a reasoning trace (the model is still thinking) is not empty either.
   expect(messageSelectionBody({ text: '', reasoning: 'still going' })).toBe('## Reasoning\n\nstill going');
 });
+
+test('the words of a recording travel with the message that carried it', () => {
+  const recorded = {
+    text: '',
+    attachments: [{ id: 'a1', type: 'audio' }],
+    transcripts: { a1: '  send him the invoice  ' },
+  };
+
+  // A voice note has no prose of its own: without its transcript the copy is an empty string.
+  expect(messageSelectionBody(recorded)).toBe('audio: "send him the invoice"');
+  expect(messageSelectionBody({ ...recorded, text: 'and cc me' })).toBe(
+    'and cc me\n\naudio: "send him the invoice"',
+  );
+});
+
+test('an attachment that is not a recording, or one never heard, adds nothing', () => {
+  expect(
+    messageSelectionBody({ text: 'look', attachments: [{ id: 'p1', type: 'image' }], transcripts: { p1: 'a cat' } }),
+  ).toBe('look');
+  expect(messageSelectionBody({ text: 'look', attachments: [{ id: 'a1', type: 'audio' }] })).toBe('look');
+  expect(
+    messageSelectionBody({ text: 'look', attachments: [{ id: 'a1', type: 'audio' }], transcripts: { a1: '  ' } }),
+  ).toBe('look');
+});

@@ -14,6 +14,7 @@ import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
+import { newerLine, olderLine, recallLines, recallsDraft } from '../core/recall';
 import { requestRunItems } from '../core/runItems';
 import { dataUriType } from '../core/dataUri';
 import { useThreadQuestions } from '../core/questionStore';
@@ -805,16 +806,29 @@ export function ChatScreen({
     consumeDraft();
   }, [attachments, consumeDraft, deviceInfo, discardComposer, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 
-  /** Up arrow on an empty composer: the last thing sent, back in the field. */
+  /**
+   * The sent history, walked by the arrows the way a terminal walks its own: Up goes back one
+   * message at a time, Down returns, and past the newest the field empties again.
+   *
+   * `recalled` is the line last put in the field. It is only trusting while the field still holds
+   * it unchanged; the moment the owner types, the arrows belong to the caret again.
+   */
+  const recallLinesOfThread = useMemo(() => recallLines(items), [items]);
+  const [recalled, setRecalled] = useState<string | null>(null);
   const recallLast = useCallback(() => {
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      const item = items[index];
-      if (item?.kind === 'text' && item.role === 'user' && item.text.trim()) {
-        changeDraft(item.text);
-        return;
-      }
-    }
-  }, [changeDraft, items]);
+    const older = olderLine(recallLinesOfThread, draftRef.current);
+    if (older === null) return;
+    setRecalled(older);
+    changeDraft(older);
+  }, [changeDraft, recallLinesOfThread]);
+  const recallNewer = useCallback(() => {
+    const next = newerLine(recallLinesOfThread, draftRef.current);
+    // `undefined` is a draft the owner wrote: Down is the caret's, not the history's.
+    if (next === undefined) return;
+    setRecalled(next);
+    changeDraft(next ?? '');
+  }, [changeDraft, recallLinesOfThread]);
+  const recallArmed = recallsDraft(recalled, draft);
 
   const empty = items.length === 0;
 
@@ -1580,6 +1594,8 @@ export function ChatScreen({
             stopping={stopping}
             questionPending={questionPending}
             onRecallLast={recallLast}
+            onRecallNewer={recallNewer}
+            recallArmed={recallArmed}
           />
         </View>
       ) : (
@@ -1704,6 +1720,8 @@ export function ChatScreen({
           stopping={stopping}
           questionPending={questionPending}
           onRecallLast={recallLast}
+          onRecallNewer={recallNewer}
+          recallArmed={recallArmed}
         />
         </View>
         </>
