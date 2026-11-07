@@ -1,4 +1,4 @@
-import { AgentIcon, CameraIcon, ChevronIcon, FolderIcon, ImageIcon, MapIcon, MenuIcon, MoreIcon, PasteIcon, PinIcon, SlidersIcon } from '../components/icons';
+import { AgentIcon, ArrowIcon, CameraIcon, ChevronIcon, FolderIcon, ImageIcon, MapIcon, MenuIcon, MoreIcon, PasteIcon, PinIcon, SlidersIcon } from '../components/icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, PanResponder, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
@@ -1676,7 +1676,7 @@ export function ChatScreen({
               onPress={recallLast}
               accessibilityRole="button"
               accessibilityLabel="Previous message">
-              <Text style={styles.jumpGlyph}>↑</Text>
+              <ArrowIcon direction="up" size={18} tone="text" />
             </Pressable>
             <View style={styles.historyRule} />
             <Pressable
@@ -1684,7 +1684,7 @@ export function ChatScreen({
               onPress={recallNewer}
               accessibilityRole="button"
               accessibilityLabel="Next message">
-              <Text style={styles.historyGlyph}>↓↓</Text>
+              <ArrowIcon double size={18} tone="text" />
             </Pressable>
           </View>
         ) : null}
@@ -1699,7 +1699,7 @@ export function ChatScreen({
             }}
             accessibilityRole="button"
             accessibilityLabel="Jump to latest message">
-            <Text style={styles.jumpGlyph}>↓</Text>
+            <ArrowIcon size={18} tone="text" />
           </Pressable>
         ) : null}
         </View>
@@ -1967,12 +1967,15 @@ const createStyles = (palette: Palette) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  jumpGlyph: { fontSize: 16, color: palette.text, lineHeight: 20 },
   // The pair at the bottom left: the jump arrow read the other way, so it keeps that shape and
   // only its edge moves. Two steps in one column, the older one on top.
+  //
+  // Inset from the edge rather than flush against it: the drawer's swipe starts at that edge, and
+  // a control sitting on it is a control the gesture has to fight for. The divider is inset too,
+  // because a hairline meeting the border reads as two boxes rather than one pill.
   history: {
     position: 'absolute' as const,
-    left: 0,
+    left: space.sm,
     bottom: space.md,
     flexDirection: 'column' as const,
     borderRadius: radius.pill,
@@ -1982,11 +1985,10 @@ const createStyles = (palette: Palette) => ({
     overflow: 'hidden' as const,
   },
   historyStep: {
-    width: 38,
+    width: 40,
     height: 34,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  historyRule: { height: 1, backgroundColor: palette.border },
-  historyGlyph: { fontSize: 11, letterSpacing: -2, color: palette.text, lineHeight: 16 },
+  historyRule: { height: 1, marginHorizontal: space.sm, backgroundColor: palette.border },
 });
