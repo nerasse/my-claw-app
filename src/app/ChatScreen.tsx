@@ -427,6 +427,8 @@ export function ChatScreen({
    * and the phone in a pocket is exactly the surface that should catch up.
    */
   const focusedRef = useRef(false);
+  /** The same fact as a state: the history arrows belong to a field that has the caret. */
+  const [composerFocused, setComposerFocused] = useState(false);
   useEffect(
     () =>
       onRemoteDraft(changed => {
@@ -1572,7 +1574,10 @@ export function ChatScreen({
             autoFocus={autoFocusHero}
             value={draft}
             onChange={changeDraft}
-            onFocusChange={focused => (focusedRef.current = focused)}
+            onFocusChange={focused => {
+              focusedRef.current = focused;
+              setComposerFocused(focused);
+            }}
             onSend={submit}
             onRecorded={stageVoiceNote}
             onRecordingError={setUploadError}
@@ -1660,6 +1665,30 @@ export function ChatScreen({
 
         {indicator}
 
+        {/* The keyboard's Up and Down, for a phone whose keyboard has neither (owner, 2026-11-07):
+            the same pill as the jump arrow, mirrored, and only while the field holds the caret and
+            an arrow can actually land in it -- an empty field, or a message already recalled.
+            Typing makes them vanish rather than replace a draft nobody asked to lose. */}
+        {composerFocused && (draft === '' || recallArmed) && recallLinesOfThread.length > 0 ? (
+          <View style={styles.history}>
+            <Pressable
+              style={styles.historyStep}
+              onPress={recallLast}
+              accessibilityRole="button"
+              accessibilityLabel="Previous message">
+              <Text style={styles.jumpGlyph}>↑</Text>
+            </Pressable>
+            <View style={styles.historyRule} />
+            <Pressable
+              style={styles.historyStep}
+              onPress={recallNewer}
+              accessibilityRole="button"
+              accessibilityLabel="Next message">
+              <Text style={styles.historyGlyph}>↓↓</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {!atBottom && items.length > 0 ? (
           <Pressable
             style={styles.jump}
@@ -1698,7 +1727,10 @@ export function ChatScreen({
         <Composer
           value={draft}
           onChange={changeDraft}
-          onFocusChange={focused => (focusedRef.current = focused)}
+          onFocusChange={focused => {
+            focusedRef.current = focused;
+            setComposerFocused(focused);
+          }}
           onSend={submit}
           onRecorded={stageVoiceNote}
           onRecordingError={setUploadError}
@@ -1936,4 +1968,25 @@ const createStyles = (palette: Palette) => ({
     justifyContent: 'center' as const,
   },
   jumpGlyph: { fontSize: 16, color: palette.text, lineHeight: 20 },
+  // The pair at the bottom left: the jump arrow read the other way, so it keeps that shape and
+  // only its edge moves. Two steps in one column, the older one on top.
+  history: {
+    position: 'absolute' as const,
+    left: 0,
+    bottom: space.md,
+    flexDirection: 'column' as const,
+    borderRadius: radius.pill,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+    overflow: 'hidden' as const,
+  },
+  historyStep: {
+    width: 38,
+    height: 34,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  historyRule: { height: 1, backgroundColor: palette.border },
+  historyGlyph: { fontSize: 11, letterSpacing: -2, color: palette.text, lineHeight: 16 },
 });
