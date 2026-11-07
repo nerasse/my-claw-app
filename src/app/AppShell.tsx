@@ -340,7 +340,7 @@ import { useThemeControl } from '../theme/ThemeProvider';
 import { statusStore } from '../core/status';
 import { statsStore } from '../core/stats';
 import { fsStore } from '../core/fsStore';
-import { messageSelectionBody, TextSelectionContext, type SelectionTarget } from '../core/textSelection';
+import { copyableText, messageSelectionBody, TextSelectionContext, type SelectionTarget } from '../core/textSelection';
 import { useLayout } from '../core/layout';
 import { useHardwareBack } from '../core/hardwareBack';
 import { useHotkeys } from '../core/hotkeys';
@@ -878,6 +878,13 @@ export function AppShell(): React.JSX.Element {
     },
     [activeThread],
   );
+  /**
+   * The web's copy, one press and no sheet: a browser selects its own text, so the only row of the
+   * menu it needed was the copy, and that is worth a button of its own (owner, 2026-11-07).
+   */
+  const copyBubble = useCallback((item: TextItem) => {
+    Clipboard.setString(copyableText(item));
+  }, []);
   // The block a reader asked to select from. Held by the shell rather than by whoever opened it:
   // a tool card scrolled out of the window must not take the viewer with it.
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
@@ -4233,6 +4240,7 @@ export function AppShell(): React.JSX.Element {
                 }
               : {})}
             onBubbleMenu={openBubbleMenu}
+            onBubbleCopy={Platform.OS === 'web' ? copyBubble : undefined}
             onResend={resendChat}
             onOpenImage={openImage}
             onOpenText={openTextViewer}
@@ -5406,11 +5414,7 @@ export function AppShell(): React.JSX.Element {
         // A voice note keeps its words beside the file, so the menu's preview and its copies read
         // the transcript: a bubble that is only a recording used to open a sheet with nothing in
         // it and copy an empty string (owner, 2026-11-07).
-        const copyText = messageSelectionBody({
-          text: bubbleMenu.text,
-          attachments: bubbleMenu.attachments,
-          transcripts: bubbleMenu.transcripts,
-        });
+        const copyText = copyableText(bubbleMenu);
         return (
         <ActionSheet
           preview={copyText}
@@ -5469,16 +5473,21 @@ export function AppShell(): React.JSX.Element {
               : []),
             // The whole message, reasoning and summary included, as the source it was written
             // in: the viewer is the only place a selection can cross from one block to the next.
-            {
-              label: 'Select text',
-              icon: <SearchIcon size={15} tone="muted" />,
-              hint: 'opens the message where any part of it can be picked',
-              onPress: () => {
-                const target = { title: 'Message', body: messageSelectionBody(bubbleMenu) };
-                setBubbleMenu(null);
-                setSelection(target);
-              },
-            },
+            // A browser selects text itself, and the bubble carries a copy button there.
+            ...(Platform.OS === 'web'
+              ? []
+              : [
+                  {
+                    label: 'Select text',
+                    icon: <SearchIcon size={15} tone="muted" />,
+                    hint: 'opens the message where any part of it can be picked',
+                    onPress: () => {
+                      const target = { title: 'Message', body: messageSelectionBody(bubbleMenu) };
+                      setBubbleMenu(null);
+                      setSelection(target);
+                    },
+                  },
+                ]),
             // The asides carry their own copy button, but only once unfolded. Offering them here
             // too is the difference between copying a reasoning trace and reading it first.
             ...(bubbleMenu.reasoning?.trim()

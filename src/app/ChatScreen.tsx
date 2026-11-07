@@ -113,6 +113,7 @@ export function ChatScreen({
   onSend,
   locationEnabled,
   onBubbleMenu,
+  onBubbleCopy,
   onResend,
   onOpenImage,
   onOpenText,
@@ -172,6 +173,8 @@ export function ChatScreen({
   /** Server capability; false until the post-connect capability frame says otherwise. */
   locationEnabled: boolean;
   onBubbleMenu: (item: TextItem) => void;
+  /** Copy a message's words in one press: the web's shortcut around the sheet. */
+  onBubbleCopy?: (item: TextItem) => void;
   /** A message of the owner's that never got its receipt is sent again, same id. */
   onResend: (item: TextItem) => void;
   onOpenImage: (images: MediaItem[], index: number) => void;
@@ -1204,6 +1207,8 @@ export function ChatScreen({
           showTime={showTimeFlag}
           foot={foot}
           onMenu={onBubbleMenu}
+          onCopy={onBubbleCopy}
+          menuHasExtras={subagent !== undefined && item.role === 'agent'}
           onResend={onResend}
           onOpenAttachment={openAttachment}
           onOpenMedia={openMedia}
@@ -1213,7 +1218,7 @@ export function ChatScreen({
         </View>
       );
     },
-    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onResend, onOpenSubAgent, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onBubbleCopy, subagent, onResend, onOpenSubAgent, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const renderRowContent = useCallback(

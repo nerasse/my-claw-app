@@ -1,4 +1,4 @@
-import { MoreIcon } from './icons';
+import { CopyIcon, MoreIcon } from './icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RunInfo, TextItem } from '../core/chat';
@@ -36,6 +36,8 @@ export const Bubble = React.memo(function BubbleView({
   showTime,
   foot,
   onMenu,
+  onCopy,
+  menuHasExtras,
   onOpenAttachment,
   onOpenMedia,
   onResend,
@@ -54,6 +56,14 @@ export const Bubble = React.memo(function BubbleView({
    */
   foot?: RunInfo;
   onMenu: (item: TextItem) => void;
+  /**
+   * Copy this message's words straight to the clipboard, no sheet in between. A browser has a
+   * real selection of its own, so the menu's "Select text" was the only reason to open it and the
+   * copy is what the reader wanted anyway (owner, 2026-11-07).
+   */
+  onCopy?: (item: TextItem) => void;
+  /** The sheet holds something the copy button cannot do (handing a sub-agent's answer back). */
+  menuHasExtras?: boolean;
   /** The owner's message never got its receipt: send it again, same id. */
   onResend?: (item: TextItem) => void;
   onOpenAttachment?: (
@@ -292,14 +302,28 @@ export const Bubble = React.memo(function BubbleView({
         {/* Button and clock travel as one block. Split, they would land at opposite ends of a row
             the signature also shares, and the stamp has to stay beside the control it follows. */}
         <View style={styles.stamp}>
-          <Pressable
-            hitSlop={12}
-            style={styles.menu}
-            onPress={() => onMenu(item)}
-            accessibilityRole="button"
-            accessibilityLabel="Message actions">
-            <MoreIcon size={16} tone="faint" />
-          </Pressable>
+          {onCopy ? (
+            <Pressable
+              hitSlop={12}
+              style={styles.menu}
+              onPress={() => onCopy(item)}
+              accessibilityRole="button"
+              accessibilityLabel="Copy message">
+              <CopyIcon size={15} tone="faint" />
+            </Pressable>
+          ) : null}
+          {/* The sheet keeps its button only where it still holds something else to offer: one
+              control per intention, and copying has its own now. */}
+          {!onCopy || menuHasExtras ? (
+            <Pressable
+              hitSlop={12}
+              style={styles.menu}
+              onPress={() => onMenu(item)}
+              accessibilityRole="button"
+              accessibilityLabel="Message actions">
+              <MoreIcon size={16} tone="faint" />
+            </Pressable>
+          ) : null}
           {/* The stamp closes the line, right of the `...`: bottom-right is where a message signs
               itself, and opening a bubble with the clock made it read as a title (2026-11-04). */}
           {showTime && !item.command && !item.notice ? (

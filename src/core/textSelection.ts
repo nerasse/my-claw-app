@@ -72,3 +72,15 @@ export function messageSelectionBody(item: {
   if (details) parts.push(`## Summary\n\n${details}`);
   return parts.join('\n\n');
 }
+
+/**
+ * What "Copy text" puts on the clipboard: the message's own words, and the words of any recording
+ * it carried. The reasoning and the summary stay out, they have their own rows.
+ */
+export function copyableText(item: {
+  text: string;
+  attachments?: ReadonlyArray<{ id: string; type: string }>;
+  transcripts?: Record<string, string>;
+}): string {
+  return messageSelectionBody({ text: item.text, attachments: item.attachments, transcripts: item.transcripts });
+}
