@@ -1161,7 +1161,7 @@ export function ChatScreen({
    * the global index so the same code serves free rows and the children of a run group.
    */
   const renderItemContent = useCallback(
-    (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean, foot?: RunInfo) => {
+    (item: ChatItem, groupedFlag: boolean, showTimeFlag: boolean, foot?: RunInfo, dense = false) => {
       if (item.kind === 'text' && item.summaryOf) return <CompactionBoundary item={item} />;
       // A `question` card with an ask still pending is the form itself. Once answered or
       // canceled the ask leaves the store and the card falls back to its settled rendering,
@@ -1193,7 +1193,12 @@ export function ChatScreen({
       if (item.kind === 'tool') {
         return (
           <View style={toolColumn}>
-            <ToolCard item={item} threadId={threadId} expandTools={uiPrefs?.expandTools ?? false} />
+            <ToolCard
+              item={item}
+              threadId={threadId}
+              expandTools={uiPrefs?.expandTools ?? false}
+              dense={dense}
+            />
           </View>
         );
       }
@@ -1262,12 +1267,15 @@ export function ChatScreen({
         <RunGroup
           run={row.run}
           items={row.items}
+          // A run in flight is drawn open and cannot be closed: the fold must not appear under
+          // the reader's eyes the moment the run ends.
+          live={row.run.status === 'running'}
           open={expandedFolds.has(foldKeyOf(row))}
           foot={row.foot}
           onToggle={() => toggleFold(foldKeyOf(row))}
-          renderItem={(item, index, children) => {
+          renderItem={(item, index, children, dense) => {
             const childGrouped = isGrouped(children, index);
-            return renderItemContent(item, childGrouped, !isGrouped(children, index + 1));
+            return renderItemContent(item, childGrouped, !isGrouped(children, index + 1), undefined, dense);
           }}
         />
       );

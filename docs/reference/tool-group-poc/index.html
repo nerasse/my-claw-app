@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>my-claw — tool run grouping</title>
+<style>
+  body{margin:0;background:#14120f;color:#eae5dd;font-family:system-ui,sans-serif;padding:32px}
+  h1{font-size:18px;font-weight:600;margin:0 0 4px}
+  p{color:#a0998d;font-size:13px;margin:0 0 24px;max-width:80ch;line-height:1.6}
+  h2{font-size:12px;color:#a0998d;font-weight:500;letter-spacing:.06em;text-transform:uppercase;
+     margin:34px 0 12px}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+  figure{margin:0}
+  figcaption{font-size:11px;color:#827c73;margin-top:7px}
+  img{display:block;border:1px solid #2a261f;border-radius:8px;max-width:100%}
+  .wide img{width:820px}
+  .phone img{width:250px}
+  a{color:#e08b73;text-decoration:none}
+</style>
+</head>
+<body>
+<h1>Tool-run grouping — V1, spine</h1>
+<p>One variant, kept because it is the one that was picked: no box, a single header line naming
+what the run touched, and the children hanging off a left rail.
+<a href="poc.html?t=dark&w=wide">Open it full size</a>, or
+<a href="poc.html?t=light&w=wide">in light</a>.</p>
+
+<h2>Opening</h2>
+<figure class="wide">
+  <img src="v1-anim.gif" style="width:780px">
+  <figcaption>rail draws down, rows and dots stagger, fold expands, then it holds</figcaption>
+</figure>
+
+<h2>The axis</h2>
+<div class="row">
+  <figure class="wide"><img src="v1-axis.png" style="width:620px">
+    <figcaption>the red line is 562.5: chevron, rail and dots</figcaption></figure>
+  <figure class="phone"><img src="v1-mobile.png"><figcaption>phone · dark</figcaption></figure>
+</div>
+
+<h2>The page</h2>
+<div class="row">
+  <figure class="wide"><img src="v1-dark.png"><figcaption>web · dark</figcaption></figure>
+  <figure class="wide"><img src="v1-light.png"><figcaption>web · light</figcaption></figure>
+</div>
+
+<h2>Live, and one item opened</h2>
+<div class="row">
+  <figure class="wide"><img src="v1-live.png"><figcaption>running · header clock, wait row, sub-agent</figcaption></figure>
+  <figure class="wide"><img src="v1-expanded.png"><figcaption>an opened row: output and diff</figcaption></figure>
+</div>
+</body>
+</html>

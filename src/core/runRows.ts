@@ -1,4 +1,4 @@
-import type { ChatItem, RunInfo, RunSummaryItem } from './chat';
+import { isSubAgentTool, type ChatItem, type RunInfo, type RunSummaryItem } from './chat';
 
 /**
  * One row of the chat list. A finished run's work collapses into a group row (its header), the
@@ -92,6 +92,9 @@ export function withCompactionRule(rows: ChatRow[], before: string | undefined):
  * came back non-zero is the run's work and belongs in the fold with the rest of it.
  */
 export function isHoisted(item: ChatItem): boolean {
+  // A sub-agent call is a door, never a line of a fold: it is the one thing the reader waits on,
+  // and in a spine of thirteen rows it would be the least visible of them.
+  if (item.kind === 'tool') return isSubAgentTool(item.name, item.args);
   if (item.kind !== 'text') return false;
   return (
     item.role === 'user' ||
@@ -287,9 +290,11 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
     }
     // Bubbles the fold never swallows: the hoisted ones, and the agent's own messages.
     const stays = isHoisted(item) || isAgentMessage(item);
-    // Same terminal run as the one being folded: keep accumulating, cutting the group around
-    // every bubble that must stay readable.
-    if (itemRun && itemRun.status !== 'running' && run && run.id === itemRun.id) {
+    // Same run as the one being folded -- running or settled. A run in flight is grouped too, so
+    // the reader watches the same column from the first call instead of a stack of cards that
+    // turns into a fold the moment the run ends (owner, 2026-11-07: "grouper les runs en cours
+    // mais déplié, always déplié"). The screen forces it open while it runs.
+    if (itemRun && run && run.id === itemRun.id) {
       if (stays) {
         if (current.length > 0) rows.push({ kind: 'group', run, items: current });
         current = [];
@@ -299,9 +304,9 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
       }
       continue;
     }
-    // Anything else ends the folding run: an item outside any run, a run in flight, a new run.
+    // Anything else ends the folding run: an item outside any run, or a new one.
     closeRun();
-    if (!itemRun || itemRun.status === 'running') {
+    if (!itemRun) {
       rows.push({ kind: 'item', item });
       continue;
     }

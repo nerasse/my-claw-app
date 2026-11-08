@@ -20,6 +20,42 @@ import { PREVIEW_GUARD, type ArgsPreview } from './utils';
  */
 type Family = 'file' | 'shell' | 'net' | 'memory' | 'agent' | 'browser' | 'time' | 'voice';
 
+/**
+ * What family a tool belongs to, for a caller that groups several calls under one word.
+ *
+ * Undefined is a tool we know nothing about (an MCP server's, a plugin's): the caller says its
+ * own name rather than invent a category.
+ */
+export function familyOf(name: string): Family | undefined {
+  return FAMILY[name];
+}
+
+/** The key of the argument that identifies a call, when the tool has one. `bash` -> `command`. */
+export function subjectKeyOf(name: string): string | undefined {
+  return KEYS[name]?.[0];
+}
+
+/**
+ * How much of a content argument fits on one row before the block is worth opening.
+ *
+ * A row is one line at 11.5 pt: about this many characters at the chat's own width. Under it the
+ * value is already on the line, and a block under it would print the same thing twice.
+ */
+const ROW_FITS = 96;
+
+/**
+ * Whether a call's content argument needs a block of its own under the row.
+ *
+ * The row carries the subject (`bash.command`, `read.path`), so printing it again below is the
+ * duplicate the owner flags every time. Three things still earn a block: an argument the row is
+ * not showing at all (`write.content`, `apply_patch.edits` -- the row shows a path), a value with
+ * newlines, and anything too long to be on the line in full.
+ */
+export function contentNeedsBlock(name: string, content: ToolContent): boolean {
+  if (content.key !== subjectKeyOf(name)) return true;
+  return content.text.includes('\n') || content.text.length > ROW_FITS;
+}
+
 /** tool -> family. Absent is a tool we know nothing about (an MCP server's, a plugin's). */
 const FAMILY: Record<string, Family> = {
   read: 'file',

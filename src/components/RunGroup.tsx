@@ -1,45 +1,17 @@
-import { ChevronIcon } from '../components/icons';
+import { ChevronIcon } from './icons';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, LayoutAnimation, Pressable, Text, View } from 'react-native';
+import { formatSpan } from '../core/utils';
+import { useElapsed } from './CommandElapsed';
 import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
+import { familyOf } from '../core/toolSummary';
 import { RunFoot } from './RunFoot';
-import { font, radius, scaleFont, space, useThemedStyles, type Palette } from '../theme';
-
-/**
- * What the header says, from counts alone: it must read the same whether the work is here or not.
- *
- * A burst between two messages is usually a run of tool calls, and sometimes only a thought the
- * model had before writing the next one -- "run" said nothing about those, and "N thoughts" names
- * exactly what opening it shows (the reasoning lines of the phases it hides).
- */
-function headline(
-  toolCount: number,
-  firstTool: string | undefined,
-  thoughts: number,
-): { count: string; detail: string } {
-  let count = 'run';
-  if (toolCount > 0) count = `${toolCount} tool call${toolCount === 1 ? '' : 's'}`;
-  else if (thoughts > 0) count = `${thoughts} thought${thoughts === 1 ? '' : 's'}`;
-  // No duration, ever: the header describes the fold, and a run's span in it read as the fold's
-  // own time ("on a l'impression que c'est le temps du dernier regroupement", 2026-09-22). The
-  // run signs itself, at its end -- `RunFoot`.
-  return { count, detail: toolCount > 0 && firstTool ? `· ${firstTool}` : '' };
-}
-
-/**
- * Past this many children, an open group also gets a bar at its bottom.
- *
- * A run is easily three hundred cards: with the only control at the top, closing one means
- * scrolling all the way back up through the work you just finished reading, which is the one
- * thing the fold exists to avoid. Below the threshold the body is about a screen, the header is
- * still in reach, and a second bar would just be chrome.
- */
-const FOOTER_FROM_ITEMS = 5;
+import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
  * A finished run, folded under one header -- docs/run-grouping.md.
  *
- * The header is the whole row when collapsed: the tool cards, thinking phases and interim prose
+ * The header is the whole row when collapsed: the tool rows, thinking phases and interim prose
  * between the question and the answer only render once the reader opens it. Closed by default,
  * every time (a reopened thread starts with every group folded).
  *
@@ -49,8 +21,10 @@ const FOOTER_FROM_ITEMS = 5;
  * opened snapped shut the moment its items landed.
  */
 export const RunGroup = React.memo(function RunGroupView({
+  run,
   items,
   open,
+  live = false,
   foot,
   onToggle,
   renderItem,
@@ -58,19 +32,35 @@ export const RunGroup = React.memo(function RunGroupView({
   run: RunInfo;
   items: ChatItem[];
   open: boolean;
+  /**
+   * The run is still going.
+   *
+   * Then the group is drawn open and cannot be closed: you do not fold the work you are watching,
+   * and a fold that appeared at the run's end made the whole block change shape under the
+   * reader's eyes (owner, 2026-11-07). Its chrono lives on the header, where it is the only place
+   * that has one -- `RunFoot` takes over when the run ends.
+   */
+  live?: boolean;
   /** The run's empreinte, when this is the row it signs under -- `markRunFeet`. */
   foot?: RunInfo;
   onToggle: () => void;
-  /** Renders one child, with its own grouping and time flags, at its index in `items`. */
-  renderItem: (item: ChatItem, index: number, children: ChatItem[]) => React.ReactNode;
+  /**
+   * Renders one child, with its own grouping and time flags, at its index in `items`.
+   *
+   * `dense` says the row is a line of the spine rather than a card: no frame, no plate, and the
+   * state dot is the group's, on the rail.
+   */
+  renderItem: (item: ChatItem, index: number, children: ChatItem[], dense: boolean) => React.ReactNode;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
 
-  const toolCount = items.reduce((n, item) => (item.kind === 'tool' ? n + 1 : n), 0);
-  const firstTool = items.find(item => item.kind === 'tool')?.name;
-  const summary = headline(toolCount, firstTool, items.length - toolCount);
-  const label = { count: summary.count, detail: summary.detail };
-  const toggle = (): void => onToggle();
+  const names: string[] = [];
+  let thoughts = 0;
+  for (const item of items) {
+    if (item.kind === 'tool') names.push(item.name);
+    else thoughts += 1;
+  }
+  const label = composition(names, thoughts);
 
   /**
    * A fold of one card hides nothing.
@@ -82,27 +72,48 @@ export const RunGroup = React.memo(function RunGroupView({
    * on have no other home -- so what it carried is drawn as a line under the card.
    */
   const only = items.length === 1 ? items[0] : undefined;
-  if (only !== undefined && only.kind === 'tool') {
+  if (only !== undefined && only.kind === 'tool' && !live) {
     return (
       <View style={styles.wrap}>
-        <View key={only.id}>{renderItem(only, 0, items)}</View>
+        <View key={only.id}>{renderItem(only, 0, items, false)}</View>
         {foot !== undefined ? <RunFoot run={foot} /> : null}
       </View>
     );
   }
 
+  const shownOpen = live || open;
+
+  const toggle = (): void => {
+    if (live) return;
+    // The body is mounted or not, so the animation is the layout's own: no measured height, no
+    // second source of truth about how tall the fold is.
+    LayoutAnimation.configureNext(LayoutAnimation.create(180, 'easeInEaseOut', 'opacity'));
+    onToggle();
+  };
+
   return (
     <View style={styles.wrap}>
-      <Bar label={label} open={open} onPress={toggle} styles={styles} />
-      {open ? (
+      <Bar label={label} open={shownOpen} live={live} since={run.startTs} onPress={toggle} styles={styles} />
+      {shownOpen ? (
         <View style={styles.body}>
+          {/* One line for the whole column, ending on the last dot's centre. A segment per row
+              was the alternative; one node beats one per call. */}
+          <View style={styles.rail} pointerEvents="none" />
           {items.map((item, index) => (
-            <View key={item.id}>{renderItem(item, index, items)}</View>
+            <View key={item.id} style={styles.child}>
+              <View style={[styles.dot, dotStyle(dotOf(item), styles)]} pointerEvents="none" />
+              {renderItem(item, index, items, true)}
+            </View>
           ))}
         </View>
       ) : null}
-      {open && items.length >= FOOTER_FROM_ITEMS ? (
-        <Bar label={label} open onPress={toggle} styles={styles} footer />
+
+      {!live && open && items.length >= FOOTER_FROM_ITEMS ? (
+        <View style={styles.hideRow}>
+          <Pressable onPress={toggle} hitSlop={8} accessibilityRole="button" accessibilityLabel="Hide the run work">
+            <Text style={styles.hideText}>hide</Text>
+          </Pressable>
+        </View>
       ) : null}
       {/* Last: the run ends here, whatever this fold holds -- its signature comes after it. */}
       {foot !== undefined ? <RunFoot run={foot} /> : null}
@@ -139,10 +150,16 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
 
-  const toolCount = summaries.reduce((n, row) => n + row.toolCount, 0);
+  const count = summaries.reduce((n, row) => n + row.toolCount, 0);
   const itemCount = summaries.reduce((n, row) => n + row.itemCount, 0);
   const firstTool = summaries.find(row => row.firstTool !== undefined)?.firstTool;
-  const summary = headline(toolCount, firstTool, itemCount - toolCount);
+  const label = {
+    count:
+      count > 0
+        ? `${count} tool call${count === 1 ? '' : 's'}`
+        : `${Math.max(itemCount, 1)} thought${itemCount === 1 ? '' : 's'}`,
+    detail: count > 0 && firstTool ? `· ${firstTool}` : '',
+  };
   const failed = summaries.some(row => row.hydration === 'failed');
 
   /**
@@ -165,7 +182,7 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   return (
     <View style={styles.wrap}>
       <Bar
-        label={summary}
+        label={label}
         open={open}
         // Only the fold state moves here: the effect above is what asks, so a group opened by a
         // press and a group reopened by a redraw cannot take two different paths.
@@ -174,6 +191,7 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
       />
       {open ? (
         <View style={styles.body}>
+          <View style={styles.rail} pointerEvents="none" />
           {failed ? (
             // The range is gone (a compaction dropped the turn, a rewind changed branch). Said
             // rather than left blank: an empty open group reads as a run that did nothing.
@@ -194,91 +212,237 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
 });
 
 /**
- * The group's control, drawn identically at its top and at its bottom.
+ * The group's one control: a chevron in a 13 pt slot, the count, and what the run touched.
  *
- * Same bar both ends on purpose: whichever one the reader reaches, it says what the group is and
- * closes it. Only the chevron differs, and it points the way the content is.
+ * The slot is what keeps the chevron's centre on the rail's axis: without it the rail and the
+ * glyph were fanned apart by the width of whatever mark sat there, and the spine read as two
+ * columns.
  */
 function Bar({
   label,
   open,
+  live = false,
+  since,
   onPress,
   styles,
-  footer = false,
 }: {
   label: { count: string; detail: string };
   open: boolean;
+  live?: boolean;
+  since?: number;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
-  footer?: boolean;
 }): React.JSX.Element {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.header, footer && styles.footer]}
+      style={styles.header}
       accessibilityRole="button"
-      accessibilityLabel={open ? 'Hide the run work' : 'Show the run work'}
+      accessibilityLabel={live ? 'The run is still going' : open ? 'Hide the run work' : 'Show the run work'}
       accessibilityState={{ expanded: open }}>
-      {/* The top bar closes downwards, the bottom bar upwards: each arrow points at the work
-          it folds away, so neither asks the reader to scroll to the other end. */}
-      <ChevronIcon direction={open ? (footer ? 'up' : 'down') : 'right'} size={14} tone="faint" />
-      <Text style={styles.summary} numberOfLines={1}>
-        <Text style={styles.count}>{label.count}</Text>
-        {label.detail ? ` ${label.detail}` : ''}
+      {/* One slot for every mark the header can carry, so the chevron and the spinner of a live
+          group put their centre on the rail's axis and not 1 pt beside it. */}
+      <View style={styles.slot}>
+        {live ? (
+          <ActivityIndicator size="small" style={styles.spinner} />
+        ) : (
+          <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
+        )}
+      </View>
+      <Text style={styles.count} numberOfLines={1}>
+        {label.count}
       </Text>
+      {label.detail ? (
+        <Text style={styles.detail} numberOfLines={1}>
+          {label.detail}
+        </Text>
+      ) : null}
+      {live && since !== undefined ? <LiveClock since={since} styles={styles} /> : null}
     </Pressable>
   );
 }
 
-const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
-  wrap: { width: '100%' as const, marginBottom: space.xs },
-  footer: { marginTop: space.xs },
-  // The bar's own gap: the card's chevron and its name are 6 pt apart, and a bar whose arrow
-  // touched its text read as a different control at the same place.
-  //
-  // 27 pt, the POC's number: a run bar is a step under a card's 29, because it stands for work
-  // rather than being one piece of it, and the two heights must not compete in one column.
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 7,
-    height: Math.round(27 * scale),
-    backgroundColor: palette.surfaceAlt,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: 8,
-  },
-  summary: {
-    flex: 1,
-    fontSize: scaleFont(11.5, scale),
-    color: palette.textMuted,
-  },
-  /** What the fold holds, in the ink of the message it belongs to. */
-  count: { color: palette.text, fontWeight: '500' as const },
-  statusError: {
-    fontSize: scaleFont(font.small, scale),
-    color: palette.danger,
-    fontWeight: '600' as const,
-    marginLeft: space.xs,
-  },
-  statusAborted: {
-    fontSize: scaleFont(font.small, scale),
-    color: palette.textFaint,
-    fontWeight: '600' as const,
-    marginLeft: space.xs,
-  },
-  body: { marginTop: space.xs },
-  skeleton: {
-    height: 14,
-    marginBottom: 6,
-    borderRadius: radius.sm,
-    backgroundColor: palette.surfaceAlt,
-  },
-  unavailable: {
-    fontSize: scaleFont(font.small, scale),
-    color: palette.textFaint,
-    fontStyle: 'italic' as const,
-    paddingHorizontal: 8,
-  },
-});
+/** How long the run has been going, climbing once a second, drawn only on a live group. */
+function LiveClock({
+  since,
+  styles,
+}: {
+  since: number;
+  styles: ReturnType<typeof createStyles>;
+}): React.JSX.Element {
+  return <Text style={styles.live}>{`running · ${formatSpan(useElapsed(since))}`}</Text>;
+}
+
+/** Past this many children, an open group also offers a way out at its bottom. */
+const FOOTER_FROM_ITEMS = 5;
+
+/**
+ * What the header says: the count, then the composition -- never the first tool's name.
+ *
+ * "13 tool calls · bash" was the old line, and `bash` is the first call of nearly every run: it
+ * said nothing about the twelve others. What the run touched can be read without opening
+ * anything, which is the only thing a fold header is for.
+ */
+export function composition(
+  names: readonly string[],
+  thoughts: number,
+): { count: string; detail: string } {
+  const count =
+    names.length > 0
+      ? `${names.length} tool call${names.length === 1 ? '' : 's'}`
+      : `${thoughts} thought${thoughts === 1 ? '' : 's'}`;
+  if (names.length === 0) return { count, detail: '' };
+  const tally = new Map<string, number>();
+  for (const name of names) {
+    const label = labelFor(name);
+    tally.set(label, (tally.get(label) ?? 0) + 1);
+  }
+  const parts = [...tally.entries()].sort((a, b) => b[1] - a[1]).map(([label, n]) => `${n} ${label}`);
+  if (thoughts > 0) parts.push(`${thoughts} thought${thoughts === 1 ? '' : 's'}`);
+  return { count, detail: `· ${parts.join(' · ')}` };
+}
+
+/**
+ * The word a family is read as. A family is coarser than a tool (`write` and `apply_patch` are
+ * both an edit), and a tool nobody classified keeps its own name, so an MCP server still reads
+ * sensibly.
+ */
+function labelFor(name: string): string {
+  if (name === 'write' || name === 'apply_patch') return 'edits';
+  if (name === 'ls') return 'files';
+  switch (familyOf(name)) {
+    case 'shell':
+      return 'shell';
+    case 'file':
+      return 'read';
+    case 'net':
+      return 'web';
+    case 'memory':
+      return 'memory';
+    case 'agent':
+      return 'agents';
+    case 'browser':
+      return 'browser';
+    case 'time':
+      return 'cron';
+    case 'voice':
+      return 'audio';
+    default:
+      return name;
+  }
+}
+
+type Dot = 'ok' | 'fail' | 'running' | 'thought' | 'waiting';
+
+/**
+ * The colour of a child's dot on the rail.
+ *
+ * Five states, because a run is read at a glance: a call that worked, one that did not, the one
+ * in flight, and the two things that are not calls -- a phase the model only thought in (hollow:
+ * it interrupts the line instead of filling it) and one that has not answered yet.
+ */
+function dotOf(item: ChatItem): Dot {
+  if (item.kind === 'tool') {
+    if (item.running === true) return 'running';
+    return item.ok === false ? 'fail' : 'ok';
+  }
+  if (item.kind === 'text' && item.waitingSince !== undefined && !item.text) return 'waiting';
+  return 'thought';
+}
+
+function dotStyle(dot: Dot, styles: ReturnType<typeof createStyles>) {
+  switch (dot) {
+    case 'ok':
+      return styles.dotOk;
+    case 'fail':
+      return styles.dotFail;
+    case 'running':
+    case 'waiting':
+      return styles.dotRunning;
+    default:
+      return styles.dotThought;
+  }
+}
+
+/** The dot's diameter. Odd on purpose: see `dot` below. */
+const DOT = 7;
+/** A row's head line, which the dot is centred on. */
+const HEAD = 27;
+/** Where a child's own content starts, from the group's left edge. */
+const GUTTER = 20;
+
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
+  const dot = Math.max(5, Math.round(DOT * scale));
+  return {
+    wrap: { width: '100%' as const, marginBottom: space.xs },
+    /**
+     * The bar's own gap: the card's chevron and its name are 6 pt apart, and a bar whose arrow
+     * touched its text read as a different control at the same place.
+     *
+     * 26 pt: a run bar is a step under a card's 29, because it stands for work rather than being
+     * one piece of it, and the two heights must not compete in one column.
+     */
+    header: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 7,
+      height: Math.round(26 * scale),
+      paddingHorizontal: 2,
+    },
+    // The chevron's slot: 13 pt wide, and its centre is where the rail runs. Everything else in
+    // the group is placed from that number.
+    slot: {
+      width: Math.round(13 * scale),
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    /** What the fold holds, in the ink of the message it belongs to. */
+    count: { fontSize: scaleFont(11.5, scale), color: palette.text, fontWeight: '600' as const },
+    detail: { flex: 1, fontSize: scaleFont(11, scale), color: palette.textMeta },
+    live: { fontSize: scaleFont(10, scale), color: palette.accent },
+    // The header's spinner is a hint, not the subject: the same 0.8 scale the card uses.
+    spinner: { transform: [{ scale: 0.7 }] },
+    body: { position: 'relative' as const, paddingTop: 2 },
+    rail: {
+      position: 'absolute' as const,
+      // centre of the chevron slot: 2 (header padding) + 13 / 2 = 8.5, rounded to the pixel the
+      // 1 pt line covers
+      left: Math.round(8 * scale),
+      top: 0,
+      bottom: Math.round(13 * scale),
+      width: 1,
+      backgroundColor: palette.border,
+    },
+    child: { position: 'relative' as const, paddingLeft: Math.round(GUTTER * scale) },
+    dot: {
+      position: 'absolute' as const,
+      // dot / 2 left of the rail's centre (8.5); odd so its edges land on whole pixels, an even
+      // one gets snapped right by half and reads off-centre
+      left: Math.round((8.5 - DOT / 2) * scale),
+      top: Math.round(((HEAD - DOT) / 2) * scale),
+      width: dot,
+      height: dot,
+      borderRadius: dot / 2,
+    },
+    dotOk: { backgroundColor: palette.ok },
+    dotFail: { backgroundColor: palette.danger },
+    dotRunning: { backgroundColor: palette.accent },
+    // A thought interrupts the line instead of filling it: the page shows through the hole.
+    dotThought: { backgroundColor: palette.bg, borderWidth: 1.5, borderColor: palette.textFaint },
+    hideRow: { alignItems: 'flex-end' as const, paddingRight: 8, marginTop: 2 },
+    hideText: { fontSize: scaleFont(10.5, scale), color: palette.textMeta },
+    skeleton: {
+      height: 14,
+      marginBottom: 6,
+      marginLeft: Math.round(GUTTER * scale),
+      borderRadius: 6,
+      backgroundColor: palette.surfaceAlt,
+    },
+    unavailable: {
+      fontSize: scaleFont(font.small, scale),
+      color: palette.textFaint,
+      fontStyle: 'italic' as const,
+      paddingHorizontal: 8,
+    },
+  };
+};

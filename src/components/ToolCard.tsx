@@ -5,7 +5,7 @@ import type { ToolItem } from '../core/chat';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
 import { formatSpan, summarizeArgs } from '../core/utils';
-import { summarizeTool, toolContent } from '../core/toolSummary';
+import { contentNeedsBlock, summarizeTool, toolContent } from '../core/toolSummary';
 import { requestToolOutput } from '../core/toolOutput';
 import { DiffView, diffCounts, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, type Palette, useThemedStyles } from '../theme';
@@ -34,12 +34,20 @@ export const ToolCard = React.memo(function ToolCardView({
   item,
   threadId,
   expandTools,
+  dense = false,
 }: {
   item: ToolItem;
   /** The conversation the card belongs to: what a full-output request has to name. */
   threadId?: string;
   /** Server-owned pref: when true the card stays expanded even after its run settles. */
   expandTools?: boolean;
+  /**
+   * Drawn as a line of a run's spine rather than as a card.
+   *
+   * No frame, no plate, no chevron on the left: the group owns the rail and the dot, and the row
+   * is one line of that column. Opening it hangs its output under the line, on the page.
+   */
+  dense?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
@@ -61,6 +69,10 @@ export const ToolCard = React.memo(function ToolCardView({
   // block, unfolded, because folding it away is what made a written file invisible. See
   // core/toolSummary. Only computed on an open card.
   const content = useMemo(() => (open ? toolContent(item.name, item.args) : null), [open, item.name, item.args]);
+  // The row already carries the subject of the call: printing it again under it was the duplicate
+  // the owner flagged. A block still appears for an argument the row does not show, for a value
+  // with newlines, and for anything too long to fit the line. See core/toolSummary.
+  const showingContent = content !== null && contentNeedsBlock(item.name, content);
   const running = item.running === true;
   // The run ended before this call reported: a terminal state of its own, and not a failure. The
   // store froze the duration at the run's end, so the head draws that number like any settled
@@ -155,14 +167,17 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
-        <View style={styles.head}>
-          <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
+        <View style={[styles.head, dense && styles.headDense]}>
+          {dense ? null : <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />}
           <Text style={[styles.rowText, styles.name]}>{item.name}</Text>
           {/* One line, every tool, folded. A shell command used to wrap under the head at three
               lines: the densest argument is the one worth the room, the argument went the other
               way, and the POC's rule ("closed, the card is 29 px whatever the tool") is what a
               column of twenty calls needs to stay a list. The command is one tap away. */}
-          {!open && preview ? (
+          {/* The subject stays on the line when the card opens. The body no longer repeats it
+              (core/toolSummary.contentNeedsBlock), so hiding it here would make the command of a
+              bash call vanish at the very moment the reader asks what ran. */}
+          {preview ? (
             <Text style={[styles.preview, summary.mono && styles.previewMono]} numberOfLines={1}>
               {preview}
             </Text>
@@ -177,11 +192,12 @@ export const ToolCard = React.memo(function ToolCardView({
             </View>
           ) : null}
           {running ? <RunningFor since={item.ts} /> : duration ? <Text style={styles.duration}>{duration}</Text> : null}
+          {dense && open ? <ChevronIcon direction="up" size={11} tone="faint" /> : null}
         </View>
       </Pressable>
 
       {open ? (
-        <View style={styles.body}>
+        <View style={[styles.body, dense && styles.bodyDense]}>
           {item.name === 'question' ? (
             <QuestionHistoryBody
               args={item.args}
@@ -192,13 +208,13 @@ export const ToolCard = React.memo(function ToolCardView({
           {/* Neither block is selectable in place: a selection inside the chat list focuses its
               text view and Android scrolls the inverted thread to it. Both carry the buttons
               instead -- on the platforms that need them. See docs/text-selection.md. */}
-          {content ? (
+          {content && showingContent ? (
             <>
               <View style={styles.outputHead}>
                 <Text style={styles.label}>{content.key}</Text>
                 <BlockActions title={`${item.name} ${content.key}`} value={content.text} />
               </View>
-              <ScrollableBlock title={`${item.name} ${content.key}`} style={styles.code}>
+              <ScrollableBlock title={`${item.name} ${content.key}`} style={dense ? styles.codeDense : styles.code}>
                 <Text style={styles.codeText}>{content.text}</Text>
               </ScrollableBlock>
             </>
@@ -359,6 +375,18 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   qAnswer: { fontSize: scaleFont(font.small, scale), color: palette.accent },
   qCanceled: { fontSize: scaleFont(font.small, scale), color: palette.danger },
   qEmpty: { fontSize: scaleFont(font.small, scale), color: palette.textMuted },
+  /**
+   * A line of a run's spine: the group already draws the column and the dot, so the card's own
+   * frame, fill and left chevron are exactly the chrome that made a burst read as a stack of
+   * boxes inside a fold.
+   */
+  cardDense: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 0,
+    marginBottom: 0,
+    overflow: 'visible' as const,
+  },
   card: {
     alignSelf: 'stretch' as const,
     backgroundColor: palette.surface,
@@ -382,6 +410,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     height: Math.round(29 * scale),
     paddingHorizontal: 8,
   },
+  // A spine row is 27, and its content starts where the head's 8 pt padding puts it -- the same
+  // column as the name of every other row in the group.
+  headDense: { height: Math.round(27 * scale) },
   /**
    * The head row is one line of type at one size. Four sizes in a 29 pt row (10 for the chevron,
    * 11 for the summary, 12 for the name, 12 for the duration) each carried their own leading, and
@@ -402,6 +433,10 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   stateWarn: { color: palette.warn },
   spinner: { transform: [{ scale: 0.8 }] },
   body: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },
+  // The output hangs under the row on the page itself: no plate, no side padding, so it lands on
+  // the row's own text column instead of inside a foreign sheet.
+  bodyDense: { paddingHorizontal: 0, paddingBottom: 6 },
+  codeDense: { backgroundColor: 'transparent', borderRadius: 0, paddingHorizontal: 0 },
   label: { fontSize: scaleFont(9.5, scale), fontWeight: '500' as const, color: palette.textMeta, letterSpacing: 0.57, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, height: Math.round(18 * scale) },
   // The plate is the container's, the face is the text's. The POC draws one material for

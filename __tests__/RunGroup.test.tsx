@@ -1,11 +1,11 @@
 /**
  * A run group's controls.
  *
- * Two things are guarded here. A run is easily three hundred cards, so an open group carries a
- * bar at both ends: closing one must not mean scrolling back up through the work you just read.
- * And the open state lives in the screen, not in the row, because a folded group whose work
- * arrives is remounted as a group of real items -- held in the component, it snapped shut the
- * moment it filled.
+ * Two things are guarded here. A run is easily three hundred cards, so an open group offers a way
+ * out at *both* ends -- a quiet `hide` word at the bottom, never a second full-width bar, which
+ * read as two controls for one fold. And the open state lives in the screen, not in the row,
+ * because a folded group whose work arrives is remounted as a group of real items -- held in the
+ * component, it snapped shut the moment it filled.
  *
  * @format
  */
@@ -139,7 +139,10 @@ test('a collapsed group is one bar, and it says what it holds', () => {
   // ("on a l'impression que c'est le temps du dernier regroupement", 2026-09-22).
   const drawn = textOf(tree);
   expect(drawn).toContain('3 tool calls');
-  expect(drawn).toContain('bash');
+  // What it touched, not the first tool's name: `bash` is the first call of nearly every run, and
+  // naming it said nothing about the other two.
+  expect(drawn).toContain('· 3 shell');
+  expect(drawn).not.toContain('· bash');
   expect(drawn).not.toContain('1 min');
   // Nothing of the body while it is closed: that is what makes a long thread cheap. The ids are
   // what renderItem draws, and `bash` hides an "a" of its own.
@@ -192,19 +195,17 @@ test('a fold that only holds thoughts says so, instead of "run"', () => {
   expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('2 thoughts');
 });
 
-test('a long open group carries a bar at the bottom too', () => {
+test('a long open group offers a way out at its bottom, without a second bar', () => {
   // The complaint this exists for: with the only control at the top, closing a three-hundred
-  // card run meant scrolling all the way back up through it.
+  // card run meant scrolling all the way back up through it. The answer is one quiet word, not
+  // the same bar drawn again: two identical bars for one fold was the slop the owner rejected.
   const items = Array.from({ length: 8 }, (_, i) => card(`c${i}`));
   const tree = group(items, true);
-  const both = bars(tree);
-  expect(both).toHaveLength(2);
-  // Both close it, and both name it, so whichever end the reader reaches is the same control.
-  expect(both.map(node => node.props.accessibilityLabel)).toEqual(['Hide the run work', 'Hide the run work']);
-  // The fold arrow is a drawn chevron now, not a character in a Text: the top bar points down
-  // at the work, the bottom bar points up at it.
-  expect(tree.root.findAllByType(ChevronIcon)).toHaveLength(2);
-  expect(tree.root.findAllByType(ChevronIcon).map(node => node.props.direction)).toEqual(['down', 'up']);
+  expect(bars(tree)).toHaveLength(2);
+  expect(textOf(tree)).toContain('hide');
+  // One chevron, on the header, pointing down at the work.
+  expect(tree.root.findAllByType(ChevronIcon)).toHaveLength(1);
+  expect(tree.root.findAllByType(ChevronIcon)[0]!.props.direction).toBe('down');
 });
 
 test('a short open group keeps one bar', () => {
@@ -213,7 +214,7 @@ test('a short open group keeps one bar', () => {
   expect(bars(tree)).toHaveLength(1);
 });
 
-test('the bar at the bottom closes the group', () => {
+test('the hide word at the bottom closes the group', () => {
   const onToggle = jest.fn();
   const items = Array.from({ length: 8 }, (_, i) => card(`c${i}`));
   const tree = group(items, true, onToggle);

@@ -235,15 +235,16 @@ describe('live run and history page reach the same verdict', () => {
     expect(groupItems(chatStore.getItems(THREAD))).toEqual(['p1', 't1', 'p2']);
   });
 
-  test('nothing is grouped before the run is sealed: the rule only applies at the end', () => {
+  test('a run in flight is grouped too, and sealing it does not change the rows', () => {
     chatStore.startRun(THREAD, RUN);
     chatStore.startStream(THREAD, 'p1');
     chatStore.appendReasoning(THREAD, 'p1', 'weighing the options');
     chatStore.endStream(THREAD, 'p1');
     chatStore.startToolCall(THREAD, 't1', 'bash', { command: 'ls' });
     chatStore.addToolCall(THREAD, { id: 't1', name: 'bash', args: { command: 'ls' }, ok: true, output: 'ok', truncated: false });
-    // A run in flight draws its work flat, phase and card alike.
-    expect(rowsOf(chatStore.getItems(THREAD))).toEqual(['p1', 't1']);
+    // Grouped from the first call: the fold is drawn open while the run goes (owner, 2026-11-07),
+    // so the block does not change shape the instant the run ends.
+    expect(rowsOf(chatStore.getItems(THREAD))).toEqual(['g:r1']);
 
     chatStore.endRun(THREAD, 'error');
     expect(rowsOf(chatStore.getItems(THREAD))).toEqual(['g:r1']);

@@ -94,7 +94,16 @@ describe('buildRows', () => {
     expect(rows.filter(row => row.kind === 'item' && row.item.kind === 'text' && row.item.role === 'agent')).toHaveLength(3);
   });
 
-  test('a running run is never grouped, even with a closed run before it', () => {
+  test('a sub-agent call is a door of its own, never a line of a fold', () => {
+    const spawn = { ...tool('s1', 'r1'), name: 'spawn', args: { name: 'reviewer' } } as ChatItem;
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), spawn, tool('t2', 'r1')]);
+    // Two folds with the door between them: it is the one thing the reader waits on, and inside
+    // a spine of thirteen rows it would be the least visible of them.
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 's1', 'g:r1+foot']);
+    expect(rows.filter(r => r.kind === 'item' && r.item.id === 's1')).toHaveLength(1);
+  });
+
+  test('a running run is grouped too, and the fold does not wait for the run to end', () => {
     const items = [
       userText('u1'),
       tool('t1', 'r1'),
@@ -104,8 +113,14 @@ describe('buildRows', () => {
       agentText('a2', 'working…', 'r2'),
     ];
     const rows = buildRows(items.map(i => (i.id === 't2' || i.id === 'a2' ? { ...i, run: run('r2', 'running') } : i)));
-    expect(rows.filter(r => r.kind === 'group')).toHaveLength(1);
-    expect(rows.filter(r => r.kind === 'group' && r.run.status === 'running')).toHaveLength(0);
+    // Two groups: the settled run, and the one in flight. The second used to be plain cards that
+    // collapsed into a fold the instant the run ended, which changed the whole block's shape under
+    // the reader's eyes (owner, 2026-11-07).
+    expect(rows.filter(r => r.kind === 'group')).toHaveLength(2);
+    const live = rows.filter(r => r.kind === 'group' && r.run.status === 'running');
+    expect(live).toHaveLength(1);
+    // The streaming answer is still its own bubble: it is what the owner follows.
+    expect(rows.some(r => r.kind === 'item' && r.item.id === 'a2')).toBe(true);
   });
 
   test('a user turn inside a run stays a row and splits the group around it', () => {
@@ -484,8 +499,9 @@ describe('markRunFeet', () => {
     expect(rows.map(labelOfRow)).toEqual(['u1', 'g:r1', 'a1+foot', 'u2', 'g:r2+foot']);
 
     const live = buildRows([userText('u'), { ...tool('t1', 'live'), run: run('live', 'running') } as ChatItem]);
-    // A run still going has no span and no status to sign: plain rows, no marks.
-    expect(live.map(labelOfRow)).toEqual(['u', 't1']);
+    // A run still going is grouped (so the reader watches one column from the first call), and it
+    // signs nothing: no span, no status, until it ends.
+    expect(live.map(labelOfRow)).toEqual(['u', 'g:live']);
   });
 
   test('a folded run the work of which never travelled signs its summary row', () => {

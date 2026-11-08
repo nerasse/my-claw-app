@@ -542,12 +542,13 @@ test('a server-published command appears on the next input without a release', a
   await unmount(tree);
 });
 
-test('a tool card starts collapsed and reveals the command it ran on tap', async () => {
+test('a tool card starts collapsed and reveals what it answered on tap', async () => {
   const tree = await renderWithHistory();
 
-  // Collapsed: name plus a one-line argument preview, no body.
+  // Collapsed: name plus a one-line argument preview, no body. The preview is the whole line
+  // (`echo hello`); the answer is not on screen until the card is opened.
   expect(textsOf(tree)).toContain('echo hello');
-  expect(textsOf(tree)).not.toContain('command');
+  expect(textsOf(tree)).not.toContain('hello');
 
   const card = tree.root.find(
     node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Tool bash'),
@@ -557,11 +558,12 @@ test('a tool card starts collapsed and reveals the command it ran on tap', async
   await ReactTestRenderer.act(async () => {
     card.props.onPress();
   });
-  await waitFor(() => textsOf(tree).includes('command'));
+  await waitFor(() => textsOf(tree).includes('hello'));
 
-  // The command IS the call: it gets a block of its own, unfolded, and there is no ARGUMENTS fold
-  // left to open -- it would hold `{}`. The output is there straight away too.
-  expect(textsOf(tree).join('|')).toContain('hello');
+  // The row already carries the command, so opening the card must NOT print it again: the body is
+  // the answer. There is no ARGUMENTS fold either -- it would hold `{}`.
+  expect(textsOf(tree)).toContain('echo hello');
+  expect(textsOf(tree)).not.toContain('command');
   expect(textsOf(tree).join('|')).not.toContain('"command"');
   expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Arguments of bash')).toHaveLength(0);
   expect(textsOf(tree)).toContain('copy');

@@ -191,13 +191,28 @@ describe('content argument block', () => {
     return tree.root.findAllByType(Text).map(t => [t.props.children].flat().join(''));
   }
 
-  it('shows the command of a bash call unfolded, with no arguments fold beside it', () => {
+  it('keeps the subject on the row when it fits, instead of printing it twice below', () => {
     const tree = renderTool(makeItem({ running: true, output: 'done' }), { expandTools: true });
     const shown = labels(tree);
-    expect(shown).toContain('command');
-    expect(shown).toContain('sleep 1');
+    // The row carries `bash  sleep 1`; a block under it would be the same string again.
+    expect(shown).not.toContain('command');
+    expect(shown).toContain('output');
     // The command was the whole call: an ARGUMENTS fold there would offer `{}`.
     expect(shown).not.toContain('arguments');
+  });
+
+  it('opens a block for a command too long to sit on the row', () => {
+    const command = `bun test ${'tests/llm/'.repeat(12)}resolver.test.ts`;
+    const tree = renderTool(makeItem({ args: { command }, running: true, output: 'done' }), { expandTools: true });
+    const shown = labels(tree);
+    expect(shown).toContain('command');
+    expect(shown).toContain(command);
+  });
+
+  it('opens a block for a multi-line command, which the row flattens', () => {
+    const command = 'set -e\nbun test\nbun run build';
+    const tree = renderTool(makeItem({ args: { command }, running: true, output: 'done' }), { expandTools: true });
+    expect(labels(tree)).toContain(command);
   });
 
   it('shows what a write wrote, which used to appear nowhere at all', () => {

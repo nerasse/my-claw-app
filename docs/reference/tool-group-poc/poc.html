@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>my-claw — tool group</title>
+<style>
+  :root{
+    --bg:#14120f; --surface:#1c1916; --alt:#282623; --raised:#3c3a37; --border:#2a261f;
+    --text:#eae5dd; --muted:#a0998d; --meta:#827c73; --faint:#6f685e;
+    --accent:#e08b73; --ok:#6dc08e; --warn:#d8a950; --danger:#ef6c88;
+    --code:#0b0a08; --codeText:#eae5dd;
+    --add:#6ec08f; --del:#ef6d89; --add-bg:#202920; --del-bg:#301e1f; --hunk-bg:#221a16;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  }
+  html[data-theme="light"]{
+    --bg:#f6f4f1; --surface:#fdfbf8; --alt:#f4f2ef; --raised:#dcdcd9; --border:#e1dcd4;
+    --text:#191714; --muted:#56504a; --meta:#756f66; --faint:#8b8479;
+    --accent:#893a2e; --ok:#2f6a47; --warn:#895a10; --danger:#a31f4b;
+    --code:#ebe9e6; --codeText:#191714;
+    --add:#2f6947; --del:#a21f4b; --add-bg:#dce2db; --del-bg:#ebd8db; --hunk-bg:#eee7e3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+       font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .thread{max-width:860px;margin:0 auto;padding:28px 24px 60px}
+  html[data-wide="narrow"] .thread{max-width:390px;padding:16px 14px 40px}
+
+  /* ---- conversation chrome (only to give the group a context) ---- */
+  .turn{margin-bottom:22px}
+  .user{align-self:flex-end;max-width:78%;margin-left:auto;background:var(--alt);
+        border-radius:14px;padding:9px 13px;color:var(--text)}
+  .agent p{margin:0 0 10px}
+  .agent .prose{max-width:72ch;color:var(--text)}
+  .meta-line{display:flex;gap:8px;align-items:center;color:var(--meta);font-size:11px;margin-bottom:4px}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--faint)}
+
+  /* ---- shared bits ---- */
+  .ico{width:13px;height:13px;flex:none;display:block}
+  .ico-sm{width:11px;height:11px}
+  .chev{width:13px;height:13px;flex:none;color:var(--faint);transition:transform .16s ease}
+  .open > .hd .chev{transform:rotate(90deg)}
+  .k{font-family:var(--mono);font-size:11.5px}
+  .n{font-variant-numeric:tabular-nums}
+  .run-foot{display:flex;justify-content:flex-end;gap:0;padding:2px 8px 0;
+            color:var(--meta);font-size:10.5px}
+  .foot-err{color:var(--danger)}
+
+  /* =====================================================================
+     V1 — SPINE : no box, one header line, children hang off a left rail
+     ===================================================================== */
+  .v1{width:100%}
+  .v1 .hd{display:flex;align-items:center;gap:7px;height:26px;padding:0 var(--hd-pad);
+          cursor:pointer;border-radius:6px}
+  .v1 .hd:hover{background:var(--alt)}
+  .v1 .hd .count{font-size:11.5px;color:var(--text);font-weight:600}
+  .v1 .hd .break{font-size:11px;color:var(--meta);overflow:hidden;text-overflow:ellipsis;
+                 white-space:nowrap;flex:1;min-width:0}
+  .v1 .hd .break b{font-weight:500;color:var(--muted)}
+  .v1 .hd .spark{display:flex;gap:9px;align-items:center;flex:none}
+  .v1 .hd .spark span{display:flex;align-items:center;gap:3px;color:var(--faint);
+                      font-size:10.5px;font-variant-numeric:tabular-nums}
+  /* ---- V1 spine geometry ------------------------------------------------
+     One number holds the column: the chevron box is 13 px inside a 2 px
+     padding, so its centre is 8.5 and the rail, the dots and the chevron all
+     land on 8.5. The body starts at 20, which is where the row's own padding
+     takes over -- no connector stubs, the dot sits on the line. */
+  .v1{--gutter:13px;--hd-pad:2px;--rail-w:1px;--dot:7px;--body-pad:20px;
+       /* ONE number, derived: the icon slot starts at the header's padding and the rail is its
+          centre. Nothing below is hand-tuned against a screenshot any more. */
+       --rail-x:calc(var(--hd-pad) + var(--gutter) / 2);
+       /* a row's own box starts at the body's padding; the dot has to reach back to the rail */
+       --rail-in-row:calc(var(--rail-x) - var(--body-pad))}
+  /* The chevron and the live spinner sit in the same slot, so the two headers of one group put
+     their mark on the same axis as the dots. */
+  .v1 .hd .slot{width:var(--gutter);height:var(--gutter);flex:none;display:flex;
+                align-items:center;justify-content:center}
+  .v1 .hd .chev{transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+
+  .v1 .fold{display:grid;grid-template-rows:0fr;
+            transition:grid-template-rows .24s cubic-bezier(.2,.8,.2,1)}
+  .v1.open .fold{grid-template-rows:1fr}
+  .v1 .fold-in{overflow:hidden;min-height:0}
+
+  .v1 .body{position:relative;padding:2px 0 2px var(--body-pad)}
+  .v1 .body:before{content:"";position:absolute;
+                   left:calc(var(--rail-x) - var(--rail-w) / 2);top:calc(-1 * var(--gutter));
+                   bottom:13px;width:var(--rail-w);
+                   background:var(--raised);transform-origin:top;transform:scaleY(0);
+                   transition:transform .28s cubic-bezier(.2,.8,.2,1) .04s}
+  .v1.open .body:before{transform:scaleY(1)}
+  /* the rail starts at the chevron's centre, and fades instead of touching the glyph */
+  .v1 .body:after{content:"";position:absolute;
+                  left:calc(var(--rail-x) - var(--rail-w) / 2);top:calc(-1 * var(--gutter));
+                  height:calc(var(--gutter) + 6px);width:var(--rail-w);
+                  background:linear-gradient(to bottom,var(--bg),transparent)}
+
+  .v1 .body .row{position:relative;opacity:0;transform:translateY(-3px);
+                 transition:opacity .2s ease,transform .22s cubic-bezier(.2,.8,.2,1)}
+  .v1.open .body .row{opacity:1;transform:none;
+                      transition-delay:calc(var(--i,0) * 22ms + 60ms)}
+  /* The dot hangs off the *head line*, not off the row: an opened row also contains its block,
+     and a dot centred on the row would land in the middle of the output. */
+  .v1 .body .row .tline{position:relative}
+  .v1 .body .row .tline:after{content:"";position:absolute;
+                 left:calc(var(--rail-in-row) - var(--dot) / 2);top:calc(50% - var(--dot) / 2);
+                 width:var(--dot);height:var(--dot);border-radius:50%;background:var(--faint);
+                 transform:scale(0);transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+  /* Odd diameter on purpose: a 1 px rail covers one device pixel, so its centre is a half
+     pixel; an even dot at a half-pixel left gets snapped right by 0.5. */
+  .v1.open .body .row .tline:after{transform:scale(1);
+                        transition-delay:calc(var(--i,0) * 22ms + 90ms)}
+  .v1 .body .row.ok .tline:after{background:var(--ok)}
+  .v1 .body .row.fail .tline:after{background:var(--danger)}
+  /* a thinking phase is a hollow dot that interrupts the line rather than filling it */
+  .v1 .body .row.thought .tline:after{background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--faint)}
+  .v1 .more{display:flex;justify-content:flex-end;padding:2px 8px 0;opacity:0;
+            transition:opacity .18s ease}
+  .v1.open .more{opacity:1;transition-delay:.24s}
+  .v1 .more button{background:none;border:0;color:var(--meta);font-size:10.5px;
+                   display:flex;align-items:center;gap:4px;cursor:pointer;padding:2px 4px;
+                   border-radius:5px;transition:color .12s ease,background .12s ease}
+  .v1 .more button:hover{color:var(--text);background:var(--alt)}
+  @media (prefers-reduced-motion: reduce){
+    .v1 .fold,.v1 .body .row,.v1 .body .row:after,.v1 .body:before{transition:none}
+    .v1 .body .row{opacity:1;transform:none}
+    .v1 .body .row .tline:after{transform:scale(1)}
+    .v1 .body:before{transform:scaleY(1)}
+  }
+
+  /* ---- live: the run is still going ---- */
+  .v1 .hd .spin{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--raised);
+                border-top-color:var(--accent);animation:spin .9s linear infinite;flex:none;
+                box-sizing:border-box}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){ .v1 .hd .spin{animation:none} }
+  .v1 .hd .live{font-size:10px;color:var(--accent);flex:none;letter-spacing:.02em}
+  .v1 .body .row.running .tline:after{background:var(--accent);animation:pulse 1.7s ease-out infinite}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 34%, transparent)}
+    70%{box-shadow:0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent)}
+    100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent)}
+  }
+  .tline .right .spin{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--raised);
+                      border-top-color:var(--accent);animation:spin .9s linear infinite}
+  .tline .right .calm{color:var(--faint)}
+  /* a tool that is alone (live, or the only one of its run) still wears the card */
+  .solo{border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:1px 0}
+  .solo .tline{border-radius:0}
+
+  /* a wait: the model call has produced nothing yet, so there is no row to draw -- only a clock */
+  .tline.wait{height:24px}
+  .tline.wait .label{font-size:11px;color:var(--meta);font-style:italic;flex:none}
+  .tline.wait .right{color:var(--meta);font-variant-numeric:tabular-nums;
+                     display:flex;align-items:center;gap:6px}
+  .v1 .body .row.waiting .tline:after{background:var(--accent);animation:pulse 1.7s ease-out infinite}
+
+  /* a sub-agent is a door, never a row of a fold: it keeps its own card at the group's level */
+  .sag{display:flex;align-items:center;gap:8px;height:27px;padding:0 8px;border-radius:6px;
+       transition:background .12s ease}
+  .sag:hover{background:var(--alt)}
+  .sag .ring{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--accent);flex:none;
+             border-right-color:transparent;animation:spin 1.4s linear infinite}
+  .sag .who{font-family:var(--mono);font-size:11.5px;color:var(--text);flex:none}
+  .sag .what{font-size:11.5px;color:var(--meta);flex:1;min-width:0;overflow:hidden;
+             text-overflow:ellipsis;white-space:nowrap}
+  .sag .right{font-size:10.5px;color:var(--meta);flex:none;font-variant-numeric:tabular-nums}
+  @media (prefers-reduced-motion: reduce){ .sag .ring{animation:none} }
+
+  /* ---- an item, opened ----
+     No panel, no frame, no dark sheet: the output is plain mono text on the page, hung under the
+     row at the row's own text column. The only chrome is a 16 px caption that says what the text
+     is and carries the copy, which is also what separates it from the row above. */
+  .v1 .body .row .tblock{margin-left:calc(-1 * var(--body-pad));
+                         padding:0 0 8px calc(var(--body-pad) + 8px);background:var(--bg)}
+  /* the opened row is marked by ink, not by a fill: its subject comes forward and a chevron
+     closes it */
+  .tline.opened .args{color:var(--text)}
+  .tline.opened .name{color:var(--text)}
+  .tline .right .up{display:flex;color:var(--faint)}
+  .cap{display:flex;align-items:center;justify-content:space-between;height:18px;margin-bottom:2px}
+  .cap .lbl{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+  .cap button{background:none;border:0;color:var(--faint);font-size:10px;cursor:pointer;
+              display:flex;align-items:center;gap:4px;padding:0;transition:color .12s ease}
+  .cap button:hover{color:var(--text)}
+  .out{margin:0;padding:0;font-family:var(--mono);font-size:11px;line-height:1.6;
+       color:var(--codeText);white-space:pre;overflow:auto;max-height:224px}
+  /* a diff reads by colour and by sign, not by a filled row */
+  .out .ln{display:block;padding:0 6px 0 0;border-radius:3px}
+  .out .add{color:var(--add);background:color-mix(in srgb, var(--add) 11%, transparent)}
+  .out .del{color:var(--del);background:color-mix(in srgb, var(--del) 11%, transparent)}
+  .out .hunk{color:var(--faint)}
+
+  /* a plain tool line */
+  .tline{display:flex;align-items:center;gap:7px;height:27px;padding:0 8px;border-radius:6px;
+         cursor:pointer;min-width:0;transition:background .12s ease}
+  .tline:hover{background:var(--alt)}
+  .tline .name{font-family:var(--mono);font-size:11.5px;color:var(--text);flex:none}
+  .tline .args{font-size:11.5px;color:var(--meta);overflow:hidden;text-overflow:ellipsis;
+               white-space:nowrap;flex:1;min-width:0}
+  .tline .right{display:flex;gap:6px;align-items:center;flex:none;color:var(--meta);
+                font-size:10.5px;font-variant-numeric:tabular-nums}
+  .tline .v-ok{color:var(--ok)}
+  .tline .v-fail{color:var(--danger)}
+
+  /* a thinking phase inside a run: no tool name, no verdict, just the aside */
+  .tline.thought{height:24px}
+  .tline.thought .th-ico{color:var(--faint);display:flex}
+  .tline.thought .th-ico .ico{width:11px;height:11px}
+  .tline.thought .label{font-size:11px;color:var(--meta);font-style:italic;flex:none}
+  .tline.thought .args{font-style:italic;color:var(--faint)}
+  .tline.thought .right{color:var(--faint)}
+
+</style>
+</head>
+<body>
+<div class="thread" id="thread"></div>
+
+<script>
+const I = {
+  terminal:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5 9 12l-4 4.5M12.5 17H19"/></svg>',
+  file:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3.5H7A2 2 0 0 0 5 5.5v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13.5 3.5V9H19"/></svg>',
+  edit:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 19.5h4L19 9a2.5 2.5 0 0 0-3.5-3.5L5 16v3.5z"/></svg>',
+  search:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></svg>',
+  net:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.2 2.4 3.2 5 3.2 8s-1 5.6-3.2 8c-2.2-2.4-3.2-5-3.2-8S9.8 6.4 12 4z"/></svg>',
+  agent:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7.5" width="14" height="11" rx="3"/><path d="M12 4v3.5"/><circle cx="9.5" cy="13" r="1"/><circle cx="14.5" cy="13" r="1"/></svg>',
+  check:'<svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 6.5"/></svg>',
+  cross:'<svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  chev:'<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  up:'<svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  copy:'<svg class="ico ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 6.5A2.5 2.5 0 0 0 12.5 4H6a2 2 0 0 0-2 2v6.5A2.5 2.5 0 0 0 6.5 15"/></svg>',
+  spark:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5l1.7 4.6 4.8 1.7-4.8 1.7L12 17.1l-1.7-4.6L5.5 10.8l4.8-1.7z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
+};
+
+/* ---------- the same run, described once ---------- */
+const FAM = {shell:['bash','terminal'], file:['read','file'], edit:['edit','edit'],
+             search:['search','search'], net:['net','net'], agent:['agent','agent'],
+             thought:['th','spark']};
+const FAM_LABEL = {shell:'shell', file:'read', edit:'edits', search:'search', net:'web',
+                   agent:'agents', thought:'thoughts'};
+
+const COLLAPSED = {
+  families:[['shell',6],['file',3],['edit',2],['search',1],['net',1],['thought',4]],
+  calls:13, foot:'run · 4 m 12 s'
+};
+
+/* Two of the eight items are thinking phases that produced no tool and no message: that is the
+   common shape of a run, and the fold has to hold them as rows, in order. */
+const OPENED = {
+  calls:6,
+  families:[['shell',3],['edit',2],['file',1],['thought',2]],
+  rows:[
+    {thought:true, args:'the test reads the merged limit, so the inheritance is the bug', time:'6 s', tok:'1.2k'},
+    {name:'bash', args:'bun test tests/llm/resolver.test.ts', time:'1.8 s', v:'ok'},
+    {name:'read', args:'src/llm/resolver.ts', time:'12 ms', v:'ok'},
+    {name:'apply_patch', args:'src/llm/resolver.ts', time:'+15 −9', v:'ok'},
+    {thought:true, args:'the doc still described a merge, not an inheritance', time:'3 s', tok:'640'},
+    {name:'bash', args:'git status --short', time:'40 ms', v:'ok'},
+    {name:'bash', args:'bun test tests/llm', time:'2.4 s', v:'ok'},
+    {name:'apply_patch', args:'docs/context-window.md', time:'+8 −2', v:'ok'},
+  ],
+  sections:[
+    {fam:'shell', rows:[
+      {name:'bash', args:'bun test tests/llm/resolver.test.ts', time:'1.8 s', v:'ok'},
+      {name:'bash', args:'git status --short', time:'40 ms', v:'ok'},
+      {name:'bash', args:'bun test tests/llm', time:'2.4 s', v:'ok'},
+    ]},
+    {fam:'file', rows:[
+      {name:'read', args:'src/llm/resolver.ts', time:'12 ms', v:'ok'},
+    ]},
+    {fam:'edit', rows:[
+      {name:'apply_patch', args:'src/llm/resolver.ts', time:'+15 −9', v:'ok'},
+      {name:'apply_patch', args:'docs/context-window.md', time:'+8 −2', v:'ok'},
+    ]},
+    {fam:'thought', rows:[
+      {thought:true, args:'the test reads the merged limit, so the inheritance is the bug', time:'6 s', tok:'1.2k'},
+      {thought:true, args:'the doc still described a merge, not an inheritance', time:'3 s', tok:'640'},
+    ]},
+  ]
+};
+
+/* A run whose reader opened two of its rows: the row stays, the body hangs under it. */
+const EXPANDED = {
+  calls:4, families:[['shell',2],['edit',1],['file',1]],
+  rows:[
+    {name:'bash', args:'bun test tests/llm/resolver.test.ts', time:'1.8 s', v:'ok'},
+    {name:'bash', args:'bun test tests/llm', time:'2.4 s', v:'ok', opened:true, blocks:[
+      {kind:'code', label:'output', lines:[
+        'bun test v1.3.13',
+        '',
+        'tests/llm/resolver.test.ts:',
+        '✓ a partial model limit inherits the field it does not name',
+        '✓ an explicit output wins over the global cap',
+        '✓ both fields merge when one side is absent',
+        '',
+        ' 44 pass, 0 fail, 44 expect() calls',
+      ]},
+    ]},
+    {name:'apply_patch', args:'docs/context-window.md', time:'+8 −2', v:'ok', opened:true, blocks:[
+      {kind:'diff', label:'docs/context-window.md', lines:[
+        ['hunk', '@@ -12,7 +12,9 @@ Merge'],
+        ['ctx',  ' A model declared with both fields keeps both.'],
+        ['del',  '-A model declared with `context` only inherits nothing.'],
+        ['add',  '+A model declared with `context` only inherits `output` from'],
+        ['add',  '+the merged limit, field by field.'],
+      ]},
+    ]},
+    {name:'read', args:'src/llm/resolver.ts', time:'12 ms', v:'ok'},
+  ],
+};
+
+/* A burst with no tool at all: the fold still has to say something true. */
+const THOUGHTS_ONLY = {calls:0, families:[['thought',3]], thoughts:3};
+
+const breakdown = fams => fams.map(([f,n]) => `<b>${n}</b> ${FAM_LABEL[f]}`).join(' · ');
+/* A run that only thought has one thing to say: repeating "3 thoughts · 3 thoughts" is the kind of
+   duplicate the owner flags every time. */
+const compose = g => (g.calls === 0 ? '' : breakdown(g.families));
+const verdict = v => v === 'ok'
+  ? `<span class="v-ok">${I.check}</span>`
+  : `<span class="v-fail">${I.cross}</span>`;
+
+function tline(r){
+  if (r.waiting) {
+    return `<div class="tline wait"><span class="label">waiting for the model</span>
+      <span class="args"></span>
+      <span class="right"><span class="spin"></span><span>${r.time}</span></span></div>`;
+  }
+  if (r.thought) {
+    return `<div class="tline thought"><span class="th-ico">${I.spark}</span>
+      <span class="label">thought</span>
+      <span class="args">${r.tok} tokens · ${r.args}</span>
+      <span class="right"><span>${r.time}</span></span></div>`;
+  }
+  return `<div class="tline${r.opened ? ' opened' : ''}"><span class="name">${r.name}</span>
+    <span class="args">${r.args}</span>
+    <span class="right">${r.running
+      ? `<span class="spin"></span><span>${r.time}</span>`
+      : `<span>${r.time}</span>${verdict(r.v)}`}${r.opened ? `<span class="up">${I.up}</span>` : ''}</span></div>`;
+}
+
+/* ---------- live: the same fold, before the run settles ---------- */
+const LIVE = {
+  calls:3, families:[['shell',2],['file',1]], live:true, elapsed:'1 m 12 s',
+  rows:[
+    {name:'bash', args:'bun test tests/llm/resolver.test.ts', time:'1.4 s', v:'ok'},
+    {thought:true, args:'the failing assertion is about the merged limit', time:'5 s', tok:'980'},
+    {name:'bash', args:'bun test tests/llm/resolver.test.ts', time:'0.6 s', running:true},
+    {waiting:true, time:'12 s'},
+  ]
+};
+
+function blocks(list){
+  const line = (k, t) => `<span class="ln ${k}">${t === '' ? '\u00a0' : t.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>`;
+  return list.map(b => `<div>
+    <div class="cap"><span class="lbl">${b.label}</span><button>${I.copy} copy</button></div>
+    <div class="out">${b.lines.map(l => Array.isArray(l) ? line(l[0], l[1]) : line('ctx', l)).join('')}</div>
+  </div>`).join('');
+}
+
+function rowHtml(r, i){
+  const cls = r.thought ? 'thought' : r.waiting ? 'waiting' : r.running ? 'running' : r.v;
+  const body = r.opened
+    ? `<div class="tblock">${blocks(r.blocks)}</div>`
+    : '';
+  return `<div class="row ${cls}" style="--i:${i}">${tline(r)}${body}</div>`;
+}
+
+/* ---------- V1 : spine ---------- */
+function v1(open, g, foot){
+  const noun = g.calls === 0
+    ? `${g.thoughts} thoughts`
+    : `${g.calls} tool calls`;
+  const head = `<div class="hd"><span class="slot">${g.live ? '<span class="spin"></span>' : I.chev}</span>
+      <span class="count n">${noun}</span>
+      <span class="break">${compose(g)}</span>
+      ${g.live ? `<span class="live">running · ${g.elapsed}</span>` : ''}
+    </div>`;
+  // The body is always in the DOM: the fold animates the row from 0fr to 1fr, and a node that
+  // only exists once open has nothing to animate from. A header-only fixture carries no rows.
+  const rows = g.rows ?? [];
+  const body = `<div class="fold"><div class="fold-in"><div class="body">${
+      rows.map((r, i) => rowHtml(r, i)).join('')
+    }</div>${
+      g.live ? '' : `<div class="more"><button>${I.up} hide</button></div>`
+    }</div></div>`;
+  return `<div class="v1 ${open?'open':''}" data-group>${head}${body}
+    <div class="run-foot"><span>${foot}</span></div></div>`;
+}
+
+/* ---------- page ---------- */
+const q = new URLSearchParams(location.search);
+const dark = (q.get('t') || 'dark') === 'dark';
+const narrow = q.get('w') === 'narrow';
+document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+document.documentElement.dataset.wide = narrow ? 'narrow' : 'wide';
+// Headless chromium keeps a 980px layout viewport whatever --window-size says: pin the
+// document itself so the narrow capture is the phone width and not a cropped desktop.
+if (narrow) { document.documentElement.style.width = '390px'; }
+
+const render = v1;
+
+/* `?anim=1` is the capture mode: one group, closed, that opens itself at 350 ms. Chromium headless
+   advances CSS transitions under --virtual-time-budget, so the frames of the GIF are the real
+   animation and not a redraw of guessed intermediate styles. */
+/* `?probe=1` prints the real boxes, so the column is checked against the layout engine and not
+   against a screenshot's antialiasing. */
+if (q.get('probe')) {
+  setTimeout(() => {
+    const box = sel => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return {
+        left: +b.left.toFixed(2), top: +b.top.toFixed(2), width: +b.width.toFixed(2),
+        centre: +(b.left + b.width / 2).toFixed(2),
+      };
+    };
+    document.body.textContent = JSON.stringify({
+      thread: box('.thread'),
+      hd: box('.v1.open .hd'),
+      chevron: box('.v1.open .hd .chev'),
+      count: box('.v1.open .hd .count'),
+      body: box('.v1.open .body'),
+      row: box('.v1.open .body .row'),
+      name: box('.v1.open .body .row .name'),
+      dot: (() => {
+        const row = document.querySelector('.v1.open .body .row');
+        const cs = getComputedStyle(row, '::after');
+        return { left: cs.left, top: cs.top, width: cs.width, height: cs.height };
+      })(),
+      rail: (() => {
+        const body = document.querySelector('.v1.open .body');
+        const cs = getComputedStyle(body, '::before');
+        return { left: cs.left, width: cs.width };
+      })(),
+      liveSpinner: box('.v1 .hd .spin'),
+      liveDot: (() => {
+        const row = document.querySelector('.v1 .row.running');
+        return row === null ? null : (() => {
+          const b = row.getBoundingClientRect();
+          const cs = getComputedStyle(row, '::after');
+          const left = b.left + parseFloat(cs.left);
+          return { left: +left.toFixed(2), centre: +(left + parseFloat(cs.width) / 2).toFixed(2) };
+        })();
+      })(),
+    }, null, 1);
+  }, 50);
+}
+
+if (q.get('anim')) {
+  document.getElementById('thread').innerHTML =
+    `<div class="turn agent">${v1(false, OPENED, 'run · 52 s')}</div>`;
+  const group = document.querySelector('[data-group]');
+  setTimeout(() => group.classList.add('open'), 350);
+  setTimeout(() => group.classList.remove('open'), 1500);
+  setTimeout(() => group.classList.add('open'), 1750);
+} else {
+  document.getElementById('thread').innerHTML = `
+  <div class="turn"><div class="user">recheck le groupement des tools dans le chat</div></div>
+  <div class="turn agent">
+    <div class="prose"><p>Les deux barres identiques en haut et en bas sautent, le titre arrête de
+    dire « bash » et nomme ce que le run a réellement touché.</p></div>
+    ${render(false, COLLAPSED, 'run · 1 m 38 s')}
+  </div>
+  <div class="turn agent">
+    <div class="prose"><p>Ouvert, voilà ce que ça donne :</p></div>
+    ${render(true, OPENED, 'run · 52 s')}
+  </div>
+  <div class="turn agent">
+    <div class="prose"><p>Pendant que ça tourne : le même fold, ouvert, non repliable, le spinner
+    à la place du chevron, le dernier call qui compte et la dernière ligne qui attend :</p></div>
+    ${v1(true, LIVE, '')}
+  </div>
+  <div class="turn agent">
+    <div class="prose"><p>Quand on clique une ligne : elle ne bouge pas, le corps se déplie dessous,
+    aligné sur sa colonne de texte, et le rail est interrompu derrière le bloc :</p></div>
+    ${v1(true, EXPANDED, 'run · 1 m 04 s')}
+  </div>
+  <div class="turn agent">
+    <div class="prose"><p>Un sous-agent n'est jamais une ligne du fold : c'est une porte, elle reste
+    au niveau du run avec son propre chrono.</p></div>
+    <div class="sag"><span class="ring"></span><span class="who">reviewer</span>
+      <span class="what">relit le diff · 2 min</span>
+      <span class="right">#b41c</span></div>
+    <div class="run-foot"><span>run · 2 m 41 s</span></div>
+  </div>
+  <div class="turn agent">
+    <div class="prose"><p>Un tool qui est seul (premier call d'un run, ou run d'un seul call) :</p></div>
+    <div class="solo">${tline({name:'bash', args:'bun test tests/llm/resolver.test.ts', time:'0.6 s', running:true})}</div>
+    <div class="run-foot"><span>run · 0.6 s</span></div>
+  </div>
+  <div class="turn agent">
+    <div class="prose"><p>Un burst sans aucun tool, que du thinking entre deux messages :</p></div>
+    ${render(false, THOUGHTS_ONLY, 'run · 41 s')}
+  </div>
+  <div class="turn agent">
+    <div class="prose"><p>Le diff est déjà coloré par <span class="k">apply_patch</span>, rien ne
+    change là-dedans.</p></div>
+  </div>
+`;
+}
+</script>
+</body>
+</html>
