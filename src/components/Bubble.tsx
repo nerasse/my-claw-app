@@ -349,11 +349,14 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: { width: '100%' as const, flexDirection: 'row' as const, marginBottom: space.xs },
   rowGrouped: { marginBottom: 1 },
   /**
-   * A line of a run's spine: exactly as tall as a tool row, so the group's dot, pinned on that
-   * height, is centred on the thought's own line instead of sitting four points under it.
+   * A line of a run's spine: as tall as a tool row, so the group's dot, pinned on that height, is
+   * centred on the thought's own line instead of sitting four points under it.
+   *
+   * `minHeight`, never `height`: the same box holds the reasoning once it is unfolded, and a fixed
+   * height made the opened text overflow its own row and draw straight over the calls below it.
    */
   rowDense: { marginBottom: 0 },
-  denseThought: { height: Math.round(27 * scale), justifyContent: 'center' as const },
+  denseThought: { minHeight: Math.round(27 * scale), justifyContent: 'center' as const },
   rowUser: { justifyContent: 'flex-end' as const },
   rowAgent: { justifyContent: 'flex-start' as const },
   // The bubble and its ⋯ row share one column: the bubble fills the width, the button sits
