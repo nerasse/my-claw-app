@@ -188,6 +188,15 @@ describe('a run in flight', () => {
 });
 
 describe("a segment's own clock", () => {
+  /** The hour of its last call, at the bottom right of an opened group (owner, 2026-11-08). */
+  it('closes an opened group on the hour of its last call', () => {
+    const ts = new Date(2026, 10, 8, 14, 6).getTime();
+    const items = [tool('bash', { ts }), tool('read', { ts: ts + 2_000, durationMs: 1_000 })];
+    expect(texts(renderGroup(items, false))).not.toContain('14:06');
+    const shown = texts(renderGroup(items, true));
+    expect(shown).toContain('14:06');
+  });
+
   // A run is folded one group per burst between the messages it wrote. Every burst used to wear the
   // run's elapsed time and a spinner, so three finished groups read as three runs of twelve minutes
   // (owner, 2026-11-08: "il doit compter pour chaque groupe et se reset a chaque debut d'un autre").

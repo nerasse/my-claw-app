@@ -13,6 +13,7 @@ const base: HistoryPillState = {
   draft: '',
   recallArmed: false,
   hasHistory: true,
+  pointerFine: false,
 };
 
 describe('the history pill', () => {
@@ -35,5 +36,14 @@ describe('the history pill', () => {
 
   test('nothing to walk, nothing drawn', () => {
     expect(historyPillVisible({ ...base, hasHistory: false })).toBe(false);
+  });
+
+  /**
+   * A desktop browser has the arrow keys already: the pill is a phone's stand-in for them, and over
+   * a thread on a laptop it is a control for a keyboard nobody is missing (owner, 2026-11-08).
+   */
+  test('is never drawn for a fine pointer, keyboard up or not', () => {
+    expect(historyPillVisible({ ...base, pointerFine: true })).toBe(false);
+    expect(historyPillVisible({ ...base, pointerFine: true, keyboardUp: false })).toBe(false);
   });
 });

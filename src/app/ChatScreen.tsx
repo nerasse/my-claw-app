@@ -16,6 +16,7 @@ import { chatStore, isSubAgentTool, useActiveRun, useChatItems, useCompacting, u
 import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { newerLine, olderLine, recallLines, recallsDraft } from '../core/recall';
 import { historyPillVisible } from '../core/historyPill';
+import { pointerFine } from '../core/platform';
 import { requestRunItems } from '../core/runItems';
 import { dataUriType } from '../core/dataUri';
 import { useThreadQuestions } from '../core/questionStore';
@@ -1733,6 +1734,7 @@ export function ChatScreen({
           draft,
           recallArmed,
           hasHistory: recallLinesOfThread.length > 0,
+          pointerFine,
         }) ? (
           <View style={styles.history}>
             <Pressable

@@ -7,6 +7,7 @@ import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
 import { familyOf } from '../core/toolSummary';
 import { spine } from './spine';
 import { RunFoot } from './RunFoot';
+import { clockTime } from '../core/clock';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
 /**
@@ -134,11 +135,15 @@ export const RunGroup = React.memo(function RunGroupView({
         </View>
       ) : null}
 
-      {!live && open && items.length >= FOOTER_FROM_ITEMS ? (
-        <View style={styles.hideRow}>
-          <Pressable onPress={toggle} hitSlop={8} accessibilityRole="button" accessibilityLabel="Hide the run work">
-            <Text style={styles.hideText}>hide</Text>
-          </Pressable>
+      {!live && shownOpen ? (
+        <View style={styles.groupFoot}>
+          {open && items.length >= FOOTER_FROM_ITEMS ? (
+            <Pressable onPress={toggle} hitSlop={8} accessibilityRole="button" accessibilityLabel="Hide the run work">
+              <Text style={styles.hideText}>hide</Text>
+            </Pressable>
+          ) : null}
+          <View style={styles.grow} />
+          {endedAt !== undefined ? <Text style={styles.clock}>{clockTime(endedAt)}</Text> : null}
         </View>
       ) : null}
       {/* Last: the run ends here, whatever this fold holds -- its signature comes after it. */}
@@ -462,7 +467,10 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
      * and colour already tells it apart from a call that worked.
      */
     dotThought: { backgroundColor: palette.textFaint },
-    hideRow: { alignItems: 'flex-end' as const, paddingRight: 8, marginTop: 2 },
+    /** Under an opened group: its way out on the left, the hour of its last call on the right. */
+    groupFoot: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingRight: 8, marginTop: 2 },
+    grow: { flex: 1 },
+    clock: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
     hideText: { fontSize: scaleFont(10.5, scale), color: palette.textMeta },
     skeleton: {
       height: 14,

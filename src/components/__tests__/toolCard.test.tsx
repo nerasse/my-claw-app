@@ -171,6 +171,26 @@ describe('ToolCard body', () => {
     expect(shown).not.toContain('arguments');
   });
 
+  /**
+   * The hour closes every block that unfolds, in the same corner (owner, 2026-11-08). A folded card
+   * is one line and has its duration in the head; the stamp belongs to the output it opened.
+   */
+  it('stamps the hour at the bottom of an opened card, and nowhere on a folded one', () => {
+    const ts = new Date(2026, 10, 8, 14, 6).getTime();
+    const closed = renderTool(makeItem({ ts, args: PATCH, output: 'Patched, +3' }));
+    expect(texts(closed)).not.toContain('14:06');
+
+    const open = renderTool(makeItem({ ts, args: PATCH, output: 'Patched, +3' }));
+    ReactTestRenderer.act(() => {
+      const head = open.root.findAll(node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Tool bash') && typeof node.props.onPress === 'function')[0];
+      head!.props.onPress();
+    });
+    const shown = texts(open);
+    expect(shown).toContain('14:06');
+    // Last: the stamp is what closes the block, after its output.
+    expect(shown[shown.length - 1]).toBe('14:06');
+  });
+
   it('keeps the count of the hidden arguments out of the line the layout clips', () => {
     const item = makeItem({ name: 'mcp__thing__do', args: { first: 'x'.repeat(400), second: 2, third: 3 } });
     const tree = renderTool(item);

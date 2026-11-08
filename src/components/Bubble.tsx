@@ -17,11 +17,10 @@ import { LocationView } from './LocationView';
 import { chatSelectable } from '../core/platform';
 import { contextMenuProps, onAccentProps } from '../core/webProps';
 import { font, lineBoxFor, lineHeightFor, radius, scaleFont, space, useChatFontScale, useThemedStyles, type Palette } from '../theme';
+import { spine } from './spine';
+import { clockTime } from '../core/clock';
 
-function clock(ts: number): string {
-  const date = new Date(ts);
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
+
 
 /**
  * One message. Memoized, and its callbacks take the item rather than closing over it: a long
@@ -229,7 +228,7 @@ export const Bubble = React.memo(function BubbleView({
       ) : null}
       {/* The stamp closes the line, right of the `...`: bottom-right is where a message signs
           itself, and opening a bubble with the clock made it read as a title (2026-11-04). */}
-      {showTime && !item.command && !item.notice ? <Text style={styles.menuTime}>{clock(item.ts)}</Text> : null}
+      {showTime && !item.command && !item.notice ? <Text style={styles.menuTime}>{clockTime(item.ts)}</Text> : null}
     </View>
   );
 
@@ -270,7 +269,6 @@ export const Bubble = React.memo(function BubbleView({
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
-          <View style={dense ? styles.denseThought : undefined}>
           <ReasoningLine
             id={item.id}
             threadId={threadId}
@@ -283,8 +281,9 @@ export const Bubble = React.memo(function BubbleView({
             streaming={item.streaming}
             expandReasoning={expandReasoning}
             {...(thoughtOnly ? { actions: stamp } : {})}
+            {...(dense ? { headHeight: spine(scale).head } : {})}
+            at={item.ts}
           />
-          </View>
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
         {!agent ? attachmentsEl : null}
@@ -299,6 +298,7 @@ export const Bubble = React.memo(function BubbleView({
             body={item.details}
             showHint="Show what the compaction kept"
             hideHint="Hide the summary"
+            clockAt={item.ts}
           />
         ) : null}
 
@@ -377,7 +377,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
    * height made the opened text overflow its own row and draw straight over the calls below it.
    */
   rowDense: { marginBottom: 0 },
-  denseThought: { minHeight: Math.round(27 * scale), justifyContent: 'center' as const },
   rowUser: { justifyContent: 'flex-end' as const },
   rowAgent: { justifyContent: 'flex-start' as const },
   // The bubble and its ⋯ row share one column: the bubble fills the width, the button sits

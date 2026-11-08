@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
-import { chatSelectable } from '../core/platform';
+import { clockTime } from '../core/clock';
 import { setAsideExpanded, useStoredAsideExpansion } from '../core/asideExpansion';
 import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
@@ -34,6 +34,8 @@ export function CollapsibleAside({
   defaultOpen = false,
   persistKey,
   actions,
+  headHeight,
+  clockAt,
   pending,
   onOpen,
 }: {
@@ -64,11 +66,27 @@ export function CollapsibleAside({
    */
   persistKey?: string;
   /**
-   * Controls that belong to the aside itself, drawn at the end of its head row. The bubble that is
-   * nothing but a thought has no foot of its own to hang its menu on, so the `⋯` and the clock ride
-   * this row instead (owner, 2026-11-08).
+   * Controls that belong to the aside itself, drawn at the end of its head row while it is
+   * **folded**. Open, the row keeps the label and the figures and nothing else: a head that grows a
+   * button is a head that stops sitting on the dot the spine puts beside it (owner, 2026-11-08).
    */
   actions?: React.ReactNode;
+  /**
+   * The exact height of the head row, when the caller places its line on a grid.
+   *
+   * A reasoning line of a run's spine is one row of that column, and its chevron has to sit on the
+   * dot's axis whether the aside is folded (one line) or open (a label and a body). Left to its
+   * content the head measured differently in the two states, which is exactly what the owner saw
+   * as "la flèche n'est plus alignée avec le dot quand on déplie".
+   */
+  headHeight?: number;
+  /**
+   * When the block happened, drawn at the bottom right of what it unfolds.
+   *
+   * One rule for every block that opens -- a reasoning line, a call, a summary -- so the hour is
+   * where the reader already looks for the end of a thing (owner, 2026-11-08).
+   */
+  clockAt?: number;
   /** Said in place of the body while it is still on its way (`reasoningFetch.ts`). */
   pending?: string;
   /** Told each time the aside is open, so a body that is not here yet can be asked for. */
@@ -102,7 +120,7 @@ export function CollapsibleAside({
     <View>
       {/* The buttons sit beside the toggle rather than inside it: one tap must not both fold
           the block away and fill the clipboard. */}
-      <View style={styles.head}>
+      <View style={[styles.head, headHeight !== undefined ? { height: headHeight } : null]}>
         <Pressable
           style={styles.line}
           onPress={() => setOpen(!open)}
@@ -115,12 +133,18 @@ export function CollapsibleAside({
           {trailing}
         </Pressable>
         {right}
-        {actions}
-        {open && body && !chatSelectable ? <BlockActions title={label} value={body} /> : null}
+        {open ? null : actions}
       </View>
       {open ? (
         <View style={styles.body}>
           {body ? <AgentMarkdown text={body} tone="aside" /> : <Text style={styles.pending}>{pending ?? ''}</Text>}
+          {/* The two ways out belong to the text the reader just opened, not to the row that opened
+              it: folded, this aside is one muted line and a copy button on it is noise. */}
+          <View style={styles.foot}>
+            {body ? <BlockActions title={label} value={body} /> : null}
+            <View style={styles.grow} />
+            {clockAt !== undefined ? <Text style={styles.clock}>{clockTime(clockAt)}</Text> : null}
+          </View>
         </View>
       ) : null}
     </View>
@@ -141,4 +165,8 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     marginTop: 2,
     marginBottom: space.xs,
   },
+  /** Under the unfolded text: its buttons on the left, the hour closing the block on the right. */
+  foot: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: 4 },
+  grow: { flex: 1 },
+  clock: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
 });

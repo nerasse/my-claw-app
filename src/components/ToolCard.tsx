@@ -12,6 +12,7 @@ import { font, lineHeightFor, radius, scaleFont, space, type Palette, useThemedS
 import { useElapsed } from './CommandElapsed';
 import { runStateOf, stateWord } from '../core/toolState';
 import { ROW_GAP, ROW_SLOT, ROW_TEXT } from './spine';
+import { clockTime } from '../core/clock';
 import { toolRows } from '../core/toolRows';
 
 /**
@@ -279,6 +280,11 @@ export const ToolCard = React.memo(function ToolCardView({
               <Text style={styles.codeText}>{item.output.trim() || (interrupted ? '(no result: the run ended)' : '(empty)')}</Text>
             </ScrollableBlock>
           ) : null}
+          {/* The hour closes every block that opens, in the same corner: the reader finds it
+              without looking for it (owner, 2026-11-08). */}
+          <View style={styles.clockRow}>
+            <Text style={styles.clock}>{clockTime(item.ts)}</Text>
+          </View>
         </View>
       ) : null}
     </View>
@@ -448,6 +454,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // the row's own text column instead of inside a foreign sheet.
   // The output starts on the row's name column: the 11 pt chevron plus the head's 5 pt gap.
   bodyDense: { paddingLeft: ROW_TEXT, paddingRight: 0, paddingBottom: 6 },
+  /** The hour, at the bottom right of an opened card: the same corner on every block. */
+  clockRow: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const },
+  clock: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
   codeDense: { backgroundColor: 'transparent', borderRadius: 0, paddingHorizontal: 0 },
   label: { fontSize: scaleFont(9.5, scale), fontWeight: '500' as const, color: palette.textMeta, letterSpacing: 0.57, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, height: Math.round(18 * scale) },

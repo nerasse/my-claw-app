@@ -20,9 +20,12 @@ export interface HistoryPillState {
   /** The field holds a line the walk itself recalled, unchanged. */
   recallArmed: boolean;
   hasHistory: boolean;
+  /** A mouse or a trackpad: the arrow keys are there, so the pill is not. */
+  pointerFine: boolean;
 }
 
 export function historyPillVisible(state: HistoryPillState): boolean {
+  if (state.pointerFine) return false;
   if (!state.focused || !state.keyboardUp || !state.hasHistory) return false;
   return state.draft === '' || state.recallArmed;
 }

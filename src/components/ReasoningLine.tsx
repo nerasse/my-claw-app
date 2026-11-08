@@ -109,6 +109,8 @@ export function ReasoningLine({
   streaming,
   expandReasoning,
   actions,
+  headHeight,
+  at,
 }: {
   /**
    * The bubble this reasoning belongs to, which is what keeps a section the reader opened open.
@@ -137,9 +139,13 @@ export function ReasoningLine({
   expandReasoning?: boolean;
   /**
    * The bubble's own controls, for the bubble that is nothing but a thought: it has no message under
-   * the line to hang them on, so they close this row instead of trailing an empty one.
+   * the line to hang them on, so they close this row while it is folded.
    */
   actions?: React.ReactNode;
+  /** The head row's exact height, on a run's spine: the chevron must sit on the dot's axis. */
+  headHeight?: number;
+  /** When the thought happened, drawn at the bottom right of what it unfolds. */
+  at?: number;
 }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   const known = useKnownReasoning(threadId, id);
@@ -201,6 +207,8 @@ export function ReasoningLine({
       trailing={figures}
       right={waitFigure}
       {...(actions ? { actions } : {})}
+      {...(headHeight !== undefined ? { headHeight } : {})}
+      {...(at !== undefined ? { clockAt: at } : {})}
       body={body}
       showHint="Show the model's reasoning"
       hideHint="Hide the model's reasoning"
