@@ -11,6 +11,7 @@ import { DiffView, diffCounts, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 import { useElapsed } from './CommandElapsed';
 import { runStateOf, stateWord } from '../core/toolState';
+import { ROW_GAP, ROW_SLOT, ROW_TEXT } from './spine';
 import { toolRows } from '../core/toolRows';
 
 /**
@@ -168,10 +169,12 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={[styles.head, dense && styles.headDense]}>
-          {/* Kept in a dense row on purpose: the reasoning phases that sit between calls are
-              drawn with theirs, so a row without one starts its name a chevron to the left of
-              theirs and the whole column reads ragged (owner, 2026-11-08). */}
-          <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
+          {/* A row keeps its chevron, in a slot as wide as the one a reasoning line uses: the two
+              put their label on the same column, and dropping it here is what made the column read
+              ragged (owner, 2026-11-08). */}
+          <View style={dense ? styles.rowSlot : undefined}>
+            <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
+          </View>
           <Text style={[styles.rowText, styles.name]}>{item.name}</Text>
           {/* One line, every tool, folded. A shell command used to wrap under the head at three
               lines: the densest argument is the one worth the room, the argument went the other
@@ -418,7 +421,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
    * that kept its 8 pt inset put its chevron 8 pt to the right of theirs and the column read
    * ragged (owner, 2026-11-08).
    */
-  headDense: { height: Math.round(27 * scale), paddingLeft: 0, paddingRight: 8 },
+  headDense: { height: Math.round(27 * scale), paddingLeft: 0, paddingRight: 8, gap: ROW_GAP },
+  /** A row's chevron slot: the aside's 14, so both columns start their label at the same place. */
+  rowSlot: { width: ROW_SLOT, alignItems: 'center' as const },
   /**
    * The head row is one line of type at one size. Four sizes in a 29 pt row (10 for the chevron,
    * 11 for the summary, 12 for the name, 12 for the duration) each carried their own leading, and
@@ -442,7 +447,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // The output hangs under the row on the page itself: no plate, no side padding, so it lands on
   // the row's own text column instead of inside a foreign sheet.
   // The output starts on the row's name column: the 11 pt chevron plus the head's 5 pt gap.
-  bodyDense: { paddingLeft: Math.round(16 * scale), paddingRight: 0, paddingBottom: 6 },
+  bodyDense: { paddingLeft: ROW_TEXT, paddingRight: 0, paddingBottom: 6 },
   codeDense: { backgroundColor: 'transparent', borderRadius: 0, paddingHorizontal: 0 },
   label: { fontSize: scaleFont(9.5, scale), fontWeight: '500' as const, color: palette.textMeta, letterSpacing: 0.57, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, height: Math.round(18 * scale) },

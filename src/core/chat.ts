@@ -2396,6 +2396,14 @@ export function useHistoryPage(threadId: string | null): HistoryPage {
   return useSyncExternalStore(subscribeToChat, snapshot);
 }
 
+/**
+ * Whether a run is answering on this thread right now.
+ *
+ * Read by the fold as well as by the header: a run's own status lives on its items, and an item
+ * can keep saying `running` after the store has closed the cycle (a lost end frame, a page that
+ * replaced the thread). The two together are what stops a group's spinner and closes it the
+ * moment the run is over.
+ */
 export function useActiveRun(threadId: string | null): boolean {
   const snapshot = useCallback(() => (threadId ? chatStore.hasActiveRun(threadId) : false), [threadId]);
   return useSyncExternalStore(subscribeToChat, snapshot);

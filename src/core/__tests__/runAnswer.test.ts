@@ -247,7 +247,11 @@ describe('live run and history page reach the same verdict', () => {
     expect(rowsOf(chatStore.getItems(THREAD))).toEqual(['g:r1']);
 
     chatStore.endRun(THREAD, 'error');
-    expect(rowsOf(chatStore.getItems(THREAD))).toEqual(['g:r1']);
+    // The group stays one row, and its run carries the status the fold reads to stop being live:
+    // a group left `running` would keep its spinner and never close behind the reader.
+    const rows = buildRows(chatStore.getItems(THREAD));
+    expect(rows.map(labelOfRow)).toEqual(['g:r1']);
+    expect(rows[0]!.kind === 'group' && rows[0]!.run.status).toBe('error');
   });
 
   test('a live run that answered hoists its answer once sealed', () => {

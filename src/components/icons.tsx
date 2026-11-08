@@ -230,21 +230,18 @@ export function ChevronIcon({
 }
 
 /**
- * A solid arrow, and the doubled one that means "all the way to the newest".
+ * A solid arrow, up or down.
  *
  * Filled rather than stroked: at the 16-18 px a chrome control asks for, a stroked chevron reads
- * as a hairline and the control around it as a placeholder (owner, 2026-11-07). One path with a
- * `double` flag rather than two components, like MoreIcon.
+ * as a hairline and the control around it as a placeholder (owner, 2026-11-07). One shape for both
+ * directions, turned.
  */
 export function ArrowIcon({
   direction = 'down',
-  double = false,
   ...props
-}: IconProps & { direction?: 'up' | 'down'; double?: boolean }): React.JSX.Element {
+}: IconProps & { direction?: 'up' | 'down' }): React.JSX.Element {
   const ink = useInk(props.color, props.tone);
-  const d = double
-    ? 'M12 1.8 18 7.8h-3.9v3.4H9.9V7.8H6zM12 11.4l6 6h-3.9v3.4H9.9v-3.4H6z'
-    : 'M12 3.6 19.2 10.8h-4.5v9.6H9.3v-9.6H4.8z';
+  const d = 'M12 3.6 19.2 10.8h-4.5v9.6H9.3v-9.6H4.8z';
   return (
     <Svg width={props.size ?? 16} height={props.size ?? 16} viewBox="0 0 24 24">
       <Path fill={ink} d={d} transform={direction === 'down' ? 'rotate(180 12 12)' : undefined} />

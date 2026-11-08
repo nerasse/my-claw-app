@@ -7,7 +7,7 @@
  * empty or already shows a recalled message -- so a draft nobody asked to lose is never replaced.
  */
 import React from 'react';
-import { TextInput } from 'react-native';
+import { Keyboard, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { ChatScreen } from '../ChatScreen';
 import { chatStore } from '../../core/chat';
@@ -79,7 +79,21 @@ function draftOf(tree: TestRenderer.ReactTestRenderer): string {
   return tree.root.findByType(TextInput).props.value as string;
 }
 
+/**
+ * The keyboard, as the component listens for it.
+ *
+ * `Keyboard` in JS only forwards from the native emitter, so a test has no way to raise an event;
+ * spying on the subscription is the same seam the screen itself uses, and firing the callback is
+ * exactly what the platform does when the IME goes away with the caret still in the field.
+ */
+const keyboardEvents: Array<{ event: string; raise: () => void }> = [];
+
 beforeEach(() => {
+  keyboardEvents.length = 0;
+  jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: () => void) => {
+    keyboardEvents.push({ event, raise: () => listener() });
+    return { remove: () => {} };
+  }) as unknown as typeof Keyboard.addListener);
   questionStore.clear();
   chatStore.clearAll();
   chatStore.seedHistory(THREAD, [
@@ -90,6 +104,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  (Keyboard.addListener as unknown as jest.Mock).mockRestore();
   if (mounted) act(() => mounted?.unmount());
   mounted = null;
   chatStore.clearAll();
@@ -112,7 +127,7 @@ test('Up walks back one sent message at a time, past the answer in between', () 
   expect(draftOf(tree)).toBe('premier');
 });
 
-test('the double arrow walks forward and empties the field past the newest', () => {
+test('the down arrow walks forward and empties the field past the newest', () => {
   const tree = render();
   focusField(tree);
   act(() => button(tree, 'Previous message')[0]!.props.onPress());
@@ -124,6 +139,19 @@ test('the double arrow walks forward and empties the field past the newest', () 
 
   act(() => button(tree, 'Next message')[0]!.props.onPress());
   expect(draftOf(tree)).toBe('');
+});
+
+test('the pill goes when the keyboard does, caret or not', () => {
+  const tree = render();
+  focusField(tree);
+  expect(button(tree, 'Previous message')).toHaveLength(1);
+
+  // Android's back button dismisses the IME and leaves the caret where it was; the pill used to
+  // stay, floating over the text it was covering (owner, 2026-11-08).
+  act(() => {
+    for (const event of keyboardEvents) if (event.event === 'keyboardDidHide') event.raise();
+  });
+  expect(button(tree, 'Previous message')).toHaveLength(0);
 });
 
 test('a draft the owner wrote takes the arrows away rather than lose the text', () => {

@@ -12,9 +12,10 @@ import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
-import { chatStore, isSubAgentTool, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
+import { chatStore, isSubAgentTool, useActiveRun, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
 import { newerLine, olderLine, recallLines, recallsDraft } from '../core/recall';
+import { historyPillVisible } from '../core/historyPill';
 import { requestRunItems } from '../core/runItems';
 import { dataUriType } from '../core/dataUri';
 import { useThreadQuestions } from '../core/questionStore';
@@ -284,6 +285,9 @@ export function ChatScreen({
   // Subscribed here rather than handed down: a growing bubble must not re-render the shell that
   // holds every page of the app, only the conversation showing it.
   const items = useChatItems(threadId);
+  // A run is live for the fold while the store still holds it: an item's own status can lag behind
+  // a closed cycle, and the spinner would then never stop. See `useActiveRun`.
+  const activeRun = useActiveRun(threadId);
   // A compaction running on this conversation: thread state, drawn as a rule at the bottom of the
   // list rather than as an item in it (CompactionRunning says why).
   const compacting = useCompacting(threadId);
@@ -429,6 +433,24 @@ export function ChatScreen({
   const focusedRef = useRef(false);
   /** The same fact as a state: the history arrows belong to a field that has the caret. */
   const [composerFocused, setComposerFocused] = useState(false);
+  /**
+   * Whether the keyboard is up.
+   *
+   * Dismissing the IME with Android's back button leaves the caret in the field, so focus is not
+   * the same question: the history pill hung over the thread with nothing to type into, over the
+   * text it was covering (owner, 2026-11-08). Starts true -- the field is not focused yet, so
+   * nothing is drawn -- and the platform is the one that says otherwise.
+   */
+  const [keyboardUp, setKeyboardUp] = useState(true);
+  useEffect(() => {
+    const shown = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const up = Keyboard.addListener(shown, () => setKeyboardUp(true));
+    const down = Keyboard.addListener('keyboardDidHide', () => setKeyboardUp(false));
+    return () => {
+      up.remove();
+      down.remove();
+    };
+  }, []);
   useEffect(
     () =>
       onRemoteDraft(changed => {
@@ -1191,16 +1213,17 @@ export function ChatScreen({
         );
       }
       if (item.kind === 'tool') {
-        return (
-          <View style={toolColumn}>
-            <ToolCard
-              item={item}
-              threadId={threadId}
-              expandTools={uiPrefs?.expandTools ?? false}
-              dense={dense}
-            />
-          </View>
+        const card = (
+          <ToolCard
+            item={item}
+            threadId={threadId}
+            expandTools={uiPrefs?.expandTools ?? false}
+            dense={dense}
+          />
         );
+        // A row of the spine is not centred in the tool column: that wrapper narrows and centres a
+        // card on a wide screen, and a centred row would sit a few points right of its siblings.
+        return dense ? card : <View style={toolColumn}>{card}</View>;
       }
       // A folded row is drawn by the list, not here: it is a row of its own, never a child.
       if (item.kind === 'run') return null;
@@ -1208,6 +1231,7 @@ export function ChatScreen({
         <View style={toolColumn}>
         <Bubble
           item={item}
+          dense={dense}
           mediaBase={mediaBase}
           deviceInfo={deviceInfo}
           grouped={groupedFlag}
@@ -1269,7 +1293,7 @@ export function ChatScreen({
           items={row.items}
           // A run in flight is drawn open and cannot be closed: the fold must not appear under
           // the reader's eyes the moment the run ends.
-          live={row.run.status === 'running'}
+          live={row.run.status === 'running' && activeRun}
           open={expandedFolds.has(foldKeyOf(row))}
           foot={row.foot}
           onToggle={() => toggleFold(foldKeyOf(row))}
@@ -1280,7 +1304,7 @@ export function ChatScreen({
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedFolds, toggleFold, openRun, compacting, stopping],
+    [grouped, itemIndexById, renderItemContent, expandedFolds, toggleFold, openRun, compacting, stopping, activeRun],
   );
 
   /**
@@ -1674,10 +1698,16 @@ export function ChatScreen({
         {indicator}
 
         {/* The keyboard's Up and Down, for a phone whose keyboard has neither (owner, 2026-11-07):
-            the same pill as the jump arrow, mirrored, and only while the field holds the caret and
-            an arrow can actually land in it -- an empty field, or a message already recalled.
-            Typing makes them vanish rather than replace a draft nobody asked to lose. */}
-        {composerFocused && (draft === '' || recallArmed) && recallLinesOfThread.length > 0 ? (
+            the same pill as the jump arrow, mirrored. It floats over the thread, so it goes the
+            moment it has nothing to walk or nothing to type into -- including a keyboard that was
+            dismissed while the caret stayed in the field. `historyPillVisible` is that list. */}
+        {historyPillVisible({
+          focused: composerFocused,
+          keyboardUp,
+          draft,
+          recallArmed,
+          hasHistory: recallLinesOfThread.length > 0,
+        }) ? (
           <View style={styles.history}>
             <Pressable
               style={styles.historyStep}
@@ -1692,7 +1722,7 @@ export function ChatScreen({
               onPress={recallNewer}
               accessibilityRole="button"
               accessibilityLabel="Next message">
-              <ArrowIcon double size={18} tone="text" />
+              <ArrowIcon direction="down" size={18} tone="text" />
             </Pressable>
           </View>
         ) : null}

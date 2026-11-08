@@ -33,6 +33,7 @@ export const Bubble = React.memo(function BubbleView({
   mediaBase,
   deviceInfo,
   grouped,
+  dense = false,
   showTime,
   foot,
   onMenu,
@@ -49,6 +50,11 @@ export const Bubble = React.memo(function BubbleView({
   deviceInfo: DeviceInfo | null;
   /** Same author as the previous item: tighten the gap instead of repeating a full margin. */
   grouped: boolean;
+  /**
+   * A child of a run's spine: the row is exactly as tall as a tool's, so the dot the group pins on
+   * that height is centred on this thought's line too.
+   */
+  dense?: boolean;
   showTime: boolean;
   /**
    * The empreinte of the run this bubble closed: its span and its status, signed here because
@@ -185,7 +191,7 @@ export const Bubble = React.memo(function BubbleView({
   // Nothing on Android.
   const onAccent = agent ? {} : onAccentProps();
   return (
-    <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null]}>
+    <View style={[styles.row, agent ? styles.rowAgent : styles.rowUser, grouped ? styles.rowGrouped : null, dense ? styles.rowDense : null]}>
       <View style={[styles.stack, agent ? styles.stackAgent : styles.stackUser]}>
       {/* Long press opens the message menu, which is where copying and selecting live: the gesture
           would otherwise start a selection the platform cannot finish, and would throw the thread
@@ -216,6 +222,7 @@ export const Bubble = React.memo(function BubbleView({
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
             produced, and during the thinking phase this line is the whole bubble. */}
         {agent && !item.command && !item.notice ? (
+          <View style={dense ? styles.denseThought : undefined}>
           <ReasoningLine
             id={item.id}
             threadId={threadId}
@@ -228,6 +235,7 @@ export const Bubble = React.memo(function BubbleView({
             streaming={item.streaming}
             expandReasoning={expandReasoning}
           />
+          </View>
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
         {!agent ? attachmentsEl : null}
@@ -340,6 +348,12 @@ export const Bubble = React.memo(function BubbleView({
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: { width: '100%' as const, flexDirection: 'row' as const, marginBottom: space.xs },
   rowGrouped: { marginBottom: 1 },
+  /**
+   * A line of a run's spine: exactly as tall as a tool row, so the group's dot, pinned on that
+   * height, is centred on the thought's own line instead of sitting four points under it.
+   */
+  rowDense: { marginBottom: 0 },
+  denseThought: { height: Math.round(27 * scale), justifyContent: 'center' as const },
   rowUser: { justifyContent: 'flex-end' as const },
   rowAgent: { justifyContent: 'flex-start' as const },
   // The bubble and its ⋯ row share one column: the bubble fills the width, the button sits

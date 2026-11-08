@@ -5,6 +5,7 @@ import { formatSpan } from '../core/utils';
 import { useElapsed } from './CommandElapsed';
 import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
 import { familyOf } from '../core/toolSummary';
+import { spine } from './spine';
 import { RunFoot } from './RunFoot';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
@@ -364,21 +365,11 @@ function dotStyle(dot: Dot, styles: ReturnType<typeof createStyles>) {
   }
 }
 
-/** The dot's diameter. Odd on purpose: see `dot` below. */
-const DOT = 7;
-/** A row's head line, which the dot is centred on. */
-const HEAD = 27;
-/**
- * Where a child's own content starts, from the group's left edge.
- *
- * Every child starts there: a tool row has no padding of its own in dense mode, and a reasoning
- * bubble's is transparent with none either. 28 keeps 19.5 between the dot's centre and the ink,
- * which is the mockup's gap.
- */
-const GUTTER = 28;
+/** The header's own left inset, before the chevron slot. See `spine.ts`. */
+const HEADER_PAD = 2;
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
-  const dot = Math.max(5, Math.round(DOT * scale));
+  const g = spine(scale);
   return {
     wrap: { width: '100%' as const, marginBottom: space.xs },
     /**
@@ -393,12 +384,12 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
       alignItems: 'center' as const,
       gap: 7,
       height: Math.round(26 * scale),
-      paddingHorizontal: 2,
+      paddingHorizontal: HEADER_PAD,
     },
     // The chevron's slot: 13 pt wide, and its centre is where the rail runs. Everything else in
     // the group is placed from that number.
     slot: {
-      width: Math.round(13 * scale),
+      width: g.slot,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
     },
@@ -411,36 +402,36 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
     body: { position: 'relative' as const, paddingTop: 2 },
     rail: {
       position: 'absolute' as const,
-      // centre of the chevron slot: 2 (header padding) + 13 / 2 = 8.5, rounded to the pixel the
-      // 1 pt line covers
-      left: Math.round(8 * scale),
+      left: g.railLeft,
       top: 0,
       bottom: Math.round(13 * scale),
       width: 1,
       backgroundColor: palette.border,
     },
-    child: { position: 'relative' as const, paddingLeft: Math.round(GUTTER * scale) },
+    child: { position: 'relative' as const, paddingLeft: g.gutter },
     dot: {
       position: 'absolute' as const,
-      // dot / 2 left of the rail's centre (8.5); odd so its edges land on whole pixels, an even
-      // one gets snapped right by half and reads off-centre
-      left: Math.round((8.5 - DOT / 2) * scale),
-      top: Math.round(((HEAD - DOT) / 2) * scale),
-      width: dot,
-      height: dot,
-      borderRadius: dot / 2,
+      left: g.dotLeft,
+      top: g.dotTop,
+      width: g.dot,
+      height: g.dot,
+      borderRadius: g.dot / 2,
     },
     dotOk: { backgroundColor: palette.ok },
     dotFail: { backgroundColor: palette.danger },
     dotRunning: { backgroundColor: palette.accent },
-    // A thought interrupts the line instead of filling it: the page shows through the hole.
-    dotThought: { backgroundColor: palette.bg, borderWidth: 1.5, borderColor: palette.textFaint },
+    /**
+     * A thought reads as a fainter call, not as a ring: a hollow circle on a stopped line was read
+     * as a loading state that never ends (owner, 2026-11-08). Faint and filled says "lighter",
+     * and colour already tells it apart from a call that worked.
+     */
+    dotThought: { backgroundColor: palette.textFaint },
     hideRow: { alignItems: 'flex-end' as const, paddingRight: 8, marginTop: 2 },
     hideText: { fontSize: scaleFont(10.5, scale), color: palette.textMeta },
     skeleton: {
       height: 14,
       marginBottom: 6,
-      marginLeft: Math.round(GUTTER * scale),
+      marginLeft: g.gutter,
       borderRadius: 6,
       backgroundColor: palette.surfaceAlt,
     },

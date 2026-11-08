@@ -1,6 +1,6 @@
 {
   "name": "MyClawApp",
-  "version": "0.6.193",
+  "version": "0.6.194",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
