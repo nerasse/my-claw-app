@@ -185,7 +185,10 @@ export function ReasoningLine({
     // where the bubble's own clock sits, and would read as a second one.
     const alone = count === '';
     return (
-      <View style={styles.line}>
+      // The same head height the open state takes, for the same reason: on a line of a run's spine
+      // the wait sits on the dot's axis only if the row is the height the dot is centred on
+      // (owner, 2026-11-08: "le wait est pas aligné sur le dot").
+      <View style={[styles.line, headHeight !== undefined ? { height: headHeight } : null]}>
         {count ? (
           /*
             One name in every state, like the aside below: the figures say what the thinking cost,

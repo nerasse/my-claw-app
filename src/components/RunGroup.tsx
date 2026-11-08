@@ -7,6 +7,7 @@ import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
 import { familyOf } from '../core/toolSummary';
 import { spine } from './spine';
 import { RunFoot } from './RunFoot';
+import { drawsNothingYet } from './Bubble';
 import { clockTime } from '../core/clock';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
 
@@ -123,12 +124,20 @@ export const RunGroup = React.memo(function RunGroupView({
       />
       {shownOpen ? (
         <View style={styles.body}>
-          {/* One line for the whole column, ending on the last dot's centre. A segment per row
-              was the alternative; one node beats one per call. */}
-          <View style={styles.rail} pointerEvents="none" />
+          {/* The column is drawn row by row, and the last row stops on its own dot. One line for
+              the whole group was simpler and hung a stub under the last item -- after a reasoning
+              at the end of a run it read as an empty bar with nothing in it (owner, 2026-11-08). */}
           {items.map((item, index) => (
             <View key={item.id} style={styles.child}>
-              <View style={[styles.dot, dotStyle(dotOf(item), styles)]} pointerEvents="none" />
+              <View
+                style={[styles.rail, index === 0 ? styles.railFirst : null, index === items.length - 1 ? styles.railEnd : styles.railBody]}
+                pointerEvents="none"
+              />
+              {/* A row with nothing in it yet draws no dot: a streaming phase before its wait is
+                  long enough to show would leave a lone blue mark hanging over the composer. */}
+              {item.kind === 'text' && drawsNothingYet(item) ? null : (
+                <View style={[styles.dot, dotStyle(dotOf(item), styles)]} pointerEvents="none" />
+              )}
               {renderItem(item, index, items, true)}
             </View>
           ))}
@@ -406,6 +415,8 @@ function dotStyle(dot: Dot, styles: ReturnType<typeof createStyles>) {
 
 /** The header's own left inset, before the chevron slot. See `spine.ts`. */
 const HEADER_PAD = 2;
+/** The air between the bar and the first row of the column. */
+const BODY_PAD = 2;
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
   const g = spine(scale);
@@ -440,15 +451,20 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
     segment: { fontSize: scaleFont(10, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
     // The header's spinner is a hint, not the subject: the same 0.8 scale the card uses.
     spinner: { transform: [{ scale: 0.7 }] },
-    body: { position: 'relative' as const, paddingTop: 2 },
+    body: { position: 'relative' as const, paddingTop: BODY_PAD },
+    /** One segment per row: they join up, and only the last one knows where to stop. */
     rail: {
       position: 'absolute' as const,
       left: g.railLeft,
       top: 0,
-      bottom: Math.round(13 * scale),
       width: 1,
       backgroundColor: palette.border,
     },
+    /** Covers the body's own padding, so the column starts under the header, not 2 pt below it. */
+    railFirst: { top: -BODY_PAD },
+    railBody: { bottom: 0 },
+    /** Down to the last dot's centre, and no further: half the head row is where a dot sits. */
+    railEnd: { height: Math.round(g.head / 2) },
     child: { position: 'relative' as const, paddingLeft: g.gutter },
     dot: {
       position: 'absolute' as const,

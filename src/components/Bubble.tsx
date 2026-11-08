@@ -23,6 +23,25 @@ import { clockTime } from '../core/clock';
 
 
 /**
+ * A bubble waiting for its first word, with nothing at all to show yet.
+ *
+ * The only thing missing is the wait's own reveal, which is time. A row of a run's spine asks this
+ * before drawing its dot: a streaming phase that has said nothing yet left a lone blue mark hanging
+ * over the composer (owner, 2026-11-08).
+ */
+export function drawsNothingYet(item: TextItem): boolean {
+  if (!item.streaming || item.waitingSince === undefined || item.text !== '') return false;
+  if (item.attachments.length > 0 || item.location || item.error) return false;
+  if (item.reasoningStartedAt !== undefined) return false;
+  return !showsReasoningRow({
+    reasoning: item.reasoning,
+    reasoningChars: item.reasoningChars,
+    tokens: item.reasoningTokens,
+    waitMs: item.waitMs,
+  });
+}
+
+/**
  * One message. Memoized, and its callbacks take the item rather than closing over it: a long
  * thread re-renders on every streaming delta, and a per-row closure rebuilt each time would make
  * the memo a no-op — every mounted bubble would re-parse its markdown for one changed character.
@@ -174,16 +193,7 @@ export const Bubble = React.memo(function BubbleView({
   // Under the threshold a waiting bubble has nothing to say, so it is not drawn at all: an empty
   // frame with its clock and its ⋯ is the "bubble that starts too early" the owner saw after the
   // caret was taken out of it (2026-10-04). It appears with its line, or with the first token.
-  if (
-    waiting &&
-    !revealed &&
-    item.attachments.length === 0 &&
-    !item.location &&
-    !item.error &&
-    item.reasoningStartedAt === undefined
-  ) {
-    return null;
-  }
+  if (drawsNothingYet(item) && !revealed) return null;
   // A bubble that is nothing but a thought: the model said nothing under it, it only thought.
   // There is no message to sign, so its clock and its `⋯` ride the reasoning line's head row and
   // the action bar under the bubble goes away. Two rows for one thought left an empty strip that

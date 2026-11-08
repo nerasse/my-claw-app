@@ -84,3 +84,31 @@ it('keeps the box around the unfolded text free to grow', () => {
 it('leaves a free bubble without a fixed head', () => {
   expect(heads(render(false))).toHaveLength(0);
 });
+
+/**
+ * The static state of the line -- a wait, or a count the endpoint kept its words for -- is a row
+ * too, and on a spine the wait was drawn a few points above the dot it belongs to (owner,
+ * 2026-11-08: "le wait est pas aligné sur le dot").
+ */
+it('gives a wait alone the same head height as a folded thought', () => {
+  const waited: TextItem = {
+    kind: 'text',
+    id: 'p2',
+    role: 'agent',
+    text: '',
+    attachments: [],
+    streaming: true,
+    ts: 1,
+    waitMs: 4_200,
+  };
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(
+      <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
+        <Bubble item={waited} mediaBase="" deviceInfo={null} grouped={false} showTime={false} onMenu={() => {}} dense />
+      </ThemeContext.Provider>,
+    );
+  });
+  const rows = styles(tree).filter(style => typeof style.height === 'number');
+  expect(rows.map(style => style.height)).toContain(spine(1).head);
+});

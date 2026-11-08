@@ -10,6 +10,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { RunGroup, composition } from '../RunGroup';
+import { spine } from '../spine';
 import type { ChatItem, RunInfo, ToolItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
@@ -125,6 +126,43 @@ describe('the fold', () => {
     const long = renderGroup([tool('bash'), tool('bash'), tool('bash'), tool('bash'), tool('read'), tool('read')], true);
     expect(controls(long)).toBe(2);
     expect(texts(long)).toContain('hide');
+  });
+
+  /** Every style object of every View in the tree, one merged object per node. */
+  const nodeStyles = (tree: ReactTestRenderer.ReactTestRenderer): Record<string, unknown>[] =>
+    tree.root.findAllByType(View).map(node => {
+      const raw = Array.isArray(node.props.style) ? node.props.style : [node.props.style];
+      const flat = raw.flat(Infinity).filter((style: unknown): style is Record<string, unknown> => style !== null && typeof style === 'object');
+      return Object.assign({}, ...flat) as Record<string, unknown>;
+    });
+
+  /**
+   * The column used to be one line under the whole group, ending a fixed 13 pt above the bottom --
+   * which hung a stub under the last row when that row was taller than a head, and read as an
+   * empty bar with nothing in it (owner, 2026-11-08).
+   */
+  it('draws the column row by row, and stops it on the last dot', () => {
+    const rails = nodeStyles(renderGroup(items, true)).filter(style => style.width === 1);
+    expect(rails).toHaveLength(items.length);
+    // All but the last span their own row; the last one stops on its dot, half a head down.
+    expect(rails.slice(0, -1).every(rail => rail.bottom === 0 && rail.height === undefined)).toBe(true);
+    const last = rails[rails.length - 1]!;
+    expect(last.height).toBe(Math.round(spine(1).head / 2));
+    expect(last.bottom).toBeUndefined();
+  });
+
+  it('leaves a row that has nothing to show yet without a dot', () => {
+    const dots = (tree: ReactTestRenderer.ReactTestRenderer): number =>
+      nodeStyles(tree).filter(style => style.borderRadius !== undefined && style.position === 'absolute' && style.width !== 1).length;
+    const thoughtRows = renderGroup([tool('bash'), thought()], true);
+    expect(dots(thoughtRows)).toBe(2);
+
+    // A streaming phase with no words yet and no reasoning to report: nothing drawn, no dot.
+    const blank = renderGroup(
+      [tool('bash'), { ...thought(), reasoning: undefined, reasoningTokens: undefined, streaming: true, waitingSince: Date.now() } as ChatItem],
+      true,
+    );
+    expect(dots(blank)).toBe(1);
   });
 
   it('shows the header line and every child when open', () => {
