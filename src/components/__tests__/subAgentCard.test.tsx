@@ -88,6 +88,19 @@ it('names the sub-agent and what it was asked, on one line, folded', () => {
   expect(shown).toContain('read the reasoning flow');
 });
 
+/**
+ * The clock on a running card is one line or none: squeezed into a sliver it wrapped at its own
+ * space and read `20` over `s` (owner, 2026-11-08).
+ */
+it('never lets the seconds wrap, however long the brief is', () => {
+  const long = 'New read-only design task, same rules (no edits, no cargo). Repo /home/neras/cf/CubeFlow at main b59fcc1. ' + 'Topic: '.repeat(20);
+  const item = makeItem({ args: { name: 'digger', type: 'research', mode: 'session', task: long }, running: true, ts: Date.now() - 20_000 });
+  const tree = render(item, DOOR);
+  const figures = tree.root.findAllByType(Text).filter(t => typeof t.props.children === 'string' && /^\d+ s$/.test(t.props.children));
+  expect(figures.length).toBeGreaterThan(0);
+  expect(figures.every(t => t.props.numberOfLines === 1)).toBe(true);
+});
+
 it('falls back to the shape when the call carried no brief', () => {
   const item = makeItem({ args: { name: 'digger', type: 'research', mode: 'session' } });
   const shown = texts(render(item, DOOR));

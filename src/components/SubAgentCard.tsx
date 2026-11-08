@@ -40,7 +40,13 @@ function hostOf(url: unknown): string {
 function RunningFor({ since }: { since: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const elapsed = useElapsed(since);
-  return <Text style={styles.duration}>{formatSpan(elapsed)}</Text>;
+  // One line, always: a figure squeezed into a sliver wrapped at its own space and read "20" over
+  // "s" (owner, 2026-11-08).
+  return (
+    <Text style={styles.figure} numberOfLines={1}>
+      {formatSpan(elapsed)}
+    </Text>
+  );
 }
 
 export const SubAgentCard = React.memo(function SubAgentCardView({
@@ -137,22 +143,31 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           </Text>
           {/* What the agent is doing, on the row: a sub-agent used to spend a whole second line on
               its brief, which made the one door of a run the tallest thing in the thread. */}
+          {/* The brief takes whatever the line has left and is cut there; the figures after it are
+              fixed, so no clock can ever be squeezed into two lines. */}
           {what ? (
             <Text style={styles.kind} numberOfLines={1}>
               {what}
             </Text>
-          ) : null}
-          <View style={styles.spacer} />
+          ) : (
+            <View style={styles.spacer} />
+          )}
           {running && item.durationMs === undefined ? <RunningFor since={item.ts} /> : null}
           {word ? (
-            <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]}>{word}</Text>
+            <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]} numberOfLines={1}>
+              {word}
+            </Text>
           ) : null}
           {running ? (
             <View style={styles.spinner}>
               <ActivityIndicator size="small" />
             </View>
           ) : null}
-          {item.durationMs !== undefined ? <Text style={styles.duration}>{formatSpan(item.durationMs)}</Text> : null}
+          {item.durationMs !== undefined ? (
+            <Text style={styles.figure} numberOfLines={1}>
+              {formatSpan(item.durationMs)}
+            </Text>
+          ) : null}
         </Pressable>
 
         {/* The door, outside the toggle: a control inside a control is announced as one thing by a
@@ -213,11 +228,13 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
   slot: { width: ROW_SLOT, alignItems: 'center' as const },
   identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
-  name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 1 },
-  kind: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, flexShrink: 1 },
+  name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 0 },
+  /** The brief: it takes the rest of the line and is cut there, never the figures after it. */
+  kind: { flex: 1, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   spacer: { flex: 1 },
-  duration: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
-  state: { fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },
+  /** A clock never shrinks and never wraps: `20` over `s` is what a squeezed figure looks like. */
+  figure: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
+  state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },
   stateBad: { color: palette.danger },
   stateWarn: { color: palette.warn },
   spinner: { transform: [{ scale: 0.8 }] },
