@@ -1320,11 +1320,6 @@ export function ChatScreen({
           // agrees a run is actually in flight: an item whose status lags a closed cycle must not
           // leave a spinner running for good.
           live={row.live === true && activeRun}
-          // Every segment of a run that is still going stays open, read off the items and never off
-          // the thread's flag: a page or a compaction answering "no run" folded the groups of a run
-          // that was still writing (owner, 2026-11-08: "les groupes se referment entre
-          // message/compact"). A run that ends seals its own items (`sealRun`).
-          running={row.run.status === 'running'}
           open={expandedFolds.has(foldKeyOf(row))}
           foot={row.foot}
           onToggle={() => toggleFold(foldKeyOf(row))}

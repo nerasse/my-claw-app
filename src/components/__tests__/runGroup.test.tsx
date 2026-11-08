@@ -54,7 +54,7 @@ function thought(overrides: Partial<ChatItem> = {}): ChatItem {
   } as ChatItem;
 }
 
-function renderGroup(items: ChatItem[], open: boolean, live = false, running = live) {
+function renderGroup(items: ChatItem[], open: boolean, live = false) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
@@ -63,7 +63,6 @@ function renderGroup(items: ChatItem[], open: boolean, live = false, running = l
           items={items}
           open={open}
           live={live}
-          running={running}
           onToggle={() => {}}
           renderItem={item => <Text>{`child:${item.id}`}</Text>}
         />
@@ -286,18 +285,26 @@ describe("a segment's own clock", () => {
   ];
 
   it('a finished segment shows its own span, never "running"', () => {
-    const shown = texts(renderGroup(segment, false, false, false));
+    const shown = texts(renderGroup(segment, false, false));
     expect(shown.some(text => text.startsWith('running'))).toBe(false);
     // 1 s (first call) .. 3 s + 2 s = 4 s of work.
     expect(shown).toContain('4 s');
   });
 
-  it('a segment of a live run that a message cut is over: no spinner, its own span', () => {
-    const shown = texts(renderGroup(segment, false, false, true));
+  /**
+   * A segment a message cut is over, even while its run goes on: it folds back to its line and the
+   * present stays open (owner, 2026-11-08: the present is open, the past is compact). What it keeps
+   * is its own span, and the run's total stays on its foot.
+   */
+  it('a segment of a live run that a message cut folds back to its line', () => {
+    const shown = texts(renderGroup(segment, false, false));
     expect(shown.some(text => text.startsWith('running'))).toBe(false);
     expect(shown).toContain('4 s');
-    // The run is still going, so the group is still drawn open.
-    expect(shown).toContain(`child:${segment[0]!.id}`);
+    expect(shown).not.toContain(`child:${segment[0]!.id}`);
+  });
+
+  it('opens again on a tap, and stays open for the reader', () => {
+    expect(texts(renderGroup(segment, true, false))).toContain(`child:${segment[0]!.id}`);
   });
 
   it('the segment being written counts from its own first call', () => {

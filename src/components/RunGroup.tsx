@@ -26,7 +26,6 @@ export const RunGroup = React.memo(function RunGroupView({
   items,
   open,
   live = false,
-  running = false,
   foot,
   onToggle,
   renderItem,
@@ -44,15 +43,6 @@ export const RunGroup = React.memo(function RunGroupView({
    * A segment a message cut is over, whatever the run is doing -- `markLiveSegments`.
    */
   live?: boolean;
-  /**
-   * The run this segment belongs to is still going.
-   *
-   * Then the group is drawn open and cannot be closed: you do not fold the work you are watching,
-   * and a fold that appeared at the run's end made the whole block change shape under the
-   * reader's eyes (owner, 2026-11-07). Every segment of a live run stays open for that reason;
-   * only the one being written wears the clock.
-   */
-  running?: boolean;
   /** The run's empreinte, when this is the row it signs under -- `markRunFeet`. */
   foot?: RunInfo;
   onToggle: () => void;
@@ -84,7 +74,7 @@ export const RunGroup = React.memo(function RunGroupView({
    * on have no other home -- so what it carried is drawn as a line under the card.
    */
   const only = items.length === 1 ? items[0] : undefined;
-  if (only !== undefined && only.kind === 'tool' && !running) {
+  if (only !== undefined && only.kind === 'tool' && !live) {
     return (
       <View style={styles.wrap}>
         <View key={only.id}>{renderItem(only, 0, items, false)}</View>
@@ -93,7 +83,13 @@ export const RunGroup = React.memo(function RunGroupView({
     );
   }
 
-  const shownOpen = live || running || open;
+  /**
+   * The segment being written is open, and so is anything the reader opened. A segment a message
+   * cut is *over*: it folds back to its line the moment the next one starts, which is what every
+   * agent surface does -- the present is open, the past is compact -- and it is what keeps a long
+   * run readable (owner, 2026-11-08). The run's own total still signs its end (`RunFoot`).
+   */
+  const shownOpen = live || open;
 
   // The segment's own bounds, never the run's: a run is folded in one group per burst, and each
   // burst has its own clock -- it starts when its first call does and stops when the message that
@@ -106,7 +102,7 @@ export const RunGroup = React.memo(function RunGroupView({
   const lastDot = items.reduce((last, item, index) => (item.kind === 'text' && drawsNothingYet(item) ? last : index), -1);
 
   const toggle = (): void => {
-    if (live || running) return;
+    if (live) return;
     // The body is mounted or not, so the animation is the layout's own: no measured height, no
     // second source of truth about how tall the fold is.
     LayoutAnimation.configureNext(LayoutAnimation.create(180, 'easeInEaseOut', 'opacity'));
