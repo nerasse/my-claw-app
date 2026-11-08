@@ -22,26 +22,36 @@ import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme'
  * opened snapped shut the moment its items landed.
  */
 export const RunGroup = React.memo(function RunGroupView({
-  run,
   items,
   open,
   live = false,
+  running = false,
   foot,
   onToggle,
   renderItem,
 }: {
-  run: RunInfo;
+  /**
+   * The run this segment belongs to. Named, never read: the header's clock is the *segment's* own
+   * (its first call to its last), and the run's total is its foot's business -- `RunFoot`.
+   */
+  run?: RunInfo;
   items: ChatItem[];
   open: boolean;
   /**
-   * The run is still going.
+   * This segment is the one the run is writing into: a spinner, a clock that climbs, and no fold.
+   *
+   * A segment a message cut is over, whatever the run is doing -- `markLiveSegments`.
+   */
+  live?: boolean;
+  /**
+   * The run this segment belongs to is still going.
    *
    * Then the group is drawn open and cannot be closed: you do not fold the work you are watching,
    * and a fold that appeared at the run's end made the whole block change shape under the
-   * reader's eyes (owner, 2026-11-07). Its chrono lives on the header, where it is the only place
-   * that has one -- `RunFoot` takes over when the run ends.
+   * reader's eyes (owner, 2026-11-07). Every segment of a live run stays open for that reason;
+   * only the one being written wears the clock.
    */
-  live?: boolean;
+  running?: boolean;
   /** The run's empreinte, when this is the row it signs under -- `markRunFeet`. */
   foot?: RunInfo;
   onToggle: () => void;
@@ -73,7 +83,7 @@ export const RunGroup = React.memo(function RunGroupView({
    * on have no other home -- so what it carried is drawn as a line under the card.
    */
   const only = items.length === 1 ? items[0] : undefined;
-  if (only !== undefined && only.kind === 'tool' && !live) {
+  if (only !== undefined && only.kind === 'tool' && !running) {
     return (
       <View style={styles.wrap}>
         <View key={only.id}>{renderItem(only, 0, items, false)}</View>
@@ -82,10 +92,17 @@ export const RunGroup = React.memo(function RunGroupView({
     );
   }
 
-  const shownOpen = live || open;
+  const shownOpen = live || running || open;
+
+  // The segment's own bounds, never the run's: a run is folded in one group per burst, and each
+  // burst has its own clock -- it starts when its first call does and stops when the message that
+  // cut it was written (owner, 2026-11-08). The run's total stays where it belongs, on its foot.
+  const startedAt = items[0]?.ts;
+  const tail = items[items.length - 1];
+  const endedAt = tail === undefined ? undefined : tail.ts + (tail.kind === 'tool' ? tail.durationMs ?? 0 : 0);
 
   const toggle = (): void => {
-    if (live) return;
+    if (live || running) return;
     // The body is mounted or not, so the animation is the layout's own: no measured height, no
     // second source of truth about how tall the fold is.
     LayoutAnimation.configureNext(LayoutAnimation.create(180, 'easeInEaseOut', 'opacity'));
@@ -94,7 +111,15 @@ export const RunGroup = React.memo(function RunGroupView({
 
   return (
     <View style={styles.wrap}>
-      <Bar label={label} open={shownOpen} live={live} since={run.startTs} onPress={toggle} styles={styles} />
+      <Bar
+        label={label}
+        open={shownOpen}
+        live={live}
+        {...(startedAt !== undefined ? { startedAt } : {})}
+        {...(endedAt !== undefined ? { endedAt } : {})}
+        onPress={toggle}
+        styles={styles}
+      />
       {shownOpen ? (
         <View style={styles.body}>
           {/* One line for the whole column, ending on the last dot's centre. A segment per row
@@ -223,14 +248,18 @@ function Bar({
   label,
   open,
   live = false,
-  since,
+  startedAt,
+  endedAt,
   onPress,
   styles,
 }: {
   label: { count: string; detail: string };
   open: boolean;
   live?: boolean;
-  since?: number;
+  /** When this segment's first call started, ms. */
+  startedAt?: number;
+  /** When its last call settled, ms. Absent on a segment with nothing dated in it. */
+  endedAt?: number;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
@@ -258,7 +287,12 @@ function Bar({
           {label.detail}
         </Text>
       ) : null}
-      {live && since !== undefined ? <LiveClock since={since} styles={styles} /> : null}
+      {live && startedAt !== undefined ? (
+        <LiveClock since={startedAt} styles={styles} />
+      ) : endedAt !== undefined && startedAt !== undefined && endedAt > startedAt ? (
+        // A finished segment keeps its own span, quietly: the run's total is its foot's business.
+        <Text style={styles.segment}>{formatSpan(endedAt - startedAt)}</Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -397,6 +431,8 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
     count: { fontSize: scaleFont(11.5, scale), color: palette.text, fontWeight: '600' as const },
     detail: { flex: 1, fontSize: scaleFont(11, scale), color: palette.textMeta },
     live: { fontSize: scaleFont(10, scale), color: palette.accent },
+    /** A finished segment's span: the same muted figure the thread uses for every other span. */
+    segment: { fontSize: scaleFont(10, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
     // The header's spinner is a hint, not the subject: the same 0.8 scale the card uses.
     spinner: { transform: [{ scale: 0.7 }] },
     body: { position: 'relative' as const, paddingTop: 2 },

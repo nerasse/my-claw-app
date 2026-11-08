@@ -53,16 +53,16 @@ function thought(overrides: Partial<ChatItem> = {}): ChatItem {
   } as ChatItem;
 }
 
-function renderGroup(items: ChatItem[], open: boolean, live = false) {
+function renderGroup(items: ChatItem[], open: boolean, live = false, running = live) {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
       <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
         <RunGroup
-          run={run}
           items={items}
           open={open}
           live={live}
+          running={running}
           onToggle={() => {}}
           renderItem={item => <Text>{`child:${item.id}`}</Text>}
         />
@@ -167,7 +167,7 @@ describe('a run in flight', () => {
     ReactTestRenderer.act(() => {
       tree = ReactTestRenderer.create(
         <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
-          <RunGroup run={run} items={items} open={false} live onToggle={onToggle} renderItem={item => <Text>{`child:${item.id}`}</Text>} />
+          <RunGroup items={items} open={false} live onToggle={onToggle} renderItem={item => <Text>{`child:${item.id}`}</Text>} />
         </ThemeContext.Provider>,
       );
     });
@@ -184,5 +184,35 @@ describe('a run in flight', () => {
   it('carries the run\'s chrono, which no other row has while it runs', () => {
     const shown = texts(renderGroup(items, false, true));
     expect(shown.some(text => text.startsWith('running · '))).toBe(true);
+  });
+});
+
+describe("a segment's own clock", () => {
+  // A run is folded one group per burst between the messages it wrote. Every burst used to wear the
+  // run's elapsed time and a spinner, so three finished groups read as three runs of twelve minutes
+  // (owner, 2026-11-08: "il doit compter pour chaque groupe et se reset a chaque debut d'un autre").
+  const segment = [
+    tool('bash', { ts: 1_000 }),
+    tool('read', { ts: 3_000, durationMs: 2_000 }),
+  ];
+
+  it('a finished segment shows its own span, never "running"', () => {
+    const shown = texts(renderGroup(segment, false, false, false));
+    expect(shown.some(text => text.startsWith('running'))).toBe(false);
+    // 1 s (first call) .. 3 s + 2 s = 4 s of work.
+    expect(shown).toContain('4 s');
+  });
+
+  it('a segment of a live run that a message cut is over: no spinner, its own span', () => {
+    const shown = texts(renderGroup(segment, false, false, true));
+    expect(shown.some(text => text.startsWith('running'))).toBe(false);
+    expect(shown).toContain('4 s');
+    // The run is still going, so the group is still drawn open.
+    expect(shown).toContain(`child:${segment[0]!.id}`);
+  });
+
+  it('the segment being written counts from its own first call', () => {
+    const shown = texts(renderGroup([tool('bash', { ts: Date.now() - 5_000 })], false, true));
+    expect(shown.some(text => /^running · \d+ s$/.test(text))).toBe(true);
   });
 });

@@ -15,7 +15,7 @@ export type ChatRow =
    * stopped mid-work. A run whose tail is neither gets `{ kind: 'foot' }` after it instead.
    */
   | { kind: 'item'; item: ChatItem; foot?: RunInfo }
-  | { kind: 'group'; run: RunInfo; items: ChatItem[]; foot?: RunInfo }
+  | { kind: 'group'; run: RunInfo; items: ChatItem[]; foot?: RunInfo; live?: boolean }
   | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[]; foot?: RunInfo }
   /**
    * The live compaction rule, as a row of the list rather than a decoration on a cell.
@@ -318,7 +318,27 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
     }
   }
   closeRun();
-  return markRunFeet(rows, ghosts);
+  return markRunFeet(markLiveSegments(rows), ghosts);
+}
+
+/**
+ * Marks the segment a running run is *still writing into*: its last one, and only that one.
+ *
+ * A run is folded in segments, one per burst between the messages it wrote, and every one of them
+ * used to be told "the run is still going". So three finished bursts of a live run all wore a
+ * spinner and the run's elapsed time, which read as three runs that had been going for twelve
+ * minutes (owner, 2026-11-08: "il doit compter pour chaque groupe et se reset a chaque debut d'un
+ * autre"). A segment that a message cut is over: nothing about it is live.
+ */
+function markLiveSegments(rows: ChatRow[]): ChatRow[] {
+  const last = new Map<string, number>();
+  rows.forEach((row, index) => {
+    if (row.kind === 'group' && row.run.status === 'running') last.set(row.run.id, index);
+  });
+  if (last.size === 0) return rows;
+  return rows.map((row, index) =>
+    row.kind === 'group' && last.get(row.run.id) === index ? { ...row, live: true } : row,
+  );
 }
 
 /**

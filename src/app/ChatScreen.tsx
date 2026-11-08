@@ -324,6 +324,15 @@ export function ChatScreen({
   /** Where the list is, because the reveal has to know what it is lifting from. */
   const offsetRef = useRef(0);
   /**
+   * How tall the composer is.
+   *
+   * The thread is a column: the list takes what the composer leaves. When the composer grows under
+   * it -- a staged file, a location chip, a draft that wrapped -- the list keeps its content where
+   * it was, so the newest lines slid under the composer's new edge and stayed there until the
+   * reader scrolled (owner, 2026-11-08: "les pieces jointes cachent les dernieres lignes").
+   */
+  const [composerHeight, setComposerHeight] = useState(0);
+  /**
    * The list's viewport and the height of what it holds, from the scroll indicator's own measure.
    * A thread that does not fill the viewport has nothing to scroll and no end to reach.
    */
@@ -379,6 +388,22 @@ export function ChatScreen({
    */
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+
+  /**
+   * The composer grew under the thread: follow it back down.
+   *
+   * A row pinned at the bottom of a shrinking viewport is the last line sliding under the composer,
+   * and an inverted list does not move its content for that -- offset 0 is the bottom whenever
+   * anybody asks it to be. So a reader who was following gets the newest message back on screen,
+   * and a reader who had scrolled up is left exactly where they were reading.
+   */
+  const composerWasRef = useRef(0);
+  useEffect(() => {
+    const grew = composerHeight > composerWasRef.current;
+    composerWasRef.current = composerHeight;
+    if (!grew || !following) return;
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [composerHeight, following]);
   useEffect(() => {
     const scope = draftScope();
     setDraft(draftTextOf(threadId));
@@ -1289,11 +1314,12 @@ export function ChatScreen({
       // before it, and the time shows on the last one, exactly like free bubbles do.
       return (
         <RunGroup
-          run={row.run}
           items={row.items}
-          // A run in flight is drawn open and cannot be closed: the fold must not appear under
-          // the reader's eyes the moment the run ends.
-          live={row.run.status === 'running' && activeRun}
+          // Only the segment the run is still writing into is live: a burst a message cut is over,
+          // and wearing a spinner and the run's elapsed time made three finished groups look like
+          // three runs of twelve minutes (owner, 2026-11-08).
+          live={row.live === true && activeRun}
+          running={row.run.status === 'running' && activeRun}
           open={expandedFolds.has(foldKeyOf(row))}
           foot={row.foot}
           onToggle={() => toggleFold(foldKeyOf(row))}
@@ -1742,7 +1768,10 @@ export function ChatScreen({
         ) : null}
         </View>
 
-        <View style={column}>
+        {/* Measured, because the list above it takes whatever this leaves: see `composerHeight`. */}
+        <View
+          style={column}
+          onLayout={event => setComposerHeight(event.nativeEvent.layout.height)}>
         {questionPending ? (
           // A card can be far up a long thread, and the only hint otherwise is a placeholder in
           // the composer. The run is blocked on the answer, so the form is the last thing in the

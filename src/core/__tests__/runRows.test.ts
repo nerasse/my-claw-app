@@ -123,6 +123,29 @@ describe('buildRows', () => {
     expect(rows.some(r => r.kind === 'item' && r.item.id === 'a2')).toBe(true);
   });
 
+  test('only the last segment of a running run is live: the ones a message cut are over', () => {
+    const items = [
+      userText('u1'),
+      tool('t1', 'r1'),
+      agentText('a1', 'first message', 'r1'),
+      tool('t2', 'r1'),
+      agentText('a2', 'second message', 'r1'),
+      tool('t3', 'r1'),
+    ].map(i => ({ ...i, run: run('r1', 'running') } as ChatItem));
+    const rows = buildRows(items);
+    // Three groups, one per burst between the messages it wrote. Every one of them used to be told
+    // "the run is still going", so three finished bursts wore a spinner and the run's elapsed time
+    // (owner, 2026-11-08).
+    const groups = rows.filter(row => row.kind === 'group') as Array<Extract<ChatRow, { kind: 'group' }>>;
+    expect(groups).toHaveLength(3);
+    expect(groups.map(group => group.live === true)).toEqual([false, false, true]);
+  });
+
+  test('a settled run has no live segment at all', () => {
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a', 'answer', 'r1')]);
+    expect(rows.filter(row => row.kind === 'group' && row.live === true)).toHaveLength(0);
+  });
+
   test('a user turn inside a run stays a row and splits the group around it', () => {
     const rows = buildRows([
       userText('u'),

@@ -108,6 +108,7 @@ export function ReasoningLine({
   waitMs,
   streaming,
   expandReasoning,
+  actions,
 }: {
   /**
    * The bubble this reasoning belongs to, which is what keeps a section the reader opened open.
@@ -134,6 +135,11 @@ export function ReasoningLine({
   streaming: boolean;
   /** Server-owned pref: start expanded instead of folded. */
   expandReasoning?: boolean;
+  /**
+   * The bubble's own controls, for the bubble that is nothing but a thought: it has no message under
+   * the line to hang them on, so they close this row instead of trailing an empty one.
+   */
+  actions?: React.ReactNode;
 }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   const known = useKnownReasoning(threadId, id);
@@ -184,6 +190,7 @@ export function ReasoningLine({
         {figures}
         {alone ? null : <View style={styles.spacer} />}
         {waitFigure}
+        {actions}
       </View>
     );
   }
@@ -193,6 +200,7 @@ export function ReasoningLine({
       label="Reasoning"
       trailing={figures}
       right={waitFigure}
+      {...(actions ? { actions } : {})}
       body={body}
       showHint="Show the model's reasoning"
       hideHint="Hide the model's reasoning"

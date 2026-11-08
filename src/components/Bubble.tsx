@@ -185,6 +185,54 @@ export const Bubble = React.memo(function BubbleView({
   ) {
     return null;
   }
+  // A bubble that is nothing but a thought: the model said nothing under it, it only thought.
+  // There is no message to sign, so its clock and its `⋯` ride the reasoning line's head row and
+  // the action bar under the bubble goes away. Two rows for one thought left an empty strip that
+  // read as a message which never arrived (owner, 2026-11-08).
+  const thoughtOnly =
+    agent &&
+    !item.command &&
+    !item.notice &&
+    item.text.trim() === '' &&
+    item.attachments.length === 0 &&
+    !item.location &&
+    !item.error &&
+    !item.details &&
+    foot === undefined &&
+    thinkingShown;
+
+  // Button and clock travel as one block. Split, they would land at opposite ends of a row the
+  // signature also shares, and the stamp has to stay beside the control it follows.
+  const stamp = (
+    <View style={styles.stamp}>
+      {onCopy ? (
+        <Pressable
+          hitSlop={12}
+          style={styles.menu}
+          onPress={() => onCopy(item)}
+          accessibilityRole="button"
+          accessibilityLabel="Copy message">
+          <CopyIcon size={15} tone="faint" />
+        </Pressable>
+      ) : null}
+      {/* The sheet keeps its button only where it still holds something else to offer: one
+          control per intention, and copying has its own now. */}
+      {!onCopy || menuHasExtras ? (
+        <Pressable
+          hitSlop={12}
+          style={styles.menu}
+          onPress={() => onMenu(item)}
+          accessibilityRole="button"
+          accessibilityLabel="Message actions">
+          <MoreIcon size={16} tone="faint" />
+        </Pressable>
+      ) : null}
+      {/* The stamp closes the line, right of the `...`: bottom-right is where a message signs
+          itself, and opening a bubble with the clock made it read as a title (2026-11-04). */}
+      {showTime && !item.command && !item.notice ? <Text style={styles.menuTime}>{clock(item.ts)}</Text> : null}
+    </View>
+  );
+
   // A browser paints the selection highlight in the accent. Unmarked, a drag over one's own
   // message would select text that looks untouched. webTheme.web.ts flips the pair on the marked
   // subtree, and the mark stays on the bubble: the primary button inside it is still accent-filled.
@@ -234,6 +282,7 @@ export const Bubble = React.memo(function BubbleView({
             waitMs={item.waitMs}
             streaming={item.streaming}
             expandReasoning={expandReasoning}
+            {...(thoughtOnly ? { actions: stamp } : {})}
           />
           </View>
         ) : null}
@@ -305,41 +354,13 @@ export const Bubble = React.memo(function BubbleView({
           message, so the bubble fills the column like a tool card. The run's empreinte rides the
           same line, at the end the marks do not take: it is a signature, and it must never read as
           a caption of the bubble above it. */}
-      <View style={[styles.menuRow, styles.menuRowEnd]}>
-        {agent && foot !== undefined ? <RunFoot run={foot} /> : null}
-        {/* Button and clock travel as one block. Split, they would land at opposite ends of a row
-            the signature also shares, and the stamp has to stay beside the control it follows. */}
-        <View style={styles.stamp}>
-          {onCopy ? (
-            <Pressable
-              hitSlop={12}
-              style={styles.menu}
-              onPress={() => onCopy(item)}
-              accessibilityRole="button"
-              accessibilityLabel="Copy message">
-              <CopyIcon size={15} tone="faint" />
-            </Pressable>
-          ) : null}
-          {/* The sheet keeps its button only where it still holds something else to offer: one
-              control per intention, and copying has its own now. */}
-          {!onCopy || menuHasExtras ? (
-            <Pressable
-              hitSlop={12}
-              style={styles.menu}
-              onPress={() => onMenu(item)}
-              accessibilityRole="button"
-              accessibilityLabel="Message actions">
-              <MoreIcon size={16} tone="faint" />
-            </Pressable>
-          ) : null}
-          {/* The stamp closes the line, right of the `...`: bottom-right is where a message signs
-              itself, and opening a bubble with the clock made it read as a title (2026-11-04). */}
-          {showTime && !item.command && !item.notice ? (
-            <Text style={styles.menuTime}>{clock(item.ts)}</Text>
-          ) : null}
+      {thoughtOnly ? null : (
+        <View style={[styles.menuRow, styles.menuRowEnd]}>
+          {agent && foot !== undefined ? <RunFoot run={foot} /> : null}
+          {stamp}
+          {!agent && foot !== undefined ? <RunFoot run={foot} /> : null}
         </View>
-        {!agent && foot !== undefined ? <RunFoot run={foot} /> : null}
-      </View>
+      )}
       </View>
     </View>
   );

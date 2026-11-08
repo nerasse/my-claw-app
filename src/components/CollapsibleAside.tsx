@@ -33,6 +33,7 @@ export function CollapsibleAside({
   hideHint,
   defaultOpen = false,
   persistKey,
+  actions,
   pending,
   onOpen,
 }: {
@@ -62,6 +63,12 @@ export function CollapsibleAside({
    * and the "always expand reasoning" pref opened nothing (every reasoning line is keyed).
    */
   persistKey?: string;
+  /**
+   * Controls that belong to the aside itself, drawn at the end of its head row. The bubble that is
+   * nothing but a thought has no foot of its own to hang its menu on, so the `⋯` and the clock ride
+   * this row instead (owner, 2026-11-08).
+   */
+  actions?: React.ReactNode;
   /** Said in place of the body while it is still on its way (`reasoningFetch.ts`). */
   pending?: string;
   /** Told each time the aside is open, so a body that is not here yet can be asked for. */
@@ -108,6 +115,7 @@ export function CollapsibleAside({
           {trailing}
         </Pressable>
         {right}
+        {actions}
         {open && body && !chatSelectable ? <BlockActions title={label} value={body} /> : null}
       </View>
       {open ? (
