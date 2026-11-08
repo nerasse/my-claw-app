@@ -318,27 +318,30 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
     }
   }
   closeRun();
-  return markRunFeet(markLiveSegments(rows), ghosts);
+  return markRunFeet(markLiveSegment(rows), ghosts);
 }
 
 /**
- * Marks the segment a running run is *still writing into*: its last one, and only that one.
+ * Marks the segment a run is *still writing into*: the thread's last group, and only that one.
  *
  * A run is folded in segments, one per burst between the messages it wrote, and every one of them
  * used to be told "the run is still going". So three finished bursts of a live run all wore a
- * spinner and the run's elapsed time, which read as three runs that had been going for twelve
+ * spinner and the same elapsed time, which read as three runs that had been going for twelve
  * minutes (owner, 2026-11-08: "il doit compter pour chaque groupe et se reset a chaque debut d'un
- * autre"). A segment that a message cut is over: nothing about it is live.
+ * autre").
+ *
+ * The last group of the whole list, not the last one of each run: a thread has one run writing at a
+ * time, and the items of that one run can carry more than one run id -- a card the app opened live
+ * wears the id it minted before the server's page named it. Keyed per run, that put a spinner and a
+ * clock on two finished segments at once, which is exactly the screenshot.
  */
-function markLiveSegments(rows: ChatRow[]): ChatRow[] {
-  const last = new Map<string, number>();
+function markLiveSegment(rows: ChatRow[]): ChatRow[] {
+  let last = -1;
   rows.forEach((row, index) => {
-    if (row.kind === 'group' && row.run.status === 'running') last.set(row.run.id, index);
+    if (row.kind === 'group' && row.run.status === 'running') last = index;
   });
-  if (last.size === 0) return rows;
-  return rows.map((row, index) =>
-    row.kind === 'group' && last.get(row.run.id) === index ? { ...row, live: true } : row,
-  );
+  if (last < 0) return rows;
+  return rows.map((row, index) => (index === last ? { ...row, live: true } : row));
 }
 
 /**

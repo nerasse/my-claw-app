@@ -141,6 +141,24 @@ describe('buildRows', () => {
     expect(groups.map(group => group.live === true)).toEqual([false, false, true]);
   });
 
+  /**
+   * One run writing, two run ids: a card the app opened live wears the id it minted before the
+   * server's page named it. Keyed per run id, both bursts were marked live -- two spinners and the
+   * same clock on screen at once, which is the screenshot the owner sent (2026-11-08).
+   */
+  test('one run id per burst still yields a single live segment', () => {
+    const items = [
+      userText('u1'),
+      { ...tool('t1'), run: run('live-3', 'running') } as ChatItem,
+      agentText('a1', 'un message', undefined),
+      { ...tool('t2'), run: run('live-3', 'running') } as ChatItem,
+      { ...tool('t3'), run: run('84fd43b5', 'running') } as ChatItem,
+    ];
+    const groups = buildRows(items).filter(row => row.kind === 'group') as Array<Extract<ChatRow, { kind: 'group' }>>;
+    // Three bursts, one live: the trailing one, whatever ids the items happen to carry.
+    expect(groups.map(group => group.live === true)).toEqual([false, false, true]);
+  });
+
   test('a settled run has no live segment at all', () => {
     const rows = buildRows([userText('u'), tool('t1', 'r1'), agentText('a', 'answer', 'r1')]);
     expect(rows.filter(row => row.kind === 'group' && row.live === true)).toHaveLength(0);

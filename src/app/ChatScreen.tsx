@@ -1316,11 +1316,15 @@ export function ChatScreen({
       return (
         <RunGroup
           items={row.items}
-          // Only the segment the run is still writing into is live: a burst a message cut is over,
-          // and wearing a spinner and the run's elapsed time made three finished groups look like
-          // three runs of twelve minutes (owner, 2026-11-08).
+          // One segment is live -- the one being written -- and it spins only while the store
+          // agrees a run is actually in flight: an item whose status lags a closed cycle must not
+          // leave a spinner running for good.
           live={row.live === true && activeRun}
-          running={row.run.status === 'running' && activeRun}
+          // Every segment of a run that is still going stays open, read off the items and never off
+          // the thread's flag: a page or a compaction answering "no run" folded the groups of a run
+          // that was still writing (owner, 2026-11-08: "les groupes se referment entre
+          // message/compact"). A run that ends seals its own items (`sealRun`).
+          running={row.run.status === 'running'}
           open={expandedFolds.has(foldKeyOf(row))}
           foot={row.foot}
           onToggle={() => toggleFold(foldKeyOf(row))}
