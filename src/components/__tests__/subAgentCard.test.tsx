@@ -101,6 +101,33 @@ it('never lets the seconds wrap, however long the brief is', () => {
   expect(figures.every(t => t.props.numberOfLines === 1)).toBe(true);
 });
 
+/**
+ * The regression this replaces: the brief stood in the head *instead of* the name, so a spawn whose
+ * task was long read as an anonymous task line and nothing said an agent was on it (owner,
+ * 2026-11-08: "on dirait pas un sous agent").
+ */
+it('keeps the name on the head and gives the brief its own line', () => {
+  const task = 'New read-only design task, same rules (no edits, no cargo). Repo /home/neras/cf/CubeFlow at main b59fcc1.';
+  const tree = render(makeItem({ args: { name: 'digger', type: 'research', mode: 'session', task } }), DOOR);
+  const shown = texts(tree);
+  expect(shown).toContain('digger');
+  expect(shown).toContain('research · session');
+  expect(shown).toContain(task);
+});
+
+/**
+ * Order, not just presence: who (name), then what it is (type), then the brief under it. A card
+ * that opened on the task read as a command someone ran, which is the whole complaint.
+ */
+it('reads who, then what, then the job', () => {
+  const task = 'read the reasoning flow';
+  const tree = render(makeItem({ args: { name: 'digger', type: 'research', mode: 'session', task } }), DOOR);
+  const shown = texts(tree);
+  expect(shown.indexOf('digger')).toBeGreaterThanOrEqual(0);
+  expect(shown.indexOf('research · session')).toBeGreaterThan(shown.indexOf('digger'));
+  expect(shown.indexOf(task)).toBeGreaterThan(shown.indexOf('research · session'));
+});
+
 it('falls back to the shape when the call carried no brief', () => {
   const item = makeItem({ args: { name: 'digger', type: 'research', mode: 'session' } });
   const shown = texts(render(item, DOOR));

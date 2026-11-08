@@ -92,12 +92,11 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   const brief = [item.args.task, item.args.message, item.args.instructions].find(value => typeof value === 'string') as string | undefined;
 
   /**
-   * What the row says after the name.
-   *
-   * A `spawn` names an agent and is identified by what it was asked. A browser task names none,
-   * so it is identified by the site it is on; its instructions are the body's job.
+   * What the row says after the name: the agent's own shape (or, for a browser task, the browser and
+   * the site). The brief is *not* part of it -- it has its own line under the name, because a long
+   * task standing in for the head left the card reading as an anonymous command.
    */
-  const what = (item.name === 'delegate_browser_task' ? kind : brief ?? kind).replace(/\s+/g, ' ').trim();
+  const what = kind.replace(/\s+/g, ' ').trim();
 
   // Same rule as a tool card: with the pref off nothing ever opens on its own, and a tap survives
   // the settle. The head is self-sufficient, so an unopened card here costs the reader nothing.
@@ -138,20 +137,18 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           <View style={styles.slot}>
             <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
           </View>
+          {/* Who, first and always: an agent with no name still reads as an agent (`spawn`), and
+              the brief never takes the line, so a named call can never look like an anonymous
+              one (owner, 2026-11-08: "on dirait pas un sous agent"). */}
           <Text style={styles.name} numberOfLines={1}>
             {label || id || action}
           </Text>
-          {/* What the agent is doing, on the row: a sub-agent used to spend a whole second line on
-              its brief, which made the one door of a run the tallest thing in the thread. */}
-          {/* The brief takes whatever the line has left and is cut there; the figures after it are
-              fixed, so no clock can ever be squeezed into two lines. */}
           {what ? (
             <Text style={styles.kind} numberOfLines={1}>
               {what}
             </Text>
-          ) : (
-            <View style={styles.spacer} />
-          )}
+          ) : null}
+          <View style={styles.spacer} />
           {running && item.durationMs === undefined ? <RunningFor since={item.ts} /> : null}
           {word ? (
             <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]} numberOfLines={1}>
@@ -184,6 +181,14 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           </Pressable>
         ) : null}
       </View>
+
+      {/* What it was asked, under the name it was given: the one line that says this is a job
+          handed to an agent, not a command the run ran. Cut here, read in full once unfolded. */}
+      {brief && !open ? (
+        <Text style={styles.briefLine} numberOfLines={1}>
+          {brief.replace(/\s+/g, ' ').trim()}
+        </Text>
+      ) : null}
 
       {open ? (
         <View style={styles.body}>
@@ -228,7 +233,16 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
   slot: { width: ROW_SLOT, alignItems: 'center' as const },
   identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
-  name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 0 },
+  /** A name, in the body's own face: monospace is what a command wears, and a sub-agent is not one. */
+  name: { fontSize: scaleFont(font.meta, scale), fontWeight: '700' as const, color: palette.text, flexShrink: 0 },
+  /** Its line, under the name, on the text column: one line folded, whole once unfolded. */
+  briefLine: {
+    paddingLeft: ROW_TEXT,
+    marginTop: 1,
+    fontSize: scaleFont(font.small, scale),
+    color: palette.textMuted,
+    lineHeight: Math.round(15 * scale),
+  },
   /** The brief: it takes the rest of the line and is cut there, never the figures after it. */
   kind: { flex: 1, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   spacer: { flex: 1 },
