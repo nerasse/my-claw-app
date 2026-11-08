@@ -79,9 +79,18 @@ it('offers the door without unfolding anything, and hands back the card id', () 
   expect(texts(tree)).not.toContain('found it');
 });
 
-it('names the sub-agent and its shape in the head, folded', () => {
+it('names the sub-agent and what it was asked, on one line, folded', () => {
   const tree = render(makeItem(), DOOR);
   const shown = texts(tree);
+  expect(shown).toContain('digger');
+  // What it is doing beats its type: a brief used to cost a second full-width line under the row,
+  // which made the one door of a run the tallest thing in the thread.
+  expect(shown).toContain('read the reasoning flow');
+});
+
+it('falls back to the shape when the call carried no brief', () => {
+  const item = makeItem({ args: { name: 'digger', type: 'research', mode: 'session' } });
+  const shown = texts(render(item, DOOR));
   expect(shown).toContain('digger');
   expect(shown).toContain('research · session');
 });

@@ -1,4 +1,4 @@
-import { ChevronIcon } from '../components/icons';
+import { ChevronIcon, OpenInNewIcon } from '../components/icons';
 import React, { useState, useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
@@ -9,7 +9,8 @@ import { formatSpan } from '../core/utils';
 import { useElapsed } from './CommandElapsed';
 import { requestToolOutput } from '../core/toolOutput';
 import { runStateOf, stateWord } from '../core/toolState';
-import { font, radius, scaleFont, space, type Palette, useThemedStyles } from '../theme';
+import { ROW_GAP, ROW_SLOT, ROW_TEXT, spine } from './spine';
+import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
 /**
  * A `spawn` or `send` call: not a tool result to read, a sub-agent to go and see.
@@ -84,6 +85,14 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   // A spawn is given a task, a send a message, a browser its instructions. Same slot either way.
   const brief = [item.args.task, item.args.message, item.args.instructions].find(value => typeof value === 'string') as string | undefined;
 
+  /**
+   * What the row says after the name.
+   *
+   * A `spawn` names an agent and is identified by what it was asked. A browser task names none,
+   * so it is identified by the site it is on; its instructions are the body's job.
+   */
+  const what = (item.name === 'delegate_browser_task' ? kind : brief ?? kind).replace(/\s+/g, ' ').trim();
+
   // Same rule as a tool card: with the pref off nothing ever opens on its own, and a tap survives
   // the settle. The head is self-sufficient, so an unopened card here costs the reader nothing.
   useEffect(() => {
@@ -108,7 +117,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   const word = stateWord(state);
 
   return (
-    <View style={[styles.card, running && styles.cardRunning, spawn?.status === 'error' && styles.cardError]}>
+    <View style={styles.row}>
       <View style={styles.head}>
         <Pressable
           style={styles.identity}
@@ -120,13 +129,17 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={`Sub-agent ${label || id || action}${running ? ', running' : ''}`}
           accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
-          <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
+          <View style={styles.slot}>
+            <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
+          </View>
           <Text style={styles.name} numberOfLines={1}>
             {label || id || action}
           </Text>
-          {kind ? (
+          {/* What the agent is doing, on the row: a sub-agent used to spend a whole second line on
+              its brief, which made the one door of a run the tallest thing in the thread. */}
+          {what ? (
             <Text style={styles.kind} numberOfLines={1}>
-              {kind}
+              {what}
             </Text>
           ) : null}
           <View style={styles.spacer} />
@@ -141,26 +154,21 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           ) : null}
           {item.durationMs !== undefined ? <Text style={styles.duration}>{formatSpan(item.durationMs)}</Text> : null}
         </Pressable>
-      </View>
 
-      {/* The door, outside the fold and outside the toggle: a control inside a control is
-          announced as one thing by a screen reader and steals the other's touch. */}
-      {subagent && onOpen ? (
-        <Pressable
-          style={styles.door}
-          onPress={() => onOpen(item.id)}
-          accessibilityRole="button"
-          accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}>
-          <Text style={styles.doorLabel} numberOfLines={1}>
-            {brief ? brief.replace(/\s+/g, ' ').trim() : `open ${subagent.label}`}
-          </Text>
-          <ChevronIcon direction="right" size={16} tone="accent" />
-        </Pressable>
-      ) : brief && !open ? (
-        <Text style={styles.brief} numberOfLines={1}>
-          {brief.replace(/\s+/g, ' ').trim()}
-        </Text>
-      ) : null}
+        {/* The door, outside the toggle: a control inside a control is announced as one thing by a
+            screen reader and steals the other's touch. An icon on the row now instead of a second
+            full-width line under it. */}
+        {subagent && onOpen ? (
+          <Pressable
+            style={styles.door}
+            onPress={() => onOpen(item.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}
+            hitSlop={8}>
+            <OpenInNewIcon size={13} tone="accent" />
+          </Pressable>
+        ) : null}
+      </View>
 
       {open ? (
         <View style={styles.body}>
@@ -170,7 +178,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
                 <Text style={styles.label}>{action === 'send' ? 'message' : 'task'}</Text>
                 <BlockActions title={`${action} ${action === 'send' ? 'message' : 'task'}`} value={brief} />
               </View>
-              <ScrollableBlock title={`${action} ${action === 'send' ? 'message' : 'task'}`} style={styles.code}>
+              <ScrollableBlock title={`${action} ${action === 'send' ? 'message' : 'task'}`} style={styles.codeFlat}>
                 <Text style={styles.codeText}>{brief}</Text>
               </ScrollableBlock>
             </>
@@ -179,7 +187,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
             <Text style={styles.label}>result{item.truncated ? ' · truncated' : ''}</Text>
             <BlockActions title={`${label || action} result`} value={item.output} />
           </View>
-          <ScrollableBlock title={`${label || action} result`} style={styles.code}>
+          <ScrollableBlock title={`${label || action} result`} style={styles.codeFlat}>
             <Text style={styles.codeText}>{item.output.trim() || (running ? '(still running)' : '(empty)')}</Text>
           </ScrollableBlock>
         </View>
@@ -189,22 +197,22 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
 });
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
-  card: {
+  /**
+   * A door is a line of the run, not a card of its own.
+   *
+   * It used to be a bordered card with a full-width door underneath, which made the one thing the
+   * reader waits on the loudest object in a thread where everything else is a flat line. It takes
+   * the spine's gutter and chevron slot instead, so its name lands on the same column as the work
+   * around it.
+   */
+  row: {
     alignSelf: 'stretch' as const,
-    backgroundColor: palette.surfaceAlt,
-    borderColor: palette.border,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    marginBottom: space.sm,
-    gap: space.xs,
+    paddingLeft: spine(scale).gutter,
+    marginBottom: space.xxs,
   },
-  // A running sub-agent is the only card in a thread that is still being written elsewhere.
-  cardRunning: { borderColor: palette.accent },
-  cardError: { borderColor: palette.danger },
-  head: { flexDirection: 'row' as const, alignItems: 'center' as const },
-  identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
+  head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
+  slot: { width: ROW_SLOT, alignItems: 'center' as const },
+  identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
   name: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, fontFamily: 'monospace', flexShrink: 1 },
   kind: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, flexShrink: 1 },
   spacer: { flex: 1 },
@@ -215,20 +223,11 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   spinner: { transform: [{ scale: 0.8 }] },
   // The door carries the brief as its own label: one row that says both what was asked and that
   // there is somewhere to go, instead of a line of prose above a button repeating the name.
-  door: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.surface,
-  },
+  /** The way in: an icon on the row, next to the chrono, not a line of its own. */
+  door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   doorLabel: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.text },
   brief: { fontSize: scaleFont(font.small, scale), color: palette.textMuted, paddingHorizontal: space.xs },
-  body: { gap: 3, paddingBottom: 2 },
+  body: { gap: 3, paddingBottom: 2, paddingLeft: ROW_TEXT },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   blockHead: {
     flexDirection: 'row' as const,
@@ -238,12 +237,10 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     marginTop: 2,
   },
   codeText: { fontSize: scaleFont(font.small, scale), color: palette.text },
-  code: {
-    backgroundColor: palette.bg,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: palette.border,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-  },
+  /**
+   * No plate and no frame: the task and the answer are text on the page, hung under the row on the
+   * name's column, exactly like a tool's output. A box inside a borderless thread is the chrome
+   * that made these cards read as a different species.
+   */
+  codeFlat: { paddingLeft: ROW_TEXT, paddingVertical: 2 },
 });
