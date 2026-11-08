@@ -103,6 +103,9 @@ export const RunGroup = React.memo(function RunGroupView({
   const tail = items[items.length - 1];
   const endedAt = tail === undefined ? undefined : tail.ts + (tail.kind === 'tool' ? tail.durationMs ?? 0 : 0);
 
+  // The last row that owns a dot: the column stops there, whatever comes after it.
+  const lastDot = items.reduce((last, item, index) => (item.kind === 'text' && drawsNothingYet(item) ? last : index), -1);
+
   const toggle = (): void => {
     if (live || running) return;
     // The body is mounted or not, so the animation is the layout's own: no measured height, no
@@ -124,23 +127,27 @@ export const RunGroup = React.memo(function RunGroupView({
       />
       {shownOpen ? (
         <View style={styles.body}>
-          {/* The column is drawn row by row, and the last row stops on its own dot. One line for
-              the whole group was simpler and hung a stub under the last item -- after a reasoning
-              at the end of a run it read as an empty bar with nothing in it (owner, 2026-11-08). */}
-          {items.map((item, index) => (
-            <View key={item.id} style={styles.child}>
-              <View
-                style={[styles.rail, index === 0 ? styles.railFirst : null, index === items.length - 1 ? styles.railEnd : styles.railBody]}
-                pointerEvents="none"
-              />
-              {/* A row with nothing in it yet draws no dot: a streaming phase before its wait is
-                  long enough to show would leave a lone blue mark hanging over the composer. */}
-              {item.kind === 'text' && drawsNothingYet(item) ? null : (
-                <View style={[styles.dot, dotStyle(dotOf(item), styles)]} pointerEvents="none" />
-              )}
-              {renderItem(item, index, items, true)}
-            </View>
-          ))}
+          {/* The column runs between dots and nowhere else: a segment per row that has one, and the
+              last of those stops on its own dot's centre. Rows with nothing to show yet draw no dot
+              and no line at all, so the column can never end in an empty bar (owner, 2026-11-08:
+              "qu'une barre verticale entre dots, jamais sans rien apres"). */}
+          {items.map((item, index) => {
+            const dotted = !(item.kind === 'text' && drawsNothingYet(item));
+            const segment =
+              index === lastDot ? styles.railEnd : dotted && index < lastDot ? styles.railBody : null;
+            return (
+              <View key={item.id} style={styles.child}>
+                {segment === null ? null : (
+                  <View
+                    style={[styles.rail, index === 0 ? styles.railFirst : null, segment]}
+                    pointerEvents="none"
+                  />
+                )}
+                {dotted ? <View style={[styles.dot, dotStyle(dotOf(item), styles)]} pointerEvents="none" /> : null}
+                {renderItem(item, index, items, true)}
+              </View>
+            );
+          })}
         </View>
       ) : null}
 
@@ -465,7 +472,21 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
     railBody: { bottom: 0 },
     /** Down to the last dot's centre, and no further: half the head row is where a dot sits. */
     railEnd: { height: Math.round(g.head / 2) },
-    child: { position: 'relative' as const, paddingLeft: g.gutter },
+    /**
+     * One line of the column: as tall as a head, with its content centred on it.
+     *
+     * Two things ride on this. A row shorter than a head (a lone wait, a phase that said nothing
+     * yet) used to sit at the top of its line with the air under it -- "le wait est un peu plus
+     * haut, et laisse de l'espace vide en bas" -- and a row that had nothing to show yet had no
+     * height at all, so the thread jumped when it appeared and jumped again with the first words
+     * (owner, 2026-11-08). Both are the same measurement now.
+     */
+    child: {
+      position: 'relative' as const,
+      paddingLeft: g.gutter,
+      minHeight: g.head,
+      justifyContent: 'center' as const,
+    },
     dot: {
       position: 'absolute' as const,
       left: g.dotLeft,

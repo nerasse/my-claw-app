@@ -151,6 +151,45 @@ describe('the fold', () => {
     expect(last.bottom).toBeUndefined();
   });
 
+  /**
+   * The owner's rule, verbatim: a column only ever runs *between* dots. A trailing row with
+   * nothing to show kept a stub under the last real dot -- an empty bar with nothing after it
+   * (2026-11-08).
+   */
+  it('never draws a line where no dot follows', () => {
+    const waiting = {
+      ...thought(),
+      text: '',
+      reasoning: undefined,
+      reasoningTokens: undefined,
+      streaming: true,
+      waitingSince: Date.now(),
+    } as ChatItem;
+    const rails = nodeStyles(renderGroup([tool('bash'), tool('read'), waiting], true)).filter(
+      style => style.width === 1,
+    );
+    // Two dotted rows: a full segment down to the second, and a short one to its dot. Nothing
+    // hangs under it.
+    expect(rails).toHaveLength(2);
+    expect(rails[1]!.height).toBe(Math.round(spine(1).head / 2));
+  });
+
+  /** A row with nothing in it still takes its line of the column, so the thread does not jump. */
+  it('reserves the height of a row that has nothing to show yet', () => {
+    const waiting = {
+      ...thought(),
+      text: '',
+      reasoning: undefined,
+      reasoningTokens: undefined,
+      streaming: true,
+      waitingSince: Date.now(),
+    } as ChatItem;
+    const heights = nodeStyles(renderGroup([tool('bash'), waiting], true))
+      .map(style => style.minHeight)
+      .filter((value): value is number => typeof value === 'number');
+    expect(heights).toContain(spine(1).head);
+  });
+
   it('leaves a row that has nothing to show yet without a dot', () => {
     const dots = (tree: ReactTestRenderer.ReactTestRenderer): number =>
       nodeStyles(tree).filter(style => style.borderRadius !== undefined && style.position === 'absolute' && style.width !== 1).length;
