@@ -398,6 +398,51 @@ export interface CompactionRun {
  * enough for preprocessing, gates and a prompt build; short enough that a bubble the server is
  * never going to mirror does not outlive the screen it was typed on.
  */
+/**
+ * A thread's held items, with a live delta's fresh entries in their place.
+ *
+ * The scan walks back from the end and stops at the first entry that is older, so the order the
+ * thread already had is never rearranged and a plain fresh frame, the common case, still lands
+ * last.
+ */
+function insertByTs(existing: ChatItem[], incoming: ChatItem[]): ChatItem[] {
+  if (incoming.length === 0) return existing;
+  const out = [...existing];
+  for (const item of incoming) {
+    let at = out.length;
+    while (at > 0 && out[at - 1]!.ts > item.ts) at -= 1;
+    out.splice(at, 0, item);
+  }
+  return out;
+}
+
+/**
+ * What a page leaves standing that it does not carry, each where it belongs.
+ *
+ * An owner's send that the server has not parked goes back among the page by its own clock: a
+ * command is journalled when it *answers*, so a `/compact` typed mid-run has no entry while the run
+ * is going, and a page that arrived meanwhile used to re-append it under everything -- the run, the
+ * boundary, the messages queued behind it. It belongs where it was typed, which is what its
+ * timestamp says.
+ *
+ * A send the server *is* holding keeps the bottom, where it waits under its badge
+ * (`insertionIndex`), and so does everything else local (a card still running, a bubble still
+ * streaming): that is the newest work of the run, and the page cannot place it better than its own
+ * arrival did.
+ */
+function mergeLocalSurvivors(base: ChatItem[], live: ChatItem[]): ChatItem[] {
+  if (live.length === 0) return base;
+  const typed = live.filter(
+    item =>
+      item.kind === 'text' &&
+      item.role === 'user' &&
+      item.summaryOf === undefined &&
+      item.queuedSince === undefined,
+  );
+  const tail = live.filter(item => !typed.includes(item));
+  return [...insertByTs(base, typed), ...tail];
+}
+
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
   private streams = new Map<string, string>();
@@ -1277,7 +1322,9 @@ class ChatStoreImpl {
     // says no run is answering (`survivesPage`).
     const live = existing.filter(item => !known.has(item.id) && survivesPage(item, activeRun, false));
 
-    this.threads.set(threadId, [...base, ...live]);
+    // A send the page does not carry (a command, which is journalled only once it answers) is put
+    // back where it was typed; only what the run is still writing stays at the end.
+    this.threads.set(threadId, [...mergeLocalSurvivors(base, live)]);
     this.spawnCards.delete(threadId);
   }
 
@@ -1326,7 +1373,7 @@ class ChatStoreImpl {
         return !(item.run && foldedRuns.has(item.run.id));
       });
 
-    this.threads.set(threadId, this.trimToCap(threadId, [...above, ...base, ...live]));
+    this.threads.set(threadId, this.trimToCap(threadId, [...above, ...mergeLocalSurvivors(base, live)]));
     this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
   }
@@ -1354,34 +1401,9 @@ class ChatStoreImpl {
     // card above the user bubble it answers.
     const persisted = patched.filter(item => !isLocalLive(item));
     const live = patched.filter(isLocalLive);
-    this.threads.set(threadId, this.trimToCap(threadId, [...this.insertByTs(persisted, fresh), ...live]));
+    this.threads.set(threadId, this.trimToCap(threadId, [...insertByTs(persisted, fresh), ...live]));
     this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
-  }
-
-  /**
-   * The delta's entries, each in its place among what the thread already holds.
-   *
-   * Appending them was the rule, on the grounds that a delta is newer than what is persisted. One
-   * entry breaks it: a folded run header. Its id is one the thread can never hold beforehand -- it
-   * names a range, not an entry -- and its place is where the run began, not where the delta
-   * started. Appended, it landed *after* the answer it stands behind: the reader got the collapsed
-   * group below the message it belongs to, which is what "the last message was inside the group"
-   * looked like on 2026-09-10 (docs/run-hydration.md).
-   *
-   * The scan walks back from the end and stops at the first entry that is older, so the order the
-   * thread already had is never rearranged and a plain fresh frame, the common case, still lands
-   * last.
-   */
-  private insertByTs(existing: ChatItem[], incoming: ChatItem[]): ChatItem[] {
-    if (incoming.length === 0) return existing;
-    const out = [...existing];
-    for (const item of incoming) {
-      let at = out.length;
-      while (at > 0 && out[at - 1]!.ts > item.ts) at -= 1;
-      out.splice(at, 0, item);
-    }
-    return out;
   }
 
   /**
@@ -1696,7 +1718,7 @@ class ChatStoreImpl {
       // derived from the send so the bubble is the same one whether it was placeheld or not.
       const id = `cmd-${replyToId}`;
       this.pendingCommands.set(threadId, id);
-      this.append(threadId, {
+      const placeholder: TextItem = {
         kind: 'text',
         id,
         role: 'agent',
@@ -1706,7 +1728,10 @@ class ChatStoreImpl {
         command: true,
         ...(this.liveRun(threadId) ? { run: this.liveRun(threadId) } : {}),
         ts: parent ? parent.ts + 1 : Date.now(),
-      });
+      };
+      // Right under the command the owner typed, never at the end of the thread: the run it is
+      // waiting for keeps writing below it.
+      if (!(replyToId && this.insertAfter(threadId, replyToId, placeholder))) this.append(threadId, placeholder);
     }
   }
 
@@ -1851,7 +1876,7 @@ class ChatStoreImpl {
       return;
     }
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
-    this.append(threadId, {
+    const answer: TextItem = {
       kind: 'text',
       id,
       role: 'agent',
@@ -1861,7 +1886,10 @@ class ChatStoreImpl {
       command: true,
       ...(details ? { details } : {}),
       ts: parent ? parent.ts + 1 : Date.now(),
-    });
+    };
+    // Under the command it answers, like the placeholder it may replace -- appended, an answer
+    // that took minutes landed at the bottom of everything it had caused.
+    if (!(replyToId && this.insertAfter(threadId, replyToId, answer))) this.append(threadId, answer);
   }
 
   /** A run is streaming into this thread right now (drives the Stop button). */
@@ -2280,6 +2308,28 @@ class ChatStoreImpl {
     this.threads.set(threadId, trimmed);
     if (trimmed.length !== items.length + 1) this.pageCursorFollows(threadId);
     this.emit();
+  }
+
+  /**
+   * A row placed right after another one, whatever has landed since.
+   *
+   * What a command answers with, and the notice that says it is still at it: both belong to the
+   * line the owner typed, not to the end of the thread. Appended, the answer to a `/compact` sent
+   * mid-run arrived below the run it waited for and below every message queued behind it -- the
+   * command sat under its own effect, the exact mirror of the server-side fix (`afterId`).
+   *
+   * False when the anchor is gone (a page replaced the thread under it): the caller appends.
+   */
+  private insertAfter(threadId: string, afterId: string, item: ChatItem): boolean {
+    const items = this.threads.get(threadId) ?? EMPTY_ITEMS;
+    const at = items.findIndex(entry => entry.id === afterId);
+    if (at < 0) return false;
+    const next = [...items.slice(0, at + 1), item, ...items.slice(at + 1)];
+    const trimmed = this.trimToCap(threadId, next);
+    this.threads.set(threadId, trimmed);
+    if (trimmed.length !== items.length + 1) this.pageCursorFollows(threadId);
+    this.emit();
+    return true;
   }
 
   private patch(threadId: string, id: string, patch: Partial<TextItem>, coalesce = false): void {
