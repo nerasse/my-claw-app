@@ -228,7 +228,11 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: {
     alignSelf: 'stretch' as const,
     paddingLeft: spine(scale).gutter,
-    marginBottom: space.xxs,
+    // A block, not a line: the thread's own rhythm above and below it -- the same 6 a tool card
+    // takes, because this is a card's worth of content (a name, a type, a job), not a line of the
+    // column. At 2 under it the next row sat on the brief (owner, 2026-11-08).
+    marginTop: space.xxs,
+    marginBottom: space.sm,
   },
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
   slot: { width: ROW_SLOT, alignItems: 'center' as const },
@@ -238,7 +242,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /** Its line, under the name, on the text column: one line folded, whole once unfolded. */
   briefLine: {
     paddingLeft: ROW_TEXT,
-    marginTop: 1,
+    marginTop: space.xxs,
     fontSize: scaleFont(font.small, scale),
     color: palette.textMuted,
     lineHeight: Math.round(15 * scale),
@@ -258,7 +262,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   doorLabel: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.text },
   brief: { fontSize: scaleFont(font.small, scale), color: palette.textMuted, paddingHorizontal: space.xs },
-  body: { gap: 3, paddingBottom: 2, paddingLeft: ROW_TEXT },
+  body: { gap: 3, paddingBottom: space.xxs, paddingLeft: ROW_TEXT },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   blockHead: {
     flexDirection: 'row' as const,
