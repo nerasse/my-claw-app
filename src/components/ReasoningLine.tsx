@@ -108,7 +108,6 @@ export function ReasoningLine({
   waitMs,
   streaming,
   expandReasoning,
-  actions,
   headHeight,
   at,
 }: {
@@ -137,11 +136,6 @@ export function ReasoningLine({
   streaming: boolean;
   /** Server-owned pref: start expanded instead of folded. */
   expandReasoning?: boolean;
-  /**
-   * The bubble's own controls, for the bubble that is nothing but a thought: it has no message under
-   * the line to hang them on, so they close this row while it is folded.
-   */
-  actions?: React.ReactNode;
   /** The head row's exact height, on a run's spine: the chevron must sit on the dot's axis. */
   headHeight?: number;
   /** When the thought happened, drawn at the bottom right of what it unfolds. */
@@ -199,7 +193,6 @@ export function ReasoningLine({
         {figures}
         {alone ? null : <View style={styles.spacer} />}
         {waitFigure}
-        {actions}
       </View>
     );
   }
@@ -209,7 +202,6 @@ export function ReasoningLine({
       label="Reasoning"
       trailing={figures}
       right={waitFigure}
-      {...(actions ? { actions } : {})}
       {...(headHeight !== undefined ? { headHeight } : {})}
       {...(at !== undefined ? { clockAt: at } : {})}
       body={body}

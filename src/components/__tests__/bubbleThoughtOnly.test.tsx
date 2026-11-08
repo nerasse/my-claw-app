@@ -12,7 +12,12 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Text } from 'react-native';
 import { Bubble } from '../Bubble';
+import { resetAsideExpansion } from '../../core/asideExpansion';
 import type { TextItem } from '../../core/chat';
+
+// The fold belongs to the reading session, keyed by bubble id: one test opening `m1` would open it
+// for the next one.
+beforeEach(() => resetAsideExpansion());
 
 const at = (hour: number, minute: number): number => new Date(2026, 10, 8, hour, minute).getTime();
 
@@ -49,6 +54,13 @@ function drawn(tree: ReactTestRenderer.ReactTestRenderer): string[] {
   });
 }
 
+/** Every accessibility label the tree carries. */
+function labelsOf(tree: ReactTestRenderer.ReactTestRenderer): string[] {
+  return tree.root
+    .findAll(node => typeof node.props.accessibilityLabel === 'string')
+    .map(node => node.props.accessibilityLabel as string);
+}
+
 /** The action buttons a bubble draws: the copy and the `...` menu. */
 function buttons(tree: ReactTestRenderer.ReactTestRenderer): number {
   return tree.root.findAll(
@@ -57,18 +69,34 @@ function buttons(tree: ReactTestRenderer.ReactTestRenderer): number {
   ).length;
 }
 
-test('a thought alone keeps its clock and its menu, on the reasoning line', () => {
+/**
+ * Folded, a thought is one muted line and nothing else: no action row, no `...`, no clock. The
+ * hour belongs to a message, or to a block the reader opened (owner, 2026-11-08: "quand un reasoning
+ * est fermé, il ne faut pas afficher le wait, le copier et l'heure. Jamais.").
+ */
+test('a thought alone draws no action row, no menu and no clock while it is folded', () => {
   const tree = mount(thought());
-  expect(drawn(tree)).toContain('14:06');
-  expect(buttons(tree)).toBeGreaterThan(0);
+  const strings = drawn(tree);
+  expect(strings).not.toContain('14:06');
+  expect(buttons(tree)).toBe(0);
+  // What it does say: what the thinking cost.
+  expect(strings).toContain('Reasoning');
+  expect(strings).toContain('33 tokens');
 });
 
-test('a thought alone draws no action row of its own', () => {
-  const tree = mount(thought());
-  // Everything the bubble draws sits in the reasoning line and its body: the row that used to close
-  // an empty bubble is gone, so the clock is the last thing on the line that names the thought.
+test('a thought alone stamps its hour once the reader opens it', () => {
+  // A thought with words is a fold; one the endpoint only counted is a single line with nothing to
+  // open, and no hour either.
+  const tree = mount(thought({ reasoning: 'le raisonnement complet, en clair' }));
+  ReactTestRenderer.act(() => {
+    tree.root
+      .findAll(node => node.props.accessibilityLabel === 'Reasoning' && typeof node.props.onPress === 'function')[0]!
+      .props.onPress();
+  });
   const strings = drawn(tree);
-  expect(strings.indexOf('14:06')).toBe(strings.length - 1);
+  expect(strings).toContain('14:06');
+  expect(strings[strings.length - 1]).toBe('14:06');
+  expect(labelsOf(tree)).toContain('Copy reasoning');
 });
 
 test('a bubble that says something keeps its action row', () => {
@@ -79,6 +107,24 @@ test('a bubble that says something keeps its action row', () => {
   // The clock closes the row under the message, after its words.
   const strings = drawn(tree);
   expect(strings.indexOf('14:06')).toBeGreaterThan(strings.indexOf('je regarde les fichiers'));
+});
+
+/**
+ * One minute, one stamp. A message draws its hour under itself; the reasoning inside it belongs to
+ * the same instant, and stamping it again under the opened block read as a duplicate (owner,
+ * 2026-11-08: "des fois ça fait doublon").
+ */
+test('a message that carries a reasoning stamps its minute once', () => {
+  const tree = mount(thought({ text: 'je regarde les fichiers', reasoning: 'un long raisonnement' }));
+  expect(drawn(tree).filter(line => line === '14:06')).toHaveLength(1);
+  ReactTestRenderer.act(() => {
+    tree.root
+      .findAll(node => node.props.accessibilityLabel === 'Reasoning' && typeof node.props.onPress === 'function')[0]!
+      .props.onPress();
+  });
+  expect(drawn(tree).filter(line => line === '14:06')).toHaveLength(1);
+  // The open block still offers its own ways out.
+  expect(labelsOf(tree)).toContain('Copy reasoning');
 });
 
 test('a bubble carrying a file is not a thought alone', () => {

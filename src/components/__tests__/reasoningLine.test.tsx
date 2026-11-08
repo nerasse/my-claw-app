@@ -179,19 +179,25 @@ test('the expand pref opens a line nobody touched, and a line the reader closed 
 });
 
 /**
- * The wait the call cost, opposite the thought it preceded.
+ * The wait the call cost, opposite the thought it preceded -- once the block is open.
  *
- * Two durations on one row, deliberately kept apart: `12 s` beside the label is what the thinking
- * lasted, `wait 4 s` at the far end is how long the reader watched nothing before the first word.
- * Folded together they read as one span measured twice.
+ * Folded, a line says what it is and what it holds and nothing else: no wait, no button, no clock
+ * (owner, 2026-11-08). Open, the wait keeps the far end it has always had, apart from the `12 s`
+ * beside the label: that one is how long the thinking lasted, this one is how long the reader
+ * watched nothing before the first word, and folded together they read as one span measured twice.
  */
-test('the wait sits at the far end of the row, beside what the thinking cost', () => {
-  const tree = render({ reasoning: 'weighing options', tokens: 640, durationMs: 12_000, waitMs: 4_200, streaming: false });
-  const text = textOf(tree);
-  expect(text).toContain('Reasoning');
-  expect(text).toContain('640 tokens');
-  expect(text).toContain('12 s');
-  expect(text).toContain('wait 4.2 s');
+test('the wait belongs to the opened block, not to the folded line', () => {
+  const tree = render({ id: 'wait-1', reasoning: 'weighing options', tokens: 640, durationMs: 12_000, waitMs: 4_200, streaming: false });
+  const folded = textOf(tree);
+  expect(folded).toContain('Reasoning');
+  expect(folded).toContain('640 tokens');
+  expect(folded).toContain('12 s');
+  expect(folded).not.toContain('wait 4.2 s');
+
+  ReactTestRenderer.act(() => {
+    tree.root.findAll(node => node.props.accessibilityLabel === 'Reasoning' && typeof node.props.onPress === 'function')[0]!.props.onPress();
+  });
+  expect(textOf(tree)).toContain('wait 4.2 s');
 });
 
 test('a call that streamed no reasoning still shows its wait, once it was long enough to read', () => {
@@ -208,9 +214,14 @@ test('a fast answer adds no row at all', () => {
   expect(tree.toJSON()).toBeNull();
 });
 
-test('a thought of its own keeps its wait even when it was short', () => {
-  // With a row already there the figure is a footnote, not a new line.
-  const tree = render({ reasoning: 'a quick thought', waitMs: 1_100, durationMs: 900, streaming: false });
+test('a thought of its own keeps its wait once it is opened', () => {
+  // With a row already there the figure is a footnote, not a new line -- and a footnote of the
+  // opened body, never of the folded line.
+  const tree = render({ id: 'wait-2', reasoning: 'a quick thought', waitMs: 1_100, durationMs: 900, streaming: false });
+  expect(textOf(tree)).not.toContain('wait 1.1 s');
+  ReactTestRenderer.act(() => {
+    tree.root.findAll(node => node.props.accessibilityLabel === 'Reasoning' && typeof node.props.onPress === 'function')[0]!.props.onPress();
+  });
   expect(textOf(tree)).toContain('wait 1.1 s');
 });
 

@@ -265,13 +265,16 @@ describe('a run in flight', () => {
 });
 
 describe("a segment's own clock", () => {
-  /** The hour of its last call, at the bottom right of an opened group (owner, 2026-11-08). */
-  it('closes an opened group on the hour of its last call', () => {
+  /**
+   * No clock under a group, open or folded: the hour belongs to a message, or to a block the reader
+   * opened -- a group's is its header's span, and a second figure under it read as a duplicate
+   * (owner, 2026-11-08).
+   */
+  it('draws no clock under a group', () => {
     const ts = new Date(2026, 10, 8, 14, 6).getTime();
     const items = [tool('bash', { ts }), tool('read', { ts: ts + 2_000, durationMs: 1_000 })];
     expect(texts(renderGroup(items, false))).not.toContain('14:06');
-    const shown = texts(renderGroup(items, true));
-    expect(shown).toContain('14:06');
+    expect(texts(renderGroup(items, true))).not.toContain('14:06');
   });
 
   // A run is folded one group per burst between the messages it wrote. Every burst used to wear the

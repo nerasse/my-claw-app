@@ -277,7 +277,11 @@ export const Bubble = React.memo(function BubbleView({
             opening an answer with a stamp made the clock read as a title, and the owner reads it as
             the message's signature instead (2026-11-04). */}
         {/* Above the answer, inside the same bubble: the reasoning belongs to the reply it
-            produced, and during the thinking phase this line is the whole bubble. */}
+            produced, and during the thinking phase this line is the whole bubble.
+            The hour is the bubble's own when it is a message -- it is drawn under it -- so the
+            reasoning inside carries none: the same minute stamped twice read as a duplicate
+            (owner, 2026-11-08). A bubble that is only a thought has no action row, so its hour
+            rides the block it opens instead (`thoughtOnly`). */}
         {agent && !item.command && !item.notice ? (
           <ReasoningLine
             id={item.id}
@@ -290,9 +294,8 @@ export const Bubble = React.memo(function BubbleView({
             waitMs={item.waitMs}
             streaming={item.streaming}
             expandReasoning={expandReasoning}
-            {...(thoughtOnly ? { actions: stamp } : {})}
             {...(dense ? { headHeight: spine(scale).head } : {})}
-            at={item.ts}
+            {...(thoughtOnly ? { at: item.ts } : {})}
           />
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}

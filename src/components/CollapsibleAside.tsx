@@ -33,7 +33,6 @@ export function CollapsibleAside({
   hideHint,
   defaultOpen = false,
   persistKey,
-  actions,
   headHeight,
   clockAt,
   pending,
@@ -65,12 +64,6 @@ export function CollapsibleAside({
    * and the "always expand reasoning" pref opened nothing (every reasoning line is keyed).
    */
   persistKey?: string;
-  /**
-   * Controls that belong to the aside itself, drawn at the end of its head row while it is
-   * **folded**. Open, the row keeps the label and the figures and nothing else: a head that grows a
-   * button is a head that stops sitting on the dot the spine puts beside it (owner, 2026-11-08).
-   */
-  actions?: React.ReactNode;
   /**
    * The exact height of the head row, when the caller places its line on a grid.
    *
@@ -132,8 +125,10 @@ export function CollapsibleAside({
           <Text style={styles.label}>{label}</Text>
           {trailing}
         </Pressable>
-        {right}
-        {open ? null : actions}
+        {/* The right slot is the unfolded block's: a folded aside says what it is and how much it
+            holds, and carries no wait, no button and no clock (owner, 2026-11-08: "quand un
+            reasoning est fermé, il ne faut pas afficher le wait, le copier et l'heure"). */}
+        {open ? right : null}
       </View>
       {open ? (
         <View style={styles.body}>

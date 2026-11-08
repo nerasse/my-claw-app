@@ -44,7 +44,7 @@ function labels(tree: ReactTestRenderer.ReactTestRenderer): string[] {
 const at = new Date(2026, 10, 8, 14, 6).getTime();
 
 describe('a folded aside', () => {
-  it('draws what the caller gives it, and offers nothing to copy', () => {
+  it('offers nothing to read, copy or stamp while it is folded', () => {
     const tree = render(
       <CollapsibleAside
         label="Reasoning"
@@ -52,15 +52,33 @@ describe('a folded aside', () => {
         showHint="show"
         hideHint="hide"
         clockAt={at}
-        actions={<Text>menu</Text>}
       />,
     );
-    expect(drawn(tree)).toContain('menu');
     // Nothing is offered to copy yet: there is no text on screen.
     expect(labels(tree)).not.toContain('Copy reasoning');
-    // The hour is the unfolded block's, not the line's: folded, the bubble that owns the aside puts
-    // its own clock in `actions` (`bubbleThoughtOnly`).
+    // The hour is the unfolded block's, never the folded line's (owner, 2026-11-08: "quand un
+    // reasoning est fermé, il ne faut pas afficher le wait, le copier et l'heure").
     expect(drawn(tree)).not.toContain('14:06');
+  });
+});
+
+/** The wait a call paid before its first word: the folded line does not say it, the open one does. */
+describe('the wait figure', () => {
+  it('is drawn once the block is open, and not before', () => {
+    const tree = render(
+      <CollapsibleAside
+        label="Reasoning"
+        body="ce que le modele a pense"
+        showHint="show"
+        hideHint="hide"
+        right={<Text>wait 3.7 s</Text>}
+      />,
+    );
+    expect(drawn(tree)).not.toContain('wait 3.7 s');
+    ReactTestRenderer.act(() => {
+      tree.root.findAll(node => node.props.accessibilityLabel === 'Reasoning' && typeof node.props.onPress === 'function')[0]!.props.onPress();
+    });
+    expect(drawn(tree)).toContain('wait 3.7 s');
   });
 });
 
@@ -73,7 +91,6 @@ describe('an open aside', () => {
         showHint="show"
         hideHint="hide"
         clockAt={at}
-        actions={<Text>menu</Text>}
       />,
     );
 
