@@ -368,8 +368,14 @@ function dotStyle(dot: Dot, styles: ReturnType<typeof createStyles>) {
 const DOT = 7;
 /** A row's head line, which the dot is centred on. */
 const HEAD = 27;
-/** Where a child's own content starts, from the group's left edge. */
-const GUTTER = 20;
+/**
+ * Where a child's own content starts, from the group's left edge.
+ *
+ * Every child starts there: a tool row has no padding of its own in dense mode, and a reasoning
+ * bubble's is transparent with none either. 28 keeps 19.5 between the dot's centre and the ink,
+ * which is the mockup's gap.
+ */
+const GUTTER = 28;
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
   const dot = Math.max(5, Math.round(DOT * scale));

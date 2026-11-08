@@ -157,7 +157,7 @@ export const ToolCard = React.memo(function ToolCardView({
   // A closed card forgets nothing: there is no second fold left to reset.
 
   return (
-    <View style={[styles.card, open && styles.cardOpen]}>
+    <View style={[styles.card, dense && styles.cardDense, open && styles.cardOpen]}>
       <Pressable
         onPress={() => {
           setOpen(value => !value);
@@ -168,7 +168,10 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={[styles.head, dense && styles.headDense]}>
-          {dense ? null : <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />}
+          {/* Kept in a dense row on purpose: the reasoning phases that sit between calls are
+              drawn with theirs, so a row without one starts its name a chevron to the left of
+              theirs and the whole column reads ragged (owner, 2026-11-08). */}
+          <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
           <Text style={[styles.rowText, styles.name]}>{item.name}</Text>
           {/* One line, every tool, folded. A shell command used to wrap under the head at three
               lines: the densest argument is the one worth the room, the argument went the other
@@ -192,7 +195,6 @@ export const ToolCard = React.memo(function ToolCardView({
             </View>
           ) : null}
           {running ? <RunningFor since={item.ts} /> : duration ? <Text style={styles.duration}>{duration}</Text> : null}
-          {dense && open ? <ChevronIcon direction="up" size={11} tone="faint" /> : null}
         </View>
       </Pressable>
 
@@ -410,9 +412,13 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     height: Math.round(29 * scale),
     paddingHorizontal: 8,
   },
-  // A spine row is 27, and its content starts where the head's 8 pt padding puts it -- the same
-  // column as the name of every other row in the group.
-  headDense: { height: Math.round(27 * scale) },
+  /**
+   * A spine row is 27, and it starts at the group's gutter with no padding of its own: a reasoning
+   * phase drawn between two calls is a transparent bubble with `paddingHorizontal: 0`, so a row
+   * that kept its 8 pt inset put its chevron 8 pt to the right of theirs and the column read
+   * ragged (owner, 2026-11-08).
+   */
+  headDense: { height: Math.round(27 * scale), paddingLeft: 0, paddingRight: 8 },
   /**
    * The head row is one line of type at one size. Four sizes in a 29 pt row (10 for the chevron,
    * 11 for the summary, 12 for the name, 12 for the duration) each carried their own leading, and
@@ -435,7 +441,8 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   body: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },
   // The output hangs under the row on the page itself: no plate, no side padding, so it lands on
   // the row's own text column instead of inside a foreign sheet.
-  bodyDense: { paddingHorizontal: 0, paddingBottom: 6 },
+  // The output starts on the row's name column: the 11 pt chevron plus the head's 5 pt gap.
+  bodyDense: { paddingLeft: Math.round(16 * scale), paddingRight: 0, paddingBottom: 6 },
   codeDense: { backgroundColor: 'transparent', borderRadius: 0, paddingHorizontal: 0 },
   label: { fontSize: scaleFont(9.5, scale), fontWeight: '500' as const, color: palette.textMeta, letterSpacing: 0.57, textTransform: 'uppercase' as const },
   outputHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, justifyContent: 'space-between' as const, height: Math.round(18 * scale) },

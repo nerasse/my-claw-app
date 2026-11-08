@@ -10,6 +10,8 @@ import React from 'react';
 import { Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { ToolCard } from '../ToolCard';
+import { View } from 'react-native';
+import { ChevronIcon } from '../icons';
 import type { ToolItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
@@ -184,6 +186,33 @@ describe('ToolCard body', () => {
     );
   });
 
+});
+
+describe('a row of a run\'s spine', () => {
+  function rootStyle(tree: ReactTestRenderer.ReactTestRenderer): Record<string, unknown> {
+    const root = tree.root.findAllByType(View)[0]!;
+    return Object.assign({}, ...[root.props.style].flat(Infinity).filter(Boolean));
+  }
+
+  it('carries no frame and no fill: the group already draws the column', () => {
+    const style = rootStyle(renderTool(makeItem(), { dense: true }));
+    expect(style.borderWidth).toBe(0);
+    expect(style.backgroundColor).toBe('transparent');
+    expect(style.marginBottom).toBe(0);
+  });
+
+  it('keeps its chevron, so its name sits on the same column as a reasoning line', () => {
+    const tree = renderTool(makeItem(), { dense: true });
+    // A reasoning phase between two calls keeps its chevron; a row without one started its name a
+    // chevron to the left of theirs and the column read ragged.
+    expect(tree.root.findAllByType(ChevronIcon).length).toBe(1);
+  });
+
+  it('keeps the frame when it is drawn as a card on its own', () => {
+    const style = rootStyle(renderTool(makeItem()));
+    expect(style.borderWidth).toBe(1);
+    expect(style.backgroundColor).toBe(lightPalette.surface);
+  });
 });
 
 describe('content argument block', () => {
