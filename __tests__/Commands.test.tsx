@@ -918,6 +918,33 @@ test('the model row says when the chat only inherits the model, and from where',
   await settleAndUnmount(tree);
 });
 
+test('the facts line names the model answering now when the run walked off its pick', async () => {
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.addUserMessage(THREAD, 'u1', 'go', []);
+  });
+  await waitFor(() => allTexts(tree).includes('go'), 60);
+  await emit({
+    type: 'model.list.result',
+    models: [
+      { id: 'claude-fable-5-2', label: 'Fable' },
+      { id: 'gpt-6.1-sol', label: 'Sol' },
+    ],
+    defaultModel: 'claude-fable-5-2',
+  });
+  // The conversation is on Fable; its route hit a wall and the run moved to another account.
+  await emit({
+    type: 'model.result',
+    threadId: THREAD,
+    model: 'claude-fable-5-2',
+    defaultModel: 'claude-fable-5-2',
+    live: 'gpt-6.1-sol',
+    effort: { level: '', levels: [], supported: false },
+  });
+  await waitFor(() => textsOf(tree).some(t => t.includes('running Sol')), 60);
+  await settleAndUnmount(tree);
+});
+
 test('a replayed command keeps its own bubble and its folded summary', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {

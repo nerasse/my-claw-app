@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { font, radius, space, type Palette, useThemedStyles } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
+import { useElapsed } from '../components/CommandElapsed';
+import { formatSpan } from '../core/utils';
 import { useStatus } from '../core/status';
 import { withoutEndpoint } from '../core/model';
 import { subAgentsUsage } from '../core/usage';
@@ -219,18 +221,53 @@ export function StatusScreen({ onClose }: { onClose: () => void }): React.JSX.El
   );
 }
 
-/** What is going on right now: the live run tree, a compaction in progress. Nothing when idle. */
+/**
+ * What is going on right now: the live run tree, with the model each node is calling and how long
+ * it has been going, plus a compaction in progress. Nothing when idle.
+ *
+ * The model is the one answering at this second, not the one the run was resolved to: a run that
+ * walked its route on a wall or lost its provider names the account it moved to, and the line it
+ * came from is what the conversation resolves to. Labels are the agents' display names, so depth
+ * is what tells main from its children.
+ */
 function RunStrip({ payload }: { payload: StatusPayload }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
   const r = payload.runtime;
   if (r.runs.length === 0 && !r.compacting) return null;
-  const parts = [...r.runs]
-    .sort((a, b) => a.depth - b.depth)
-    .map(run => (run.depth === 0 ? run.label : `${run.label}[${run.depth}]`));
-  if (r.compacting) parts.push('compacting');
+  const runs = [...r.runs].sort((a, b) => a.depth - b.depth);
   return (
-    <View style={styles.runBadge}>
-      <Text style={styles.runBadgeText}>{`running · ${parts.join(', ')}`}</Text>
+    <View style={styles.runCard}>
+      {runs.map(run => (
+        <RunLine key={`${run.depth}:${run.label}`} run={run} />
+      ))}
+      {r.compacting ? (
+        <View style={styles.runLine}>
+          <Text style={styles.runDot}>●</Text>
+          <Text style={styles.runLabel} numberOfLines={1}>
+            compacting
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** One node: who, on what, for how long. The model is the one calling now (docs/status-page.md). */
+function RunLine({ run }: { run: StatusPayload['runtime']['runs'][number] }): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const elapsed = useElapsed(new Date(run.startedAt).getTime());
+  return (
+    <View style={[styles.runLine, run.depth > 0 ? { paddingLeft: space.sm + (run.depth - 1) * space.md } : null]}>
+      <Text style={styles.runDot}>{run.depth === 0 ? '●' : '◈'}</Text>
+      <Text style={styles.runLabel} numberOfLines={1}>
+        {run.label}
+      </Text>
+      {run.model ? (
+        <Text style={styles.runModel} numberOfLines={1}>
+          {withoutEndpoint(run.model)}
+        </Text>
+      ) : null}
+      <Text style={styles.runElapsed}>{formatSpan(elapsed)}</Text>
     </View>
   );
 }
@@ -671,6 +708,20 @@ const createStyles = (palette: Palette) => ({
     backgroundColor: palette.accentSoft,
   },
   runBadgeText: { fontSize: font.small, fontWeight: '600' as const, color: palette.accent },
+  runCard: {
+    alignSelf: 'stretch' as const,
+    gap: 2,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: palette.accentSoft,
+  },
+  runLine: { flexDirection: 'row' as const, alignItems: 'baseline' as const, gap: space.xs, minWidth: 0 },
+  runDot: { fontSize: font.meta, color: palette.accent },
+  runLabel: { fontSize: font.small, fontWeight: '600' as const, color: palette.accent },
+  // The model is the reading; the name yields to it and never the other way round.
+  runModel: { flexShrink: 1 as const, minWidth: 0, fontSize: font.meta, color: palette.accent },
+  runElapsed: { flexShrink: 0 as const, fontVariant: ['tabular-nums' as const], fontSize: font.meta, color: palette.accent },
   card: {
     backgroundColor: palette.surface,
     borderWidth: 1,

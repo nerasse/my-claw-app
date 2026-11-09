@@ -1384,6 +1384,12 @@ export interface ModelResultFrame {
    * off, which is every conversation that never turned it on.
    */
   siphon?: string;
+  /**
+   * What the run in flight is calling right now, when it is not the model above: it walked its
+   * route, or its provider fell. Absent means nothing runs, or that what runs is what this
+   * conversation resolves to. Absent too on a server that predates the field.
+   */
+  live?: string;
 }
 
 /**
@@ -1657,8 +1663,11 @@ export interface StatusPayload {
   /** What the provider says it charged, beside what the server deduced. Absent on an older server. */
   reconciliation?: UsageReconciliation;
   runtime: {
-    /** The live run tree of this conversation: `main` at depth 0, each sub-agent below it. */
-    runs: Array<{ label: string; depth: number; startedAt: string }>;
+    /**
+     * The live run tree of this conversation: `main` at depth 0, each sub-agent below it. `model`
+     * is what that node is calling at this second, which is not always the model it started on.
+     */
+    runs: Array<{ label: string; depth: number; startedAt: string; model?: string }>;
     /** A /compact holds the session: work in progress with no run node of its own. */
     compacting: boolean;
     verbose: boolean;
@@ -2396,6 +2405,11 @@ export interface SubAgentEntry {
    */
   workspaceDir?: string;
   model?: string;
+  /**
+   * Set when `model` is what the run in flight is calling rather than the pin it started on: the
+   * run walked its route or its provider fell. Absent on a server that predates the field.
+   */
+  modelLive?: boolean;
   createdAt: string;
 }
 

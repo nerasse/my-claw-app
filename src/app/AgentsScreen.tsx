@@ -51,8 +51,15 @@ const AgentCard = React.memo(function AgentCardView({
       <Text style={styles.cardMeta} numberOfLines={1}>
         {`${entry.messageCount} msg${entry.messageCount === 1 ? '' : 's'} · ${scopeLabelOf(entry)}`}
         {row.kind === 'temporary' ? ' · one-shot' : ''}
-        {entry.model ? ` · ${entry.model}` : ''}
+        {entry.model ? ' · ' : ''}
       </Text>
+      {/* The row is the only place that says which account a delegated run is on: `modelLive` is
+          set when the run walked off its pin, and the name is then what is calling now. */}
+      {entry.model ? (
+        <Text style={[styles.cardMeta, entry.modelLive ? styles.cardModelLive : null]} numberOfLines={1}>
+          {entry.model}
+        </Text>
+      ) : null}
     </Pressable>
   );
 });
@@ -290,6 +297,8 @@ function createStyles(palette: Palette) {
       color: palette.textFaint,
       fontSize: font.micro,
     },
+    /** Not the pin: the run is on another account right now. */
+    cardModelLive: { color: palette.accent },
     cardMeta: {
       color: palette.textMuted,
       fontSize: font.small,

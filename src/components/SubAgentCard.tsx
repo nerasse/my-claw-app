@@ -10,6 +10,7 @@ import { useElapsed } from './CommandElapsed';
 import { requestToolOutput } from '../core/toolOutput';
 import { runStateOf, stateWord } from '../core/toolState';
 import { ROW_GAP, ROW_SLOT, ROW_TEXT, spine } from './spine';
+import { withoutEndpoint } from '../core/model';
 import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
 /**
@@ -60,8 +61,11 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   item: ToolItem;
   /** The conversation the card belongs to: what a full-result request has to name. */
   threadId?: string;
-  /** Set when this card's sub-agent still exists; without it there is nowhere to go. */
-  subagent?: { label: string; status: 'idle' | 'running' };
+  /**
+   * Set when this card's sub-agent still exists; without it there is nowhere to go. `model` is what
+   * the agent runs -- the live one when `modelLive`, its pin otherwise.
+   */
+  subagent?: { label: string; status: 'idle' | 'running'; model?: string; modelLive?: boolean };
   spawn?: { subagentId: string; displayName: string; status: SpawnStatus };
   onOpen?: (toolItemId: string) => void;
   expandTools?: boolean;
@@ -97,6 +101,12 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
    * task standing in for the head left the card reading as an anonymous command.
    */
   const what = kind.replace(/\s+/g, ' ').trim();
+  /**
+   * What the agent is calling, when the roster says: the card is where the owner watches an agent
+   * work, and a run that walked its route on a wall is on another account than the one it started
+   * on. Marked in accent when it is not the pin -- the row then names the model answering now.
+   */
+  const model = subagent?.model ? withoutEndpoint(subagent.model) : undefined;
 
   // Same rule as a tool card: with the pref off nothing ever opens on its own, and a tap survives
   // the settle. The head is self-sufficient, so an unopened card here costs the reader nothing.
@@ -149,6 +159,11 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
             </Text>
           ) : null}
           <View style={styles.spacer} />
+          {model ? (
+            <Text style={[styles.model, subagent?.modelLive ? styles.modelLive : null]} numberOfLines={1}>
+              {model}
+            </Text>
+          ) : null}
           {running && item.durationMs === undefined ? <RunningFor since={item.ts} /> : null}
           {word ? (
             <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]} numberOfLines={1}>
@@ -250,6 +265,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /** The brief: it takes the rest of the line and is cut there, never the figures after it. */
   kind: { flex: 1, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   spacer: { flex: 1 },
+  /** The model a running agent calls: a reading, so it never wraps and never takes the name's room. */
+  model: { flexShrink: 1, minWidth: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
+  modelLive: { color: palette.accent },
   /** A clock never shrinks and never wraps: `20` over `s` is what a squeezed figure looks like. */
   figure: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
   state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },

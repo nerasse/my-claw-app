@@ -2967,6 +2967,14 @@ export function AppShell(): React.JSX.Element {
   const currentModelLabel = threadModel
     ? catalog.models.find(model => model.id === threadModel.model)?.label ?? threadModel.model
     : null;
+  /**
+   * What is calling right now, when the run left the model this conversation resolves to: it walked
+   * its route on a wall, or its provider fell. The header names the model that answers, and the
+   * name it replaced follows it so the jump explains itself (docs/provider-failures.md).
+   */
+  const liveModelLabel = threadModel?.live
+    ? catalog.models.find(model => model.id === threadModel.live)?.label ?? threadModel.live
+    : null;
   // A model this chat did not pick is inherited, and from where decides what to go and edit. A
   // row that only named the model could not explain why picking the global default changed
   // nothing: the agent's own pin was answering all along.
@@ -3436,6 +3444,9 @@ export function AppShell(): React.JSX.Element {
   const subtitle = [
     offline ? status.state : null,
     threadModel ? (modelProvider ? `${modelProvider} / ${currentModelLabel}` : currentModelLabel) : null,
+    // A run that walked its route or lost its provider: the name above is the conversation's, and
+    // this is what is answering, marked so a jump on the wire is not read as a wrong header.
+    liveModelLabel ? `running ${liveModelLabel}` : null,
     effortLabel,
     // "N items" is gone (owner, 2026-11-04: "le x item dans le header de session est useless").
     // The count was a size, not a state: the thread is on screen and scrollable, so it never told

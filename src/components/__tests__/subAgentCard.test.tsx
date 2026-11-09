@@ -250,3 +250,22 @@ it('a settled card shows its frozen duration, not a second counter', () => {
   expect(shown).toContain('4.2 s');
   expect(shown.some(text => /^1 min \d+ s$/.test(text))).toBe(false);
 });
+
+/**
+ * Which model the agent is on: the card is where the owner watches it work, and a run that walked
+ * its route on a wall answers on another account than the one it started on. `modelLive` is what
+ * says the name is the current one rather than the pin.
+ */
+test('a running sub-agent shows the model it is calling, and marks it when it walked off its pin', () => {
+  const tree = render(makeItem({ ok: undefined, running: true }), {
+    subagent: { label: 'digger', status: 'running', model: 'claude-2/claude-fable-5-2', modelLive: true },
+  });
+  const shown = texts(tree);
+  expect(shown).toContain('claude-2/claude-fable-5-2');
+  // The live name is accent-coloured: the same card on a pin draws it as meta.
+  const model_ = tree.root
+    .findAllByType(Text)
+    .find(node => node.props.children === 'claude-2/claude-fable-5-2');
+  const style = Array.isArray(model_?.props.style) ? Object.assign({}, ...model_.props.style) : model_?.props.style;
+  expect((style as { color?: string } | undefined)?.color).toBe(lightPalette.accent);
+});

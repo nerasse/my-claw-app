@@ -330,13 +330,20 @@ export function indexRoster(agents: readonly SubAgentEntry[]): {
 export function spawnDoorsOf(
   cards: readonly SpawnCard[],
   agents: readonly SubAgentEntry[],
-): Map<string, { label: string; status: 'idle' | 'running' }> {
+): Map<string, { label: string; status: 'idle' | 'running'; model?: string; modelLive?: boolean }> {
   const { byId, byName } = indexRoster(agents);
-  const doors = new Map<string, { label: string; status: 'idle' | 'running' }>();
+  const doors = new Map<string, { label: string; status: 'idle' | 'running'; model?: string; modelLive?: boolean }>();
   for (const card of cards) {
     const agent = agentOfCard(card, byId, byName);
     if (!agent) continue;
-    doors.set(card.id, { label: agent.id.replace(/^subagent\//, ''), status: agent.status });
+    doors.set(card.id, {
+      label: agent.id.replace(/^subagent\//, ''),
+      status: agent.status,
+      // The card is where the owner watches an agent work: the model it is calling belongs there,
+      // and `modelLive` marks the ones that walked off their pin (server docs/provider-failures.md).
+      ...(agent.model ? { model: agent.model } : {}),
+      ...(agent.modelLive ? { modelLive: true } : {}),
+    });
   }
   return doors;
 }

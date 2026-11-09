@@ -630,14 +630,19 @@ test('a run in flight is called out above the cards, its tree and a compaction w
         ...PAYLOAD.runtime,
         compacting: true,
         runs: [
-          { label: 'digger', depth: 1, startedAt: '2026-08-08T10:05:00.000Z' },
-          { label: 'main', depth: 0, startedAt: '2026-08-08T10:04:00.000Z' },
+          // One line per node, each with the model it is calling: a run that walked its route is on
+          // another account than the one it started on, and this is where that is visible.
+          { label: 'digger', depth: 1, startedAt: '2026-08-08T10:05:00.000Z', model: 'gpt-6.1-sol' },
+          { label: 'main', depth: 0, startedAt: '2026-08-08T10:04:00.000Z', model: 'claude-2/claude-fable-5-2' },
         ],
       },
     },
   });
 
-  await waitFor(() => textsOf(tree).some(text => text.includes('running · main, digger[1], compacting')));
+  await waitFor(() => {
+    const text = textsOf(tree).join('\n');
+    return text.includes('main') && text.includes('claude-2/claude-fable-5-2') && text.includes('digger') && text.includes('gpt-6.1-sol') && text.includes('compacting');
+  });
 
   await unmount(tree);
 });

@@ -91,6 +91,12 @@ interface ThreadModel {
    * under a pinned conversation runs the pin even when its own row would name something else.
    */
   siphon?: string;
+  /**
+   * What the run in flight is calling right now, when it is not the `model` above: it walked its
+   * route or its provider fell. Absent means nothing runs, or that what runs is the conversation's
+   * own model -- and absent too on a server that predates the field.
+   */
+  live?: string;
 }
 
 /**
@@ -237,6 +243,7 @@ class ModelStoreImpl {
       effort: frame.effort ?? NO_EFFORT,
       ...(frame.context === undefined ? {} : { context: frame.context }),
       ...(frame.siphon === undefined ? {} : { siphon: frame.siphon }),
+      ...(frame.live === undefined ? {} : { live: frame.live }),
     });
     this.emit();
   }

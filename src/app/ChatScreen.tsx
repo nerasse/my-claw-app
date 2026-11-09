@@ -229,7 +229,7 @@ export function ChatScreen({
    * Which `spawn` cards lead to a sub-agent that still exists, keyed by chat item id. Built from
    * the roster, so a killed sub-agent stops offering a door instead of opening a dead thread.
    */
-  subagentDoors: Map<string, { label: string; status: 'idle' | 'running' }>;
+  subagentDoors: Map<string, { label: string; status: 'idle' | 'running'; model?: string; modelLive?: boolean }>;
   /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
   spawnLive?: Map<string, { subagentId: string; displayName: string; status: SpawnStatus }>;
   onOpenSubAgent?: (toolItemId: string) => void;
