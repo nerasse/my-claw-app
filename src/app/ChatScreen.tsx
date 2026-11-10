@@ -224,7 +224,12 @@ export function ChatScreen({
    * parent, because a chat that looks like every other chat must say what it is before the user
    * types into it.
    */
-  subagent?: { id: string; type: string; status: 'idle' | 'running'; messageCount: number; parentTitle: string };
+  /**
+   * A sub-agent on screen: what its header says. `model` is the facts line the conversation's own
+   * header carries (provider / model, what is answering now, the effort), composed by the shell --
+   * a sub-agent runs a model of its own and can walk off it like any other run.
+   */
+  subagent?: { id: string; type: string; status: 'idle' | 'running'; parentTitle: string; model?: string };
   /**
    * Which `spawn` cards lead to a sub-agent that still exists, keyed by chat item id. Built from
    * the roster, so a killed sub-agent stops offering a door instead of opening a dead thread.
@@ -1505,8 +1510,13 @@ export function ChatScreen({
               </Text>
               {/* The parent is named rather than left to memory: the chevron says there is a way
                   out, this says where it lands. */}
+              {/* The model first, like every other header: it is the reading, and the parent is
+                  the one piece a chevron already leads to. The message count left this line -- a
+                  size, not a state (owner, 2026-11-04, on the same count in the thread header). */}
               <Text style={styles.subtitle} numberOfLines={1}>
-                {`${subagent.status === 'running' ? 'running' : 'idle'} · ${subagent.messageCount} msg${subagent.messageCount === 1 ? '' : 's'} · from ${subagent.parentTitle}`}
+                {[subagent.model, subagent.status === 'running' ? 'running' : 'idle', `from ${subagent.parentTitle}`]
+                  .filter(Boolean)
+                  .join(' · ')}
               </Text>
             </View>
             <Pressable

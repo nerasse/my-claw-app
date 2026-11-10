@@ -395,7 +395,6 @@ type SubAgentView = {
   id: string;
   type: string;
   status: 'idle' | 'running';
-  messageCount: number;
   parentThreadId: string;
   /** Where its tools work. Absent on an agent spawned before the server carried the field. */
   workspaceDir?: string;
@@ -1369,7 +1368,6 @@ export function AppShell(): React.JSX.Element {
           id: entry.id,
           type: entry.type,
           status: entry.status,
-          messageCount: entry.messageCount,
           parentThreadId,
           ...(entry.workspaceDir ? { workspaceDir: entry.workspaceDir } : {}),
         },
@@ -3465,6 +3463,18 @@ export function AppShell(): React.JSX.Element {
   // there, three figures wide; repeating it on the facts line put the same number twice in one
   // strip. Below that the gauge is gone and this is the only place left for it -- handed over as
   // its own run so that a long provider id truncates the name and never the figure (2026-11-04).
+  /**
+   * The facts line of a sub-agent's header: the same three things a conversation's carries (what it
+   * runs on, what is answering now, the effort), composed here because the header that draws it in a
+   * sub-agent is a different shape -- a back row, not a title bar with controls.
+   */
+  const subagentFacts = [
+    threadModel ? (modelProvider ? `${modelProvider} / ${currentModelLabel}` : currentModelLabel) : null,
+    liveModelLabel ? `running ${liveModelLabel}` : null,
+    effortLabel,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const shareLabel =
     contextShare === null || layout.width >= 560 ? undefined : `${contextShare.toFixed(1)}%`;
   const meter =
@@ -4241,8 +4251,10 @@ export function AppShell(): React.JSX.Element {
                     id: subagentView.id,
                     type: subagentView.type,
                     status: streaming ? ('running' as const) : subagentView.status,
-                    messageCount: subagentView.messageCount,
                     parentTitle: backLabel(subagentView, parentTitleOf),
+                    // The same facts line the conversation's own header carries: a sub-agent runs a
+                    // model too, and it can walk off it exactly like a conversation.
+                    ...(subagentFacts ? { model: subagentFacts } : {}),
                   },
                   // Its own prop, not the drawer's: the way back used to be the hamburger slot
                   // wearing a chevron, which is why it read as the odd one out of every header.

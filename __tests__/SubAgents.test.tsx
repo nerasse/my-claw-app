@@ -9,10 +9,29 @@ import { subAgentCallersStore, subAgentStore } from '../src/core/subagents';
 import { sessionStore } from '../src/core/sessions';
 import { deviceBridge } from '../src/core/nativeBridge';
 import type { SubAgentCaller, SubAgentEntry, ToolCallPayload } from '../src/core/protocol';
+import { DeviceEventEmitter } from 'react-native';
 import { labelsOf, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-subagents';
+
+function emit(frame: Record<string, unknown>): Promise<void> {
+  return ReactTestRenderer.act(async () => {
+    DeviceEventEmitter.emit('claw:ws:message', { text: JSON.stringify(frame) });
+  });
+}
+
+/** A model result for one thread, as the server pushes it. */
+function emitModel({ threadId, model, live }: { threadId: string; model: string; live?: string }): Promise<void> {
+  return emit({
+    type: 'model.result',
+    threadId,
+    model,
+    defaultModel: model,
+    effort: { level: '', levels: [], supported: false },
+    ...(live ? { live } : {}),
+  });
+}
 
 function sentFrames(): Array<Record<string, unknown>> {
   return bridge.sendMessage.mock.calls.map(
@@ -192,6 +211,18 @@ describe('inside a sub-agent', () => {
     // announces a return to a conversation rather than an anonymous back arrow.
     expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
     expect(textsOf(tree)).toContain('digger-a1b2 · research');
+    await settleAndUnmount(tree);
+  });
+
+  it('the header carries the model facts of that sub-agent, like a conversation does', async () => {
+    const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
+    await enter(tree);
+    // The sub-agent's own thread has its own model state: the server answers model.get for it when
+    // the thread is entered, and the header draws the same facts line the conversation's does.
+    await emitModel({ threadId: handleFor('subagent/digger-a1b2'), model: 'claude-2/claude-fable-5-2' });
+    await waitFor(() => textsOf(tree).some(text => text.includes('claude-2/claude-fable-5-2')));
+    const facts = textsOf(tree).find(text => text.includes('claude-2/claude-fable-5-2'));
+    expect(facts).toContain('from ');
     await settleAndUnmount(tree);
   });
 
