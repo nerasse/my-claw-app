@@ -1,4 +1,4 @@
-import { buildRows, foldKeyOf, isAgentMessage, isHoisted, pinnedSends, type ChatRow } from '../runRows';
+import { buildRows, foldKeyOf, isAgentMessage, isHoisted, pinnedSends, withDaySeparators, type ChatRow } from '../runRows';
 import type { ChatItem } from '../chat';
 
 /** A finished run's items, status, timeline. */
@@ -57,6 +57,7 @@ const labelOfRow = (row: ChatRow): string => {
   if (row.kind === 'group') return `g:${row.run.id}${row.foot ? '+foot' : ''}`;
   if (row.kind === 'folded') return `f:${row.run.id}:${row.summaries.reduce((n, s) => n + s.itemCount, 0)}${row.foot ? '+foot' : ''}`;
   if (row.kind === 'rule') return 'rule';
+  if (row.kind === 'day') return 'day';
   if (row.kind === 'foot') return `foot:${row.run.id}`;
   return `${row.item.id}${row.foot ? '+foot' : ''}`;
 };
@@ -491,5 +492,65 @@ describe('markRunFeet', () => {
   test('a folded run the work of which never travelled signs its summary row', () => {
     const rows = buildRows([userText('u'), folded('w1', 'r1')]);
     expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12+foot']);
+  });
+});
+
+describe('withDaySeparators', () => {
+  const at = (day: number, hour: number): number => new Date(2026, 10, day, hour).getTime();
+  const textAt = (id: string, ts: number, role: 'user' | 'agent' = 'user'): ChatItem =>
+    ({ kind: 'text', id, role, text: 'x', attachments: [], streaming: false, ts }) as ChatItem;
+
+  test('a day opens once, however many rows it holds', () => {
+    const rows = withDaySeparators(buildRows([textAt('a', at(9, 22)), textAt('b', at(9, 23)), textAt('c', at(10, 8))]));
+    expect(rows.map(labelOfRow)).toEqual(['day', 'a', 'b', 'day', 'c']);
+  });
+
+  test('the divider carries the day of the row that opens it', () => {
+    const rows = withDaySeparators(buildRows([textAt('a', at(9, 22)), textAt('b', at(10, 8))]));
+    const days = rows.filter(row => row.kind === 'day') as Array<{ day: number }>;
+    expect(days.map(row => row.day)).toEqual([
+      new Date(2026, 10, 9, 0).getTime(),
+      new Date(2026, 10, 10, 0).getTime(),
+    ]);
+  });
+
+  test('a group opens on the day of its first item', () => {
+    const rows = withDaySeparators(
+      buildRows([
+        textAt('u', at(9, 21)),
+        { ...tool('t1', 'r1'), ts: at(9, 22) } as ChatItem,
+        { ...tool('t2', 'r1'), ts: at(10, 1) } as ChatItem,
+      ]),
+    );
+    // The group spans midnight: it is one row, opened on the day it started. Its own signature
+    // says when it ended, which is a fact the fold's header does not restate.
+    expect(rows.map(labelOfRow)).toEqual(['day', 'u', 'g:r1+foot']);
+  });
+
+  test('an empreinte never opens a divider of its own', () => {
+    // A run signs under the last row it drew, and that row already opened the day: the signature
+    // belongs to it, not to the run's own start or end.
+    const rows = withDaySeparators(
+      buildRows([
+        textAt('u', at(9, 22)),
+        { ...agentText('c1', '$ done', 'r1', { command: true }), ts: at(10, 1) } as ChatItem,
+      ]),
+    );
+    expect(rows.map(labelOfRow)).toEqual(['day', 'u', 'day', 'c1', 'foot:r1']);
+  });
+
+  test('a live rule stays with the message it holds, under the new day', () => {
+    // The rule is inserted above the send it parks, and says what is happening now: the divider
+    // of the day that send opens belongs above the rule, never between the two.
+    const rows = withDaySeparators([
+      { kind: 'item', item: textAt('a', at(9, 23)) },
+      { kind: 'rule' },
+      { kind: 'item', item: textAt('b', at(10, 0)) },
+    ]);
+    expect(rows.map(labelOfRow)).toEqual(['day', 'a', 'day', 'rule', 'b']);
+  });
+
+  test('an empty thread gets no divider', () => {
+    expect(withDaySeparators([])).toEqual([]);
   });
 });

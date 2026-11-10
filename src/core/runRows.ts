@@ -1,4 +1,5 @@
 import type { ChatItem, RunInfo, RunSummaryItem } from './chat';
+import { dayOf } from './day';
 
 /**
  * One row of the chat list. A finished run's work collapses into a group row (its header), the
@@ -32,7 +33,15 @@ export type ChatRow =
    * all, has no message to sign and no fold to stand under. Its signature is then its only trace
    * in the thread, and it stands where the work would have (2026-09-22).
    */
-  | { kind: 'foot'; run: RunInfo };
+  | { kind: 'foot'; run: RunInfo }
+  /**
+   * The day a run of rows belongs to, drawn once where that day starts.
+   *
+   * A row of its own, like the compaction rule: a cell's children are laid out the other way
+   * round under the inverted list, so a divider drawn above a bubble inside its cell lands under
+   * it. `day` is local midnight -- the identity the divider is keyed on.
+   */
+  | { kind: 'day'; day: number };
 
 /**
  * The identity of a fold, stable across the moment its items arrive.
@@ -179,6 +188,45 @@ export function pinnedSends(rows: ChatRow[]): ChatRow[] {
   );
   if (pinned.length === 0) return rows;
   return [...rows.filter(row => !pinned.includes(row)), ...pinned];
+}
+
+/**
+ * The day each run of rows opens, inserted where that day changes.
+ *
+ * A divider belongs to a row that has a time of its own: a bubble's, a group's first item's, a
+ * folded row's first summary's. A footer (the empreinte) has none and keeps the day the row
+ * before it opened, so a signature never divides a day in two. The live rule is the other way
+ * round -- it says what is happening now, and when the message parked behind it opens a new day,
+ * the divider goes above the rule rather than between the two.
+ *
+ * `pinnedSends` runs before this: a send pinned to the bottom is drawn there, and the divider
+ * must follow the bubble rather than the order it was typed in.
+ */
+function dayOfRow(row: ChatRow): number | undefined {
+  if (row.kind === 'item') return row.item.ts;
+  if (row.kind === 'group') return row.items[0]?.ts;
+  if (row.kind === 'folded') return row.summaries[0]?.ts;
+  return undefined;
+}
+
+export function withDaySeparators(rows: ChatRow[]): ChatRow[] {
+  const out: ChatRow[] = [];
+  let current: number | undefined;
+  for (const row of rows) {
+    const ts = dayOfRow(row);
+    if (ts !== undefined) {
+      const day = dayOf(ts);
+      if (day !== current) {
+        // The live rule says "now": when the message it holds is the first of a new day, the rule
+        // belongs to that day too, and the divider goes above it rather than between the two.
+        const at = out[out.length - 1]?.kind === 'rule' ? out.length - 1 : out.length;
+        out.splice(at, 0, { kind: 'day', day });
+        current = day;
+      }
+    }
+    out.push(row);
+  }
+  return out;
 }
 
 /**
