@@ -3147,7 +3147,9 @@ export function AppShell(): React.JSX.Element {
           ? `waiting · retry at ${formatReset(retry.waiting.at)}`
           : (retry?.enabled ?? target.quotaRetry === true)
             ? 'on · waits for the provider reset'
-            : 'off',
+            : siphon !== undefined
+              ? 'held by Siphon · its pin waits out a wall'
+              : 'off',
         selected: retry?.enabled ?? target.quotaRetry === true,
         onPress: () => {
           const enabled = retry?.enabled ?? target.quotaRetry === true;
