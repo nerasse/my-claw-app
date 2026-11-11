@@ -706,6 +706,8 @@ export interface QuotaRetryWait {
   at: string;
   attempts: number;
   windows: string[];
+  /** The account whose bar reopens first, when the run walked more than one. */
+  provider?: string;
 }
 
 /** The owner's quota-retry setting, and the wait it has armed, pushed when either changes. */

@@ -40,7 +40,8 @@ export function QuotaWaitBar({
         <View style={styles.dot} />
         <View style={styles.texts}>
           <Text style={styles.title} numberOfLines={1}>
-            Waiting for quota{waiting.windows.length > 0 ? ` · ${waiting.windows.join(', ')}` : ''}
+            Waiting for quota
+            {waiting.provider ? ` · ${waiting.provider} opens first` : waiting.windows.length > 0 ? ` · ${waiting.windows.join(', ')}` : ''}
           </Text>
           <Text style={styles.detail} numberOfLines={1}>
             {detail}

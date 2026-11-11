@@ -83,7 +83,7 @@ class QuotaRetryStore {
 
   set(threadId: string, state: QuotaRetryState): void {
     const current = this.byThread.get(threadId);
-    if (current?.enabled === state.enabled && current?.waiting?.at === state.waiting?.at && current?.waiting?.attempts === state.waiting?.attempts) return;
+    if (current?.enabled === state.enabled && current?.waiting?.at === state.waiting?.at && current?.waiting?.attempts === state.waiting?.attempts && current?.waiting?.provider === state.waiting?.provider) return;
     this.byThread.set(threadId, state);
     for (const listener of this.listeners) listener();
   }
