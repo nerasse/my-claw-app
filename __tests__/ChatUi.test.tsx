@@ -157,7 +157,10 @@ test('typing "/" opens the slash-menu, filters live, and inserts on tap', async 
     statusItem.props.onPress();
   });
   await waitFor(() => labelsOf(tree).includes('Close status'));
-  expect(bridge.sendMessage).not.toHaveBeenCalledWith(expect.stringContaining('"/st'));
+  // The command text must not reach the model as a question. Read the frames, not the raw calls: a
+  // `draft.set` legitimately carries what was typed, and the run's own send is what matters here.
+  const frames = bridge.sendMessage.mock.calls.map(([raw]) => JSON.parse(String(raw)) as { type?: string; text?: string });
+  expect(frames.some(frame => frame.type === 'chat.send' && String(frame.text ?? '').includes('/st'))).toBe(false);
   await pressLabel(tree, 'Close status');
   await waitFor(() => !labelsOf(tree).includes('Close status'));
   expect(inputOf(tree).props.value).toBe('');
