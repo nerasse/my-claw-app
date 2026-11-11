@@ -53,7 +53,13 @@ test('a bubble that stopped waiting stops moving the rule', () => {
 import { buildRows, withCompactionRule, firstItemOfRow, type ChatRow } from '../runRows';
 
 const label = (row: ChatRow): string =>
-  row.kind === 'item' ? row.item.id : row.kind === 'rule' ? 'RULE' : `group(${row.run.id})`;
+  row.kind === 'item'
+    ? row.item.id
+    : row.kind === 'rule'
+      ? 'RULE'
+      : row.kind === 'day'
+        ? 'DAY'
+        : `group(${row.run.id})`;
 
 /** The items of a thread: a question, the answer to it, then the send parked behind a compaction. */
 function thread(): ChatItem[] {

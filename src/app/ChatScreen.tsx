@@ -4,6 +4,7 @@ import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, PanResponder,
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
+import { DaySeparator } from '../components/DaySeparator';
 import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
 import { RunFoot } from '../components/RunFoot';
 import { ToolCard } from '../components/ToolCard';
@@ -13,7 +14,7 @@ import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useActiveRun, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
-import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, type ChatRow } from '../core/runRows';
+import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, withDaySeparators, type ChatRow } from '../core/runRows';
 import { newerLine, olderLine, recallLines, recallsDraft } from '../core/recall';
 import { historyPillVisible } from '../core/historyPill';
 import { pointerFine } from '../core/platform';
@@ -90,6 +91,8 @@ const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
   // The rule has no id of its own: one compaction runs at a time on a thread, so one rule.
   if (row.kind === 'rule') return 'rule:compaction';
+  // One divider per calendar day: the day itself is the identity.
+  if (row.kind === 'day') return `day:${row.day}`;
   // The empreinte row is the run's, and a run signs once.
   if (row.kind === 'foot') return `foot:${row.run.id}`;
   // Not the run id alone: a run has one fold per burst now, and two rows sharing a key drop one.
@@ -1040,8 +1043,10 @@ export function ChatScreen({
   // And a send the server never got is pinned under all of it: it waits for a connection, not for a
   // turn, so a bubble left in its reading order scrolls away from the only place the owner looks
   // while the run keeps writing -- `pinnedSends`.
+  // The day dividers come last, on the order the reader actually gets: a pinned send moved to the
+  // bottom must take its day with it.
   const rows = useMemo(
-    () => pinnedSends(withCompactionRule(buildRows(items), ruleBefore)),
+    () => withDaySeparators(pinnedSends(withCompactionRule(buildRows(items), ruleBefore))),
     [items, ruleBefore],
   );
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
@@ -1290,6 +1295,11 @@ export function ChatScreen({
       // `column-reverse` under a scaleY flip (docs/compaction-indicator.md).
       if (row.kind === 'rule') {
         return compacting === undefined ? null : <CompactionRunning since={compacting.since} text={compacting.text} reasoning={compacting.reasoning} stopping={stopping} />;
+      }
+      // The day a run of rows belongs to. A row of the list, never a decoration on a cell: the
+      // inverted list lays a cell's children out the other way round.
+      if (row.kind === 'day') {
+        return <DaySeparator day={row.day} />;
       }
       // The empreinte alone: a run whose tail is not a message and not a fold still signs its
       // work -- it is the run's only trace (docs/run-grouping.md).

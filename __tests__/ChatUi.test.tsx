@@ -875,11 +875,16 @@ describe('paging back through a long conversation', () => {
     });
 
     // Older messages go in front, and the inverted list therefore appends them at its own end:
-    // nothing the reader was looking at moves.
+    // nothing the reader was looking at moves. Day dividers are read separately: they are the
+    // list's own furniture, not a message of the page.
     const rowId = (row: { kind: string; item?: { id: string }; run?: { id: string } }): string =>
-      row.kind === 'item' ? row.item!.id : row.run!.id;
+      row.kind === 'item' ? row.item!.id : row.kind === 'day' ? 'day' : row.run!.id;
     await waitFor(() => chatList(tree).props.data.some((row: { kind: string; item?: { id: string }; run?: { id: string } }) => rowId(row) === 'older-1'));
-    expect(chatList(tree).props.data.map(rowId)).toEqual([
+    expect(
+      chatList(tree)
+        .props.data.filter((row: { kind: string }) => row.kind !== 'day')
+        .map(rowId),
+    ).toEqual([
       'h-2',
       'h-1',
       'h-0',

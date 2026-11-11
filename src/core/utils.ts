@@ -1,4 +1,5 @@
 import { DEFAULT_HTTP_ORIGIN } from './serverUrl';
+import { dayLabel, dayOf } from './day';
 import { kindForName, type FileKind } from './fileKind';
 export function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -93,15 +94,19 @@ export function viewerFor(
 // once per visible row of every session, file and job list — it was the most expensive thing a row
 // did. Locale changes need an app restart anyway, so there is nothing to invalidate.
 const clockFormat = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
-const dayFormat = new Intl.DateTimeFormat(undefined, { day: '2-digit', month: '2-digit' });
 
+/**
+ * A stamp as a row reads it: the clock for today, the shared day ladder past that.
+ *
+ * One ladder for the whole app (`dayLabel`, core/day.ts), so a session row, a file's date and a
+ * day divider in the thread say the same thing: `Yesterday`, `3 days ago`, `Last week`, then the
+ * date. It used to be a bare dd/MM here and nothing between today and the date.
+ */
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  const today = new Date();
-  const sameDay =
-    date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-  return sameDay ? clockFormat.format(date) : dayFormat.format(date);
+  if (dayOf(date.getTime()) === dayOf(Date.now())) return clockFormat.format(date);
+  return dayLabel(dayOf(date.getTime()));
 }
 
 export function formatBytes(bytes: number): string {
