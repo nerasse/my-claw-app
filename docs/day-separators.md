@@ -50,6 +50,18 @@ The locale is the device's, like every other date in the app. The ladder is not 
 `formatDate` (core/utils.ts) reads it too, so a session row, a file's date and a divider all name a
 day the same way, and only today is a bare clock.
 
+## The clock on a bubble carries its day too
+
+The divider says which day a run of rows belongs to, and the stamp that closes a bubble, a tool
+card or an opened aside said only `14:06` -- so a conversation read back three days later looked
+like one endless afternoon (owner, 2026-11-11: "à chaque fois qu'on écrit l'heure je voudrais qu'il
+y ait la date et l'heure").
+
+`dayAndTime` (core/clock.ts) is that one printer, and it reads the same ladder: the clock alone for
+today -- the divider above already names the day -- then `Yesterday 14:06`, `3 days ago 14:06`,
+`Last week 14:06`, then `20/10 14:06`. Every hour drawn in the thread goes through it: the bubble's
+corner, the tool card's corner and an expanded aside's footer.
+
 ## Tests
 
 `src/core/__tests__/day.test.ts`: the day stamp at the edges of a day, and the three labels.
@@ -59,3 +71,6 @@ the row, a group opening on its first item, and a footer never opening one.
 
 `src/components/__tests__/daySeparator.test.tsx`: the chip renders the name, and an older day is a
 date.
+
+`src/core/__tests__/clock.test.ts` (`dayAndTime`): today is the clock alone, then the ladder in
+front of it, and the date past two weeks.

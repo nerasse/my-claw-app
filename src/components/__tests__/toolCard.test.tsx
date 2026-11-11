@@ -176,7 +176,10 @@ describe('ToolCard body', () => {
    * is one line and has its duration in the head; the stamp belongs to the output it opened.
    */
   it('stamps the hour at the bottom of an opened card, and nowhere on a folded one', () => {
-    const ts = new Date(2026, 10, 8, 14, 6).getTime();
+    // Today at 14:06: another day's stamp is printed with its day in front of the clock, and this
+    // test is about the corner the clock closes, not about the ladder (core/clock.ts).
+    const today = new Date();
+    const ts = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 14, 6).getTime();
     const closed = renderTool(makeItem({ ts, args: PATCH, output: 'Patched, +3' }));
     expect(texts(closed)).not.toContain('14:06');
 

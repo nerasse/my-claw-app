@@ -18,7 +18,7 @@ import { chatSelectable } from '../core/platform';
 import { contextMenuProps, onAccentProps } from '../core/webProps';
 import { font, lineBoxFor, lineHeightFor, radius, scaleFont, space, useChatFontScale, useThemedStyles, type Palette } from '../theme';
 import { spine } from './spine';
-import { clockTime } from '../core/clock';
+import { dayAndTime } from '../core/clock';
 
 
 
@@ -238,7 +238,7 @@ export const Bubble = React.memo(function BubbleView({
       ) : null}
       {/* The stamp closes the line, right of the `...`: bottom-right is where a message signs
           itself, and opening a bubble with the clock made it read as a title (2026-11-04). */}
-      {showTime && !item.command && !item.notice ? <Text style={styles.menuTime}>{clockTime(item.ts)}</Text> : null}
+      {showTime && !item.command && !item.notice ? <Text style={styles.menuTime}>{dayAndTime(item.ts)}</Text> : null}
     </View>
   );
 

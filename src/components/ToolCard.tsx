@@ -12,7 +12,7 @@ import { font, lineHeightFor, radius, scaleFont, space, type Palette, useThemedS
 import { useElapsed } from './CommandElapsed';
 import { runStateOf, stateWord } from '../core/toolState';
 import { ROW_GAP, ROW_SLOT, ROW_TEXT } from './spine';
-import { clockTime } from '../core/clock';
+import { dayAndTime } from '../core/clock';
 import { toolRows } from '../core/toolRows';
 
 /**
@@ -283,7 +283,7 @@ export const ToolCard = React.memo(function ToolCardView({
           {/* The hour closes every block that opens, in the same corner: the reader finds it
               without looking for it (owner, 2026-11-08). */}
           <View style={styles.clockRow}>
-            <Text style={styles.clock}>{clockTime(item.ts)}</Text>
+            <Text style={styles.clock}>{dayAndTime(item.ts)}</Text>
           </View>
         </View>
       ) : null}

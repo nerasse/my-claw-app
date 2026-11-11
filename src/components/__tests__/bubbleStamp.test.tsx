@@ -16,7 +16,12 @@ import { Text } from 'react-native';
 import { Bubble } from '../Bubble';
 import type { TextItem } from '../../core/chat';
 
-const at = (hour: number, minute: number): number => new Date(2026, 10, 4, hour, minute).getTime();
+// Today, whatever today is: a stamp from another day is printed with its day in front of the
+// clock (core/clock.ts), and this test is about where the clock sits, not what it says.
+const at = (hour: number, minute: number): number => {
+  const day = new Date();
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute).getTime();
+};
 
 function mount(role: 'agent' | 'user', showTime = true): ReactTestRenderer.ReactTestRenderer {
   const item: TextItem = {

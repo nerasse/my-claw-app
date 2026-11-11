@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AgentMarkdown } from './AgentMarkdown';
 import { BlockActions } from './BlockActions';
-import { clockTime } from '../core/clock';
+import { dayAndTime } from '../core/clock';
 import { setAsideExpanded, useStoredAsideExpansion } from '../core/asideExpansion';
 import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
@@ -138,7 +138,7 @@ export function CollapsibleAside({
           <View style={styles.foot}>
             {body ? <BlockActions title={label} value={body} /> : null}
             <View style={styles.grow} />
-            {clockAt !== undefined ? <Text style={styles.clock}>{clockTime(clockAt)}</Text> : null}
+            {clockAt !== undefined ? <Text style={styles.clock}>{dayAndTime(clockAt)}</Text> : null}
           </View>
         </View>
       ) : null}

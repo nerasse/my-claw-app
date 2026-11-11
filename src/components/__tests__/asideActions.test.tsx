@@ -41,7 +41,11 @@ function labels(tree: ReactTestRenderer.ReactTestRenderer): string[] {
     .map(node => node.props.accessibilityLabel as string);
 }
 
-const at = new Date(2026, 10, 8, 14, 6).getTime();
+// Today at 14:06: another day's stamp carries its day with the clock (core/clock.ts).
+const at = (() => {
+  const day = new Date();
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 14, 6).getTime();
+})();
 
 describe('a folded aside', () => {
   it('offers nothing to read, copy or stamp while it is folded', () => {

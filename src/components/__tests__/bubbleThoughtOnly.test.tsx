@@ -19,7 +19,12 @@ import type { TextItem } from '../../core/chat';
 // for the next one.
 beforeEach(() => resetAsideExpansion());
 
-const at = (hour: number, minute: number): number => new Date(2026, 10, 8, hour, minute).getTime();
+// Today, whatever today is: a stamp from another day is printed with its day in front of the
+// clock (core/clock.ts), and these assertions are about the clock alone.
+const at = (hour: number, minute: number): number => {
+  const day = new Date();
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute).getTime();
+};
 
 function thought(extra: Partial<TextItem> = {}): TextItem {
   return {
