@@ -145,7 +145,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           accessibilityLabel={`Sub-agent ${label || id || action}${running ? ', running' : ''}`}
           accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
           <View style={styles.slot}>
-            <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
+            <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone="faint" />
           </View>
           {/* Who, first and always: an agent with no name still reads as an agent (`spawn`), and
               the brief never takes the line, so a named call can never look like an anonymous

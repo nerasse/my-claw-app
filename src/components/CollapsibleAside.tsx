@@ -6,6 +6,7 @@ import { BlockActions } from './BlockActions';
 import { dayAndTime } from '../core/clock';
 import { setAsideExpanded, useStoredAsideExpansion } from '../core/asideExpansion';
 import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
+import { ROW_SLOT } from './spine';
 
 /**
  * A long aside folded into one muted line, expanded on tap. Two things use it: what the model
@@ -121,7 +122,7 @@ export function CollapsibleAside({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={label}
           accessibilityHint={open ? hideHint : showHint}>
-          <ChevronIcon direction={open ? 'down' : 'right'} size={14} tone="faint" />
+          <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone="faint" />
           <Text style={styles.label}>{label}</Text>
           {trailing}
         </Pressable>

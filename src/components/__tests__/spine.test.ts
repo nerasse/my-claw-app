@@ -39,8 +39,8 @@ describe('the spine geometry', () => {
   it('centres the header chevron on the rail as well', () => {
     for (const scale of scales) {
       const g = spine(scale);
-      // the slot starts after the header's 2 pt inset
-      expect(2 + g.slot / 2).toBe(g.railCentre);
+      // The slot is flush with the group's left edge, so it has no inset of its own.
+      expect(g.slot / 2).toBe(g.railCentre);
     }
   });
 
@@ -53,9 +53,10 @@ describe('the spine geometry', () => {
   });
 
   it('puts a row label, and the output under it, on one column', () => {
-    // The aside's chevron is 14 wide with a 4 pt gap; a dense row reuses both, so the two kinds of
-    // child start their text at the same place instead of 2 pt apart.
+    // The aside's chevron is the slot, plus a 4 pt gap; a dense row reuses both, so the two kinds of
+    // child start their text at the same place instead of a few points apart.
     expect(ROW_TEXT).toBe(ROW_SLOT + ROW_GAP);
+    expect(spine(1).slot).toBe(ROW_SLOT);
   });
 
   it('does not drift with the scale it is read at', () => {

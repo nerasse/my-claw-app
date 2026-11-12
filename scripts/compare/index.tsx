@@ -8,6 +8,7 @@ import React from 'react';
 import { AppRegistry, ScrollView, Text, View } from 'react-native';
 import { ToolCard } from '../../src/components/ToolCard';
 import { RunGroup } from '../../src/components/RunGroup';
+import { CollapsibleAside } from '../../src/components/CollapsibleAside';
 import { ThreadRow } from '../../src/components/ThreadRow';
 import { ContextMeter } from '../../src/components/ContextMeter';
 import { ThemeProvider } from '../../src/theme/ThemeProvider';
@@ -49,6 +50,20 @@ const ITEMS: ToolItem[] = [
   tool({ id: 't5', name: 'grep', args: { pattern: 'max_tokens' }, ok: false, output: 'no match', durationMs: 900 }),
 ];
 
+/** One thought phase, to see a reasoning line on the same column as a tool name. */
+const THOUGHT = {
+  kind: 'text',
+  id: 'th1',
+  role: 'agent',
+  text: '',
+  reasoning: 'la machine est saturée',
+  reasoningTokens: 209,
+  durationMs: 1200,
+  attachments: [],
+  streaming: false,
+  ts: Date.now(),
+} as ChatItem;
+
 const SESSIONS = [
   { threadId: 'a', title: 'Refonte UI — trois directions', updatedAt: new Date().toISOString(), messageCount: 14 } as never,
   { threadId: 'b', title: 'Refonte page téléchargements', updatedAt: new Date(Date.now() - 3600_000).toISOString(), messageCount: 3 } as never,
@@ -76,13 +91,43 @@ function Sheet(): React.JSX.Element {
       <Text style={styles.h}>cartes d'outil, ouvertes</Text>
       {ITEMS.slice(0, 2).map(item => <ToolCard key={`o-${item.id}`} item={item} expandTools />)}
 
-      <Text style={styles.h}>groupe de run</Text>
+      <Text style={styles.h}>groupe de run, replié</Text>
+      <View style={styles.textColumn}>
+        <Text style={styles.answer}>Load average 10 sur 6 cœurs : la machine est saturée, ce qui explique les échecs.</Text>
+        <RunGroup
+          run={{ id: 'r2' } as never}
+          items={ITEMS as ChatItem[]}
+          open={false}
+          onToggle={() => {}}
+          renderItem={(item, _i, _all, dense) => (item.kind === 'tool' ? <ToolCard key={item.id} item={item} dense={dense} /> : null)}
+        />
+        {/* Free rows, the case the owner compared: a bar, then a reasoning line, then a message. */}
+        <CollapsibleAside label="Reasoning" body="" showHint="Show" hideHint="Hide" clockAt={Date.now()} />
+        <RunGroup
+          run={{ id: 'r3' } as never}
+          items={[ITEMS[0]!, THOUGHT] as ChatItem[]}
+          open
+          onToggle={() => {}}
+          renderItem={(item, _i, _all, dense) =>
+            item.kind === 'tool' ? <ToolCard key={item.id} item={item} dense={dense} /> : <CollapsibleAside {...(item as never)} label="Reasoning" body="la machine est saturée" showHint="Show" hideHint="Hide" />
+          }
+        />
+        <RunGroup
+          run={{ id: 'r4' } as never}
+          items={[ITEMS[3]!] as ChatItem[]}
+          open
+          onToggle={() => {}}
+          renderItem={(item, _i, _all, dense) => (item.kind === 'tool' ? <ToolCard key={item.id} item={item} dense={dense} /> : null)}
+        />
+      </View>
+
+      <Text style={styles.h}>groupe de run, ouvert</Text>
       <RunGroup
         run={{ id: 'r1' } as never}
         items={ITEMS as ChatItem[]}
         open
         onToggle={() => {}}
-        renderItem={item => (item.kind === 'tool' ? <ToolCard key={item.id} item={item} /> : null)}
+        renderItem={(item, _i, _all, dense) => (item.kind === 'tool' ? <ToolCard key={item.id} item={item} dense={dense} /> : null)}
       />
     </ScrollView>
   );
@@ -90,6 +135,8 @@ function Sheet(): React.JSX.Element {
 
 const createStyles = (palette: Palette) => ({
   page: { padding: 20, gap: 8, backgroundColor: palette.bg },
+  textColumn: { gap: 8 },
+  answer: { fontSize: 14, lineHeight: 21, color: palette.text },
   h: { fontSize: font.micro, color: palette.textFaint, letterSpacing: 0.4, textTransform: 'uppercase' as const, marginTop: space.lg },
   hostBar: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border },
 });

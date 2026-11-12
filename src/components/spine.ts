@@ -14,13 +14,15 @@
  * With both, a dot's centre equals the rail's centre exactly, at any scale, and the arithmetic
  * stays in integers: no half-pixel ever reaches the compositor, which is what used to snap a dot
  * half a pixel off and read as a misalignment.
+ *
+ * The slot is also the fold mark's box, and it starts at the group's own left edge -- the same x a
+ * message's first letter takes, and the same x a reasoning line's chevron takes. Three left edges
+ * used to sit within 4 pt of each other and read as three columns (owner, 2026-11-12).
  */
 
-/** The header's own left inset, before the chevron slot. Not scaled: it is a hairline of air. */
-const HEADER_PAD = 2;
-/** A row's chevron slot. 14 is `CollapsibleAside`'s chevron, so a tool row and a reasoning line
- * put their label on the same column. */
-export const ROW_SLOT = 14;
+/** A row's fold mark. 13 is the chevron every foldable row draws, so a bar, a reasoning line, a
+ * sub-agent and a tool row put their label on the same column. */
+export const ROW_SLOT = 13;
 /** The gap between a row's chevron slot and its label: `space.xs`, the aside's own. */
 export const ROW_GAP = 4;
 /** Where a row's label starts, from the row's own left edge. */
@@ -55,10 +57,10 @@ export interface SpineGeometry {
 }
 
 export function spine(scale: number): SpineGeometry {
-  const slot = odd(13 * scale, 7);
-  // An odd slot in an even padding keeps the centre on a half pixel, which is where the 1 pt rail
-  // can actually be drawn.
-  const railLeft = HEADER_PAD + (slot - 1) / 2;
+  const slot = odd(ROW_SLOT * scale, ROW_SLOT);
+  // The slot starts at the group's left edge, so its centre is the rail's: no inset, or the bar's
+  // chevron sits a couple of points right of the message column it should start on.
+  const railLeft = (slot - 1) / 2;
   const railCentre = railLeft + 0.5;
   const dot = odd(DOT * scale, 5);
   const head = Math.round(HEAD * scale);

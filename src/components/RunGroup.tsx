@@ -5,7 +5,7 @@ import { formatSpan } from '../core/utils';
 import { useElapsed } from './CommandElapsed';
 import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
 import { familyOf } from '../core/toolSummary';
-import { spine } from './spine';
+import { spine, ROW_GAP, ROW_SLOT } from './spine';
 import { RunFoot } from './RunFoot';
 import { drawsNothingYet } from './Bubble';
 import { font, scaleFont, space, useThemedStyles, type Palette } from '../theme';
@@ -295,7 +295,7 @@ function Bar({
         {live ? (
           <ActivityIndicator size="small" style={styles.spinner} />
         ) : (
-          <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
+          <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone="faint" />
         )}
       </View>
       <Text style={styles.count} numberOfLines={1}>
@@ -418,8 +418,6 @@ function dotStyle(dot: Dot, styles: ReturnType<typeof createStyles>) {
   }
 }
 
-/** The header's own left inset, before the chevron slot. See `spine.ts`. */
-const HEADER_PAD = 2;
 /** The air between the bar and the first row of the column. */
 const BODY_PAD = 2;
 
@@ -428,8 +426,10 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
   return {
     wrap: { width: '100%' as const, marginBottom: space.xs },
     /**
-     * The bar's own gap: the card's chevron and its name are 6 pt apart, and a bar whose arrow
-     * touched its text read as a different control at the same place.
+     * The bar's own metrics: the chevron's slot flush with the group's left edge, so the mark starts
+     * on the same x as the message it stands for and as a reasoning line's chevron. The gap is the
+     * aside's own, which is what puts the count on the label column instead of 4 pt right of it
+     * (owner, 2026-11-12: "des décalages chelous ... et les chevrons n'ont pas le même style").
      *
      * 26 pt: a run bar is a step under a card's 29, because it stands for work rather than being
      * one piece of it, and the two heights must not compete in one column.
@@ -437,12 +437,11 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
     header: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      gap: 7,
+      gap: ROW_GAP,
       height: Math.round(26 * scale),
-      paddingHorizontal: HEADER_PAD,
     },
-    // The chevron's slot: 13 pt wide, and its centre is where the rail runs. Everything else in
-    // the group is placed from that number.
+    // The chevron's slot: as wide as the mark every foldable row draws, and its centre is where
+    // the rail runs. Everything else in the group is placed from that number.
     slot: {
       width: g.slot,
       alignItems: 'center' as const,
