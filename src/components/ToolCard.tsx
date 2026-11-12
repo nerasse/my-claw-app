@@ -1,4 +1,3 @@
-import { ChevronIcon } from '../components/icons';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
@@ -170,12 +169,11 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={[styles.head, dense && styles.headDense]}>
-          {/* A row keeps its chevron, in a slot as wide as the one a reasoning line uses: the two
-              put their label on the same column, and dropping it here is what made the column read
-              ragged (owner, 2026-11-08). */}
-          <View style={dense ? styles.rowSlot : undefined}>
-            <ChevronIcon direction={open ? 'down' : 'right'} size={11} tone="faint" />
-          </View>
+          {/* No chevron of its own: the dot on the rail already marks a call, and the group above
+              owns the fold mark, so a third arrow per row was one too many (owner, 2026-11-12).
+              The slot stays, empty, so the name keeps the column a reasoning line puts its label
+              on -- dropping the space with the glyph is what makes the column read ragged. */}
+          <View style={styles.rowSlot} />
           <Text style={[styles.rowText, styles.name]}>{item.name}</Text>
           {/* One line, every tool, folded. A shell command used to wrap under the head at three
               lines: the densest argument is the one worth the room, the argument went the other
@@ -428,8 +426,11 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
    * ragged (owner, 2026-11-08).
    */
   headDense: { height: Math.round(27 * scale), paddingLeft: 0, paddingRight: 8, gap: ROW_GAP },
-  /** A row's chevron slot: the aside's 14, so both columns start their label at the same place. */
-  rowSlot: { width: ROW_SLOT, alignItems: 'center' as const },
+  /**
+   * The slot a reasoning line's chevron occupies, kept empty here: both rows start their label on
+   * the same column even though only one of them has a mark to put there.
+   */
+  rowSlot: { width: ROW_SLOT },
   /**
    * The head row is one line of type at one size. Four sizes in a 29 pt row (10 for the chevron,
    * 11 for the summary, 12 for the name, 12 for the duration) each carried their own leading, and

@@ -210,10 +210,16 @@ describe('the fold', () => {
     for (const item of items) expect(shown).toContain(`child:${item.id}`);
   });
 
-  it('leaves a single tool call to its own card, with no header', () => {
-    const shown = texts(renderGroup([tool('bash')], true));
+  it('leaves a single tool call to its own row of the column, with no header', () => {
+    const tree = renderGroup([tool('bash')], true);
+    const shown = texts(tree);
     expect(shown.some(text => text.startsWith('1 tool call'))).toBe(false);
     expect(shown.filter(text => text.startsWith('child:')).length).toBe(1);
+    // The same surface as a grouped burst: one dot, no frame -- never a bordered card of its own.
+    const dot = nodeStyles(tree).filter(style => style.borderRadius !== undefined && style.position === 'absolute' && style.width !== 1);
+    expect(dot).toHaveLength(1);
+    // No rail either: a column only ever runs between dots, and there is no second one here.
+    expect(nodeStyles(tree).filter(style => style.width === 1)).toHaveLength(0);
   });
 
   it('draws a dot for each child, and a hollow one for a thought', () => {

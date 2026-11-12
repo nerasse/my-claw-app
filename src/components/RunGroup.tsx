@@ -68,16 +68,21 @@ export const RunGroup = React.memo(function RunGroupView({
    * A fold of one card hides nothing.
    *
    * The header exists to stand for work the reader has not asked to see, and a single tool call
-   * between two messages is one card behind one bar: everything the bar says, the card says
-   * itself. The owner asked for the card, twice (2026-09-21: "quand il n'y a qu'un seul tool
-   * call, ne regroupe pas"). The row is still the group -- the run's span and the word it stopped
-   * on have no other home -- so what it carried is drawn as a line under the card.
+   * between two messages is one row behind one bar: everything the bar says, the row says
+   * itself. The owner asked for the row, twice (2026-09-21: "quand il n'y a qu'un seul tool
+   * call, ne regroupe pas"). It is drawn as a line of the same column the grouped calls hang
+   * from -- dot, then the row -- so a lone call and a burst of five read as one surface
+   * (owner, 2026-11-12: the bordered card it used to be was the last of another style).
    */
   const only = items.length === 1 ? items[0] : undefined;
   if (only !== undefined && only.kind === 'tool' && !live) {
     return (
       <View style={styles.wrap}>
-        <View key={only.id}>{renderItem(only, 0, items, false)}</View>
+        <View style={styles.child}>
+          {/* One dot, no rail: the column only ever runs between dots. */}
+          <View style={[styles.dot, dotStyle(dotOf(only), styles)]} pointerEvents="none" />
+          {renderItem(only, 0, items, true)}
+        </View>
         {foot !== undefined ? <RunFoot run={foot} /> : null}
       </View>
     );

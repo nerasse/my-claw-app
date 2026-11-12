@@ -12,6 +12,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { ToolCard } from '../ToolCard';
 import { View } from 'react-native';
 import { ChevronIcon } from '../icons';
+import { ROW_SLOT } from '../spine';
 import type { ToolItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
@@ -224,11 +225,15 @@ describe('a row of a run\'s spine', () => {
     expect(style.marginBottom).toBe(0);
   });
 
-  it('keeps its chevron, so its name sits on the same column as a reasoning line', () => {
+  it('draws no fold mark of its own: the dot already marks the call', () => {
     const tree = renderTool(makeItem(), { dense: true });
-    // A reasoning phase between two calls keeps its chevron; a row without one started its name a
-    // chevron to the left of theirs and the column read ragged.
-    expect(tree.root.findAllByType(ChevronIcon).length).toBe(1);
+    expect(tree.root.findAllByType(ChevronIcon).length).toBe(0);
+    // The slot it used to fill stays, so the name keeps the column a reasoning line's label has.
+    const slots = tree.root
+      .findAllByType(View)
+      .map(node => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean)))
+      .filter(style => style.width === ROW_SLOT);
+    expect(slots.length).toBe(1);
   });
 
   it('keeps the frame when it is drawn as a card on its own', () => {
