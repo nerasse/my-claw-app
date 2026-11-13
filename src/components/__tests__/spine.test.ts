@@ -59,6 +59,47 @@ describe('the spine geometry', () => {
     expect(spine(1).slot).toBe(ROW_SLOT);
   });
 
+  /**
+   * The group starts where a message's first letter starts.
+   *
+   * Reported four times as "the dots are a few pixels to the right of the start of the sentences".
+   * The cause was not rounding: a dot is centred on the rail, so with the group flush against the
+   * column its 7 pt circle began 3 pt in, and the chevron -- centred in a 13 pt slot, its ink
+   * starting at 7.8/24 of that box -- began 4.2 pt in. The group now reaches back by the dot's own
+   * inset, which puts the dot's left edge -- the leftmost ink of a row, and one per row -- exactly
+   * on the prose column.
+   */
+  it('puts the dot exactly on the prose column, at every scale', () => {
+    for (const scale of scales) {
+      const g = spine(scale);
+      expect(g.inset).toBe(g.dotLeft);
+      // In the thread's coordinates, after the group's pull.
+      expect(g.dotLeft - g.inset).toBe(0);
+    }
+  });
+
+  /**
+   * The chevron sits right behind it, and cannot be brought to zero.
+   *
+   * It is centred in its slot so that its centre shares the rail with the dots, and its ink starts
+   * at 7.8/24 of the box: pulling the whole group by that instead would push the dot to a negative
+   * offset, outside the row. Two and a half points at the largest scale is inside the stroke's own
+   * width, and it is a third of the 4.2 the owner was seeing before the pull.
+   */
+  it('leaves the chevron within 2.5 pt of that column, never at a negative offset', () => {
+    for (const scale of scales) {
+      const g = spine(scale);
+      const chevronInk = (g.slot * 7.8) / 24 - g.inset;
+      expect(chevronInk).toBeGreaterThanOrEqual(0);
+      expect(chevronInk).toBeLessThanOrEqual(2.5);
+    }
+  });
+
+  it('keeps the whole column reachable at a negative margin, never a lie about its width', () => {
+    // `inset` is a pull, not a padding: the group's right edge must not move with it.
+    for (const scale of scales) expect(spine(scale).inset).toBeGreaterThanOrEqual(0);
+  });
+
   it('starts a child of a run on the label column, not past it', () => {
     // A bar's count and a child's name sit on the same x: the gutter is the label column, and the
     // dot's rail is what the fold marks are centred on (owner, 2026-11-13).

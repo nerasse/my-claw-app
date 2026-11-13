@@ -55,6 +55,22 @@ export interface SpineGeometry {
   dotTop: number;
   head: number;
   gutter: number;
+  /**
+   * How far the group hangs back so its leftmost mark starts the prose column: the dot's inset.
+   *
+   * A dot is centred on the rail, so against a flush edge its 7 pt circle began 3 pt in, and the
+   * chevron -- centred in a 13 pt slot, its ink starting at 7.8/24 of that box -- began 4.2 pt in.
+   * Both therefore sat to the right of the column a message's first letter takes, which is the
+   * offset reported four times (last: 2026-11-13, "les fleches, les points ... decales un peu sur
+   * la droite par rapport au debut des phrases").
+   *
+   * The marks cannot be nudged one by one -- a chevron and a dot have to share the rail, and
+   * centring each on it is what makes them agree -- so the group is pulled back by this instead.
+   * The dot's left edge then lands exactly on the prose column, and the chevron's ink within a
+   * point of it at normal scale. Every invariant here still holds; the column just starts where
+   * the text does.
+   */
+  inset: number;
 }
 
 export function spine(scale: number): SpineGeometry {
@@ -76,5 +92,6 @@ export function spine(scale: number): SpineGeometry {
     dotTop: Math.round((head - dot) / 2),
     head,
     gutter: Math.round(GUTTER * scale),
+    inset: railCentre - dot / 2,
   };
 }

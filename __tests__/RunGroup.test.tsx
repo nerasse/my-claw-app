@@ -372,23 +372,28 @@ test('a stopped run wears the owner’s word, not the engine’s', () => {
   expect(texts).not.toContain('aborted');
 });
 
-test('a fold of one card draws the card, and the run signs under it', () => {
-  // The bar hides work the reader has not asked to see, and one card hides nothing -- so the run's
-  // signature is what the row still owes, drawn as its own line under the card.
+test('a fold of one card is a fold like any other, and the run still signs under it', () => {
+  // It used to be drawn bare: "quand il n'y a qu'un seul tool call, ne regroupe pas" (owner,
+  // 2026-09-21). Read in a thread that rule lost -- the same call wore two shapes and two columns
+  // depending on how many siblings it had, with nothing to say what happened (owner, 2026-11-13:
+  // "même quand il n'y a qu'un seul tool call, tu le regroupes et tu le déplies comme les autres").
+  // The bar is back on a one-row fold; what must survive is that the run's signature is still
+  // drawn under it.
   const tree = group([card('only')], false, jest.fn(), RUN);
   const texts = tree.root.findAllByType(Text).map(node => node.props.children);
-  expect(texts).toContain('only');
   expect(texts).toContain('run · 1 min');
-  expect(bars(tree)).toHaveLength(0);
+  expect(bars(tree)).toHaveLength(1);
+  // Closed, the card is behind the bar: the bar is what the row says now.
+  expect(texts).not.toContain('only');
 });
 
 /** A group the run signs under, or one it does not. */
-const groupWith = (items: ChatItem[], foot: boolean, run: RunInfo = RUN) =>
+const groupWith = (items: ChatItem[], foot: boolean, run: RunInfo = RUN, open = false) =>
   render(
     <RunGroup
       run={run}
       items={items}
-      open={false}
+      open={open}
       foot={foot ? run : undefined}
       onToggle={jest.fn()}
       renderItem={item => <Text>{item.id}</Text>}
@@ -398,13 +403,16 @@ const groupWith = (items: ChatItem[], foot: boolean, run: RunInfo = RUN) =>
 const textsOf = (tree: ReactTestRenderer.ReactTestRenderer): unknown[] =>
   tree.root.findAllByType(Text).map(node => node.props.children);
 
-test('a fold of a single tool call draws the card, and no bar to open', () => {
-  // The owner, twice in one message: "quand il n'y a qu'un seul tool call, ne regroupe pas"
-  // (2026-09-21). One card behind one bar is a press for nothing -- the bar said the same thing
-  // the card says, and the card is what he was after.
+test('a fold of a single tool call keeps its bar, and hides its row until opened', () => {
+  // The rule that used to live here ("un seul tool call, ne regroupe pas") was about a card behind
+  // a bar. It was reversed on purpose: one shape for every burst size, and the header is the only
+  // thing that says what the run did (owner, 2026-11-13).
   const tree = groupWith([card('a')], false);
-  expect(bars(tree)).toHaveLength(0);
-  expect(textsOf(tree)).toContain('a');
+  expect(bars(tree)).toHaveLength(1);
+  expect(textsOf(tree)).not.toContain('a');
+
+  const opened = groupWith([card('a')], false, RUN, true);
+  expect(textsOf(opened)).toContain('a');
 });
 
 test('a fold of a single thought still folds: the thought is what the bar stands for', () => {
@@ -425,13 +433,12 @@ test('a fold of a single thought still folds: the thought is what the bar stands
   expect(textsOf(tree)).toContain('1 thought');
 });
 
-test('the run\'s span and the word it stopped on stand under the lone card', () => {
-  // What the bar carried is not about the fold: "Stopped" and the run's span exist nowhere else
-  // in the thread, so they sign under the card as the run's empreinte rather than disappearing
-  // with the bar.
+test("the run's span and the word it stopped on stand under the fold, bar or not", () => {
+  // What the bar carries is not about the fold: "Stopped" and the run's span exist nowhere else
+  // in the thread, so they sign under it as the run's empreinte.
   const stopped: RunInfo = { ...RUN, status: 'aborted' };
-  const tree = groupWith([card('a')], true, stopped);
-  expect(bars(tree)).toHaveLength(0);
+  const tree = groupWith([card('a')], true, stopped, true);
+  expect(bars(tree)).toHaveLength(1);
   expect(textsOf(tree)).toContain('a');
   expect(textsOf(tree)).toContain(' · Stopped');
   expect(textsOf(tree)).toContain('run · 1 min');

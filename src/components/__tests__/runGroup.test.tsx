@@ -210,16 +210,20 @@ describe('the fold', () => {
     for (const item of items) expect(shown).toContain(`child:${item.id}`);
   });
 
-  it('leaves a single tool call to its own row of the column, with no header', () => {
-    const tree = renderGroup([tool('bash')], true);
-    const shown = texts(tree);
-    expect(shown.some(text => text.startsWith('1 tool call'))).toBe(false);
-    expect(shown.filter(text => text.startsWith('child:')).length).toBe(1);
-    // The same surface as a grouped burst: one dot, no frame -- never a bordered card of its own.
-    const dot = nodeStyles(tree).filter(style => style.borderRadius !== undefined && style.position === 'absolute' && style.width !== 1);
-    expect(dot).toHaveLength(1);
-    // No rail either: a column only ever runs between dots, and there is no second one here.
-    expect(nodeStyles(tree).filter(style => style.width === 1)).toHaveLength(0);
+  it('folds a single tool call like any other, header included', () => {
+    // A lone call used to be drawn bare. Read in a thread, that meant the same call had two shapes
+    // and two columns depending on how many siblings it had, with no header to say what happened
+    // (owner, 2026-11-13). One call is a fold of one row, header and all.
+    const closed = renderGroup([tool('bash')], false);
+    expect(texts(closed)).toContain('1 tool call');
+    // Closed, it hides its row like every other fold...
+    expect(texts(closed).some(text => text.startsWith('child:'))).toBe(false);
+
+    const open = renderGroup([tool('bash')], true);
+    expect(texts(open)).toContain('1 tool call');
+    expect(texts(open).filter(text => text.startsWith('child:')).length).toBe(1);
+    // ...and on one row the rail has nowhere to run: a column only ever goes between two dots.
+    expect(nodeStyles(open).filter(style => style.width === 1)).toHaveLength(0);
   });
 
   it('draws a dot for each child, and a hollow one for a thought', () => {

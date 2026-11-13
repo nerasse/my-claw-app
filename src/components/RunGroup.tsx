@@ -65,28 +65,16 @@ export const RunGroup = React.memo(function RunGroupView({
   const label = composition(names, thoughts);
 
   /**
-   * A fold of one card hides nothing.
+   * One tool call is a fold like any other.
    *
-   * The header exists to stand for work the reader has not asked to see, and a single tool call
-   * between two messages is one row behind one bar: everything the bar says, the row says
-   * itself. The owner asked for the row, twice (2026-09-21: "quand il n'y a qu'un seul tool
-   * call, ne regroupe pas"). It is drawn as a line of the same column the grouped calls hang
-   * from -- dot, then the row -- so a lone call and a burst of five read as one surface
-   * (owner, 2026-11-12: the bordered card it used to be was the last of another style).
+   * It used to be special-cased: a single call between two messages was drawn bare, on the
+   * argument that a fold of one card hides nothing. Read in a thread that argument loses: the lone
+   * row starts at a different column and wears a different shape than the same call inside a burst,
+   * so the eye reads a jump instead of one surface, and there is no header to say what happened
+   * (owner, 2026-11-13: "même quand il n'y a qu'un seul tool call, tu le regroupes et tu le
+   * déplies comme les autres"). The header of a one-row fold is cheap, and it makes the shape of a
+   * run constant whatever the burst size.
    */
-  const only = items.length === 1 ? items[0] : undefined;
-  if (only !== undefined && only.kind === 'tool' && !live) {
-    return (
-      <View style={styles.wrap}>
-        <View style={styles.child}>
-          {/* One dot, no rail: the column only ever runs between dots. */}
-          <View style={[styles.dot, dotStyle(dotOf(only), styles)]} pointerEvents="none" />
-          {renderItem(only, 0, items, true)}
-        </View>
-        {foot !== undefined ? <RunFoot run={foot} /> : null}
-      </View>
-    );
-  }
 
   /**
    * The segment being written is open, and so is anything the reader opened. A segment a message
@@ -133,8 +121,17 @@ export const RunGroup = React.memo(function RunGroupView({
               "qu'une barre verticale entre dots, jamais sans rien apres"). */}
           {items.map((item, index) => {
             const dotted = !(item.kind === 'text' && drawsNothingYet(item));
+            // A column needs two dots to run between: on the fold's only row there is nothing to
+            // connect, and the short segment to its own dot drew a stub under the header holding
+            // nothing (owner, 2026-11-08, and the one-row fold made it common).
             const segment =
-              index === lastDot ? styles.railEnd : dotted && index < lastDot ? styles.railBody : null;
+              items.length === 1
+                ? null
+                : index === lastDot
+                  ? styles.railEnd
+                  : dotted && index < lastDot
+                    ? styles.railBody
+                    : null;
             return (
               <View key={item.id} style={styles.child}>
                 {segment === null ? null : (
@@ -421,10 +418,22 @@ function dotStyle(dot: Dot, styles: ReturnType<typeof createStyles>) {
 /** The air between the bar and the first row of the column. */
 const BODY_PAD = 2;
 
+/** The thread's right gutter: what a row's trailing figure stops short of. */
+const RIGHT_GUTTER = 8;
+
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
   const g = spine(scale);
   return {
-    wrap: { width: '100%' as const, marginBottom: space.xs },
+    /**
+     * The group reaches back by the dot's own inset, so its leftmost mark lands on the column a
+     * message's first letter takes instead of 3 pt to its right (`spine.ts`).
+     *
+     * Stretched rather than given a width: a `width: '100%'` with a negative left margin would
+     * pull the right edge in by the same amount, and every trailing figure (a call's duration, a
+     * run's empreinte) would sit 3 pt left of the bubble's own right padding. Stretch computes the
+     * width from the parent and the margins, so the right edge stays exactly where it was.
+     */
+    wrap: { alignSelf: 'stretch' as const, marginLeft: -g.inset, marginBottom: space.xs },
     /**
      * The bar's own metrics: the chevron's slot flush with the group's left edge, so the mark starts
      * on the same x as the message it stands for and as a reasoning line's chevron. The gap is the
@@ -439,6 +448,11 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
       alignItems: 'center' as const,
       gap: ROW_GAP,
       height: Math.round(26 * scale),
+      // The same 8 pt the rows under it and the run's empreinte use: without it the header's own
+      // trailing figure (a segment's span, a live run's chrono) ended hard against the edge while
+      // every duration below it stopped 8 pt short, so one column had two right edges
+      // (owner, 2026-11-13: "au niveau du padding ensuite a droite au niveau des items").
+      paddingRight: RIGHT_GUTTER,
     },
     // The chevron's slot: as wide as the mark every foldable row draws, and its centre is where
     // the rail runs. Everything else in the group is placed from that number.
@@ -501,7 +515,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
      * and colour already tells it apart from a call that worked.
      */
     dotThought: { backgroundColor: palette.textFaint },
-    hideRow: { alignItems: 'flex-end' as const, paddingRight: 8, marginTop: 2 },
+    hideRow: { alignItems: 'flex-end' as const, paddingRight: RIGHT_GUTTER, marginTop: 2 },
     hideText: { fontSize: scaleFont(10.5, scale), color: palette.textMeta },
     skeleton: {
       height: 14,
@@ -514,7 +528,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
       fontSize: scaleFont(font.small, scale),
       color: palette.textFaint,
       fontStyle: 'italic' as const,
-      paddingHorizontal: 8,
+      paddingHorizontal: RIGHT_GUTTER,
     },
   };
 };
