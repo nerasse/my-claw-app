@@ -37,6 +37,11 @@ export interface TextItem {
   error?: string;
   /** What the server heard, per recording id, rendered inside each recording's own bubble. */
   transcripts?: Record<string, string>;
+  /**
+   * Another agent wrote this turn rather than the owner: a background sub-agent's return. The
+   * bubble says so in a header and never claims the owner's voice.
+   */
+  from?: { label: string; kind?: 'send' | 'return'; status?: string };
   /** What the model thought before answering, shown collapsed. */
   reasoning?: string;
   /** A history bubble whose reasoning stayed on the server, this long: `reasoningFetch.ts`. */
@@ -365,6 +370,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       streaming: false,
       ...(entry.location ? { location: entry.location } : {}),
       ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
+      ...(entry.from ? { from: { label: entry.from.label, ...(entry.from.kind ? { kind: entry.from.kind } : {}), ...(entry.from.status ? { status: entry.from.status } : {}) } } : {}),
       ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
       ...(entry.reasoningChars ? { reasoningChars: entry.reasoningChars } : {}),
       ...(entry.reasoningTokens ? { reasoningTokens: entry.reasoningTokens } : {}),
@@ -1590,6 +1596,33 @@ class ChatStoreImpl {
   ): void {
     if (this.getItems(threadId).some(item => item.id === id)) return;
     this.addUserMessage(threadId, id, text, attachments, location);
+  }
+
+  /**
+   * A background sub-agent reporting back: one turn of the conversation, written by an agent.
+   *
+   * `role: 'user'` because that is the role the turn has in the log -- the prompt needs a user turn
+   * to answer -- and `from` is what stops it reading as something the owner typed.
+   */
+  addSubAgentReturn(
+    threadId: string,
+    id: string,
+    text: string,
+    subagentId: string,
+    label: string,
+    status: 'complete' | 'error' | 'stopped',
+  ): void {
+    if (this.getItems(threadId).some(item => item.id === id)) return;
+    this.append(threadId, {
+      kind: 'text',
+      id,
+      role: 'user',
+      text,
+      attachments: [],
+      streaming: false,
+      from: { label, kind: 'return', status },
+      ts: Date.now(),
+    });
   }
 
   /**

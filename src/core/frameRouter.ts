@@ -254,6 +254,13 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // A message sent is what orders the list, wherever it was typed.
       if (!isSubAgentThread(frame.threadId)) sessionStore.touch(frame.threadId, frame.text);
       break;
+    case 'chat.subagent.return':
+      chatStore.addSubAgentReturn(frame.threadId, frame.id, frame.text, frame.subagentId, frame.label, frame.status);
+      // A return is a message: it wakes the thread and orders it in the drawer, like an incoming
+      // answer. Without this the conversation that a sub-agent just reported into read as idle.
+      noteActivity(frame.threadId, frame.text);
+      if (!isSubAgentThread(frame.threadId)) sessionStore.touch(frame.threadId, frame.text);
+      break;
     case 'chat.compaction':
       // No ring, no unread mark, and deliberately no `noteActivity`: a compaction is not a
       // message and the owner never asked for this one, so bumping the thread in the drawer for

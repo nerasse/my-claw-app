@@ -461,6 +461,11 @@ export type HistoryEntry =
        * reads as a bubble.
        */
       compactionStopped?: boolean;
+      /**
+       * Another agent wrote this turn, not the owner: a background sub-agent's return, or a report
+       * it handed back. Drawn as an agent card, never as the owner's own words.
+       */
+      from?: { sessionId: string; label: string; kind?: 'send' | 'return'; status?: string };
       /** The run this entry belongs to, when it sits inside one. */
       run?: RunMeta;
     }
@@ -494,6 +499,24 @@ export interface ChatUserFrame {
  * device holding both keeps one rule and not two. The turns it stands for are still in the thread,
  * above the rule: `count` only says how many the prompt no longer carries.
  */
+/**
+ * A background sub-agent reporting back into the conversation that launched it.
+ *
+ * Its own frame rather than `chat.user`, because the owner did not type it: the thread draws an
+ * agent card, and a reopened thread reads the same fact off the entry's `from`.
+ */
+export interface ChatSubAgentReturnFrame {
+  type: 'chat.subagent.return';
+  threadId: string;
+  id: string;
+  /** The child's answer, without the `<subagent>` tag the model reads. */
+  text: string;
+  ts: string;
+  subagentId: string;
+  label: string;
+  status: 'complete' | 'error' | 'stopped';
+}
+
 export interface ChatCompactionFrame {
   type: 'chat.compaction';
   threadId: string;
@@ -624,6 +647,11 @@ export interface SessionSummary {
   folderId?: string;
   /** A run is answering on this thread right now: the app keeps the Stop button visible. */
   activeRun?: boolean;
+  /**
+   * Sub-agents this conversation launched that are still working in the background (server
+   * 0.7.171+). A thread with some and no run of its own is idle, not answering.
+   */
+  subagents?: number;
   /** Workspace key the conversation runs in: 'default' or a config.workspaces key. */
   workspace?: string;
   /** The conversation holds text typed and not sent. One bit: the text itself rides on chat.history. */
@@ -3072,6 +3100,7 @@ export type ServerFrame =
   | BrowserUnblockResultFrame
   | ChatMessageFrame
   | ChatUserFrame
+  | ChatSubAgentReturnFrame
   | ChatCompactionFrame
   | ChatCompactingFrame
   | ChatCompactingDeltaFrame
@@ -3211,6 +3240,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'nodes.presence',
   'chat.message',
   'chat.user',
+  'chat.subagent.return',
   'chat.compaction',
   'chat.compacting',
   'chat.compacting.delta',

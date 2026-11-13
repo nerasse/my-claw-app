@@ -1,6 +1,6 @@
 import { MoreIcon } from './icons';
 import React from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Pressable, Text, View } from 'react-native';
 import type { SessionSummary } from '../core/protocol';
 import { formatDate } from '../core/utils';
 import { useLayout } from '../core/layout';
@@ -61,7 +61,7 @@ export const ThreadRow = React.memo(function ThreadRowRow({
         onPress={() => onOpen(item.threadId)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${running ? ', answering' : ''}${question ? ', a question is waiting' : ''}${item.hasDraft ? ', unsent draft' : ''}`}>
+        accessibilityLabel={`Conversation ${item.title}${unread ? ', unread' : ''}${running ? ', answering' : ''}${!running && item.subagents ? `, ${item.subagents} sub-agent${item.subagents > 1 ? 's' : ''} working` : ''}${question ? ', a question is waiting' : ''}${item.hasDraft ? ', unsent draft' : ''}`}>
         <View style={styles.titleRow}>
           {/* A run in flight takes the slot of the unread dot, and one mark is enough: a
               conversation being answered is not one to catch up on, and the bold title still says
@@ -69,6 +69,11 @@ export const ThreadRow = React.memo(function ThreadRowRow({
               never a claim the list below cannot account for. */}
           {running ? (
             <ActivityIndicator size={DOT_SPINNER} color={palette.accent} />
+          ) : item.subagents ? (
+            // Children working, no run of this conversation's own: not "answering" (that is the
+            // accent spinner, and it would be a lie) and not unread either. A quiet pulse says
+            // work is happening here without claiming the owner owes it anything yet.
+            <SubAgentsDot />
           ) : unread ? (
             <View style={styles.dot} />
           ) : null}
@@ -108,6 +113,29 @@ export const ThreadRow = React.memo(function ThreadRowRow({
 /** A pixel taller than the unread dot, which is 6: a spinner smaller than that reads as dust. */
 const DOT_SPINNER = 11;
 
+/**
+ * Background children, marked apart from both neighbours in this slot.
+ *
+ * The accent spinner means "this conversation is answering", the filled dot means "unread": a
+ * conversation whose sub-agents work while it sits idle is neither, so it gets a ring in the meta
+ * tone, breathing just enough to read as alive on a still list.
+ */
+function SubAgentsDot(): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const pulse = React.useRef(new Animated.Value(0.45)).current;
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.45, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return <Animated.View style={[styles.agentsDot, { opacity: pulse }]} />;
+}
+
 const createStyles = (palette: Palette) => ({
   row: {
     flexDirection: 'row' as const,
@@ -137,6 +165,14 @@ const createStyles = (palette: Palette) => ({
   mainDense: { paddingVertical: space.xs },
   titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accent },
+  // A ring, not a fill: the same 6 pt box as the unread dot, hollow, in the tone of a caption.
+  agentsDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1.5,
+    borderColor: palette.textMeta,
+  },
   title: { flex: 1, fontSize: 13.5, color: palette.text },
   // Unread is heavier, and so is the row you are in: the bar says where you are, the weight says
   // it again in the type, which is what makes an active row readable at a glance down the column.

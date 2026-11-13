@@ -268,6 +268,9 @@ export const Bubble = React.memo(function BubbleView({
           item.command && styles.bubbleCommand,
           // A notice is the system speaking: the agent did not write it either.
           item.notice && styles.bubbleNotice,
+          // A sub-agent's return came from an agent, so it takes the thread's neutral surface
+          // rather than the owner's bubble: it is a card, and the owner never typed it.
+          item.from?.kind === 'return' && styles.bubbleReturn,
         ]}
         // A Pressable is accessible by default, which would collapse the bubble into one node
         // and hide the reasoning line, the attachments and the tool cards from a screen reader.
@@ -297,6 +300,12 @@ export const Bubble = React.memo(function BubbleView({
             {...(dense ? { headHeight: spine(scale).head } : {})}
             {...(thoughtOnly ? { at: item.ts } : {})}
           />
+        ) : null}
+        {item.from?.kind === 'return' ? (
+          <View style={styles.returnHead}>
+            <Text style={styles.returnWho} numberOfLines={1}>{item.from.label}</Text>
+            <Text style={styles.returnState}>{returnWord(item.from.status)}</Text>
+          </View>
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
         {!agent ? attachmentsEl : null}
@@ -379,6 +388,13 @@ export const Bubble = React.memo(function BubbleView({
   );
 });
 
+/** What became of the run that reported: the card's own word for its status. */
+function returnWord(status: string | undefined): string {
+  if (status === 'error') return 'failed';
+  if (status === 'stopped') return 'stopped';
+  return 'returned';
+}
+
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: { width: '100%' as const, flexDirection: 'row' as const, marginBottom: space.xs },
   rowGrouped: { marginBottom: 1 },
@@ -402,6 +418,23 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
+  bubbleReturn: {
+    alignSelf: 'stretch' as const,
+    maxWidth: '100%' as const,
+    backgroundColor: palette.surface,
+  },
+  /**
+   * Who reported, and what became of it. One line above the body: the card has to say it is an
+   * agent before the reader takes the words for the owner's.
+   */
+  returnHead: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.xs,
+    marginBottom: space.xs,
+  },
+  returnWho: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, flexShrink: 1 },
+  returnState: { fontSize: scaleFont(font.meta, scale), color: palette.textMeta },
   bubbleUser: {
     // The POC's two bounds, not one: the bubble shrinks to its text, and it stops at a
     // comfortable measure. Drawn full width, a message of three words left half a screen of
