@@ -300,7 +300,124 @@ export function continueTarget(items: readonly ChatItem[]): RunInfo | undefined 
   return undefined;
 }
 
+/**
+ * The reasoning a message carries, split out as a row of its own.
+ *
+ * A bubble owns the thinking that produced it, and it drew that thinking inside itself: so the
+ * last thought of a run sat on top of the answer, outside the fold, and the thread kept a
+ * reasoning line and a "wait" figure on every finished message (owner, 2026-11-13: "on laisse le
+ * dernier reasoning avec le message. Il n'est pas dans le groupement de tools ... ça va clean
+ * l'interface énormément").
+ *
+ * The reasoning is moved onto its own item, immediately before the bubble, and every reasoning
+ * field of the message is cleared: the bubble then draws only its words, and the thought joins the
+ * run's fold like every other thinking phase. It keeps the message's id under a suffix, so an
+ * aside the reader opened (`persistKey`) stays the same key across a redraw and across the live to
+ * history transition -- the expanded state of a thought must not reset when its bubble settles.
+ *
+ * Only agent messages are touched: a user bubble never thinks, and a command output or a notice is
+ * not the agent speaking. A message that kept its reasoning on the server (`reasoningChars`) is
+ * split the same way: the row knows how to fetch it on open.
+ */
+export function splitReasoning(items: ChatItem[]): ChatItem[] {
+  const out: ChatItem[] = [];
+  for (const item of items) {
+    if (!carriesReasoning(item)) {
+      out.push(item);
+      continue;
+    }
+    const thought: ChatItem = {
+      kind: 'text',
+      id: `${item.id}~reasoning`,
+      role: 'agent',
+      text: '',
+      attachments: [],
+      streaming: item.streaming,
+      ts: item.ts,
+      ...(item.run !== undefined ? { run: item.run } : {}),
+      ...(item.reasoning !== undefined ? { reasoning: item.reasoning } : {}),
+      ...(item.reasoningChars !== undefined ? { reasoningChars: item.reasoningChars } : {}),
+      ...(item.reasoningTokens !== undefined ? { reasoningTokens: item.reasoningTokens } : {}),
+      ...(item.reasoningStartedAt !== undefined ? { reasoningStartedAt: item.reasoningStartedAt } : {}),
+      ...(item.reasoningMs !== undefined ? { reasoningMs: item.reasoningMs } : {}),
+      // The wait belongs to the call that produced both, and it is a figure about the thought: left
+      // on the message it would draw a second line under the answer.
+      ...(item.waitMs !== undefined ? { waitMs: item.waitMs } : {}),
+      ...(item.waitingSince !== undefined ? { waitingSince: item.waitingSince } : {}),
+      // The id the server knows this reasoning by. The split item's own id is synthetic, so an
+      // aside that has to fetch its text (`reasoningChars`) would ask for a row that does not
+      // exist; `docs/run-hydration.md`, and `__tests__/Reasoning.test.tsx` pins the frame.
+      reasoningOf: item.id,
+    };
+    out.push(thought, withoutReasoning(item));
+  }
+  return out;
+}
+
+/**
+ * Whether a bubble draws its thinking inside itself, and therefore has to hand it to the fold.
+ *
+ * Only a message that says something: its reasoning was drawn *above its words*, inside the same
+ * bubble, and that is the line the owner wants folded. A phase that only thought is already a row
+ * of the work -- it has no words to sit above, and `ReasoningLine` is all it draws -- so splitting
+ * it again would put an empty bubble beside its own thought.
+ */
+function carriesReasoning(item: ChatItem): item is Extract<ChatItem, { kind: 'text' }> {
+  if (item.kind !== 'text' || item.role !== 'agent') return false;
+  if (item.command === true || item.notice === true || item.summaryOf !== undefined) return false;
+  if (item.error !== undefined) return false;
+  // Nothing to hang the line above: a bare thought is already its own row.
+  if (item.text.trim() === '' && (item.attachments?.length ?? 0) === 0) return false;
+  return (
+    Boolean(item.reasoning?.trim()) ||
+    (item.reasoningChars ?? 0) > 0 ||
+    item.reasoningTokens !== undefined ||
+    item.reasoningMs !== undefined ||
+    item.waitMs !== undefined
+  );
+}
+
+/** The same message with every reasoning field cleared: its words, nothing about the thinking. */
+function withoutReasoning(item: Extract<ChatItem, { kind: 'text' }>): ChatItem {
+  // Built rather than destructured-with-rests: the linter refuses seven "unused" bindings, and a
+  // whitelist says exactly which fields are *kept* on a bubble, which is the thing that matters.
+  const rest: Extract<ChatItem, { kind: 'text' }> = {
+    kind: 'text',
+    id: item.id,
+    role: item.role,
+    text: item.text,
+    attachments: item.attachments,
+    ts: item.ts,
+    // A message that answered is not still thinking: `streaming` drove the caret (and the "is it
+    // waiting yet" reveal) that the split row now owns. With no words under it, a stream flag would
+    // draw a bare cursor under an empty bubble -- the very bar the thought row replaced.
+    streaming: item.text.trim() === '' ? false : item.streaming,
+  };
+  // Everything else this bubble may carry, unchanged and still allowed to be absent.
+  if (item.location !== undefined) rest.location = item.location;
+  if (item.error !== undefined) rest.error = item.error;
+  if (item.transcripts !== undefined) rest.transcripts = item.transcripts;
+  if (item.command !== undefined) rest.command = item.command;
+  if (item.notice !== undefined) rest.notice = item.notice;
+  if (item.details !== undefined) rest.details = item.details;
+  if (item.summaryOf !== undefined) rest.summaryOf = item.summaryOf;
+  if (item.archive !== undefined) rest.archive = item.archive;
+  if (item.compactionMs !== undefined) rest.compactionMs = item.compactionMs;
+  if (item.compactionStopped !== undefined) rest.compactionStopped = item.compactionStopped;
+  if (item.queuedSince !== undefined) rest.queuedSince = item.queuedSince;
+  if (item.queuedReason !== undefined) rest.queuedReason = item.queuedReason;
+  if (item.pending !== undefined) rest.pending = item.pending;
+  if (item.run !== undefined) rest.run = item.run;
+  if (item.foldOf !== undefined) rest.foldOf = item.foldOf;
+  return rest;
+}
+
 export function buildRows(items: ChatItem[]): ChatRow[] {
+  return rowsOf(splitReasoning(items));
+}
+
+/** The rows of an already-split thread: `buildRows` is this, behind `splitReasoning`. */
+function rowsOf(items: ChatItem[]): ChatRow[] {
   const rows: ChatRow[] = [];
   let run: RunInfo | null = null;
   // The segment of the run being folded so far. Flushed as a group row the moment a hoisted

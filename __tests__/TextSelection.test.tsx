@@ -120,7 +120,7 @@ test('a long press on a message opens its actions instead of a selection', async
   await unmount(tree);
 });
 
-test('the viewer holds the whole message, reasoning included, in one selectable node', async () => {
+test('the viewer holds the message in one selectable node, and the thinking is not in it', async () => {
   const tree = await renderThread();
 
   longPressBubble(tree);
@@ -132,8 +132,10 @@ test('the viewer holds the whole message, reasoning included, in one selectable 
   const selectable = selectableNodes(tree);
   expect(selectable).toHaveLength(1);
   const body = selectable[0]!.props.children as string;
-  expect(body).toContain('weighing two options');
   expect(body).toContain('the command replied');
+  // The thinking that produced the answer folds with the run now, on a row of its own with its own
+  // copy button: it is not part of this message any more (owner, 2026-11-13).
+  expect(body).not.toContain('weighing two options');
 
   // The bar takes the lot without asking the reader to drag at all.
   await press(tree, 'Copy everything');
@@ -161,15 +163,14 @@ test('a tool card sends its output to the same viewer, raw', async () => {
 });
 
 /**
- * The two copy rows name what they take.
+ * The copy row names what it takes, and there is only one left.
  *
- * `Copy text` used to paste the reasoning along with the answer, and there was no way to take
- * both halves at once without the selection viewer (owner, 2026-11-04: "mets un action copy with
- * thinking et retire le thinking du copy message"). So the plain copy is the answer alone, and
- * `Copy with thinking` is the pair. A third row for the reasoning stays where it was, which is
- * why the plain one must not carry it: it would copy the same text twice.
+ * `Copy text` used to drag the reasoning along, so `Copy with thinking` and `Copy reasoning` were
+ * added to get at the parts separately (owner, 2026-11-04). The thinking now folds with the run and
+ * carries its own copy button on its row, so both extra rows pointed at something the bubble no
+ * longer holds: they are gone rather than left copying an empty string.
  */
-test('copying a message takes the answer alone, and a second row takes the reasoning too', async () => {
+test('copying a message takes its words alone: the thinking is not on it any more', async () => {
   const tree = await renderThread();
 
   longPressBubble(tree, 'the command replied');
@@ -178,14 +179,13 @@ test('copying a message takes the answer alone, and a second row takes the reaso
   await press(tree, 'Copy text');
   expect(Clipboard.setString).toHaveBeenCalledWith('the command replied');
 
+  // Neither row exists: the reasoning folds with the run and carries its own copy button there
+  // (owner, 2026-11-13). A row that copied the answer again, or copied nothing, would be worse.
   (Clipboard.setString as jest.Mock).mockClear();
   longPressBubble(tree, 'the command replied');
-  await waitFor(() => textsOf(tree).includes('Copy with thinking'));
-  await press(tree, 'Copy with thinking');
-  const copied = String((Clipboard.setString as jest.Mock).mock.calls[0]![0]);
-  expect(copied).toContain('## Reasoning');
-  expect(copied).toContain('weighing two options');
-  expect(copied).toContain('the command replied');
+  await waitFor(() => textsOf(tree).includes('Copy text'));
+  expect(textsOf(tree)).not.toContain('Copy with thinking');
+  expect(textsOf(tree)).not.toContain('Copy reasoning');
 
   await unmount(tree);
 });

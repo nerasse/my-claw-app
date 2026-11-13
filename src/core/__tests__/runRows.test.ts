@@ -283,7 +283,39 @@ describe('buildRows', () => {
     ]);
     expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a', 'g:r1+foot']);
     const groups = rows.filter(row => row.kind === 'group') as Array<{ items: ChatItem[] }>;
+    // A phase that says nothing is already its own row of the work: its thinking is the whole
+    // bubble, so it is not split (only a message with words has a line to hand over).
     expect(groups.map(g => g.items.map(i => i.id))).toEqual([['t1'], ['p-after']]);
+  });
+
+  test('the reasoning of an answer folds into the run, and the answer keeps only its words', () => {
+    // The thinking that produced the last message used to ride inside its bubble, so it sat on top
+    // of the answer, outside the fold, and every finished message kept a reasoning line under the
+    // work it explained (owner, 2026-11-13: "on laisse le dernier reasoning avec le message ... ça
+    // va clean l'interface énormément").
+    const rows = buildRows([
+      userText('u'),
+      tool('t1', 'r1'),
+      agentText('a', 'the answer', 'r1', { reasoning: 'weighing the options', reasoningTokens: 900 }),
+    ]);
+    // One fold holds the call and the thought; the answer stands outside it, alone.
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a+foot']);
+    const group = rows.find(row => row.kind === 'group') as { items: ChatItem[] };
+    expect(group.items.map(i => i.id)).toEqual(['t1', 'a~reasoning']);
+    const answer = rows.find(row => row.kind === 'item' && row.item.id === 'a') as { item: ChatItem };
+    // Nothing about the thinking survives on the message: it would draw the line again.
+    expect(answer.item).not.toHaveProperty('reasoning');
+    expect(answer.item).not.toHaveProperty('reasoningTokens');
+    expect(answer.item).not.toHaveProperty('reasoningMs');
+    expect(answer.item).not.toHaveProperty('waitMs');
+  });
+
+  test('a message that only thought, with no words, is a fold of one thought', () => {
+    const rows = buildRows([userText('u'), agentText('p', '', 'r1', { reasoning: 'hmm' })]);
+    // Not split, for the same reason: nothing to hang a line above.
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1+foot']);
+    const group = rows.find(row => row.kind === 'group') as { items: ChatItem[] };
+    expect(group.items.map(i => i.id)).toEqual(['p']);
   });
 
   test("the empreinte lands on the run's end, and only there", () => {

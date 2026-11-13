@@ -284,7 +284,7 @@ export const Bubble = React.memo(function BubbleView({
             rides the block it opens instead (`thoughtOnly`). */}
         {agent && !item.command && !item.notice ? (
           <ReasoningLine
-            id={item.id}
+            id={item.reasoningOf ?? item.id}
             threadId={threadId}
             reasoning={item.reasoning}
             reasoningChars={item.reasoningChars}

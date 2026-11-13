@@ -80,7 +80,7 @@ function texts(tree: ReactTestRenderer.ReactTestRenderer): string[] {
 describe('the header says what the run touched', () => {
   it('counts the families instead of naming the first tool', () => {
     const label = composition(['bash', 'bash', 'bash', 'read', 'read', 'apply_patch'], 0);
-    expect(label.count).toBe('6 tool calls');
+    expect(label.count).toBe('6 steps');
     expect(label.detail).toBe('· 3 shell · 2 read · 1 edits');
     // `bash` is the first call of nearly every run: naming it said nothing about the other five.
     expect(label.detail).not.toBe('· bash');
@@ -92,7 +92,7 @@ describe('the header says what the run touched', () => {
 
   it('says only the thoughts when there is no call at all', () => {
     const label = composition([], 3);
-    expect(label.count).toBe('3 thoughts');
+    expect(label.count).toBe('3 steps');
     // `3 thoughts · 3 thoughts` is the duplicate the owner flags.
     expect(label.detail).toBe('');
   });
@@ -102,7 +102,7 @@ describe('the header says what the run touched', () => {
   });
 
   it('reads a lone thought as singular', () => {
-    expect(composition([], 1).count).toBe('1 thought');
+    expect(composition([], 1).count).toBe('1 step');
   });
 });
 
@@ -205,7 +205,7 @@ describe('the fold', () => {
 
   it('shows the header line and every child when open', () => {
     const shown = texts(renderGroup(items, true));
-    expect(shown).toContain('3 tool calls');
+    expect(shown).toContain('3 steps');
     expect(shown).toContain('· 1 shell · 1 read · 1 edits');
     for (const item of items) expect(shown).toContain(`child:${item.id}`);
   });
@@ -215,12 +215,12 @@ describe('the fold', () => {
     // and two columns depending on how many siblings it had, with no header to say what happened
     // (owner, 2026-11-13). One call is a fold of one row, header and all.
     const closed = renderGroup([tool('bash')], false);
-    expect(texts(closed)).toContain('1 tool call');
+    expect(texts(closed)).toContain('1 step');
     // Closed, it hides its row like every other fold...
     expect(texts(closed).some(text => text.startsWith('child:'))).toBe(false);
 
     const open = renderGroup([tool('bash')], true);
-    expect(texts(open)).toContain('1 tool call');
+    expect(texts(open)).toContain('1 step');
     expect(texts(open).filter(text => text.startsWith('child:')).length).toBe(1);
     // ...and on one row the rail has nowhere to run: a column only ever goes between two dots.
     expect(nodeStyles(open).filter(style => style.width === 1)).toHaveLength(0);

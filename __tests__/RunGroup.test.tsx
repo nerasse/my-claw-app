@@ -138,7 +138,7 @@ test('a collapsed group is one bar, and it says what it holds', () => {
   // carries the run's span -- a span in it read as the fold's own time
   // ("on a l'impression que c'est le temps du dernier regroupement", 2026-09-22).
   const drawn = textOf(tree);
-  expect(drawn).toContain('3 tool calls');
+  expect(drawn).toContain('3 steps');
   // What it touched, not the first tool's name: `bash` is the first call of nearly every run, and
   // naming it said nothing about the other two.
   expect(drawn).toContain('· 3 shell');
@@ -158,7 +158,7 @@ test("the run's span and status ride its empreinte, and only there", () => {
     <RunGroup run={stopped} items={items} open={false} onToggle={jest.fn()} renderItem={item => <Text>{item.id}</Text>} />,
   );
   const middleTexts = middle.root.findAllByType(Text).map(node => node.props.children);
-  expect(middleTexts.join('')).toContain('2 tool calls');
+  expect(middleTexts.join('')).toContain('2 steps');
   expect(middleTexts).not.toContain('run ·');
   expect(middleTexts).not.toContain('Stopped');
 
@@ -192,7 +192,7 @@ test('a fold that only holds thoughts says so, instead of "run"', () => {
     ts: 5,
   } as ChatItem;
   const tree = group([thinking, { ...thinking, id: 'p2' } as ChatItem], false);
-  expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('2 thoughts');
+  expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('2 steps');
 });
 
 test('a long open group offers a way out at its bottom, without a second bar', () => {
@@ -347,7 +347,7 @@ test('two merged rows of one run read as a single group', () => {
     />,
   );
   const texts = tree.root.findAllByType(Text).map(node => node.props.children);
-  expect(texts.join('')).toContain('52 tool calls');
+  expect(texts.join('')).toContain('52 steps');
   // The merged folds read as one group, and the run signs once, under it.
   expect(texts).toContain('run · 1 min');
 });
@@ -430,7 +430,7 @@ test('a fold of a single thought still folds: the thought is what the bar stands
   } as ChatItem;
   const tree = groupWith([thinking], true);
   expect(bars(tree)).toHaveLength(1);
-  expect(textsOf(tree)).toContain('1 thought');
+  expect(textsOf(tree)).toContain('1 step');
 });
 
 test("the run's span and the word it stopped on stand under the fold, bar or not", () => {

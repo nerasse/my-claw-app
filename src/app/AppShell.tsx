@@ -207,7 +207,6 @@ import {
   ArchiveIcon,
   CalendarIcon,
   ChartIcon,
-  CopyAllIcon,
   CopyIcon,
   DigestIcon,
   DocIcon,
@@ -225,7 +224,6 @@ import {
   SendIcon,
   SiphonIcon,
   SlidersIcon,
-  SparkIcon,
   TrashIcon,
   WaitResetIcon,
 } from '../components/icons';
@@ -5470,36 +5468,20 @@ export function AppShell(): React.JSX.Element {
                   },
                 ]
               : []),
-            // The answer alone. The reasoning has its own row below, so leaving it in here would
-            // copy it twice and make "with thinking" mean nothing (owner, 2026-11-04).
+            // The answer alone, and now literally: the thinking that produced it folds with the
+            // run (`core/runRows.ts:splitReasoning`), so there is nothing else to leave out.
             {
               label: 'Copy text',
               icon: <CopyIcon size={15} tone="muted" />,
-              hint: 'the answer, without the reasoning',
+              hint: 'the answer alone',
               onPress: () => {
                 Clipboard.setString(copyText);
                 setBubbleMenu(null);
               },
             },
-            // Both halves at once, which is what a reader pasting a debugging exchange into an
-            // issue wants. Gated on the reasoning alone: a message that only carries a summary
-            // would make this row copy exactly what the row above copies.
-            ...(bubbleMenu.reasoning?.trim()
-              ? [
-                  {
-                    label: 'Copy with thinking',
-                    icon: <CopyAllIcon size={15} tone="muted" />,
-                    hint: 'the answer and the reasoning that led to it',
-                    onPress: () => {
-                      const item = bubbleMenu;
-                      Clipboard.setString(messageSelectionBody({ ...item, details: undefined }));
-                      setBubbleMenu(null);
-                    },
-                  },
-                ]
-              : []),
-            // The whole message, reasoning and summary included, as the source it was written
-            // in: the viewer is the only place a selection can cross from one block to the next.
+            // The message and its summary, as the source it was written in: the viewer is the only
+            // place a selection can cross from one block to the next. The thinking is not here any
+            // more -- it lives on its own row of the run, with its own copy button.
             // A browser selects text itself, and the bubble carries a copy button there.
             ...(Platform.OS === 'web'
               ? []
@@ -5515,20 +5497,6 @@ export function AppShell(): React.JSX.Element {
                     },
                   },
                 ]),
-            // The asides carry their own copy button, but only once unfolded. Offering them here
-            // too is the difference between copying a reasoning trace and reading it first.
-            ...(bubbleMenu.reasoning?.trim()
-              ? [
-                  {
-                    label: 'Copy reasoning',
-                    icon: <SparkIcon size={15} tone="muted" />,
-                    onPress: () => {
-                      Clipboard.setString(bubbleMenu.reasoning ?? '');
-                      setBubbleMenu(null);
-                    },
-                  },
-                ]
-              : []),
             ...(bubbleMenu.details?.trim()
               ? [
                   {

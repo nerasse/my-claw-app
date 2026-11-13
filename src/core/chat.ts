@@ -55,6 +55,15 @@ export interface TextItem {
   reasoningStartedAt?: number;
   reasoningMs?: number;
   /**
+   * On a split thought: the id of the message whose reasoning this is.
+   *
+   * `splitReasoning` (`core/runRows.ts`) moves a message's thinking onto a row of its own so it can
+   * fold with the run, and that row's `id` is synthetic. The server still knows the reasoning by
+   * the message's id, so anything that has to ask for it -- `reasoningChars`, a page that kept the
+   * text -- sends this instead. Absent on a thought that never belonged to a message.
+   */
+  reasoningOf?: string;
+  /**
    * A model call opened this bubble and has produced nothing yet, since this instant (the
    * server's). The bubble draws "Reasoning" with a counter where its caret would be, and the first
    * thing the turn writes into it takes the mark down. It lives on the bubble because the wait

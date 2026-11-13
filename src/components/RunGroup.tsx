@@ -194,13 +194,17 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
 
   const count = summaries.reduce((n, row) => n + row.toolCount, 0);
   const itemCount = summaries.reduce((n, row) => n + row.itemCount, 0);
-  const firstTool = summaries.find(row => row.firstTool !== undefined)?.firstTool;
+  // What is behind the header that is not a call: the thinking phases, which the server counts in
+  // `itemCount` only. `itemCount` is the total, so the difference is the thoughts -- and it is
+  // never negative on a row the server wrote, but a page boundary can make the two disagree, so
+  // the clamp keeps a bad count from inventing steps.
+  const thoughtCount = Math.max(0, itemCount - count);
+  // The same umbrella as a fold of real items (`composition`): "tool calls" would undercount what
+  // is behind the header, and naming the first tool said nothing about the rest (owner, 2026-11-13).
+  const steps = count + thoughtCount;
   const label = {
-    count:
-      count > 0
-        ? `${count} tool call${count === 1 ? '' : 's'}`
-        : `${Math.max(itemCount, 1)} thought${itemCount === 1 ? '' : 's'}`,
-    detail: count > 0 && firstTool ? `· ${firstTool}` : '',
+    count: `${steps} step${steps === 1 ? '' : 's'}`,
+    detail: '',
   };
   const failed = summaries.some(row => row.hydration === 'failed');
 
@@ -328,21 +332,27 @@ function LiveClock({
 const FOOTER_FROM_ITEMS = 5;
 
 /**
- * What the header says: the count, then the composition -- never the first tool's name.
+ * What the header says: how many steps the fold holds, then what they were.
  *
- * "13 tool calls · bash" was the old line, and `bash` is the first call of nearly every run: it
- * said nothing about the twelve others. What the run touched can be read without opening
- * anything, which is the only thing a fold header is for.
+ * "13 tool calls · bash" was the old line: `bash` is the first call of nearly every run, so it
+ * said nothing about the twelve others. The composition answers "what did this run touch" without
+ * opening anything, which is the only thing a fold header is for.
+ *
+ * The umbrella word is "steps" and not "tool calls" because a fold now also holds the thinking
+ * that produced the answer -- a step of the run, not a call -- and because it reads plainly to
+ * someone who does not know what a tool is (owner, 2026-11-13). The breakdown keeps the truth
+ * about each part: `1 shell`, `1 thought`.
  */
 export function composition(
   names: readonly string[],
   thoughts: number,
 ): { count: string; detail: string } {
-  const count =
-    names.length > 0
-      ? `${names.length} tool call${names.length === 1 ? '' : 's'}`
-      : `${thoughts} thought${thoughts === 1 ? '' : 's'}`;
-  if (names.length === 0) return { count, detail: '' };
+  const steps = names.length + thoughts;
+  const count = `${steps} step${steps === 1 ? '' : 's'}`;
+  if (names.length === 0) {
+    // Nothing but thinking: the breakdown would repeat the count word for word.
+    return { count, detail: '' };
+  }
   const tally = new Map<string, number>();
   for (const name of names) {
     const label = labelFor(name);
