@@ -8,9 +8,21 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { UndoPromptFrame } from './protocol';
+import type { UndoListFrame, UndoPromptFrame } from './protocol';
 
 export type UndoMode = 'soft' | 'hard';
+
+/**
+ * The turn picker's pending prompt, and the row the owner picked on this device.
+ *
+ * A second array rather than a variant of UndoPrompt: the two sheets can be open on different
+ * threads at once (a `/undo list` here, a bare `/undo` there), and folding them into one list
+ * would make each one's `all()` have to filter the other's shape out.
+ */
+export interface UndoPick extends UndoListFrame {
+  /** The row this device pressed, sent back at once. */
+  picked?: { n: number; mode: UndoMode };
+}
 
 export interface UndoPrompt extends UndoPromptFrame {
   /** The mode picked on this device, sent back as soon as the sheet row is pressed. */
@@ -23,7 +35,9 @@ const EMPTY: UndoPrompt[] = [];
 
 class UndoStoreImpl {
   private prompts: UndoPrompt[] = [];
+  private picks: UndoPick[] = [];
   private byThread = new Map<string, UndoPrompt[]>();
+  private picksByThread = new Map<string, UndoPick[]>();
   private threadsSnapshot: string[] = [];
   private listeners = new Set<Listener>();
 
@@ -43,9 +57,32 @@ class UndoStoreImpl {
 
   /** Answered here, on another surface, or the command gave up (server restart). */
   resolve(id: string): void {
-    if (!this.prompts.some(entry => entry.id === id)) return;
+    const hadPrompt = this.prompts.some(entry => entry.id === id);
+    const hadPick = this.picks.some(entry => entry.id === id);
+    if (!hadPrompt && !hadPick) return;
     this.prompts = this.prompts.filter(entry => entry.id !== id);
+    this.picks = this.picks.filter(entry => entry.id !== id);
     this.reindex();
+  }
+
+  /** The turn picker is open on this thread: the last turns, each with the mode it allows. */
+  list(frame: UndoListFrame): void {
+    if (this.picks.some(entry => entry.id === frame.id)) return;
+    this.picks = [...this.picks, { ...frame }];
+    this.reindex();
+  }
+
+  /** The row picked on this device; the sheet waits for `undo.resolved` to close. */
+  pick(id: string, n: number, mode: UndoMode): void {
+    const entry = this.picks.find(p => p.id === id);
+    if (!entry) return;
+    entry.picked = { n, mode };
+    this.reindex();
+  }
+
+  /** The open turn picker of one conversation, if any. */
+  pickForThread(threadId: string): UndoPick | undefined {
+    return this.picksByThread.get(threadId)?.[0];
   }
 
   /** The mode chosen on this device; the sheet waits for `undo.resolved` to close. */
@@ -76,8 +113,9 @@ class UndoStoreImpl {
   }
 
   clear(): void {
-    if (this.prompts.length === 0) return;
+    if (this.prompts.length === 0 && this.picks.length === 0) return;
     this.prompts = [];
+    this.picks = [];
     this.reindex();
   }
 
@@ -88,8 +126,15 @@ class UndoStoreImpl {
       list.push(prompt);
       byThread.set(prompt.threadId, list);
     }
+    const picks = new Map<string, UndoPick[]>();
+    for (const pick of this.picks) {
+      const list = picks.get(pick.threadId) ?? [];
+      list.push(pick);
+      picks.set(pick.threadId, list);
+    }
     this.byThread = byThread;
-    this.threadsSnapshot = [...byThread.keys()];
+    this.picksByThread = picks;
+    this.threadsSnapshot = [...new Set([...byThread.keys(), ...picks.keys()])];
     for (const listener of this.listeners) listener();
   }
 }
@@ -111,5 +156,14 @@ export function useUndoPrompts(threadId: string | null): UndoPrompt[] {
     cb => undoStore.subscribe(cb),
     () => (threadId ? undoStore.forThread(threadId) : EMPTY),
     () => (threadId ? undoStore.forThread(threadId) : EMPTY),
+  );
+}
+
+/** The open turn picker of the thread on screen, for its sheet. */
+export function useUndoPick(threadId: string | null): UndoPick | undefined {
+  return useSyncExternalStore(
+    cb => undoStore.subscribe(cb),
+    () => (threadId ? undoStore.pickForThread(threadId) : undefined),
+    () => (threadId ? undoStore.pickForThread(threadId) : undefined),
   );
 }

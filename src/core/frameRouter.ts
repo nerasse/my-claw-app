@@ -918,6 +918,11 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       undoStore.prompt(frame);
       if (frame.threadId === activeThreadId()) onUndoPromptOnActiveThread?.(frame);
       break;
+    case 'undo.list':
+      // `/undo list`: the turns this conversation can be rewound to. Same store, same life -- the
+      // command is awaiting the choice, and `undo.resolved` closes it wherever it was answered.
+      undoStore.list(frame);
+      break;
     case 'undo.resolved':
       // Chosen (here or on another surface) or dismissed: close the sheet.
       undoStore.resolve(frame.id);

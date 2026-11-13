@@ -896,6 +896,40 @@ export interface UndoPromptFrame {
   ts: string;
 }
 
+/** `/undo list`: the turns this conversation can be rewound to, newest first (`n` = 1 is last). */
+export interface UndoListFrame {
+  type: 'undo.list';
+  id: string;
+  threadId: string;
+  turns: UndoListTurn[];
+}
+
+/**
+ * One turn a rewınd could target.
+ *
+ * Already clipped and counted server-side: a conversation can hold hundreds of messages, some of
+ * them 50 KB with pictures and voice notes, and the picker draws one line per turn. `hard` is the
+ * honest answer to "can the files come back too" -- a session keeps only its most recent
+ * snapshots, so a deep turn is conversation-only.
+ */
+export interface UndoListTurn {
+  n: number;
+  preview: string;
+  ts: number;
+  attachments: number;
+  transcripts: number;
+  hard: boolean;
+  compaction?: boolean;
+}
+
+/** The owner picked a row of the turn picker: `n` and the mode the row allows. */
+export interface UndoChooseListFrame {
+  type: 'undo.choose.list';
+  id: string;
+  n: number;
+  mode: 'soft' | 'hard';
+}
+
 /** The owner picked a mode in the undo sheet. */
 export interface UndoChooseFrame {
   type: 'undo.choose';
@@ -3100,6 +3134,7 @@ export type ServerFrame =
   | QuestionPendingFrame
   | QuestionResolvedFrame
   | UndoPromptFrame
+  | UndoListFrame
   | UndoResolvedFrame
   | AgentsConfigResultFrame
   | ProviderRenamePreviewResultFrame
@@ -3281,6 +3316,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'question.pending',
   'question.resolved',
   'undo.prompt',
+  'undo.list',
   'undo.resolved',
   'error',
 ]);
@@ -3662,6 +3698,11 @@ export function encodeQuestionReply(id: string, answers: string[][]): string {
 /** The owner picked a mode in the undo sheet. */
 export function encodeUndoChoose(id: string, mode: 'soft' | 'hard'): string {
   return JSON.stringify({ type: 'undo.choose', id, mode });
+}
+
+/** The owner picked a turn in the picker. `n` is the row's own number. */
+export function encodeUndoChooseList(id: string, n: number, mode: 'soft' | 'hard'): string {
+  return JSON.stringify({ type: 'undo.choose.list', id, n, mode });
 }
 
 /** The owner dismissed the undo sheet. */

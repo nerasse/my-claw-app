@@ -24,7 +24,7 @@ import {
 import { formatTranscript } from '../core/transcript';
 import { retryDelayAfter, sendsToRetry } from '../core/sendRetry';
 import { questionStore, useQuestionThreads } from '../core/questionStore';
-import { useUndoPrompts, undoStore } from '../core/undoStore';
+import { useUndoPick, useUndoPrompts, undoStore } from '../core/undoStore';
 import { bootFrames, resumeFrames } from '../core/resume';
 import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn } from '../core/subagentStack';
@@ -327,6 +327,7 @@ import { CONNECTION_LABEL, Drawer } from './Drawer';
 import { PromptSheet } from '../components/PromptSheet';
 import { ApprovalSheet } from '../components/ApprovalSheet';
 import { UndoSheet } from '../components/UndoSheet';
+import { UndoPickSheet } from '../components/UndoPickSheet';
 import { ApprovalHistoryScreen } from './ApprovalHistoryScreen';
 import { ActionSheet, type SheetEntry } from '../components/ActionSheet';
 import { KeyboardShell } from '../components/KeyboardShell';
@@ -958,6 +959,7 @@ export function AppShell(): React.JSX.Element {
   // re-render the shell of every page.
   const questionThreads = useQuestionThreads();
   const undoPrompts = useUndoPrompts(activeThread);
+  const undoPick = useUndoPick(activeThread);
   const replyToQuestion = useCallback((id: string, answers: string[][]) => {
     // The card stays where it is, marked sending: the `question.resolved` frame is what drops it,
     // on this window and on every other one. Dropping it here would flicker ahead of the server.
@@ -6038,6 +6040,17 @@ export function AppShell(): React.JSX.Element {
             const last = undoPrompts[undoPrompts.length - 1]!;
             connection.send(encodeUndoCancel(last.id)).catch(() => {});
             undoStore.resolve(last.id);
+          }}
+        />
+      ) : null}
+
+      {undoPick ? (
+        <UndoPickSheet
+          pick={undoPick}
+          onClose={() => {
+            // Dismissing is a cancel: nothing runs, the server resolves the prompt.
+            connection.send(encodeUndoCancel(undoPick.id)).catch(() => {});
+            undoStore.resolve(undoPick.id);
           }}
         />
       ) : null}
