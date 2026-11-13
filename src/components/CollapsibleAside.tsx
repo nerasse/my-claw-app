@@ -162,11 +162,14 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1, flexGrow: 1 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
   pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },
-  // A left rule marks it as an aside rather than part of the answer.
+  // No rule: an inset already says this sits under something.
+  //
+  // This body used to carry a 2px left border. Inside a run group the rail already draws a
+  // vertical a few points to the left of this text, and the pair read as one doubled line rather
+  // than as two meanings (owner, 2026-11-13, screenshot of a reasoning body). The indent is the
+  // part the eye actually uses, and dropping the border also stops the rail from being echoed.
   body: {
-    borderLeftWidth: 2,
-    borderLeftColor: palette.border,
-    paddingLeft: space.sm,
+    paddingLeft: space.md,
     marginTop: 2,
     marginBottom: space.xs,
   },

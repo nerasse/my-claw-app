@@ -191,6 +191,17 @@ export function ReasoningLine({
           <Text style={styles.label}>Reasoning</Text>
         ) : null}
         {figures}
+        {/*
+          Why there is nothing to open, when the count says the model did think.
+
+          A count with no words is two different facts that looked identical: an endpoint that
+          summarises only part of its thoughts (the Responses API leaves whole reasoning items
+          with an empty summary, docs/reasoning-visibility.md "A thought with no words"), and one
+          that keeps them encrypted for replay and never shows them at all. Without a word about
+          it, the reader sees a model that seems not to think. Said once, faintly, and only while
+          there is a count: a call that merely waited has nothing to explain.
+        */}
+        {count ? <Text style={styles.withheld}>not shared</Text> : null}
         {alone ? null : <View style={styles.spacer} />}
         {waitFigure}
       </View>
@@ -223,4 +234,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /** One step fainter than the label it follows: what the thinking cost is context on an aside, not
    *  a second label competing with it. */
   figure: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, opacity: 0.75 },
+  /** Why a thought has no words: the quietest thing on the row, after the figures it explains. */
+  withheld: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, opacity: 0.7, fontStyle: 'italic' as const },
 });

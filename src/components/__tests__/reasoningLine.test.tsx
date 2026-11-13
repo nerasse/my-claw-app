@@ -110,8 +110,24 @@ test('a thought with no words shows what it spent and how long, and opens nothin
   expect(textOf(tree)).toContain('Reasoning');
   expect(textOf(tree)).toContain('516 tokens');
   expect(textOf(tree)).toContain('4.2 s');
+  // The count alone was ambiguous: an endpoint that summarises only part of its thoughts and one
+  // that keeps them encrypted both read as a model that does not think. Said once, faintly.
+  expect(textOf(tree)).toContain('not shared');
   // Nothing to reveal, so nothing to press: a control that opens nothing is worse than none.
   expect(tree.root.findAll((node) => node.props.accessibilityRole === 'button')).toHaveLength(0);
+});
+
+test('a call that only waited has nothing to explain', () => {
+  // No count means no thought to account for: the wait is the whole story, and a reason why a
+  // thought was withheld would be a sentence about nothing.
+  const tree = render({ waitMs: 9_000, streaming: false });
+  expect(textOf(tree)).toContain('wait 9 s');
+  expect(textOf(tree)).not.toContain('not shared');
+});
+
+test('a thought with words is not called withheld', () => {
+  const tree = render({ reasoning: 'weighing options', tokens: 1500, durationMs: 12_000, streaming: false });
+  expect(textOf(tree)).not.toContain('not shared');
 });
 
 test('a thought with words carries its count too, beside the duration', () => {
