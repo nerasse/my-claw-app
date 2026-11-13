@@ -1170,7 +1170,11 @@ class ChatStoreImpl {
       // The last running run among the incoming entries is the one in flight. Prefer the real id
       // when one exists; a page that predates the run (or a run so fresh its entries are not
       // written) keeps what the live frames established.
-      const incoming = [...entries].reverse().find(entry => entry.run?.status === 'running');
+      const incoming = [...entries].reverse().find(entry => entry.run?.status === 'running')
+        // A run the server folds as no longer `running` is still the one this page names, and the
+        // thread is demonstrably writing: without this fallback the synthetic id never met the
+        // real one, and one run rendered as two groups (owner, 2026-11-13).
+        ?? (this.isStreaming(threadId) ? [...entries].reverse().find(entry => entry.run !== undefined) : undefined);
       if (incoming?.run) {
         const real = runInfoOf(incoming.run);
         if (open) {

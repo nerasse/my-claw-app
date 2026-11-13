@@ -422,6 +422,22 @@ export function buildRows(items: ChatItem[]): ChatRow[] {
   return rowsOf(splitReasoning(items));
 }
 
+/**
+ * A phase the model only thought in: reasoning, no words, no file -- the bubble `ReasoningLine` is
+ * the whole of. It has nothing to stand outside a fold with, so a run being written takes it.
+ */
+function isThoughtOnly(item: ChatItem): boolean {
+  if (item.kind !== 'text' || item.role !== 'agent') return false;
+  if (item.text.trim() !== '' || (item.attachments?.length ?? 0) > 0) return false;
+  if (item.command || item.notice || item.error !== undefined || item.summaryOf !== undefined) return false;
+  return (
+    Boolean(item.reasoning?.trim()) ||
+    (item.reasoningChars ?? 0) > 0 ||
+    item.reasoningTokens !== undefined ||
+    item.reasoningMs !== undefined
+  );
+}
+
 /** The rows of an already-split thread: `buildRows` is this, behind `splitReasoning`. */
 function rowsOf(items: ChatItem[]): ChatRow[] {
   const rows: ChatRow[] = [];
@@ -476,6 +492,17 @@ function rowsOf(items: ChatItem[]): ChatRow[] {
       continue;
     }
     // Anything else ends the folding run: an item outside any run, or a new one.
+    //
+    // A thought the store holds without a run still belongs to the work it was written into. A live
+    // bubble that lost its run -- a start frame missed on a reconnect, a session list that sealed
+    // the run a beat early -- left its reasoning standing between the fold and the message it
+    // produced, which the reader saw as a reasoning that had escaped the group (owner, 2026-11-13).
+    // Only a bare thought joins, only into a run still being written, and only when it is not itself
+    // a row: a message keeps its place whatever run it wears.
+    if (!itemRun && run && run.status === 'running' && !stays && isThoughtOnly(item)) {
+      current.push(item);
+      continue;
+    }
     closeRun();
     if (!itemRun) {
       rows.push({ kind: 'item', item });

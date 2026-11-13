@@ -69,6 +69,18 @@ no group to draw. The wait is the bubble's own `WaitLine`, where it has always b
 
 The fold cuts around every hoisted row, so the order the work was written in survives.
 
+## A thought never stands outside
+
+A thought the store holds **without a run** -- a live bubble whose start frame was missed, a run the
+server folded as no longer running -- joins the fold being written instead of drawing between it and
+the message it produced. The owner photographed exactly that on 2026-11-13: four blocks reading
+`55 steps · 28 shell · 7 web · 20 thoughts`, a bare `Reasoning` line, then the message, while a
+reasoning that *did* carry its run sat in the fold like every other step.
+
+The rule is narrow on purpose: a phase that only thought (no words, no file), only while the run is
+still `running`. A message keeps its place whatever run it wears -- hoisting is what makes the answer
+readable, and a stray thought with nothing being written around it stays a row of its own.
+
 ## An opened row
 
 Clicking a row does not move it. Its body hangs under it on the page:
