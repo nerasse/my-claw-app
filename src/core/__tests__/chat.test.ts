@@ -119,6 +119,29 @@ describe('chatStore streaming', () => {
     expect(errors[0]).toMatchObject({ id: 'e1', error: 'HTTP 429', streaming: false });
   });
 
+  test('the same failure under two ids is one bubble, and the journalled one is the survivor', () => {
+    // The run died before its first token: the client invented a bubble from the abort frame, and
+    // the server journalled the failure under an id of its own because the stream had already been
+    // claimed. The thread held both -- the live one hoisted with the run's work, the entry stuck at
+    // the bottom with everything that came after it above, until a reload.
+    chatStore.abortStream(THREAD, 'live-error', 'HTTP 429');
+    chatStore.handleSyncResult(
+      THREAD,
+      [{ id: 'failure-1', role: 'assistant', text: '', ts: '2026-01-01T00:00:02.000Z', error: 'HTTP 429' }],
+      'failure-1',
+      'failure-1',
+      false,
+      undefined,
+      false,
+      false,
+      0,
+    );
+
+    const errors = chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.error !== undefined);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ id: 'failure-1', error: 'HTTP 429' });
+  });
+
   test('an abort settling a bubble that came from a page keeps its text and its place', () => {
     // The bubble is on screen, written by the server, and its own stream is gone: the abort has
     // to find it rather than add a second one under the answer.

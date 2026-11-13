@@ -432,6 +432,36 @@ function insertByTs(existing: ChatItem[], incoming: ChatItem[]): ChatItem[] {
 }
 
 /**
+ * The failure a run leaves behind is one bubble, whatever id the server gave it.
+ *
+ * A run that dies before its first token has no entry to carry the error, so the client invents a
+ * bubble from the abort frame and the server journals a `failure` of its own. They usually share
+ * an id (`bubble-identity.md`), but not always: the stream may have already been claimed by a
+ * phase, and then `log.append` mints its own. Two bubbles for one failure is what the owner saw
+ * while the new entries landed above them -- the live one hoisted with the work, the journalled one
+ * stuck at the bottom of the thread (2026-11-13).
+ *
+ * `persisted` wins, because it is the one a reload will serve; the live bubble goes. Matched on the
+ * error's own words, which is the only identity the two share, and only for a bubble the run is no
+ * longer writing into: a live stream is never settled by another bubble's failure.
+ */
+function isSettledByError(item: ChatItem, persisted: readonly ChatItem[]): boolean {
+  if (item.kind !== 'text' || item.error === undefined) return false;
+  return persisted.some(other => other.kind === 'text' && other.error === item.error);
+}
+
+/**
+ * The mirror case, on the page's side: a failure entry the screen already carries under the live
+ * bubble's id is not a second failure. It would land at the end of the thread, under everything
+ * that followed the run it ends, and stay there until a reload.
+ */
+function withoutOrphanErrors(persisted: ChatItem[], fresh: readonly ChatItem[]): ChatItem[] {
+  const known = new Set(fresh.flatMap(item => (item.kind === 'text' && item.error !== undefined ? [item.error] : [])));
+  if (known.size === 0) return persisted;
+  return persisted.filter(item => !(item.kind === 'text' && item.error !== undefined && known.has(item.error)));
+}
+
+/**
  * What a page leaves standing that it does not carry, each where it belongs.
  *
  * An owner's send that the server has not parked goes back among the page by its own clock: a
@@ -1414,8 +1444,8 @@ class ChatStoreImpl {
     // A delta is newer than what is persisted, but NOT newer than the turn in flight: the live
     // items belong to a run the server has not written yet. Appending blind hoists a running tool
     // card above the user bubble it answers.
-    const persisted = patched.filter(item => !isLocalLive(item));
-    const live = patched.filter(isLocalLive);
+    const persisted = withoutOrphanErrors(patched.filter(item => !isLocalLive(item)), fresh);
+    const live = patched.filter(isLocalLive).filter(item => !isSettledByError(item, persisted));
     this.threads.set(threadId, this.trimToCap(threadId, [...insertByTs(persisted, fresh), ...live]));
     this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
