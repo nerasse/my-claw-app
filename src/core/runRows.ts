@@ -1,4 +1,4 @@
-import { isSubAgentTool, type ChatItem, type RunInfo, type RunSummaryItem } from './chat';
+import { isSubAgentTool, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from './chat';
 import { dayOf } from './day';
 
 /**
@@ -269,9 +269,14 @@ export function hasNothingToShow(item: ChatItem): boolean {
 /**
  * A message the owner sent, as opposed to what is stored under the same role: a command and its
  * output, a notice, a compaction boundary (the summary is a `user` turn because the prompt needs
- * it there).
+ * it there), and a sub-agent's return (written under `user` so the model answers it, and drawn as
+ * an agent's card).
+ *
+ * Every reader of "what did the owner type" goes through this: the terminal history recall, the
+ * Continue button, the run's own trigger signature. A return is not one of those, and treating it
+ * as one made Up recall a report and made a run sign a message nobody had sent.
  */
-export function isOwnerMessage(item: ChatItem): boolean {
+export function isOwnerMessage(item: ChatItem): item is TextItem {
   return (
     item.kind === 'text' &&
     item.role === 'user' &&
@@ -279,7 +284,8 @@ export function isOwnerMessage(item: ChatItem): boolean {
     item.notice !== true &&
     item.summaryOf === undefined &&
     item.compactionMs === undefined &&
-    item.compactionStopped !== true
+    item.compactionStopped !== true &&
+    item.from?.kind !== 'return'
   );
 }
 
@@ -517,6 +523,10 @@ function markLiveSegment(rows: ChatRow[]): ChatRow[] {
 function footAnchorOf(row: ChatRow): boolean {
   if (row.kind !== 'item' || row.item.kind !== 'text') return false;
   const item = row.item;
+  // A sub-agent's return is a card, not a message: it has no action row to sign under, so the
+  // run's empreinte gets its own row after it. Left as an anchor, the signature was simply not
+  // drawn -- the card drew the turn, and `foot` went nowhere.
+  if (item.from?.kind === 'return') return false;
   return (
     item.command !== true &&
     item.notice !== true &&

@@ -1,4 +1,4 @@
-import { buildRows, foldKeyOf, isAgentMessage, isHoisted, pinnedSends, withDaySeparators, type ChatRow } from '../runRows';
+import { buildRows, foldKeyOf, isAgentMessage, isHoisted, isOwnerMessage, pinnedSends, withDaySeparators, type ChatRow } from '../runRows';
 import type { ChatItem } from '../chat';
 
 /** A finished run's items, status, timeline. */
@@ -412,6 +412,46 @@ describe('isHoisted', () => {
     expect(isHoisted(agentText('a', 'text'))).toBe(false);
   });
 });
+describe('a sub-agent return, as a row', () => {
+  const returned = (id: string, runId?: string): ChatItem =>
+    ({
+      kind: 'text',
+      id,
+      role: 'user',
+      text: 'the report',
+      attachments: [],
+      streaming: false,
+      from: { label: 'eyes', kind: 'return', status: 'complete' },
+      ts: 5,
+      ...(runId ? { run: run(runId) } : {}),
+    }) as ChatItem;
+
+  test('it is never taken for the owner speaking', () => {
+    // The turn rides the log under `role: 'user'` because the prompt needs a turn in that role to
+    // answer it, and every reader of "what did the owner type" has to say no here: the terminal
+    // recall, Continue, and the signature a run hangs on its trigger.
+    const row = returned('ret-1');
+    expect(isOwnerMessage(row)).toBe(false);
+    expect(isOwnerMessage(userText('u'))).toBe(true);
+    // Hoisted, though: like the owner's own turns it stays a row of the thread rather than
+    // disappearing into a fold, which is where a report read as a line of work would be the least
+    // findable thing on screen.
+    expect(isHoisted(row)).toBe(true);
+  });
+
+  test('it cuts the fold like a message, and never lands inside one', () => {
+    const rows = buildRows([userText('u'), tool('t1', 'r1'), returned('ret-1', 'r1'), tool('t2', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'ret-1', 'g:r1+foot']);
+  });
+
+  test('the run signature gets its own row after it, not a bubble to sign', () => {
+    // A return is a card: it has no action row, so the empreinte it used to be nailed onto was
+    // never drawn at all.
+    const rows = buildRows([userText('u'), returned('ret-1', 'r1')]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'ret-1', 'foot:r1']);
+  });
+});
+
 describe('folded runs: the work never travelled', () => {
   test('a folded row is a group row of its own', () => {
     const rows = buildRows([userText('u'), folded('a', 'r1'), agentText('ans', 'answer', 'r1')]);

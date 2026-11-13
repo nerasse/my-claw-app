@@ -9,12 +9,14 @@ import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
 import { RunFoot } from '../components/RunFoot';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
+import { SubAgentReturn } from '../components/SubAgentReturn';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useActiveRun, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, withDaySeparators, type ChatRow } from '../core/runRows';
+import { isSubAgentReturn } from '../core/subagentReturn';
 import { newerLine, olderLine, recallLines, recallsDraft } from '../core/recall';
 import { historyPillVisible } from '../core/historyPill';
 import { pointerFine } from '../core/platform';
@@ -1243,8 +1245,23 @@ export function ChatScreen({
             subagent={subagentDoors.get(item.id)}
             spawn={spawnLive?.get(item.id)}
             onOpen={onOpenSubAgent}
-            expandTools={uiPrefs?.expandTools ?? false}
           />
+          </View>
+        );
+      }
+      // A sub-agent's report is a row of the thread, not a bubble: `role: 'user'` on the wire is a
+      // fact about the prompt, and drawing it as a message made the owner read his own voice onto
+      // words an agent wrote (owner, 2026-11-13).
+      if (item.kind === 'text' && isSubAgentReturn(item)) {
+        return (
+          <View style={toolColumn}>
+            <SubAgentReturn
+              item={item}
+              mediaBase={mediaBase}
+              deviceInfo={deviceInfo}
+              onOpenAttachment={openAttachment}
+              onOpenMedia={openMedia}
+            />
           </View>
         );
       }

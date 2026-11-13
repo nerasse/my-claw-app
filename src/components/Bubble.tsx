@@ -6,8 +6,8 @@ import type { DeviceInfo } from '../core/device';
 import type { FileKind } from '../core/fileKind';
 import type { ViewerKind } from '../core/utils';
 import { AgentMarkdown } from './AgentMarkdown';
-import { AttachmentView } from './AttachmentView';
-import { MediaCarousel, isCarouselMedia, mediaItemsOf, type MediaItem } from './MediaCarousel';
+import { AttachmentList } from './AttachmentList';
+import type { MediaItem } from './MediaCarousel';
 import { CollapsibleAside } from './CollapsibleAside';
 import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine, showsReasoningRow } from './ReasoningLine';
@@ -124,48 +124,22 @@ export const Bubble = React.memo(function BubbleView({
   // photo is, said after it), the agent's answer reads as a reply, then the file it produced. The
   // live `addAgentMessage` merges the media bubble the router sends after the streamed text into
   // the stream bubble, so this order is what a finished turn shows on screen.
-  const single = (att: (typeof item.attachments)[number]): React.JSX.Element => (
-    <AttachmentView
-      key={att.id}
-      att={att}
+  //
+  // The drawing itself (consecutive pictures become one carousel, a run is only grouped when every
+  // attachment of it can be drawn) is `AttachmentList`, shared with a sub-agent's return: a browser
+  // task brings screenshots back, and a second copy of that rule in a second component is how the
+  // two would drift apart.
+  const attachmentsEl = (
+    <AttachmentList
+      attachments={item.attachments}
+      {...(item.transcripts ? { transcripts: item.transcripts } : {})}
       mediaBase={mediaBase}
       deviceInfo={deviceInfo}
-      onOpen={onOpenAttachment}
-      // Each recording carries its own words; one blob under all of them would say the
-      // wrong thing twice.
-      transcript={item.transcripts?.[att.id]}
+      {...(onOpenAttachment ? { onOpen: onOpenAttachment } : {})}
+      {...(onOpenMedia ? { onOpenMedia } : {})}
       onAccent={!agent}
     />
   );
-  // Consecutive pictures become one carousel; everything else keeps its own row, in the order the
-  // message carried it. A run is only grouped when every attachment of it can actually be drawn --
-  // a picture with no bytes left is a chip, and a carousel with a hole in it would hide that.
-  const attachmentsEl: React.JSX.Element[] = [];
-  let run: typeof item.attachments = [];
-  const flush = (): void => {
-    if (run.length === 0) return;
-    const items = mediaItemsOf(run, mediaBase, deviceInfo);
-    if (items.length > 1 && items.length === run.length) {
-      attachmentsEl.push(
-        <MediaCarousel
-          key={`carousel-${run[0].id}`}
-          items={items}
-          onOpen={index => onOpenMedia?.(items, index)}
-        />,
-      );
-    } else {
-      for (const att of run) attachmentsEl.push(single(att));
-    }
-    run = [];
-  };
-  for (const att of item.attachments) {
-    if (isCarouselMedia(att)) run.push(att);
-    else {
-      flush();
-      attachmentsEl.push(single(att));
-    }
-  }
-  flush();
   const textEl = item.text ? (
     item.command || item.notice ? (
       <Text
@@ -269,9 +243,6 @@ export const Bubble = React.memo(function BubbleView({
           item.command && styles.bubbleCommand,
           // A notice is the system speaking: the agent did not write it either.
           item.notice && styles.bubbleNotice,
-          // A sub-agent's return came from an agent, so it takes the thread's neutral surface
-          // rather than the owner's bubble: it is a card, and the owner never typed it.
-          item.from?.kind === 'return' && styles.bubbleReturn,
         ]}
         // A Pressable is accessible by default, which would collapse the bubble into one node
         // and hide the reasoning line, the attachments and the tool cards from a screen reader.
@@ -301,12 +272,6 @@ export const Bubble = React.memo(function BubbleView({
             {...(dense ? { headHeight: spine(scale).head } : {})}
             {...(thoughtOnly ? { at: item.ts } : {})}
           />
-        ) : null}
-        {item.from?.kind === 'return' ? (
-          <View style={styles.returnHead}>
-            <Text style={styles.returnWho} numberOfLines={1}>{item.from.label}</Text>
-            <Text style={styles.returnState}>{returnWord(item.from.status)}</Text>
-          </View>
         ) : null}
         {item.location ? <LocationView location={item.location} onAccent={!agent} /> : null}
         {!agent ? attachmentsEl : null}
@@ -384,13 +349,6 @@ export const Bubble = React.memo(function BubbleView({
   );
 });
 
-/** What became of the run that reported: the card's own word for its status. */
-function returnWord(status: string | undefined): string {
-  if (status === 'error') return 'failed';
-  if (status === 'stopped') return 'stopped';
-  return 'returned';
-}
-
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   row: { width: '100%' as const, flexDirection: 'row' as const, marginBottom: space.xs },
   rowGrouped: { marginBottom: 1 },
@@ -414,23 +372,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
-  bubbleReturn: {
-    alignSelf: 'stretch' as const,
-    maxWidth: '100%' as const,
-    backgroundColor: palette.surface,
-  },
-  /**
-   * Who reported, and what became of it. One line above the body: the card has to say it is an
-   * agent before the reader takes the words for the owner's.
-   */
-  returnHead: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.xs,
-    marginBottom: space.xs,
-  },
-  returnWho: { fontSize: scaleFont(font.meta, scale), fontWeight: '600' as const, color: palette.text, flexShrink: 1 },
-  returnState: { fontSize: scaleFont(font.meta, scale), color: palette.textMeta },
   bubbleUser: {
     // The POC's two bounds, not one: the bubble shrinks to its text, and it stops at a
     // comfortable measure. Drawn full width, a message of three words left half a screen of

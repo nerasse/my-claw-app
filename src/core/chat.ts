@@ -293,7 +293,9 @@ function isLocalLive(item: ChatItem): boolean {
  * than this one). Otherwise the rule is the one above.
  */
 function survivesPage(item: ChatItem, activeRun: boolean | undefined, userBubbles: boolean): boolean {
-  const ownSend = item.kind === 'text' && item.role === 'user' && item.summaryOf === undefined;
+  // `isOwnerMessage`, not the role: a sub-agent's return rides the log under `role: 'user'` because
+  // the prompt needs a turn in that role to answer it, and it is not something the owner typed.
+  const ownSend = isOwnerMessage(item);
   if (activeRun === false) {
     if (item.kind === 'tool') return item.running === true;
     return ownSend && (userBubbles || item.queuedSince !== undefined);
@@ -477,13 +479,7 @@ function withoutOrphanErrors(persisted: ChatItem[], fresh: readonly ChatItem[]):
  */
 function mergeLocalSurvivors(base: ChatItem[], live: ChatItem[]): ChatItem[] {
   if (live.length === 0) return base;
-  const typed = live.filter(
-    item =>
-      item.kind === 'text' &&
-      item.role === 'user' &&
-      item.summaryOf === undefined &&
-      item.queuedSince === undefined,
-  );
+  const typed = live.filter(item => isOwnerMessage(item) && item.queuedSince === undefined);
   const tail = live.filter(item => !typed.includes(item));
   return [...insertByTs(base, typed), ...tail];
 }
@@ -635,7 +631,10 @@ class ChatStoreImpl {
         id: cardId,
         name: live.action,
         args: { type: live.agentType, mode: live.mode, task: '' },
-        ok: live.status === 'complete',
+        // The launch was accepted; how the child fared is its own report's business (`SubAgentCard`
+        // says `started` and stops there). `ok: false` on a settled error drew a working launch as
+        // a refusal.
+        ok: true,
         durationMs: undefined,
         subagentId: live.subagentId,
         status: live.status,
@@ -659,7 +658,7 @@ class ChatStoreImpl {
     if (current?.status !== undefined && current.status !== 'running') {
       const item = this.getItems(threadId).find(entry => entry.id === cardId);
       if (item?.kind === 'tool' && item.running) {
-        this.patchTool(threadId, cardId, { running: false, ok: current.status === 'complete', spawn: current }, true);
+        this.patchTool(threadId, cardId, { running: false, spawn: current }, true);
       }
       return;
     }
@@ -723,7 +722,7 @@ class ChatStoreImpl {
     } : undefined);
     // A delayed duplicate terminal event must not rewrite the first terminal outcome.
     if (current && current.status !== 'running') {
-      if (runningTool) this.patchTool(threadId, cardId, { running: false, ok: current.status === 'complete', spawn: current }, true);
+      if (runningTool) this.patchTool(threadId, cardId, { running: false, spawn: current }, true);
       return;
     }
     if (next) {
@@ -735,7 +734,10 @@ class ChatStoreImpl {
       };
       this.setSpawnState(threadId, cardId, spawn);
       if (runningTool || tool?.kind === 'tool') {
-        this.patchTool(threadId, cardId, { running: false, ok: outcome.status === 'complete', spawn }, true);
+        // `ok` is left to the tool frame: it describes the launch call, and the child's status is
+        // `spawn`. Writing `outcome.status === 'complete'` here made a card whose child failed read
+        // "refused", which is a verdict about the launch nobody gave.
+        this.patchTool(threadId, cardId, { running: false, spawn }, true);
       }
     } else if (runningTool) {
       this.patchTool(threadId, cardId, { running: false }, true);
@@ -2366,8 +2368,9 @@ class ChatStoreImpl {
   private insertionIndex(items: readonly ChatItem[], incoming: ChatItem): number {
     // A compaction boundary is stored under `role: 'user'` (the role the prompt needs the summary
     // in), but it is not something the owner sent: it belongs to the run that is still going, like
-    // that run's own cards, so it must not step over a send parked behind it.
-    const ownMessage = incoming.kind === 'text' && incoming.role === 'user' && incoming.summaryOf === undefined;
+    // that run's own cards, so it must not step over a send parked behind it. Nor is a sub-agent's
+    // return, which is how it lands under a parked message and reads as an answer to it.
+    const ownMessage = isOwnerMessage(incoming);
     if (ownMessage) return items.length;
     let index = items.length;
     while (index > 0) {

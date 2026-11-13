@@ -1,7 +1,8 @@
 /**
- * A `spawn`/`send` card is a door, not a result. Everything here guards that: the way to the
- * sub-agent is reachable while the card is folded, and the head says who and in what state
- * without unfolding anything.
+ * A `spawn`/`send` card is a door, not a result -- and since the launch stopped blocking, not a
+ * clock either. Everything here guards that: the way to the sub-agent is reachable while the card
+ * is folded, the head says who and that it started, and nothing on it claims to know how the child
+ * is doing, because this call is over.
  */
 
 import React from 'react';
@@ -39,8 +40,6 @@ function render(item: ToolItem, props: Record<string, unknown> = {}) {
   return tree;
 }
 
-// A running card counts its own seconds, so it holds an interval. Unmounted after every test:
-// left alive, the tick lands after the test and React reports an act() warning for it.
 let lastTree: ReactTestRenderer.ReactTestRenderer | undefined;
 afterEach(() => {
   if (!lastTree) return;
@@ -83,29 +82,9 @@ it('names the sub-agent and what it was asked, on one line, folded', () => {
   const tree = render(makeItem(), DOOR);
   const shown = texts(tree);
   expect(shown).toContain('digger');
-  // What it is doing beats its type: a brief used to cost a second full-width line under the row,
-  // which made the one door of a run the tallest thing in the thread.
   expect(shown).toContain('read the reasoning flow');
 });
 
-/**
- * The clock on a running card is one line or none: squeezed into a sliver it wrapped at its own
- * space and read `20` over `s` (owner, 2026-11-08).
- */
-it('never lets the seconds wrap, however long the brief is', () => {
-  const long = 'New read-only design task, same rules (no edits, no cargo). Repo /home/neras/cf/CubeFlow at main b59fcc1. ' + 'Topic: '.repeat(20);
-  const item = makeItem({ args: { name: 'digger', type: 'research', mode: 'session', task: long }, running: true, ts: Date.now() - 20_000 });
-  const tree = render(item, DOOR);
-  const figures = tree.root.findAllByType(Text).filter(t => typeof t.props.children === 'string' && /^\d+ s$/.test(t.props.children));
-  expect(figures.length).toBeGreaterThan(0);
-  expect(figures.every(t => t.props.numberOfLines === 1)).toBe(true);
-});
-
-/**
- * The regression this replaces: the brief stood in the head *instead of* the name, so a spawn whose
- * task was long read as an anonymous task line and nothing said an agent was on it (owner,
- * 2026-11-08: "on dirait pas un sous agent").
- */
 it('keeps the name on the head and gives the brief its own line', () => {
   const task = 'New read-only design task, same rules (no edits, no cargo). Repo /home/neras/cf/CubeFlow at main b59fcc1.';
   const tree = render(makeItem({ args: { name: 'digger', type: 'research', mode: 'session', task } }), DOOR);
@@ -145,7 +124,7 @@ it('shows the task and the result once unfolded', () => {
   const tree = render(makeItem(), DOOR);
   ReactTestRenderer.act(() => {
     tree.root
-      .find(node => node.props.accessibilityLabel === 'Sub-agent digger' && typeof node.props.onPress === 'function')
+      .find(node => node.props.accessibilityLabel === 'Sub-agent digger, started' && typeof node.props.onPress === 'function')
       .props.onPress();
   });
   const shown = texts(tree);
@@ -157,7 +136,7 @@ it('calls a send what it is: a message, not a task', () => {
   const tree = render(makeItem({ name: 'send', args: { id: 'subagent/digger-a1b2', message: 'status?' } }), DOOR);
   ReactTestRenderer.act(() => {
     tree.root
-      .find(node => node.props.accessibilityLabel === 'Sub-agent digger' && typeof node.props.onPress === 'function')
+      .find(node => node.props.accessibilityLabel === 'Sub-agent digger, sent' && typeof node.props.onPress === 'function')
       .props.onPress();
   });
   expect(texts(tree)).toContain('message');
@@ -165,15 +144,13 @@ it('calls a send what it is: a message, not a task', () => {
 });
 
 it('a delegated browser task is a sub-agent card: the browser is who, the site is what, the door opens it', () => {
-  // The browser used to run as a private loop with no session, so its call was an ordinary tool
-  // row: nothing to open, nothing live. It is a real sub-agent now and its card says so.
   const onOpen = jest.fn();
   const tree = render(
     makeItem({
       name: 'delegate_browser_task',
       args: { url: 'https://shop.example.com/cart', instructions: 'Check the cart total' },
     }),
-    { subagent: { label: 'browser-3f2a', status: 'running' as const }, spawn: { subagentId: 'subagent/browser-3f2a', displayName: 'browser-3f2a', status: 'running' as const }, onOpen },
+    { subagent: { label: 'browser-3f2a', status: 'running' as const }, onOpen },
   );
   const shown = texts(tree);
   expect(shown).toContain('browser-3f2a');
@@ -182,73 +159,61 @@ it('a delegated browser task is a sub-agent card: the browser is who, the site i
   expect(button).toBeDefined();
   ReactTestRenderer.act(() => button!.props.onPress());
   expect(onOpen).toHaveBeenCalledWith('tool-1');
-  // Unfolded, the instructions are the task.
   ReactTestRenderer.act(() => {
     tree.root
-      .find(node => node.props.accessibilityLabel === 'Sub-agent browser-3f2a, running' && typeof node.props.onPress === 'function')
+      .find(node => node.props.accessibilityLabel === 'Sub-agent browser-3f2a, started' && typeof node.props.onPress === 'function')
       .props.onPress();
   });
   expect(texts(tree)).toContain('task');
   expect(texts(tree)).toContain('Check the cart total');
 });
 
-// One vocabulary with the tool card (core/toolState). Running and done carry no word: the
-// spinner and the duration already say it, and a card that spelled out "done" next to "1.2 s"
-// would be saying it twice.
+/**
+ * The whole point of this card since the launch stopped blocking: it says one word, forever.
+ *
+ * It used to read the child's life -- a spinner while it worked, a clock climbing beside it, then
+ * "failed" or "error" when it settled -- because the call stayed open for the whole run. Every one
+ * of those was a lie about a call that had already returned, and a loading mark in a thread where
+ * nothing was loading (owner, 2026-11-13).
+ */
 it.each([
-  ['error' as const, 'failed'],
-  ['aborted' as const, 'stopped'],
-])('says in the head that the run is %s', (status, expected) => {
-  const tree = render(makeItem({ running: false }), {
-    ...DOOR,
-    spawn: { subagentId: 's1', displayName: 'digger', status },
-  });
-  expect(texts(tree)).toContain(expected);
-});
-
-it.each(['running' as const, 'complete' as const])('a %s run draws no state word', status => {
-  const tree = render(makeItem({ running: status === 'running', durationMs: status === 'complete' ? 1200 : undefined }), {
-    ...DOOR,
-    spawn: { subagentId: 's1', displayName: 'digger', status },
-  });
-  for (const word of ['failed', 'stopped', 'truncated', 'done', 'running']) {
-    expect(texts(tree)).not.toContain(word);
-  }
-});
-
-// 2026-10-04: a card the server went down under is drawn from its state alone, and such a card is
-// never `ok`. Read before the state, `ok: false` painted it a red "error" -- a stopped one too.
-it.each(['interrupted' as const, 'aborted' as const])(
-  'a card drawn from its state alone says stopped (%s), not failed',
-  status => {
-    const tree = render(makeItem({ ok: false, output: '' }), {
-      ...DOOR,
-      spawn: { subagentId: 's1', displayName: 'digger', status },
-    });
-    expect(texts(tree)).toContain('stopped');
-    expect(texts(tree)).not.toContain('failed');
-  },
-);
-
-// A running card without a clock is the same picture at ten seconds and at ten minutes, and
-// nothing else on the card carries time until the result lands.
-it('counts the run while it runs', () => {
-  const tree = render(makeItem({ running: true, ts: Date.now() - 95_000 }), {
-    ...DOOR,
-    spawn: { subagentId: 's1', displayName: 'digger', status: 'running' as const },
-  });
-  const shown = texts(tree);
-  expect(shown.some(text => /^1 min \d+ s$/.test(text))).toBe(true);
-});
-
-it('a settled card shows its frozen duration, not a second counter', () => {
-  const tree = render(makeItem({ durationMs: 4200, ts: Date.now() - 95_000 }), {
+  ['spawn' as const, 'started'],
+  ['send' as const, 'sent'],
+])('a %s says %s and nothing else', (name, word) => {
+  const tree = render(makeItem({ name, args: { name: 'digger', message: 'go', task: 'go' } }), {
     ...DOOR,
     spawn: { subagentId: 's1', displayName: 'digger', status: 'complete' as const },
   });
-  const shown = texts(tree);
-  expect(shown).toContain('4.2 s');
-  expect(shown.some(text => /^1 min \d+ s$/.test(text))).toBe(false);
+  expect(texts(tree)).toContain(word);
+  for (const other of ['failed', 'stopped', 'error', 'running', 'done', 'returned']) {
+    expect(texts(tree)).not.toContain(other);
+  }
+});
+
+/** The child's fate belongs to its return card. Two cards saying it is the same fact twice. */
+it('never repeats the child outcome the child reports itself', () => {
+  const tree = render(makeItem(), { ...DOOR, spawn: { subagentId: 's1', displayName: 'digger', status: 'error' as const } });
+  expect(texts(tree)).toContain('started');
+  expect(texts(tree)).not.toContain('failed');
+});
+
+it('says refused when the launch itself was refused', () => {
+  const tree = render(makeItem({ ok: false, output: 'no such agent' }), DOOR);
+  expect(texts(tree)).toContain('refused');
+});
+
+/**
+ * No clock anywhere on a running card: the call is over, and the child's own elapsed time is its
+ * thread's business. The interval that used to feed `RunningFor` is gone with it.
+ */
+it('draws no clock, live or settled', () => {
+  const live = texts(render(makeItem({ running: true, ts: Date.now() - 95_000 }), {
+    ...DOOR,
+    spawn: { subagentId: 's1', displayName: 'digger', status: 'running' as const },
+  }));
+  expect(live.some(text => /^\d+ (s|min)/.test(text))).toBe(false);
+  const settled = texts(render(makeItem({ durationMs: 4200 }), DOOR));
+  expect(settled.some(text => text === '4.2 s')).toBe(false);
 });
 
 /**
@@ -256,16 +221,29 @@ it('a settled card shows its frozen duration, not a second counter', () => {
  * its route on a wall answers on another account than the one it started on. `modelLive` is what
  * says the name is the current one rather than the pin.
  */
-test('a running sub-agent shows the model it is calling, and marks it when it walked off its pin', () => {
-  const tree = render(makeItem({ ok: undefined, running: true }), {
+test('shows the model the agent calls, and marks it when it walked off its pin', () => {
+  const tree = render(makeItem(), {
     subagent: { label: 'digger', status: 'running', model: 'claude-2/claude-fable-5-2', modelLive: true },
   });
   const shown = texts(tree);
   expect(shown).toContain('claude-2/claude-fable-5-2');
-  // The live name is accent-coloured: the same card on a pin draws it as meta.
-  const model_ = tree.root
-    .findAllByType(Text)
-    .find(node => node.props.children === 'claude-2/claude-fable-5-2');
+  const model_ = tree.root.findAllByType(Text).find(node => node.props.children === 'claude-2/claude-fable-5-2');
   const style = Array.isArray(model_?.props.style) ? Object.assign({}, ...model_.props.style) : model_?.props.style;
   expect((style as { color?: string } | undefined)?.color).toBe(lightPalette.accent);
+});
+
+/**
+ * A run can die under a launch: the tool frame never comes, and the card would sit running for
+ * good -- everything it draws is deferred to a settle that never lands. The child's own lifecycle
+ * is the second sign the launch was accepted, and it is what closes the row.
+ */
+it('closes itself from the child lifecycle when its own frame never arrives', () => {
+  const tree = render(makeItem({ running: true, ok: false, output: '' }), {
+    ...DOOR,
+    spawn: { subagentId: 's1', displayName: 'digger', status: 'complete' as const },
+  });
+  // `ok: false` on a card the store froze is not a refusal: that flag is the placeholder
+  // `startToolCall` writes, and the outcome the call never got is not the launch's verdict.
+  expect(texts(tree)).toContain('started');
+  expect(texts(tree)).not.toContain('refused');
 });

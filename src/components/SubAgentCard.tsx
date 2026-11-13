@@ -1,28 +1,29 @@
 import { OpenInNewIcon } from '../components/icons';
-import React, { useState, useEffect, useRef } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
 import type { SpawnStatus } from '../core/protocol';
 import { BlockActions } from './BlockActions';
 import { ScrollableBlock } from './ScrollableBlock';
-import { formatSpan } from '../core/utils';
-import { useElapsed } from './CommandElapsed';
 import { requestToolOutput } from '../core/toolOutput';
-import { runStateOf, stateWord } from '../core/toolState';
 import { ROW_GAP, spine } from './spine';
 import { withoutEndpoint } from '../core/model';
 import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
 /**
- * A `spawn` or `send` call: not a tool result to read, a sub-agent to go and see.
+ * A `spawn`, `send` or `delegate_browser_task` call: not a tool result to read, a sub-agent to go
+ * and see -- and, since the launch stopped blocking, a line that says one thing: it started.
  *
- * It used to render as an ordinary ToolCard, and the door to the sub-agent was the last node of
- * the expanded body. Reaching the one thing the card is for meant unfolding it, scrolling past
- * the serialized call and the whole result, and only then tapping. The door is in the head here,
- * reachable while the card is still folded, and the body holds what a sub-agent run actually has
- * to say: the task it was given and the answer it came back with.
+ * It used to draw the child's life: a spinner while it worked, a clock climbing beside it, then
+ * "failed" or "stopped" when the child settled, because the call itself stayed open for the whole
+ * run and its `ok` was the child's fate. Now the call answers at once and the child works on its
+ * own, so all of that became a lie about a call that had already finished -- and a loading state in
+ * a thread where nothing is loading. The card says `started` (or `sent`), fixed forever, and the
+ * child's outcome is its return's business (`SubAgentReturn`), which is a different card at a
+ * different moment.
  *
- * Memoized, and `onOpen` takes the card id rather than being closed over it: see Bubble.
+ * The head is still the door to the sub-agent, reachable while the card is folded, and the body
+ * still holds what a launch has to say: the task it was given and what the call answered with.
  */
 /** The site of a browser task. By hand, not `new URL`: RN's URL is a partial polyfill (see `httpOrigin`). */
 function hostOf(url: unknown): string {
@@ -32,22 +33,30 @@ function hostOf(url: unknown): string {
 }
 
 /**
- * Seconds since the call started, where the frozen duration will sit once it settles.
+ * What the row says for good, once the call is over.
  *
- * A sub-agent can run for ten minutes; "● running" alone says nothing about whether it has been
- * going for ten seconds or ten minutes, and the card carries no other trace of time until the
- * result lands. Its own component so the tick redraws this text and not the card.
+ * Three words and no state machine: a launch either started (or sent, for a `send`) or it was
+ * refused. The child's own fate is deliberately absent -- it belongs to the return card, and
+ * reading it here as well drew the same failure twice at two moments.
  */
-function RunningFor({ since }: { since: number }): React.JSX.Element {
-  const styles = useThemedStyles(createStyles);
-  const elapsed = useElapsed(since);
-  // One line, always: a figure squeezed into a sliver wrapped at its own space and read "20" over
-  // "s" (owner, 2026-11-08).
-  return (
-    <Text style={styles.figure} numberOfLines={1}>
-      {formatSpan(elapsed)}
-    </Text>
-  );
+function launchWord(
+  item: ToolItem,
+  action: 'spawn' | 'send' | 'browser',
+  settled: boolean,
+): { word: string; bad: boolean } {
+  // The call is still open, and that is the one case with no word: a launch answers in
+  // milliseconds, and a `wait: true` stays open by design until its child is done. Neither gets a
+  // spinner -- a launch is not a loading state.
+  //
+  // `settled` closes it when the call's own frame never comes. A run can die under a launch:
+  // `interruptInFlightTools` leaves sub-agent cards to their own state machine, so the card stayed
+  // `running` with the placeholder `ok: false` that `startToolCall` writes, and read as a refusal.
+  // The child's lifecycle is the second sign the launch was accepted, and it is enough: the
+  // launch did start, and the run ending under it is the run's own story (`RunFoot`).
+  if (item.running === true) return settled ? { word: action === 'send' ? 'sent' : 'started', bad: false } : { word: '', bad: false };
+  if (item.ok === false) return { word: 'refused', bad: true };
+  if (item.interrupted === true) return { word: 'stopped', bad: false };
+  return { word: action === 'send' ? 'sent' : 'started', bad: false };
 }
 
 export const SubAgentCard = React.memo(function SubAgentCardView({
@@ -56,7 +65,6 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
   subagent,
   spawn,
   onOpen,
-  expandTools,
 }: {
   item: ToolItem;
   /** The conversation the card belongs to: what a full-result request has to name. */
@@ -66,16 +74,14 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
    * the agent runs -- the live one when `modelLive`, its pin otherwise.
    */
   subagent?: { label: string; status: 'idle' | 'running'; model?: string; modelLive?: boolean };
+  /** The child's lifecycle, read only for its name: its status no longer dresses this card. */
   spawn?: { subagentId: string; displayName: string; status: SpawnStatus };
   onOpen?: (toolItemId: string) => void;
-  expandTools?: boolean;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
-  const userTookControl = useRef(false);
 
-  const running = item.running === true || spawn?.status === 'running';
-  const action = item.name === 'send' ? 'send' : 'spawn';
+  const action = item.name === 'send' ? 'send' : item.name === 'delegate_browser_task' ? 'browser' : 'spawn';
   // What to call it, in order of trust: the lifecycle frame knows the real display name, the
   // arguments only know what the caller asked for, and a `send` carries an id instead.
   const label =
@@ -93,7 +99,9 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           .filter(Boolean)
           .join(' · ');
   // A spawn is given a task, a send a message, a browser its instructions. Same slot either way.
-  const brief = [item.args.task, item.args.message, item.args.instructions].find(value => typeof value === 'string') as string | undefined;
+  const brief = [item.args.task, item.args.message, item.args.instructions].find(value => typeof value === 'string') as
+    | string
+    | undefined;
 
   /**
    * What the row says after the name: the agent's own shape (or, for a browser task, the browser and
@@ -107,42 +115,26 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
    * on. Marked in accent when it is not the pin -- the row then names the model answering now.
    */
   const model = subagent?.model ? withoutEndpoint(subagent.model) : undefined;
+  // The child's lifecycle is how the card knows the launch landed even when its own result frame
+  // never arrives: any terminal state means the call was accepted.
+  const settled = spawn !== undefined && spawn.status !== 'running';
+  const { word, bad } = launchWord(item, action, settled || item.durationMs !== undefined);
 
-  // Same rule as a tool card: with the pref off nothing ever opens on its own, and a tap survives
-  // the settle. The head is self-sufficient, so an unopened card here costs the reader nothing.
-  useEffect(() => {
-    if (expandTools && running && !open && !userTookControl.current) setOpen(true);
-    if (!running) userTookControl.current = false;
-  }, [expandTools, running, open]);
-
-  // A sub-agent's answer is exactly the kind of output that gets clipped. Asked for in full only
-  // once somebody unfolds the card.
+  // A launch's answer is exactly the kind of output that gets clipped (the child's id line, or the
+  // refusal). Asked for in full only once somebody unfolds the card.
   useEffect(() => {
     if (open && item.truncated && threadId) requestToolOutput(threadId, item.id);
   }, [open, item.truncated, item.id, threadId]);
-
-  // One vocabulary with the tool card (core/toolState): a sub-agent that failed and a tool that
-  // failed say the same word, and neither says "aborted" while the other says "interrupted".
-  const state = runStateOf({
-    running,
-    ok: spawn?.status === 'error' ? false : item.ok,
-    aborted: spawn?.status === 'aborted' || spawn?.status === 'interrupted',
-    truncated: item.truncated,
-  });
-  const word = stateWord(state);
 
   return (
     <View style={styles.row}>
       <View style={styles.head}>
         <Pressable
           style={styles.identity}
-          onPress={() => {
-            setOpen(value => !value);
-            userTookControl.current = true;
-          }}
+          onPress={() => setOpen(value => !value)}
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
-          accessibilityLabel={`Sub-agent ${label || id || action}${running ? ', running' : ''}`}
+          accessibilityLabel={`Sub-agent ${label || id || action}, ${word}`}
           accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
           {/* Who, first and always: an agent with no name still reads as an agent (`spawn`), and
               the brief never takes the line, so a named call can never look like an anonymous
@@ -152,6 +144,20 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           <Text style={styles.name} numberOfLines={1}>
             {label || id || action}
           </Text>
+          {/* The door, right after the name it opens: it belongs to the agent, not to the row's
+              trailing figures, and put there it never moves the word that ends the line. Outside
+              the toggle's own press target, so a screen reader announces it as the one control it
+              is and it cannot steal the toggle's touch. */}
+          {subagent && onOpen ? (
+            <Pressable
+              style={styles.door}
+              onPress={() => onOpen(item.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}
+              hitSlop={8}>
+              <OpenInNewIcon size={13} tone="accent" />
+            </Pressable>
+          ) : null}
           {what ? (
             <Text style={styles.kind} numberOfLines={1}>
               {what}
@@ -163,37 +169,14 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
               {model}
             </Text>
           ) : null}
-          {running && item.durationMs === undefined ? <RunningFor since={item.ts} /> : null}
+          {/* The launch, in one word, for good. No spinner and no clock: the call is over the
+              moment it lands, and a child working somewhere is not this row's state. */}
           {word ? (
-            <Text style={[styles.state, state === 'failed' ? styles.stateBad : styles.stateWarn]} numberOfLines={1}>
+            <Text style={[styles.state, bad ? styles.stateBad : null]} numberOfLines={1}>
               {word}
             </Text>
           ) : null}
-          {running ? (
-            <View style={styles.spinner}>
-              <ActivityIndicator size="small" />
-            </View>
-          ) : null}
-          {item.durationMs !== undefined ? (
-            <Text style={styles.figure} numberOfLines={1}>
-              {formatSpan(item.durationMs)}
-            </Text>
-          ) : null}
         </Pressable>
-
-        {/* The door, outside the toggle: a control inside a control is announced as one thing by a
-            screen reader and steals the other's touch. An icon on the row now instead of a second
-            full-width line under it. */}
-        {subagent && onOpen ? (
-          <Pressable
-            style={styles.door}
-            onPress={() => onOpen(item.id)}
-            accessibilityRole="button"
-            accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}
-            hitSlop={8}>
-            <OpenInNewIcon size={13} tone="accent" />
-          </Pressable>
-        ) : null}
       </View>
 
       {/* What it was asked, under the name it was given: the one line that says this is a job
@@ -218,11 +201,11 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
             </>
           ) : null}
           <View style={styles.blockHead}>
-            <Text style={styles.label}>result{item.truncated ? ' · truncated' : ''}</Text>
-            <BlockActions title={`${label || action} result`} value={item.output} />
+            <Text style={styles.label}>answer{item.truncated ? ' · truncated' : ''}</Text>
+            <BlockActions title={`${label || action} launch`} value={item.output} />
           </View>
-          <ScrollableBlock title={`${label || action} result`} style={styles.codeFlat}>
-            <Text style={styles.codeText}>{item.output.trim() || (running ? '(still running)' : '(empty)')}</Text>
+          <ScrollableBlock title={`${label || action} launch`} style={styles.codeFlat}>
+            <Text style={styles.codeText}>{item.output.trim() || '(empty)'}</Text>
           </ScrollableBlock>
         </View>
       ) : null}
@@ -238,10 +221,18 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
    * reader waits on the loudest object in a thread where everything else is a flat line. It takes
    * the spine's gutter and chevron slot instead, so its name lands on the same column as the work
    * around it.
+   *
+   * The pull-back is the group's own (`spine().inset`): a mark centred on the rail begins a few
+   * points inside the prose column, so a row that only indents by the gutter starts those same
+   * points to the right of the bar and the cards above it. Measured on the screen, not guessed.
    */
   row: {
     alignSelf: 'stretch' as const,
+    marginLeft: -spine(scale).inset,
     paddingLeft: spine(scale).gutter,
+    // The thread's right gutter, the one a tool's duration and a run's empreinte stop short of:
+    // without it these two words ended 8 pt right of every figure in the column.
+    paddingRight: 8,
     // A block, not a line: the thread's own rhythm above and below it -- the same 6 a tool card
     // takes, because this is a card's worth of content (a name, a type, a job), not a line of the
     // column. At 2 under it the next row sat on the brief (owner, 2026-11-08).
@@ -266,20 +257,22 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /** The model a running agent calls: a reading, so it never wraps and never takes the name's room. */
   model: { flexShrink: 1, minWidth: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   modelLive: { color: palette.accent },
-  /** A clock never shrinks and never wraps: `20` over `s` is what a squeezed figure looks like. */
-  figure: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
-  state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), fontWeight: '600' as const },
+  /** A word, not a verdict: grey says the launch happened, danger says it did not. */
+  state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   stateBad: { color: palette.danger },
-  stateWarn: { color: palette.warn },
-  spinner: { transform: [{ scale: 0.8 }] },
-  // The door carries the brief as its own label: one row that says both what was asked and that
-  // there is somewhere to go, instead of a line of prose above a button repeating the name.
-  /** The way in: an icon on the row, next to the chrono, not a line of its own. */
+  /**
+   * The way in: an icon beside the name it opens, inside the head row, not a line of its own and
+   * not a slot at the end -- there it moved the word that closes the line off the column every
+   * duration above it stops on.
+   */
   door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
-  doorLabel: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.text },
-  brief: { fontSize: scaleFont(font.small, scale), color: palette.textMuted, paddingHorizontal: space.xs },
   body: { gap: 3, paddingBottom: space.xxs, paddingLeft: 0 },
-  label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
+  label: {
+    fontSize: scaleFont(font.micro, scale),
+    color: palette.textMeta,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase' as const,
+  },
   blockHead: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
