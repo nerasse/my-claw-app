@@ -13,6 +13,7 @@ import { CommandElapsed } from './CommandElapsed';
 import { ReasoningLine, showsReasoningRow } from './ReasoningLine';
 import { WaitLine, WAIT_REVEAL_MS, useRevealed } from './WaitLine';
 import { RunFoot } from './RunFoot';
+import { RunFailure } from './RunFailure';
 import { LocationView } from './LocationView';
 import { chatSelectable } from '../core/platform';
 import { contextMenuProps, onAccentProps } from '../core/webProps';
@@ -351,18 +352,13 @@ export const Bubble = React.memo(function BubbleView({
           </Text>
         ) : null}
 
-        {item.error && !agent && onResend ? (
-          <Pressable
-            onPress={() => onResend(item)}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Send again">
-            <Text style={styles.error}>{`${item.error} · tap to send again`}</Text>
-          </Pressable>
-        ) : item.error ? (
-          <Text style={styles.error}>
-            {item.error}
-          </Text>
+        {item.error ? (
+          <RunFailure
+            error={item.error}
+            // The owner's own send can be sent again: the failure is the app's, and the whole
+            // line is the button. An agent's is the run's, and opens instead.
+            {...(!agent && onResend ? { onResend: () => onResend(item) } : {})}
+          />
         ) : null}
 
         {/* Sent on a socket that called itself open; the receipt is what proves it arrived. */}
@@ -468,7 +464,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // Command output keeps its line breaks: /status is a table, not prose.
   textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: scaleFont(font.small, scale) },
   textNotice: { color: palette.text, fontSize: scaleFont(font.small, scale) },
-  error: { fontSize: scaleFont(font.small, scale), color: palette.danger, marginTop: 2 },
   queued: { fontSize: scaleFont(font.small, scale), color: palette.textMeta, marginTop: 2 },
   queuedUser: { color: palette.bubbleUserText, opacity: 0.62 },
   // One alignment for every case. It used to follow the author, then space itself around the run's

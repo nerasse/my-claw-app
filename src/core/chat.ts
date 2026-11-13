@@ -2107,6 +2107,16 @@ class ChatStoreImpl {
 
   abortStream(threadId: string, id: string, error?: string): void {
     if (!this.streams.has(id)) {
+      // An id the thread already holds is carrying its error itself: a sync delivered the very
+      // bubble this abort names, or an earlier abort already settled it. Appending here is the
+      // duplicate the owner saw stuck at the bottom of the thread while the new entries landed
+      // above it -- `append` does not dedupe, and no later delta touches it, so only a reload
+      // could take it away (2026-11-13). Patch it where it sits instead.
+      const held = this.getItems(threadId).find(item => item.id === id);
+      if (held?.kind === 'text' && error) {
+        if (held.streaming || held.error !== error) this.patch(threadId, id, { streaming: false, error });
+        return;
+      }
       // A bubble is invented here, and only for a run that died before its first token: the error
       // has nowhere else to go, and a thread that ends on nothing explains nothing. With no error
       // there is nothing to invent it for -- a stop settles bubbles it never opened (one streamer

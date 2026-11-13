@@ -101,6 +101,50 @@ describe('chatStore streaming', () => {
     expect(chatStore.getItems(THREAD)[0]).toMatchObject({ error: 'boom', streaming: false });
   });
 
+  /**
+   * The same abort twice, or an abort naming a bubble a sync already delivered, is one bubble.
+   *
+   * Measured 2026-11-13: a run died on a 429, the frame invented its error bubble, and the delta
+   * that followed delivered the journalled failure under the same id. `append` does not dedupe, so
+   * the thread held the error twice -- the second one pinned at the bottom while every new entry
+   * landed above it, and only a reload could take it away. The owner read it as "il y a un
+   * dupliqué des erreurs qui reste toujours collé en bas".
+   */
+  test('an abort for a bubble the thread already holds patches it instead of stacking a copy', () => {
+    chatStore.abortStream(THREAD, 'e1', 'HTTP 429');
+    chatStore.abortStream(THREAD, 'e1', 'HTTP 429');
+
+    const errors = chatStore.getItems(THREAD).filter(item => item.kind === 'text' && item.error !== undefined);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ id: 'e1', error: 'HTTP 429', streaming: false });
+  });
+
+  test('an abort settling a bubble that came from a page keeps its text and its place', () => {
+    // The bubble is on screen, written by the server, and its own stream is gone: the abort has
+    // to find it rather than add a second one under the answer.
+    chatStore.handleSyncResult(
+      THREAD,
+      [
+        { id: 'q1', role: 'user', text: 'go', ts: '2026-01-01T00:00:00.000Z' },
+        { id: 'e1', role: 'assistant', text: '', ts: '2026-01-01T00:00:01.000Z' },
+      ],
+      'e1',
+      'e1',
+      false,
+      undefined,
+      false,
+      false,
+      0,
+    );
+    chatStore.abortStream(THREAD, 'e1', 'HTTP 429');
+    chatStore.addAgentMessage(THREAD, 'next', 'another answer', []);
+
+    const items = chatStore.getItems(THREAD);
+    expect(items.filter(item => item.kind === 'text' && item.error !== undefined)).toHaveLength(1);
+    // And it is still above the answer that came after it, not stuck below it.
+    expect(items.findIndex(item => item.id === 'e1')).toBeLessThan(items.findIndex(item => item.id === 'next'));
+  });
+
   // A stop settles every streamer of the session, and most of them never opened a bubble here:
   // one per message folded into the running turn. Each used to leave an empty bubble behind, so a
   // single stop read as four of them.

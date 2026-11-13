@@ -37,10 +37,17 @@ export function CollapsibleAside({
   headHeight,
   clockAt,
   dense = false,
+  tone = 'faint',
   pending,
   onOpen,
 }: {
   label: string;
+  /**
+   * Which ink the line takes. `faint` for context about a message; `danger` for the reason a run
+   * died, which has to be readable as a failure without being a wall of red (owner, 2026-11-13:
+   * an API error printed inline read as a message from the agent).
+   */
+  tone?: 'faint' | 'danger';
   /**
    * Drawn right after the label, inside the toggle. A node rather than more text because what
    * goes here ticks (the thinking counter) and has to redraw itself alone, without the aside or
@@ -131,8 +138,8 @@ export function CollapsibleAside({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={label}
           accessibilityHint={open ? hideHint : showHint}>
-          {dense ? null : <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone="faint" />}
-          <Text style={styles.label}>{label}</Text>
+          {dense ? null : <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone={tone === 'danger' ? 'danger' : 'faint'} />}
+          <Text style={[styles.label, tone === 'danger' ? styles.labelDanger : null]}>{label}</Text>
           {trailing}
         </Pressable>
         {/* The right slot is the unfolded block's: a folded aside says what it is and how much it
@@ -161,6 +168,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   // The toggle takes the row and yields it: a long label must not push the copy button out.
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1, flexGrow: 1 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
+  labelDanger: { color: palette.danger },
   pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },
   // No rule: an inset already says this sits under something.
   //
