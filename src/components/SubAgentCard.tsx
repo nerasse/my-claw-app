@@ -1,4 +1,4 @@
-import { ChevronIcon, OpenInNewIcon } from '../components/icons';
+import { OpenInNewIcon } from '../components/icons';
 import React, { useState, useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
@@ -9,7 +9,7 @@ import { formatSpan } from '../core/utils';
 import { useElapsed } from './CommandElapsed';
 import { requestToolOutput } from '../core/toolOutput';
 import { runStateOf, stateWord } from '../core/toolState';
-import { ROW_GAP, ROW_SLOT, ROW_TEXT, spine } from './spine';
+import { ROW_GAP, spine } from './spine';
 import { withoutEndpoint } from '../core/model';
 import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 
@@ -144,12 +144,11 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={`Sub-agent ${label || id || action}${running ? ', running' : ''}`}
           accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
-          <View style={styles.slot}>
-            <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone="faint" />
-          </View>
           {/* Who, first and always: an agent with no name still reads as an agent (`spawn`), and
               the brief never takes the line, so a named call can never look like an anonymous
-              one (owner, 2026-11-08: "on dirait pas un sous agent"). */}
+              one (owner, 2026-11-08: "on dirait pas un sous agent"). No fold mark: a row of the
+              run's column is marked by its dot and the group's bar owns the fold, so the name is
+              the toggle, exactly like a tool's row. */}
           <Text style={styles.name} numberOfLines={1}>
             {label || id || action}
           </Text>
@@ -250,13 +249,12 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     marginBottom: space.sm,
   },
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
-  slot: { width: ROW_SLOT, alignItems: 'center' as const },
   identity: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
   /** A name, in the body's own face: monospace is what a command wears, and a sub-agent is not one. */
   name: { fontSize: scaleFont(font.meta, scale), fontWeight: '700' as const, color: palette.text, flexShrink: 0 },
-  /** Its line, under the name, on the text column: one line folded, whole once unfolded. */
+  /** Its line, under the name, on the name's own column: one line folded, whole once unfolded. */
   briefLine: {
-    paddingLeft: ROW_TEXT,
+    paddingLeft: 0,
     marginTop: space.xxs,
     fontSize: scaleFont(font.small, scale),
     color: palette.textMuted,
@@ -280,7 +278,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   doorLabel: { flex: 1, fontSize: scaleFont(font.small, scale), color: palette.text },
   brief: { fontSize: scaleFont(font.small, scale), color: palette.textMuted, paddingHorizontal: space.xs },
-  body: { gap: 3, paddingBottom: space.xxs, paddingLeft: ROW_TEXT },
+  body: { gap: 3, paddingBottom: space.xxs, paddingLeft: 0 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, letterSpacing: 0.4, textTransform: 'uppercase' as const },
   blockHead: {
     flexDirection: 'row' as const,
@@ -295,5 +293,5 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
    * name's column, exactly like a tool's output. A box inside a borderless thread is the chrome
    * that made these cards read as a different species.
    */
-  codeFlat: { paddingLeft: ROW_TEXT, paddingVertical: 2 },
+  codeFlat: { paddingLeft: 0, paddingVertical: 2 },
 });

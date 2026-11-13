@@ -139,7 +139,10 @@ export function CompactionRunning({ since, text, reasoning, stopping }: { since:
 }
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
-  row: { width: '100%' as const, marginBottom: space.md, paddingHorizontal: space.sm },
+  // No horizontal inset: the rule runs on the thread's own text column, and the Summary/Archive
+  // folds under it start there too. The 8 pt it used to carry pushed both of them right of every
+  // other row (owner, 2026-11-13).
+  row: { width: '100%' as const, marginBottom: space.md },
   rule: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm },
   line: { flex: 1, height: 1, backgroundColor: palette.border },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },

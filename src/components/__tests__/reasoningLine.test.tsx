@@ -9,6 +9,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { ThemeContext } from '../../theme';
 import { darkPalette } from '../../theme/palettes';
 import { ReasoningLine, showsReasoningRow } from '../ReasoningLine';
+import { ChevronIcon } from '../icons';
 import { resetAsideExpansion, setAsideExpanded } from '../../core/asideExpansion';
 
 // Every tree is taken down after its test: one left mounted hears the next test's resets outside
@@ -235,4 +236,14 @@ test('a long wait alone takes the caret down with it', () => {
   expect(showsReasoningRow({ tokens: 500, waitMs: 800 })).toBe(true);
   expect(showsReasoningRow({ reasoning: 'thought', waitMs: undefined })).toBe(true);
   expect(showsReasoningRow({ reasoningChars: 4_000 })).toBe(true);
+});
+
+test('a reasoning line of the column carries no fold mark, and the one in a bubble does', () => {
+  // On a spine row the dot marks the line and the group's bar owns the fold, so an arrow there was
+  // a third mark for the same thing. In a bubble the aside is the only way in, and keeps it.
+  const row = render({ reasoning: 'a thought', durationMs: 900, streaming: false, headHeight: 27 });
+  expect(row.root.findAllByType(ChevronIcon)).toHaveLength(0);
+
+  const bubble = render({ reasoning: 'a thought', durationMs: 900, streaming: false });
+  expect(bubble.root.findAllByType(ChevronIcon)).toHaveLength(1);
 });

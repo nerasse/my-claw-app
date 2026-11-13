@@ -202,7 +202,7 @@ export function ReasoningLine({
       label="Reasoning"
       trailing={figures}
       right={waitFigure}
-      {...(headHeight !== undefined ? { headHeight } : {})}
+      {...(headHeight !== undefined ? { headHeight, dense: true } : {})}
       {...(at !== undefined ? { clockAt: at } : {})}
       body={body}
       showHint="Show the model's reasoning"

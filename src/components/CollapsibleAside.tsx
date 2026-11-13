@@ -36,6 +36,7 @@ export function CollapsibleAside({
   persistKey,
   headHeight,
   clockAt,
+  dense = false,
   pending,
   onOpen,
 }: {
@@ -81,6 +82,14 @@ export function CollapsibleAside({
    * where the reader already looks for the end of a thing (owner, 2026-11-08).
    */
   clockAt?: number;
+  /**
+   * A row of a run's column: no chevron.
+   *
+   * The dot on the rail already marks the row and the group's bar owns the fold mark, so a third
+   * arrow per row was one too many (owner, 2026-11-12), and the reasoning line was the last one
+   * left in a fold. The label is still the toggle.
+   */
+  dense?: boolean;
   /** Said in place of the body while it is still on its way (`reasoningFetch.ts`). */
   pending?: string;
   /** Told each time the aside is open, so a body that is not here yet can be asked for. */
@@ -122,7 +131,7 @@ export function CollapsibleAside({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={label}
           accessibilityHint={open ? hideHint : showHint}>
-          <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone="faint" />
+          {dense ? null : <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone="faint" />}
           <Text style={styles.label}>{label}</Text>
           {trailing}
         </Pressable>

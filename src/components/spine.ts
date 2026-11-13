@@ -30,8 +30,9 @@ export const ROW_TEXT = ROW_SLOT + ROW_GAP;
 
 /** A row's head line. The dot is centred on it. */
 const HEAD = 27;
-/** Where a child's content starts, from the group's left edge. */
-const GUTTER = 28;
+/** Where a child's content starts, from the group's left edge. The label column: a bar's count and
+ * a child's name or aside label all start here, so the column has one text edge. */
+const GUTTER = ROW_TEXT;
 /** The dot's nominal diameter, before rounding to the nearest odd. */
 const DOT = 7;
 

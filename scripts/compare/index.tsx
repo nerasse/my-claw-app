@@ -9,6 +9,9 @@ import { AppRegistry, ScrollView, Text, View } from 'react-native';
 import { ToolCard } from '../../src/components/ToolCard';
 import { RunGroup } from '../../src/components/RunGroup';
 import { CollapsibleAside } from '../../src/components/CollapsibleAside';
+import { CompactionBoundary } from '../../src/components/CompactionBoundary';
+import { ReasoningLine } from '../../src/components/ReasoningLine';
+import { spine } from '../../src/components/spine';
 import { ThreadRow } from '../../src/components/ThreadRow';
 import { ContextMeter } from '../../src/components/ContextMeter';
 import { ThemeProvider } from '../../src/theme/ThemeProvider';
@@ -91,6 +94,11 @@ function Sheet(): React.JSX.Element {
       <Text style={styles.h}>cartes d'outil, ouvertes</Text>
       {ITEMS.slice(0, 2).map(item => <ToolCard key={`o-${item.id}`} item={item} expandTools />)}
 
+      <Text style={styles.h}>règle de compaction</Text>
+      <CompactionBoundary
+        item={{ kind: 'text', id: 'c1', role: 'user', text: 'The compaction kept: three turns about the siphon.', archive: 'Finished work: the quota wait was moved to the run.', summaryOf: 3, compactionMs: 42000, attachments: [], streaming: false, ts: Date.now() } as never}
+      />
+
       <Text style={styles.h}>groupe de run, replié</Text>
       <View style={styles.textColumn}>
         <Text style={styles.answer}>Load average 10 sur 6 cœurs : la machine est saturée, ce qui explique les échecs.</Text>
@@ -109,7 +117,16 @@ function Sheet(): React.JSX.Element {
           open
           onToggle={() => {}}
           renderItem={(item, _i, _all, dense) =>
-            item.kind === 'tool' ? <ToolCard key={item.id} item={item} dense={dense} /> : <CollapsibleAside {...(item as never)} label="Reasoning" body="la machine est saturée" showHint="Show" hideHint="Hide" />
+            item.kind === 'tool' ? (
+              <ToolCard key={item.id} item={item} dense={dense} />
+            ) : (
+              <ReasoningLine
+                reasoning="la machine est saturée, je vérifie ce qui charge"
+                durationMs={1200}
+                streaming={false}
+                headHeight={spine(1).head}
+              />
+            )
           }
         />
         <RunGroup

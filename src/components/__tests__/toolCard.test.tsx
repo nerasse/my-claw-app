@@ -225,15 +225,15 @@ describe('a row of a run\'s spine', () => {
     expect(style.marginBottom).toBe(0);
   });
 
-  it('draws no fold mark of its own: the dot already marks the call', () => {
+  it('draws no fold mark and no slot: the dot marks the call and the name starts at the gutter', () => {
     const tree = renderTool(makeItem(), { dense: true });
     expect(tree.root.findAllByType(ChevronIcon).length).toBe(0);
-    // The slot it used to fill stays, so the name keeps the column a reasoning line's label has.
+    // Nothing to the left of the name: a row of the column starts where the bar's count does.
     const slots = tree.root
       .findAllByType(View)
       .map(node => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean)))
       .filter(style => style.width === ROW_SLOT);
-    expect(slots.length).toBe(1);
+    expect(slots).toHaveLength(0);
   });
 
   it('keeps the frame when it is drawn as a card on its own', () => {

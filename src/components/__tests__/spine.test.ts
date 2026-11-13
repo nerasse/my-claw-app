@@ -59,6 +59,12 @@ describe('the spine geometry', () => {
     expect(spine(1).slot).toBe(ROW_SLOT);
   });
 
+  it('starts a child of a run on the label column, not past it', () => {
+    // A bar's count and a child's name sit on the same x: the gutter is the label column, and the
+    // dot's rail is what the fold marks are centred on (owner, 2026-11-13).
+    for (const scale of [1, 1.2, 0.9]) expect(spine(scale).gutter).toBe(Math.round(ROW_TEXT * scale));
+  });
+
   it('does not drift with the scale it is read at', () => {
     // Two neighbouring scales used to give dot centres half a pixel apart; the column must not
     // depend on where the slider sits.

@@ -10,7 +10,7 @@ import { DiffView, diffCounts, splitDiff } from './DiffView';
 import { font, lineHeightFor, radius, scaleFont, space, type Palette, useThemedStyles } from '../theme';
 import { useElapsed } from './CommandElapsed';
 import { runStateOf, stateWord } from '../core/toolState';
-import { ROW_GAP, ROW_SLOT, ROW_TEXT } from './spine';
+import { ROW_GAP } from './spine';
 import { dayAndTime } from '../core/clock';
 import { toolRows } from '../core/toolRows';
 
@@ -169,11 +169,6 @@ export const ToolCard = React.memo(function ToolCardView({
         accessibilityLabel={`Tool ${item.name}${running ? ', running' : duration ? `, ${duration}` : ''}${word ? `, ${word}` : ''}`}
         accessibilityHint={open ? 'Collapse details' : 'Show arguments and output'}>
         <View style={[styles.head, dense && styles.headDense]}>
-          {/* No chevron of its own: the dot on the rail already marks a call, and the group above
-              owns the fold mark, so a third arrow per row was one too many (owner, 2026-11-12).
-              The slot stays, empty, so the name keeps the column a reasoning line puts its label
-              on -- dropping the space with the glyph is what makes the column read ragged. */}
-          <View style={styles.rowSlot} />
           <Text style={[styles.rowText, styles.name]}>{item.name}</Text>
           {/* One line, every tool, folded. A shell command used to wrap under the head at three
               lines: the densest argument is the one worth the room, the argument went the other
@@ -420,17 +415,12 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     paddingHorizontal: 8,
   },
   /**
-   * A spine row is 27, and it starts at the group's gutter with no padding of its own: a reasoning
-   * phase drawn between two calls is a transparent bubble with `paddingHorizontal: 0`, so a row
-   * that kept its 8 pt inset put its chevron 8 pt to the right of theirs and the column read
-   * ragged (owner, 2026-11-08).
+   * A spine row is 27, and it starts at the group's gutter with no padding of its own: the dot on
+   * the rail is the only mark it carries, so the name starts where the bar's count does. A row that
+   * kept an inset, or a slot for a chevron it no longer draws, put its name to the right of every
+   * label above it (owner, 2026-11-13: "on rapproche le tout vers les dots").
    */
   headDense: { height: Math.round(27 * scale), paddingLeft: 0, paddingRight: 8, gap: ROW_GAP },
-  /**
-   * The slot a reasoning line's chevron occupies, kept empty here: both rows start their label on
-   * the same column even though only one of them has a mark to put there.
-   */
-  rowSlot: { width: ROW_SLOT },
   /**
    * The head row is one line of type at one size. Four sizes in a 29 pt row (10 for the chevron,
    * 11 for the summary, 12 for the name, 12 for the duration) each carried their own leading, and
@@ -452,9 +442,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   spinner: { transform: [{ scale: 0.8 }] },
   body: { paddingHorizontal: 8, paddingBottom: 8, gap: 6 },
   // The output hangs under the row on the page itself: no plate, no side padding, so it lands on
-  // the row's own text column instead of inside a foreign sheet.
-  // The output starts on the row's name column: the 11 pt chevron plus the head's 5 pt gap.
-  bodyDense: { paddingLeft: ROW_TEXT, paddingRight: 0, paddingBottom: 6 },
+  // the row's own text column instead of inside a foreign sheet -- and on the name's column now
+  // that the row starts at the gutter.
+  bodyDense: { paddingLeft: 0, paddingRight: 0, paddingBottom: 6 },
   /** The hour, at the bottom right of an opened card: the same corner on every block. */
   clockRow: { flexDirection: 'row' as const, justifyContent: 'flex-end' as const },
   clock: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
