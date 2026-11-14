@@ -1,25 +1,58 @@
 import { ChevronIcon } from '../components/icons';
 import React, { useCallback, useMemo } from 'react';
-import { Platform, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { font, radius, space, type Palette, useThemedStyles } from '../theme';
+import { font, radius, space, useThemedStyles, type Palette } from '../theme';
 import { useDismissKeyboard } from '../core/keyboard';
 import { useScrollIndicator } from '../components/ScrollIndicator';
-import { scopeLabelOf, type RosterGroup, type RosterRow, type SubAgentsStatus } from '../core/subagents';
+import { isOneShot, scopeLabelOf, type RosterRow, type SubAgentsStatus } from '../core/subagents';
 import type { SubAgentEntry } from '../core/protocol';
 import { useLayerFrame } from '../core/layout';
 import { keyLayerProps } from '../core/keyNav';
-
-/**
- * A group as the list consumes it. `showMajor` is decided once, here, rather than by having every
- * header look back at the group before it on every render.
- */
-type AgentSection = { major: string; type: string; showMajor: boolean; data: RosterRow[] };
+import { formatDate } from '../core/utils';
 
 const keyOfRow = (row: RosterRow): string => row.key;
 
-/** One sub-agent. Memoized: a busy conversation keeps every one-shot it ever spawned. */
-const AgentCard = React.memo(function AgentCardView({
+/**
+ * The row that is working right now.
+ *
+ * A dot that breathes, not a spinner: a list of twenty agents would mount twenty indeterminate
+ * spinners, each running its own animation for the one row that is busy, and at ten pixels a
+ * spinner's arc reads as a stray parenthesis next to a name. The drawer marks a conversation whose
+ * sub-agents work with the same idea (a quiet pulse), so this is the same language one level down.
+ */
+function BusyDot(): React.JSX.Element {
+  const styles = useThemedStyles(createStyles);
+  const pulse = React.useRef(new Animated.Value(0.4)).current;
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      // Both, not just `stop()`: a loop stopped between its two timings can leave the second
+      // one scheduled, and a roster closed mid-pulse kept a timer alive for the rest of the
+      // process (Jest reports the worker that will not exit).
+      loop.stop();
+      pulse.stopAnimation();
+    };
+  }, [pulse]);
+  return <Animated.View style={[styles.busyDot, { opacity: pulse }]} />;
+}
+
+/**
+ * One sub-agent, as a row of a list.
+ *
+ * It was a bordered card three lines tall -- a mark, the id, `● running`, then a meta line and
+ * often a third for the model -- and a roster of twenty of them read as twenty boxes rather than as
+ * something you scan. It is now the same row the conversation list uses, because it answers the
+ * same question: a name, what it is, and when it last said something. The frame is gone; the
+ * running state is the one mark that earns colour.
+ */
+const AgentRow = React.memo(function AgentRowView({
   row,
   onOpen,
 }: {
@@ -28,54 +61,67 @@ const AgentCard = React.memo(function AgentCardView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const entry = row.entry;
+  const oneShot = isOneShot(entry);
+  // What it is, then who can reach it, then the count. Joined once, so the line has one separator
+  // style rather than a chain of ` · ` built by hand per case. A one-shot is always private, so
+  // saying "this conversation" on every one of them repeats what "one-shot" already said.
+  const meta = [
+    entry.type,
+    ...(oneShot ? ['one-shot'] : [scopeLabelOf(entry)]),
+    ...(entry.messageCount > 0 ? [`${entry.messageCount} msg${entry.messageCount === 1 ? '' : 's'}`] : []),
+  ];
+  const when = entry.lastMessageAt ?? entry.createdAt;
+
   return (
     <Pressable
-      style={styles.card}
+      style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
       onPress={() => onOpen(entry)}
       accessibilityRole="button"
-      accessibilityLabel={`Open sub-agent ${entry.id}, ${entry.status}`}>
-      <View style={styles.cardHead}>
-        <Text style={row.kind === 'temporary' ? styles.glyphFaint : styles.glyph}>
-          {row.kind === 'temporary' ? '◇' : '◈'}
+      accessibilityLabel={`Open sub-agent ${entry.id}, ${entry.status === 'running' ? 'running' : 'idle'}, last message ${formatDate(when)}`}>
+      {/* The one mark that carries state. Idle rows get no dot at all: a column of grey dots says
+          "nothing here" twenty times and pushes every name off its column. */}
+      <View style={styles.mark}>{entry.status === 'running' ? <BusyDot /> : null}</View>
+      <View style={styles.main}>
+        <View style={styles.titleRow}>
+          {/* The id, not the display name: the model picks names and repeats them, and this is the
+              handle that opens the agent. */}
+          <Text style={styles.name} numberOfLines={1}>
+            {entry.id.replace(/^subagent\//, '')}
+          </Text>
+          {/* When it last spoke -- the row's order. Not "now" for a running row: a run can have
+              been going for ten minutes since its last message, and the mark on the left already
+              says it is busy. */}
+          <Text style={styles.date} numberOfLines={1}>
+            {formatDate(when)}
+          </Text>
+        </View>
+        <Text style={styles.meta} numberOfLines={1}>
+          {meta.join(' · ')}
         </Text>
-        {/* The id, not the display name: the model picks names and repeats them. */}
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {entry.id.replace(/^subagent\//, '')}
-        </Text>
-        {entry.status === 'running' ? (
-          <Text style={styles.running}>● running</Text>
-        ) : (
-          <Text style={styles.state}>idle</Text>
-        )}
+        {/* The row is the only place that says which account a delegated run is on: `modelLive` is
+            set when the run walked off its pin, and the name is then what is calling now. */}
+        {entry.model ? (
+          <Text style={[styles.model, entry.modelLive ? styles.modelLive : null]} numberOfLines={1}>
+            {entry.model}
+          </Text>
+        ) : null}
       </View>
-      <Text style={styles.cardMeta} numberOfLines={1}>
-        {`${entry.messageCount} msg${entry.messageCount === 1 ? '' : 's'} · ${scopeLabelOf(entry)}`}
-        {row.kind === 'temporary' ? ' · one-shot' : ''}
-        {entry.model ? ' · ' : ''}
-      </Text>
-      {/* The row is the only place that says which account a delegated run is on: `modelLive` is
-          set when the run walked off its pin, and the name is then what is calling now. */}
-      {entry.model ? (
-        <Text style={[styles.cardMeta, entry.modelLive ? styles.cardModelLive : null]} numberOfLines={1}>
-          {entry.model}
-        </Text>
-      ) : null}
     </Pressable>
   );
 });
 
 /**
- * The sub-agents of one conversation, grouped named-then-temporary and by agent type inside each.
- * The split is not cosmetic: a named sub-agent lives until killed, while a one-shot (a kept
- * `run-` session) dies with its parent conversation. Both open as a real chat, though.
+ * The sub-agents of a conversation -- or, from the drawer, the ones it shares with others.
  *
- * Picking a row closes this screen. It is a chooser, not a level to come back to, which is what
- * lets the sub-agent's own header name the parent conversation instead of naming this list.
+ * One flat list, most recently spoken to first (`rosterRows`): the ordering is the date, so there
+ * is no section header left to read. Picking a row closes this screen, because it is a chooser
+ * rather than a level to come back to; that is what lets the sub-agent's own header name the
+ * parent conversation instead of naming this list.
  */
 export function AgentsScreen({
   parentTitle,
   subtitle,
-  groups,
+  rows,
   status,
   onClose,
   onOpenAgent,
@@ -84,7 +130,7 @@ export function AgentsScreen({
   parentTitle: string;
   /** What this list is a list of; defaults to the parent, which is not always what it means. */
   subtitle?: string;
-  groups: RosterGroup[];
+  rows: RosterRow[];
   status: SubAgentsStatus;
   onClose: () => void;
   onOpenAgent: (entry: SubAgentEntry) => void;
@@ -95,37 +141,11 @@ export function AgentsScreen({
   const { scrollProps, indicator } = useScrollIndicator();
   useDismissKeyboard();
 
-  const total = useMemo(() => groups.reduce((sum, group) => sum + group.rows.length, 0), [groups]);
-  const sections = useMemo<AgentSection[]>(
-    () =>
-      groups.map((group, index) => ({
-        major: group.major,
-        type: group.type,
-        showMajor: index === 0 || groups[index - 1]!.major !== group.major,
-        data: group.rows,
-      })),
-    [groups],
-  );
+  const running = useMemo(() => rows.filter(row => row.entry.status === 'running').length, [rows]);
 
   const renderRow = useCallback(
-    ({ item }: { item: RosterRow }) => <AgentCard row={item} onOpen={onOpenAgent} />,
+    ({ item }: { item: RosterRow }) => <AgentRow row={item} onOpen={onOpenAgent} />,
     [onOpenAgent],
-  );
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: AgentSection }) => (
-      <View>
-        {section.showMajor ? (
-          <View style={styles.majorHead}>
-            <Text style={styles.major}>{section.major}</Text>
-            {section.major === 'temporary' ? <Text style={styles.majorNote}>read-only</Text> : null}
-          </View>
-        ) : null}
-        <Text style={styles.minor} numberOfLines={1}>
-          {section.type}
-        </Text>
-      </View>
-    ),
-    [styles],
   );
 
   return (
@@ -143,8 +163,12 @@ export function AgentsScreen({
           <Text style={styles.title} numberOfLines={1}>
             Sub-agents
           </Text>
+          {/* The count lives here rather than as a section header: it is the one figure the screen
+              is worth opening for ("what is running while I read"). */}
           <Text style={styles.headerSub} numberOfLines={1}>
-            {subtitle ?? parentTitle}
+            {[subtitle ?? parentTitle, rows.length > 0 ? `${rows.length} agent${rows.length === 1 ? '' : 's'}` : '', running > 0 ? `${running} running` : '']
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
         </View>
       </View>
@@ -153,23 +177,21 @@ export function AgentsScreen({
         <Text style={styles.empty}>this server does not report sub-agents · update it to see them</Text>
       ) : status === 'unknown' ? (
         <Text style={styles.empty}>loading agents</Text>
-      ) : total === 0 ? (
+      ) : rows.length === 0 ? (
         <Text style={styles.empty}>no sub-agent yet · the agent creates them when it delegates</Text>
       ) : null}
 
       <View style={styles.listWrap}>
         {/* Virtualized: a conversation keeps every one-shot it spawned, so this list has no
-            ceiling. Headers do not stick — they are read as separators, not as a position. */}
-        <SectionList
+            ceiling. */}
+        <FlatList
           {...scrollProps}
-          sections={sections}
+          data={rows}
           keyExtractor={keyOfRow}
           renderItem={renderRow}
-          renderSectionHeader={renderSectionHeader}
-          stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
-          initialNumToRender={12}
+          initialNumToRender={14}
           maxToRenderPerBatch={10}
           updateCellsBatchingPeriod={50}
           windowSize={9}
@@ -200,12 +222,6 @@ function createStyles(palette: Palette) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    backGlyph: {
-      color: palette.accent,
-      fontSize: 22,
-      lineHeight: 24,
-      marginTop: -2,
-    },
     headerMain: {
       flex: 1,
       minWidth: 0,
@@ -231,77 +247,43 @@ function createStyles(palette: Palette) {
       minHeight: 0,
     },
     body: {
-      padding: space.md,
+      paddingHorizontal: space.sm,
+      paddingTop: space.xs,
       paddingBottom: space.xl,
     },
-    majorHead: {
+    /**
+     * A row, not a card: the conversation list's own metrics. A roster is scanned for a name, and a
+     * border per entry turns a list into a stack of boxes.
+     */
+    row: {
       flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: space.md,
-      marginBottom: space.xs,
-    },
-    major: {
-      color: palette.textFaint,
-      fontSize: font.micro,
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
-    },
-    majorNote: {
-      color: palette.textFaint,
-      fontSize: font.micro,
-    },
-    minor: {
-      color: palette.textMuted,
-      fontSize: font.meta,
-      fontFamily: 'monospace',
-      marginTop: space.sm,
-      marginBottom: space.xs,
-    },
-    card: {
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.surface,
-      paddingHorizontal: space.md,
+      alignItems: 'flex-start',
+      gap: space.xs,
       paddingVertical: space.sm,
-      marginBottom: space.xs,
-      gap: 2,
+      paddingHorizontal: space.xs,
+      borderRadius: radius.sm,
     },
-    cardHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: space.sm,
-    },
-    glyph: {
-      color: palette.accent,
-      fontSize: font.meta,
-    },
-    glyphFaint: {
-      color: palette.textFaint,
-      fontSize: font.meta,
-    },
-    cardTitle: {
+    rowPressed: { backgroundColor: palette.surfaceAlt },
+    /** The running slot, reserved: without it a busy row's name starts left of every idle one. */
+    mark: { width: 12, paddingTop: 4, alignItems: 'center' },
+    busyDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: palette.accent },
+    main: { flex: 1, minWidth: 0, gap: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+    name: {
       flex: 1,
       color: palette.text,
       fontSize: font.meta,
-      fontWeight: '600',
+      fontWeight: '500',
       fontFamily: 'monospace',
     },
-    running: {
-      color: palette.accent,
-      fontSize: font.micro,
-      fontWeight: '600',
-    },
-    state: {
-      color: palette.textFaint,
-      fontSize: font.micro,
-    },
+    /**
+     * When it last spoke: the conversation list's own figure, same corner, same ink. `tabular-nums`
+     * because a column of times read down is a column, and proportional digits stagger it.
+     */
+    date: { flexShrink: 0, color: palette.textMeta, fontSize: font.micro, fontVariant: ['tabular-nums'] },
+    meta: { color: palette.textMuted, fontSize: font.small },
+    model: { color: palette.textMeta, fontSize: font.micro },
     /** Not the pin: the run is on another account right now. */
-    cardModelLive: { color: palette.accent },
-    cardMeta: {
-      color: palette.textMuted,
-      fontSize: font.small,
-    },
+    modelLive: { color: palette.accent },
   });
 }

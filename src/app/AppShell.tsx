@@ -26,7 +26,7 @@ import { retryDelayAfter, sendsToRetry } from '../core/sendRetry';
 import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPick, useUndoPrompts, undoStore } from '../core/undoStore';
 import { bootFrames, resumeFrames } from '../core/resume';
-import { groupRoster, groupSharedRoster, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
+import { rosterRows, sharedRosterRows, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn } from '../core/subagentStack';
 import { sessionStore, useArchivedSessions, useFolders, useSessions } from '../core/sessions';
 import { workspaceOptions } from '../core/workspaceFilter';
@@ -2102,7 +2102,7 @@ export function AppShell(): React.JSX.Element {
   const ownRoster = useSubAgents(activeThread);
   const cardAgents = useMemo(() => reachableFrom(ownRoster.agents, roster.agents), [ownRoster.agents, roster.agents]);
   const spawnCards = useSpawnCards(activeThread);
-  const rosterGroups = useMemo(() => groupRoster(roster.agents), [roster.agents]);
+  const rosterList = useMemo(() => rosterRows(roster.agents), [roster.agents]);
   // The drawer page shows what this conversation shares with others: public agents, then the
   // agents of each workspace it can reach. Private ones stay out -- they belong to the
   // conversation roster, which is the other entry point.
@@ -2110,13 +2110,13 @@ export function AppShell(): React.JSX.Element {
     () => roster.agents.filter(agent => agent.visibility === 'global' || agent.visibility === 'workspace'),
     [roster.agents],
   );
-  const globalGroups = useMemo(() => groupSharedRoster(globalAgents), [globalAgents]);
+  const globalList = useMemo(() => sharedRosterRows(globalAgents), [globalAgents]);
   const subagentCount = useMemo(
     () => ({
-      total: rosterGroups.reduce((sum, group) => sum + group.rows.length, 0),
+      total: rosterList.length,
       running: roster.agents.filter(agent => agent.status === 'running').length,
     }),
-    [rosterGroups, roster.agents],
+    [rosterList, roster.agents],
   );
 
   // Both derivations live in core/subagents.ts, both pure. Only the door needs the roster: the
@@ -6188,7 +6188,7 @@ export function AppShell(): React.JSX.Element {
       {agentsOpen && rosterThread ? (
         <AgentsScreen
           parentTitle={parentTitleOf(rosterThread)}
-          groups={rosterGroups}
+          rows={rosterList}
           status={roster.status}
           onClose={() => setAgentsOpen(false)}
           onOpenAgent={entry => openSubAgent(entry, rosterThread)}
@@ -6199,7 +6199,7 @@ export function AppShell(): React.JSX.Element {
         <AgentsScreen
           parentTitle="conversations"
           subtitle="public and per-workspace"
-          groups={globalGroups}
+          rows={globalList}
           status={roster.status}
           onClose={() => setAgentsGlobalOpen(false)}
           onOpenAgent={openGlobalAgent}

@@ -127,6 +127,19 @@ async function pressLabel(tree: Tree, label: string): Promise<void> {
   await ReactTestRenderer.act(async () => target.props.onPress());
 }
 
+/**
+ * Presses a roster row by the agent it opens.
+ *
+ * By prefix, not by the whole label: a row now names the status and when the agent last spoke, and
+ * a test that spells all of that out breaks every time a fact is added to a row it does not care
+ * about.
+ */
+async function pressRow(tree: Tree, id: string): Promise<void> {
+  const label = labelsOf(tree).find(candidate => candidate.startsWith(`Open sub-agent ${id},`));
+  if (!label) throw new Error(`no roster row for ${id}`);
+  await pressLabel(tree, label);
+}
+
 describe('the header counter', () => {
   it('is absent when the conversation has no sub-agent', async () => {
     const tree = await seed([]);
@@ -155,31 +168,31 @@ describe('the header counter', () => {
 });
 
 describe('the roster', () => {
-  it('opens from the counter, groups by category and type, and names the way back', async () => {
+  it('opens from the counter, orders by last message, and names the way back', async () => {
     const tree = await seed([
-      agent({ id: 'subagent/digger-a1b2' }),
-      agent({ id: 'subagent/scribe-c3d4', type: 'writer' }),
-      agent({ id: 'subagent/run-7d21a04c', visibility: 'private' }),
+      agent({ id: 'subagent/digger-a1b2', lastMessageAt: '2026-01-01T09:00:00.000Z' }),
+      agent({ id: 'subagent/scribe-c3d4', type: 'writer', lastMessageAt: '2026-01-01T11:00:00.000Z' }),
+      agent({ id: 'subagent/run-7d21a04c', visibility: 'private', lastMessageAt: '2026-01-01T10:00:00.000Z' }),
     ]);
     // Two named plus the kept one-shot.
     await pressLabel(tree, '3 sub-agents');
 
     const texts = textsOf(tree);
-    expect(texts).toContain('named');
-    expect(texts).toContain('temporary');
-    expect(texts).toContain('research');
-    expect(texts).toContain('writer');
+    expect(texts).toContain('scribe-c3d4');
     expect(texts).toContain('digger-a1b2');
+    // No category header is left to read: the date is the whole order (owner, 2026-11-13).
+    for (const heading of ['named', 'temporary', 'research', 'writer']) {
+      expect(texts).not.toContain(heading);
+    }
     // The one-shot is openable, exactly like a named one.
-    expect(labelsOf(tree)).toContain('Open sub-agent subagent/run-7d21a04c, idle');
-    expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent'))).toBe(true);
+    expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent subagent/run-7d21a04c,'))).toBe(true);
     await settleAndUnmount(tree);
   });
 
   it('opens a kept one-shot as a chat, naming the parent on the way back', async () => {
     const tree = await seed([agent({ id: 'subagent/run-7d21a04c', visibility: 'private' })]);
     await pressLabel(tree, '1 sub-agent');
-    await pressLabel(tree, 'Open sub-agent subagent/run-7d21a04c, idle');
+    await pressRow(tree, 'subagent/run-7d21a04c');
     expect(textsOf(tree)).toContain('run-7d21a04c · research');
     expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
     await settleAndUnmount(tree);
@@ -201,7 +214,7 @@ describe('the roster', () => {
 describe('inside a sub-agent', () => {
   async function enter(tree: Tree): Promise<void> {
     await pressLabel(tree, '1 sub-agent');
-    await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
+    await pressRow(tree, 'subagent/digger-a1b2');
   }
 
   it('the header names the parent conversation, not just "back"', async () => {
@@ -382,7 +395,7 @@ describe('handing an answer back to a caller', () => {
   /** Opens the hand-back sheet on the sub-agent's own answer. */
   async function openHandoff(tree: Tree): Promise<void> {
     await pressLabel(tree, '1 sub-agent');
-    await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
+    await pressRow(tree, 'subagent/digger-a1b2');
     await ReactTestRenderer.act(async () => {
       chatStore.seedHistory(handleFor('subagent/digger-a1b2'), [
         { id: 'h-a', role: 'assistant', text: 'the cause is the token cache', ts: '2026-01-01T10:00:02.000Z' },
@@ -590,21 +603,22 @@ describe('the drawer Sub-Agents entry', () => {
     await pressLabel(tree, 'Sub-agents');
 
     // The page: globals listed, a conversation's private one absent.
-    expect(textsOf(tree)).toContain('public and per-workspace');
+    // The subtitle and the count share one line now, so it is read by prefix.
+    expect(textsOf(tree).some(text => text.startsWith('public and per-workspace'))).toBe(true);
     expect(textsOf(tree)).toContain('digger-a1b2');
     expect(textsOf(tree)).not.toContain('secret-e5f6');
-    expect(labelsOf(tree)).toContain('Open sub-agent subagent/digger-a1b2, idle');
+    expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent subagent/digger-a1b2,'))).toBe(true);
 
-    await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
+    await pressRow(tree, 'subagent/digger-a1b2');
     expect(textsOf(tree)).toContain('digger-a1b2 · research');
     expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
     await settleAndUnmount(tree);
   });
 
-  it('sections the page by scope: public first, then one per workspace', async () => {
+  it('orders the page by date too, and carries each scope on its row instead of over a block', async () => {
     const tree = await seed([
-      agent({ id: 'subagent/shared-a1b2' }),
-      agent({ id: 'subagent/builder-c3d4', visibility: 'workspace', workspaceKey: 'alpha' }),
+      agent({ id: 'subagent/shared-a1b2', lastMessageAt: '2026-01-01T09:00:00.000Z' }),
+      agent({ id: 'subagent/builder-c3d4', visibility: 'workspace', workspaceKey: 'alpha', lastMessageAt: '2026-01-01T11:00:00.000Z' }),
       agent({ id: 'subagent/secret-e5f6', visibility: 'private' }),
     ]);
     await pressLabel(tree, 'Open conversations');
@@ -612,8 +626,9 @@ describe('the drawer Sub-Agents entry', () => {
     await pressLabel(tree, 'Sub-agents');
 
     const texts = textsOf(tree);
-    expect(texts).toContain('public');
-    expect(texts).toContain('workspace · alpha');
+    // The scope is a fact of each row now: the page has one order, and it is the date.
+    expect(texts).toContain('research · public · 4 msgs');
+    expect(texts).toContain('research · workspace · alpha · 4 msgs');
     expect(texts).toContain('shared-a1b2');
     expect(texts).toContain('builder-c3d4');
     // A private agent belongs to the conversation roster, not to this page.
@@ -637,7 +652,7 @@ describe('a sub-agent is not a conversation', () => {
   it('writing in one does not list it in the drawer, and does not become the thread reopened at boot', async () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
     await pressLabel(tree, '1 sub-agent');
-    await pressLabel(tree, 'Open sub-agent subagent/digger-a1b2, idle');
+    await pressRow(tree, 'subagent/digger-a1b2');
 
     const composer = tree.root.findAll(
       node => node.props.accessibilityLabel === 'Message to send' && typeof node.props.onChangeText === 'function',
@@ -680,7 +695,7 @@ describe('the door on a spawn card', () => {
     // id-carrying shape excludes the drawer's pinned Sub-Agents button.
     // The trailing space is the discriminator: the drawer's "Open sub-agents" has an s, the
     // door carries the id right after "sub-agent".
-    expect(controlsLabelled(tree, 'Open sub-agent ')).toEqual(['Open sub-agent digger-a1b2, idle']);
+    expect(controlsLabelled(tree, 'Open sub-agent ').map(label => label.split(',')[0])).toEqual(['Open sub-agent digger-a1b2']);
     // The two others name themselves, but lead nowhere.
     expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent ghost'))).toBe(false);
     expect(labelsOf(tree).some(label => label.startsWith('Open sub-agent peek'))).toBe(false);

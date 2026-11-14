@@ -1,4 +1,4 @@
-import { groupRoster, groupSharedRoster, scopeLabelOf, spawnDoorsOf, spawnLiveOf, subAgentStore } from '../subagents';
+import { rosterRows, scopeLabelOf, sharedRosterRows, spawnDoorsOf, spawnLiveOf, subAgentStore } from '../subagents';
 import type { SpawnCard } from '../chat';
 import type { SubAgentEntry } from '../protocol';
 
@@ -18,103 +18,91 @@ const oneShot = (over: Partial<SubAgentEntry> = {}): SubAgentEntry =>
 
 beforeEach(() => subAgentStore.reset());
 
-describe('groupRoster', () => {
-  it('puts named before temporary and groups each by agent type', () => {
-    const groups = groupRoster([
-      entry({ id: 'subagent/w-0001', type: 'writer' }),
-      entry({ id: 'subagent/r-0002', type: 'research' }),
-      oneShot({ type: 'writer' }),
-      oneShot({ type: 'research' }),
+describe('rosterRows', () => {
+  it('orders by the last message, most recent first', () => {
+    const rows = rosterRows([
+      entry({ id: 'subagent/old-0001', lastMessageAt: '2026-05-01T10:00:00.000Z' }),
+      entry({ id: 'subagent/new-0002', lastMessageAt: '2026-05-03T10:00:00.000Z' }),
+      entry({ id: 'subagent/mid-0003', lastMessageAt: '2026-05-02T10:00:00.000Z' }),
     ]);
-    expect(groups.map(g => `${g.major}/${g.type}`)).toEqual([
-      'named/research',
-      'named/writer',
-      'temporary/research',
-      'temporary/writer',
-    ]);
+    expect(rows.map(r => r.key)).toEqual(['subagent/new-0002', 'subagent/mid-0003', 'subagent/old-0001']);
   });
 
-  it('floats the type holding a running agent to the top of each category', () => {
-    const groups = groupRoster([
-      entry({ id: 'subagent/a-0001', type: 'aaa' }),
-      entry({ id: 'subagent/z-0002', type: 'zzz', status: 'running' }),
-      oneShot({ type: 'aaa', status: 'running' }),
+  /**
+   * The complaint this replaces: the roster grouped named-before-temporary and then by agent type,
+   * so the agent that answered a minute ago sat wherever its type alphabetically fell, under a
+   * heading nobody reads twice.
+   */
+  it('mixes types and one-shots together: the date is the only order', () => {
+    const rows = rosterRows([
+      entry({ id: 'subagent/w-0001', type: 'writer', lastMessageAt: '2026-05-01T10:00:00.000Z' }),
+      oneShot({ type: 'research', lastMessageAt: '2026-05-03T10:00:00.000Z' }),
+      entry({ id: 'subagent/r-0002', type: 'research', lastMessageAt: '2026-05-02T10:00:00.000Z' }),
     ]);
-    // Alphabetical would have put aaa first: what is working now wins over the sort.
-    expect(groups.map(g => `${g.major}/${g.type}`)).toEqual(['named/zzz', 'named/aaa', 'temporary/aaa']);
+    expect(rows.map(r => r.key)).toEqual([
+      expect.stringContaining('subagent/run-'),
+      'subagent/r-0002',
+      'subagent/w-0001',
+    ]);
+    // The distinction is still on the row, not over it.
+    expect(rows[0]!.kind).toBe('temporary');
+    expect(rows[1]!.kind).toBe('named');
   });
 
-  it('within a type, running leads and then the most recent', () => {
-    const groups = groupRoster([
+  it('falls back to createdAt on a server that does not send lastMessageAt', () => {
+    const rows = rosterRows([
       entry({ id: 'subagent/old-0001', createdAt: '2026-01-01T00:00:00.000Z' }),
       entry({ id: 'subagent/new-0002', createdAt: '2026-03-01T00:00:00.000Z' }),
-      entry({ id: 'subagent/busy-0003', createdAt: '2025-01-01T00:00:00.000Z', status: 'running' }),
     ]);
-    expect(groups[0]!.rows.map(r => r.key)).toEqual([
-      'subagent/busy-0003',
-      'subagent/new-0002',
-      'subagent/old-0001',
-    ]);
+    expect(rows.map(r => r.key)).toEqual(['subagent/new-0002', 'subagent/old-0001']);
   });
 
-  it('breaks a tie on id so the order never wobbles between renders', () => {
-    const same = '2026-01-01T00:00:00.000Z';
-    const rows = groupRoster([
-      entry({ id: 'subagent/b-0002', createdAt: same }),
-      entry({ id: 'subagent/a-0001', createdAt: same }),
-    ])[0]!.rows;
-    expect(rows.map(r => r.key)).toEqual(['subagent/a-0001', 'subagent/b-0002']);
+  it('breaks a tie on running first, then id, so the order never wobbles between renders', () => {
+    const same = '2026-05-01T00:00:00.000Z';
+    const rows = rosterRows([
+      entry({ id: 'subagent/b-0002', lastMessageAt: same }),
+      entry({ id: 'subagent/a-0001', lastMessageAt: same }),
+      entry({ id: 'subagent/z-0003', lastMessageAt: same, status: 'running' }),
+    ]);
+    expect(rows.map(r => r.key)).toEqual(['subagent/z-0003', 'subagent/a-0001', 'subagent/b-0002']);
   });
 
   it('classes a kept one-shot as temporary, and it carries its entry to open the chat', () => {
     const kept = oneShot({ displayName: 'researcher' });
-    const groups = groupRoster([kept, entry({ id: 'subagent/digger-a1b2' })]);
-    const temporary = groups.find(g => g.major === 'temporary')!;
-    expect(temporary.rows).toEqual([
-      { kind: 'temporary', key: kept.id, entry: kept },
-    ]);
-    expect(groups.find(g => g.major === 'named')!.rows[0]).toMatchObject({ kind: 'named' });
+    const rows = rosterRows([kept, entry({ id: 'subagent/digger-a1b2' })]);
+    expect(rows.find(r => r.kind === 'temporary')).toEqual({ kind: 'temporary', key: kept.id, entry: kept });
+    expect(rows.find(r => r.kind === 'named')).toMatchObject({ kind: 'named' });
   });
 
-  it('is empty when there is nothing, rather than showing empty groups', () => {
-    expect(groupRoster([])).toEqual([]);
+  it('is empty when there is nothing', () => {
+    expect(rosterRows([])).toEqual([]);
   });
 });
 
-describe('groupSharedRoster', () => {
-  it('puts public first, then one section per workspace, alphabetically', () => {
-    const groups = groupSharedRoster([
-      entry({ id: 'subagent/b-0001', visibility: 'workspace', workspaceKey: 'beta' }),
-      entry({ id: 'subagent/a-0002', visibility: 'workspace', workspaceKey: 'alpha' }),
-      entry({ id: 'subagent/g-0003' }),
+describe('sharedRosterRows', () => {
+  it('keeps public and workspace agents, ordered by date across both', () => {
+    const rows = sharedRosterRows([
+      entry({ id: 'subagent/w-0001', visibility: 'workspace', workspaceKey: 'beta', lastMessageAt: '2026-05-03T00:00:00.000Z' }),
+      entry({ id: 'subagent/g-0002', lastMessageAt: '2026-05-01T00:00:00.000Z' }),
+      entry({ id: 'subagent/a-0003', visibility: 'workspace', workspaceKey: 'alpha', lastMessageAt: '2026-05-02T00:00:00.000Z' }),
     ]);
-    expect(groups.map(g => g.major)).toEqual(['public', 'workspace · alpha', 'workspace · beta']);
+    expect(rows.map(r => r.key)).toEqual(['subagent/w-0001', 'subagent/a-0003', 'subagent/g-0002']);
+    // The scope is what tells them apart now that no section header does.
+    expect(rows.map(r => scopeLabelOf(r.entry))).toEqual(['workspace · beta', 'workspace · alpha', 'public']);
   });
 
   it('keeps private agents out: they belong to the conversation roster', () => {
-    const groups = groupSharedRoster([
+    const rows = sharedRosterRows([
       entry({ id: 'subagent/p-0001', visibility: 'private' }),
       oneShot(),
       entry({ id: 'subagent/g-0002' }),
     ]);
-    expect(groups.flatMap(g => g.rows.map(r => r.entry.id))).toEqual(['subagent/g-0002']);
-  });
-
-  it('groups by agent type inside a workspace section, like the conversation roster', () => {
-    const groups = groupSharedRoster([
-      entry({ id: 'subagent/w-0001', type: 'writer', visibility: 'workspace', workspaceKey: 'alpha' }),
-      entry({ id: 'subagent/r-0002', type: 'research', visibility: 'workspace', workspaceKey: 'alpha' }),
-    ]);
-    expect(groups.map(g => `${g.major}/${g.type}`)).toEqual([
-      'workspace · alpha/research',
-      'workspace · alpha/writer',
-    ]);
+    expect(rows.map(r => r.entry.id)).toEqual(['subagent/g-0002']);
   });
 
   it('an unkeyed workspace agent reads as the default workspace, not as public', () => {
     const agent = entry({ id: 'subagent/d-0001', visibility: 'workspace' });
     expect(scopeLabelOf(agent)).toBe('workspace · default');
-    expect(groupSharedRoster([agent]).map(g => g.major)).toEqual(['workspace · default']);
   });
 });
 

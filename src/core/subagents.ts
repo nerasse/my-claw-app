@@ -189,97 +189,64 @@ export interface TemporaryRow {
 
 export type RosterRow = NamedRow | TemporaryRow;
 
-export interface RosterGroup {
-  /**
-   * The first grouping level. `named`/`temporary` inside one conversation's roster; a scope label
-   * (`public`, `workspace · <key>`) on the drawer page, which groups by who can reach an agent
-   * rather than by how long it lives.
-   */
-  major: string;
-  /** The agent type, the second grouping level. */
-  type: string;
-  rows: RosterRow[];
-}
-
-/** What the roster shows next to an agent, and what the drawer page groups by. */
-export function scopeLabelOf(entry: SubAgentEntry): string {
-  if (entry.visibility !== 'workspace') return entry.visibility;
-  return `workspace · ${entry.workspaceKey ?? 'default'}`;
-}
-
 /**
- * Groups the roster the way it is read: named before temporary, then by agent type. Within a
- * category a type holding a running agent comes first, then alphabetically; within a type the
- * running ones lead, then the most recently created.
+ * What the roster shows next to an agent: who can reach it, in the reader's words.
  *
- * The two categories are distinguished by id: `subagent/run-` is a kept one-shot, anything else
- * is a named session. Both come from the server's roster, which is already scoped to the asking
- * conversation.
+ * `public` rather than the wire's `global`, and `this conversation` rather than `private`: the one
+ * page that draws this is the roster, where "global" reads as a global variable. A private agent
+ * only ever appears in the roster of the conversation that spawned it, so the row says what that
+ * means rather than repeating a scope nobody chose.
  */
-export function groupRoster(agents: SubAgentEntry[]): RosterGroup[] {
-  const buckets = new Map<'named' | 'temporary', Map<string, RosterRow[]>>([
-    ['named', new Map()],
-    ['temporary', new Map()],
-  ]);
-  for (const entry of agents) {
-    const kind: 'named' | 'temporary' = entry.id.startsWith('subagent/run-') ? 'temporary' : 'named';
-    const byType = buckets.get(kind)!;
-    const rows = byType.get(entry.type) ?? [];
-    rows.push({ kind, key: entry.id, entry });
-    byType.set(entry.type, rows);
-  }
-  for (const byType of buckets.values()) {
-    for (const rows of byType.values()) {
-      rows.sort((a, b) => {
-        const running = Number(b.entry.status === 'running') - Number(a.entry.status === 'running');
-        if (running !== 0) return running;
-        const created = b.entry.createdAt.localeCompare(a.entry.createdAt);
-        return created !== 0 ? created : a.entry.id.localeCompare(b.entry.id);
-      });
-    }
-  }
-
-  const groupsOf = (source: Map<string, RosterRow[]>, major: 'named' | 'temporary'): RosterGroup[] =>
-    [...source.entries()]
-      .sort(([aType, aRows], [bType, bRows]) => {
-        const lead = Number(bRows.some(r => r.entry.status === 'running')) - Number(aRows.some(r => r.entry.status === 'running'));
-        return lead !== 0 ? lead : aType.localeCompare(bType);
-      })
-      .map(([type, rows]) => ({ major, type, rows }));
-
-  return [...groupsOf(buckets.get('named')!, 'named'), ...groupsOf(buckets.get('temporary')!, 'temporary')];
+export function scopeLabelOf(entry: SubAgentEntry): string {
+  if (entry.visibility === 'workspace') return `workspace · ${entry.workspaceKey ?? 'default'}`;
+  return entry.visibility === 'global' ? 'public' : 'this conversation';
 }
 
 /**
- * The agents this conversation shares with others, grouped by scope: `public` first, then one
- * section per workspace. A workspace agent is only ever in the roster when the conversation that
- * asked belongs to that workspace -- the server filters before sending -- so a section here is a
- * scope the owner is actually inside, never a directory of everything that exists.
+ * The roster, most recently spoken to first.
+ *
+ * It used to be grouped: named before temporary, then a section per agent type, then running first
+ * inside each section. That is a filing cabinet of the server's own categories, and the owner read
+ * it as one (2026-11-13: "lister les agents par date du last msg, pas par catégorie"). The agent
+ * that answered a minute ago is the one you look for; where its type alphabetically falls is not a
+ * fact anyone acts on. The one-shot/named distinction stays on the row instead of over it.
+ *
+ * Ties, and a server too old to send `lastMessageAt`, fall back to `createdAt`: an ordering that
+ * wobbles between two renders reorders the list under the reader's finger.
+ */
+export function rosterRows(agents: readonly SubAgentEntry[]): RosterRow[] {
+  return [...agents]
+    .sort((a, b) => {
+      const seen = timestampOf(b) - timestampOf(a);
+      if (seen !== 0) return seen;
+      // Same moment: what is working now leads, then a stable key.
+      const running = Number(b.status === 'running') - Number(a.status === 'running');
+      return running !== 0 ? running : a.id.localeCompare(b.id);
+    })
+    .map(entry => ({ kind: isOneShot(entry) ? ('temporary' as const) : ('named' as const), key: entry.id, entry }));
+}
+
+/** The moment a row sorts on: its last message, else its creation. */
+function timestampOf(entry: SubAgentEntry): number {
+  const at = Date.parse(entry.lastMessageAt ?? entry.createdAt);
+  return Number.isFinite(at) ? at : 0;
+}
+
+/** A kept one-shot, by id: `subagent/run-` is what the server mints for a `mode: 'run'` child. */
+export function isOneShot(entry: SubAgentEntry): boolean {
+  return entry.id.startsWith('subagent/run-');
+}
+
+/**
+ * The agents this conversation shares with others: public ones and the ones scoped to a workspace
+ * it is inside. Same ordering as the roster -- a date, not a scope -- and the scope rides each row
+ * (`scopeLabelOf`) instead of a heading over a block of them.
  *
  * One-shots are absent by construction: they are private, and private agents belong to the
  * conversation roster rather than to this page.
  */
-export function groupSharedRoster(agents: SubAgentEntry[]): RosterGroup[] {
-  const buckets = new Map<string, SubAgentEntry[]>();
-  for (const entry of agents) {
-    if (entry.visibility !== 'global' && entry.visibility !== 'workspace') continue;
-    const label = entry.visibility === 'global' ? 'public' : scopeLabelOf(entry);
-    const rows = buckets.get(label) ?? [];
-    rows.push(entry);
-    buckets.set(label, rows);
-  }
-
-  // `public` leads because it is the widest scope; the workspaces follow alphabetically, so a
-  // section does not move under the reader when an agent starts or stops running.
-  const labels = [...buckets.keys()].sort((a, b) => {
-    if (a === 'public') return -1;
-    if (b === 'public') return 1;
-    return a.localeCompare(b);
-  });
-
-  return labels.flatMap(label =>
-    groupRoster(buckets.get(label)!).map(group => ({ ...group, major: label })),
-  );
+export function sharedRosterRows(agents: readonly SubAgentEntry[]): RosterRow[] {
+  return rosterRows(agents.filter(entry => entry.visibility === 'global' || entry.visibility === 'workspace'));
 }
 
 export function useSubAgents(threadId: string | null): ThreadRoster {

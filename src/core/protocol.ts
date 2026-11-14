@@ -2474,6 +2474,11 @@ export interface SubAgentEntry {
    * run walked its route or its provider fell. Absent on a server that predates the field.
    */
   modelLive?: boolean;
+  /**
+   * When the last message reached this agent: what the roster is ordered by. Absent on a server
+   * that predates the field, and the list falls back to `createdAt`.
+   */
+  lastMessageAt?: string;
   createdAt: string;
 }
 
