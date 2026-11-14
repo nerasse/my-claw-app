@@ -60,6 +60,17 @@ describe('noticeOf', () => {
     });
   });
 
+  /**
+   * One kind for a switch, whatever the cause: the wall is a sentence inside the note now, not a
+   * row above it. Two rows for one instant read as two incidents (owner, 2026-11-14).
+   */
+  test('a switch reads as one kind, and still is one', () => {
+    expect(noticeOf('[fallback] a is out of its week allowance (Week at 100%). This run used b instead.').label)
+      .toBe('Model change');
+    // A retry is a different event: the run waits and stays on its model.
+    expect(noticeOf('[retry] a failed; trying again in 30s.').label).toBe('Retry');
+  });
+
   test('a note the server forgot to tag is still readable', () => {
     expect(noticeOf('something happened')).toEqual({ label: 'Note', body: 'something happened' });
   });

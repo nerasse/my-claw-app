@@ -15,7 +15,22 @@ export interface NoticeText {
   body: string;
 }
 
-const TAGS: Readonly<Record<string, string>> = { quota: 'Quota', fallback: 'Fallback', retry: 'Retry' };
+/**
+ * The kind of a provider note, in the reader's words.
+ *
+ * One kind for one event. A switch used to arrive as two rows -- `Quota` announcing the wall, then
+ * `Fallback` announcing the move -- for the same instant, which read as two incidents (owner,
+ * 2026-11-14: "un item quota et un autre fallback ... ils ont la même utilité d'info"). The cause
+ * is in the sentence now, so the row only has to say what happened: the run changed model.
+ *
+ * `quota` stays here for the entries an older server already wrote to a log; nothing emits it now.
+ * `retry` is a different event and keeps its own word: the run waits and stays on the same model.
+ */
+const TAGS: Readonly<Record<string, string>> = {
+  fallback: 'Model change',
+  retry: 'Retry',
+  quota: 'Quota',
+};
 
 export function noticeOf(text: string): NoticeText {
   const tagged = /^\s*\[([a-z]+)\]\s*([\s\S]*)$/.exec(text);
