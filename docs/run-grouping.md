@@ -63,11 +63,19 @@ no group to draw. The wait is the bubble's own `WaitLine`, where it has always b
 `isHoisted()` keeps three things out of a group, and each is a row of its own:
 
 - a bubble the owner wrote, a command output, a notice, an error, a compaction summary;
+- a compaction rule (`kind: 'rule'`), which is the boundary the fold is cut at;
 - a message the agent actually wrote (`isAgentMessage`): the answer is what the reader follows;
 - **a sub-agent call** (`spawn`, `send`): a door, not a result. It is the one thing the reader
   waits on, and inside a spine of thirteen rows it would be the least visible of them.
 
 The fold cuts around every hoisted row, so the order the work was written in survives.
+
+## A boundary cuts the fold
+
+A compaction is a rule across the thread and a cut through the fold: the run it interrupts does not
+continue into the work written after it. The work before the boundary is one group, closed; what
+follows opens another. Only the work after the last boundary can be the segment being written
+(`markLiveSegment`), so a boundary with nothing after it leaves no group spinning.
 
 ## A thought never stands outside
 

@@ -43,11 +43,12 @@ export function CollapsibleAside({
 }: {
   label: string;
   /**
-   * Which ink the line takes. `faint` for context about a message; `danger` for the reason a run
-   * died, which has to be readable as a failure without being a wall of red (owner, 2026-11-13:
-   * an API error printed inline read as a message from the agent).
+   * Which ink the line takes. `faint` for context about a message; `meta` for a note the reader
+   * has to be able to read without hunting for it (a provider that retried, a quota that is out);
+   * `danger` for the reason a run died, which has to be readable as a failure without being a
+   * wall of red (owner, 2026-11-13: an API error printed inline read as a message from the agent).
    */
-  tone?: 'faint' | 'danger';
+  tone?: 'faint' | 'meta' | 'danger';
   /**
    * Drawn right after the label, inside the toggle. A node rather than more text because what
    * goes here ticks (the thinking counter) and has to redraw itself alone, without the aside or
@@ -139,7 +140,7 @@ export function CollapsibleAside({
           accessibilityLabel={label}
           accessibilityHint={open ? hideHint : showHint}>
           {dense ? null : <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone={tone === 'danger' ? 'danger' : 'faint'} />}
-          <Text style={[styles.label, tone === 'danger' ? styles.labelDanger : null]}>{label}</Text>
+          <Text style={[styles.label, tone === 'danger' ? styles.labelDanger : null, tone === 'meta' ? styles.labelMeta : null]}>{label}</Text>
           {trailing}
         </Pressable>
         {/* The right slot is the unfolded block's: a folded aside says what it is and how much it
@@ -169,6 +170,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1, flexGrow: 1 },
   label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
   labelDanger: { color: palette.danger },
+  labelMeta: { color: palette.textMeta },
   pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },
   // No rule: an inset already says this sits under something.
   //

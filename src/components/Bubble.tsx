@@ -141,17 +141,13 @@ export const Bubble = React.memo(function BubbleView({
     />
   );
   const textEl = item.text ? (
-    item.command || item.notice ? (
+    item.command ? (
       <Text
-        style={[
-          styles.text,
-          item.command ? styles.textCommand : styles.textNotice,
-          lineBoxFor(bodySize, item.text),
-        ]}>
+        style={[styles.text, styles.textCommand, lineBoxFor(bodySize, item.text)]}>
         {item.text}
         {/* A command the server is still running says how long it has been at it; a
             caret would only blink on text nobody is writing. */}
-        {item.streaming ? item.command ? <CommandElapsed since={item.ts} /> : '▍' : ''}
+        {item.streaming ? <CommandElapsed since={item.ts} /> : ''}
       </Text>
     ) : (
       // Both sides of a conversation are markdown: the owner writes ``` and `code` as readily as
@@ -176,7 +172,6 @@ export const Bubble = React.memo(function BubbleView({
   const thoughtOnly =
     agent &&
     !item.command &&
-    !item.notice &&
     item.text.trim() === '' &&
     item.attachments.length === 0 &&
     !item.location &&
@@ -213,7 +208,7 @@ export const Bubble = React.memo(function BubbleView({
       ) : null}
       {/* The stamp closes the line, right of the `...`: bottom-right is where a message signs
           itself, and opening a bubble with the clock made it read as a title (2026-11-04). */}
-      {showTime && !item.command && !item.notice ? <Text style={styles.menuTime}>{dayAndTime(item.ts)}</Text> : null}
+      {showTime && !item.command ? <Text style={styles.menuTime}>{dayAndTime(item.ts)}</Text> : null}
     </View>
   );
 
@@ -241,8 +236,6 @@ export const Bubble = React.memo(function BubbleView({
           // Command output is drawn apart: the agent did not write it, so it must not wear
           // the agent's clothes.
           item.command && styles.bubbleCommand,
-          // A notice is the system speaking: the agent did not write it either.
-          item.notice && styles.bubbleNotice,
         ]}
         // A Pressable is accessible by default, which would collapse the bubble into one node
         // and hide the reasoning line, the attachments and the tool cards from a screen reader.
@@ -257,7 +250,7 @@ export const Bubble = React.memo(function BubbleView({
             reasoning inside carries none: the same minute stamped twice read as a duplicate
             (owner, 2026-11-08). A bubble that is only a thought has no action row, so its hour
             rides the block it opens instead (`thoughtOnly`). */}
-        {agent && !item.command && !item.notice ? (
+        {agent && !item.command ? (
           <ReasoningLine
             id={item.reasoningOf ?? item.id}
             threadId={threadId}
@@ -386,14 +379,9 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
     borderColor: palette.border,
   },
   // No fill and no padding: the answer starts where every other row of the thread starts, and
-  // a run of them reads as one column of prose. `bubbleNotice` and `bubbleCommand` keep a plate
-  // of their own -- they are not the agent speaking.
+  // a run of them reads as one column of prose. `bubbleCommand` keeps a plate of its own -- the
+  // agent did not write it.
   bubbleAgent: { width: '100%' as const, backgroundColor: 'transparent' as const, paddingHorizontal: 0, paddingVertical: 0 },
-  bubbleNotice: {
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.danger,
-  },
   bubbleCommand: {
     backgroundColor: palette.accentSoft,
     borderWidth: 1,
@@ -404,7 +392,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   textUser: { color: palette.bubbleUserText },
   // Command output keeps its line breaks: /status is a table, not prose.
   textCommand: { color: palette.text, fontFamily: 'monospace', fontSize: scaleFont(font.small, scale) },
-  textNotice: { color: palette.text, fontSize: scaleFont(font.small, scale) },
   queued: { fontSize: scaleFont(font.small, scale), color: palette.textMeta, marginTop: 2 },
   queuedUser: { color: palette.bubbleUserText, opacity: 0.62 },
   // One alignment for every case. It used to follow the author, then space itself around the run's

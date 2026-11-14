@@ -59,27 +59,6 @@ export function foldKeyOf(row: Extract<ChatRow, { kind: 'group' | 'folded' }>): 
   return fetchedFor ?? first?.id ?? row.run.id;
 }
 
-/** The oldest item a row draws, which is where a rule standing above the row has to attach. */
-export function firstItemOfRow(row: ChatRow): string | undefined {
-  if (row.kind === 'item') return row.item.id;
-  if (row.kind === 'group') return row.items[0]?.id;
-  return undefined;
-}
-
-/**
- * The rule, inserted as its own row just above the send it belongs to.
- *
- * Above, so the bubble comes after it in reading order: the rule is the divider the compaction
- * draws, and the message waits *below* it. Inserted before the row that holds that bubble, and
- * never after, so the parked message is the last thing the thread says.
- */
-export function withCompactionRule(rows: ChatRow[], before: string | undefined): ChatRow[] {
-  if (before === undefined) return rows;
-  const at = rows.findIndex(row => firstItemOfRow(row) === before);
-  if (at < 0) return rows;
-  return [...rows.slice(0, at), { kind: 'rule' }, ...rows.slice(at)];
-}
-
 /**
  * Bubbles that never belong inside a run group: the owner's own turns (which split the group
  * around them, so an answer to a question stays readable when the work folds), command output
@@ -418,8 +397,8 @@ function withoutReasoning(item: Extract<ChatItem, { kind: 'text' }>): ChatItem {
   return rest;
 }
 
-export function buildRows(items: ChatItem[]): ChatRow[] {
-  return rowsOf(splitReasoning(items));
+export function buildRows(items: ChatItem[], compactionBefore?: string): ChatRow[] {
+  return rowsOf(splitReasoning(items), compactionBefore);
 }
 
 /**
@@ -439,7 +418,7 @@ function isThoughtOnly(item: ChatItem): boolean {
 }
 
 /** The rows of an already-split thread: `buildRows` is this, behind `splitReasoning`. */
-function rowsOf(items: ChatItem[]): ChatRow[] {
+function rowsOf(items: ChatItem[], compactionBefore?: string): ChatRow[] {
   const rows: ChatRow[] = [];
   let run: RunInfo | null = null;
   // The segment of the run being folded so far. Flushed as a group row the moment a hoisted
@@ -460,6 +439,16 @@ function rowsOf(items: ChatItem[]): ChatRow[] {
   };
 
   for (const item of items) {
+    // A compaction cuts the thread, and it cuts the fold with it: the run it interrupts does not
+    // go on into the work written after it, so what came before is a group of its own -- closed --
+    // and whatever follows opens another. Drawn as a decoration *between* rows (`withCompactionRule`
+    // used to place it), the rule left the group spanning the boundary and still spinning: the
+    // owner saw a run "running · 3 min 41 s" above a compaction that had already cut it, and the
+    // work after the boundary counted as part of that group (2026-11-14).
+    if (compactionBefore !== undefined && item.id === compactionBefore) {
+      closeRun();
+      rows.push({ kind: 'rule' });
+    }
     const itemRun = item.kind === 'run' ? item.run : item.run;
     if (itemRun && itemRun.status !== 'running' && !ghostSeen.has(itemRun.id)) {
       ghostSeen.add(itemRun.id);
@@ -534,9 +523,12 @@ function rowsOf(items: ChatItem[]): ChatRow[] {
  * clock on two finished segments at once, which is exactly the screenshot.
  */
 function markLiveSegment(rows: ChatRow[]): ChatRow[] {
+  // Only what stands after the last boundary is "now": a compaction cuts the fold, and the group
+  // it left above the rule is the past, however much of its run has not been written yet.
+  const afterRule = rows.reduce((at, row, index) => (row.kind === 'rule' ? index + 1 : at), 0);
   let last = -1;
   rows.forEach((row, index) => {
-    if (row.kind === 'group' && row.run.status === 'running') last = index;
+    if (index >= afterRule && row.kind === 'group' && row.run.status === 'running') last = index;
   });
   if (last < 0) return rows;
   return rows.map((row, index) => (index === last ? { ...row, live: true } : row));

@@ -50,7 +50,7 @@ test('a bubble that stopped waiting stops moving the rule', () => {
  * way round -- the owner saw the bubble above the rule, exactly what the cell placement was meant
  * to prevent. A row of the list is ordered by the data, which is what the inversion is built on.
  */
-import { buildRows, withCompactionRule, firstItemOfRow, type ChatRow } from '../runRows';
+import { buildRows, type ChatRow } from '../runRows';
 
 const label = (row: ChatRow): string =>
   row.kind === 'item'
@@ -72,7 +72,7 @@ function thread(): ChatItem[] {
 
 test('the rule is a row of its own, immediately above the send it holds', () => {
   const items = thread();
-  const rows = withCompactionRule(buildRows(items), compactionRuleBefore(items));
+  const rows = buildRows(items, compactionRuleBefore(items));
   // Reading order, oldest first: the parked send is still the last thing the thread says, and the
   // divider now stands above it rather than under it.
   expect(rows.map(label)).toEqual(['q1', 'a1', 'RULE', 'parked']);
@@ -80,22 +80,23 @@ test('the rule is a row of its own, immediately above the send it holds', () => 
 
 test('nothing parked leaves the rows alone, so the header keeps drawing the rule', () => {
   const items = [said('q1'), said('a1')];
-  const rows = withCompactionRule(buildRows(items), compactionRuleBefore(items));
+  const rows = buildRows(items, compactionRuleBefore(items));
   expect(rows.map(label)).toEqual(['q1', 'a1']);
   expect(rows.some(row => row.kind === 'rule')).toBe(false);
 });
 
-test('the rule attaches above the row that draws the bubble, group or not', () => {
-  // An injection splits a run, and the parked bubble sits after a group: the rule goes above that
-  // group's row only if the bubble itself opens it, which is what `firstItemOfRow` answers.
-  const rows = withCompactionRule(buildRows(thread()), 'parked');
+test('the rule stands immediately above the bubble it holds, group or not', () => {
+  // A run's work sits above the parked bubble: the rule is inserted at the bubble's own place in
+  // the thread, so the group before it ends there rather than being cut by a row drawn after it.
+  const rows = buildRows(thread(), 'parked');
   const at = rows.findIndex(row => row.kind === 'rule');
   expect(at).toBeGreaterThanOrEqual(0);
-  expect(firstItemOfRow(rows[at + 1]!)).toBe('parked');
+  expect(rows[at + 1]!.kind).toBe('item');
+  expect(rows[at - 1]!.kind).toBe('item');
 });
 
 test('a send that already left is not held by a rule', () => {
   const items = [said('q1'), said('sent')];
-  const rows = withCompactionRule(buildRows(items), compactionRuleBefore(items));
+  const rows = buildRows(items, compactionRuleBefore(items));
   expect(rows.map(label)).toEqual(['q1', 'sent']);
 });

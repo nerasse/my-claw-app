@@ -86,9 +86,17 @@ for the same reason.
 rule *under* the message waiting for it, while the boundary the compaction goes on to write sits
 *above* the same message: the thread reorders itself under the reader as the run ends, for no reason
 he could see. `compactionRuleBefore(items)` (in `core/runRows.ts`) names the first bubble queued with
-reason `compaction`, and `withCompactionRule(rows, before)` inserts `{ kind: 'rule' }` immediately
-above the row that draws it. The header keeps it while nothing is parked. Only `compaction` counts:
-a send queued for the next turn boundary of a live run (`injection`) is not waiting for this.
+reason `compaction`, and `buildRows(items, before)` inserts `{ kind: 'rule' }` at that bubble's own
+place in the thread, right before it. The header keeps it while nothing is parked. Only `compaction`
+counts: a send queued for the next turn boundary of a live run (`injection`) is not waiting for this.
+
+**The rule cuts the fold, it does not sit between two of them.** A compaction interrupts the run it
+finds: the work before it is a group of its own, closed, and whatever is written after it opens
+another. Placed as a decoration between rows, the boundary went *through* the fold -- the group
+counted work from both sides of it and kept the spinner and the clock of a run being written, which
+is the screenshot the owner sent on 2026-11-14 ("un compact doit couper le groupe et passer a un
+nouveau ou attendre le suivant"). Only what stands after the last rule can be the live segment
+(`markLiveSegment`), so a boundary with nothing after it leaves no group spinning.
 
 **Why the rule is a row and not a decoration on the cell** (fixed in 0.6.53). It was drawn inside
 the parked bubble's cell, as the first child of the row boundary, and that is not a reading order

@@ -923,7 +923,7 @@ describe('paging back through a long conversation', () => {
   });
 });
 
-test('a notice is drawn apart from the agent replies it arrives between', async () => {
+test('a notice is drawn as an aside, never as a bubble of its own', async () => {
   const tree = await renderWithHistory();
   // The server states a model fallback out of band: it is not an answer, and a bubble that looked
   // like one would be read as the agent's own words.
@@ -939,34 +939,33 @@ test('a notice is drawn apart from the agent replies it arrives between', async 
   });
   await waitFor(() => stringsOf(tree).some(t => t.includes('is not available')));
 
-  // Rendered as plain text, never through the markdown renderer the agent's answers use: the
-  // backticks are the server's wording, not a formatting instruction to obey.
-  const notice = tree.root
+  // The shape every block of context takes (`CollapsibleAside`, as the reason a run died does):
+  // a muted head, its own fold. The red outline it used to wear read as a second failure of the
+  // conversation, and the owner asked for it gone (2026-11-14).
+  const toggles = tree.root.findAll(
+    node => node.props?.accessibilityRole === 'button' && node.props?.accessibilityLabel === 'Note',
+  );
+  expect(toggles.length).toBeGreaterThan(0);
+
+  const flatten = (style: unknown): { borderWidth?: number; fontFamily?: string } =>
+    Object.assign({}, ...[style].flat(Infinity).filter(Boolean)) as {
+      borderWidth?: number;
+      fontFamily?: string;
+    };
+  const body = tree.root
     .findAll(node => {
       const children = node.props.children;
       const list = Array.isArray(children) ? children : [children];
       return list.some(c => typeof c === 'string' && c.includes('is not available'));
     })
     .at(-1)!;
-  // The bubble around it is outlined, which an agent bubble never is: that outline is the whole
-  // "drawn apart". Climbing to it also proves the text is not inside an agent bubble.
-  const flatten = (style: unknown): { borderWidth?: number; fontFamily?: string } =>
-    Object.assign({}, ...[style].flat(Infinity).filter(Boolean)) as {
-      borderWidth?: number;
-      fontFamily?: string;
-    };
-  let node: ReactTestRenderer.ReactTestInstance | null = notice;
-  let outlined = false;
-  while (node) {
-    if (flatten(node.props.style).borderWidth === 1) {
-      outlined = true;
-      break;
-    }
-    node = node.parent;
+  // No outlined plate anywhere up the row it sits in: that outline was the whole "drawn apart", and
+  // it read as a second failure of the conversation.
+  for (let node: ReactTestRenderer.ReactTestInstance | null = body; node; node = node.parent) {
+    expect(flatten(node.props.style).borderWidth ?? 0).not.toBe(1);
   }
-  expect(outlined).toBe(true);
   // Not the command style either: /status is a table and wears monospace, a notice is a sentence.
-  expect(flatten(notice.props.style).fontFamily).toBeUndefined();
+  expect(flatten(body.props.style).fontFamily).toBeUndefined();
   await unmount(tree);
 });
 

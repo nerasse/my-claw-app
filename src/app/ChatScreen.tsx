@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, FlatList, Keyboard, Linking, PanResponder, Platform, Pressable, Text, View, type TextInput } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { Bubble } from '../components/Bubble';
+import { ProviderNotice } from '../components/ProviderNotice';
 import { CompactionBoundary, CompactionRunning } from '../components/CompactionBoundary';
 import { DaySeparator } from '../components/DaySeparator';
 import { FoldedRunGroup, RunGroup } from '../components/RunGroup';
@@ -15,7 +16,7 @@ import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useActiveRun, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
-import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withCompactionRule, withDaySeparators, type ChatRow } from '../core/runRows';
+import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withDaySeparators, type ChatRow } from '../core/runRows';
 import { isSubAgentReturn } from '../core/subagentReturn';
 import { newerLine, olderLine, recallLines, recallsDraft } from '../core/recall';
 import { historyPillVisible } from '../core/historyPill';
@@ -1040,15 +1041,15 @@ export function ChatScreen({
   );
   // A finished run's work folds under one row (its header), which is why the list is built from
   // rows and not from raw items: a collapsed group is one row, an open one renders its children
-  // inside it -- docs/run-grouping.md. The compaction rule is a row too, inserted above the send
-  // it holds -- `withCompactionRule`.
+  // inside it -- docs/run-grouping.md. The live compaction rule is a row too, and a boundary the
+  // fold is cut at rather than a decoration between rows: `buildRows` takes it.
   // And a send the server never got is pinned under all of it: it waits for a connection, not for a
   // turn, so a bubble left in its reading order scrolls away from the only place the owner looks
   // while the run keeps writing -- `pinnedSends`.
   // The day dividers come last, on the order the reader actually gets: a pinned send moved to the
   // bottom must take its day with it.
   const rows = useMemo(
-    () => withDaySeparators(pinnedSends(withCompactionRule(buildRows(items), ruleBefore))),
+    () => withDaySeparators(pinnedSends(buildRows(items, ruleBefore))),
     [items, ruleBefore],
   );
   const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
@@ -1252,6 +1253,15 @@ export function ChatScreen({
       // A sub-agent's report is a row of the thread, not a bubble: `role: 'user'` on the wire is a
       // fact about the prompt, and drawing it as a message made the owner read his own voice onto
       // words an agent wrote (owner, 2026-11-13).
+      // A provider's note is context about the run, never a bubble: same shape as the reason a
+      // run died, and never the raw payload it came with (`components/ProviderNotice.tsx`).
+      if (item.kind === 'text' && item.notice) {
+        return (
+          <View style={toolColumn}>
+            <ProviderNotice item={item} />
+          </View>
+        );
+      }
       if (item.kind === 'text' && isSubAgentReturn(item)) {
         return (
           <View style={toolColumn}>
