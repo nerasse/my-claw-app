@@ -2109,16 +2109,20 @@ class ChatStoreImpl {
   /**
    * What the call that wrote into this bubble spent thinking, once it has answered.
    *
-   * It touches no span: the words were timed as they streamed, and the span of a thought with no
-   * words comes on the frame (`ms`). Opening one here measured the time between the count and the
-   * end of the stream, and wrote that over the real duration.
+   * The server's `ms` wins over anything measured here, and that is the point of the frame: the
+   * app times a phase from the frame that opens it to the first prose delta, which is a wall clock
+   * across a socket, while the server times the same span where the deltas arrive -- and its figure
+   * is the one the log stores and the one a reload shows. Without this the two disagreed, and a
+   * phase read `12 s` live and `4 s` after a refresh (owner, 2026-11-14: "le ms serveur c'est lui
+   * l'important").
    */
   setReasoningTokens(threadId: string, id: string, tokens: number, ms?: number): void {
     if (!this.streams.has(id)) return;
     this.endWaiting(threadId, id);
-    const item = this.getItems(threadId).find(entry => entry.id === id);
-    const timed = item?.kind === 'text' && (item.reasoningMs !== undefined || this.reasoningStart.has(id));
-    this.patch(threadId, id, { reasoningTokens: tokens, ...(ms !== undefined && ms > 0 && !timed ? { reasoningMs: ms } : {}) });
+    // The span the server named is the answer from here on: the local measurement stops, so the
+    // seal at the first delta cannot overwrite the figure a moment later.
+    if (ms !== undefined && ms > 0) this.reasoningStart.delete(id);
+    this.patch(threadId, id, { reasoningTokens: tokens, ...(ms !== undefined && ms > 0 ? { reasoningMs: ms } : {}) });
   }
 
   /**

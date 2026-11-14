@@ -199,23 +199,36 @@ describe('the thinking is timed', () => {
     expect(first()).toMatchObject({ reasoningTokens: 512, reasoningMs: 4_200 });
   });
 
-  // The count arrives once the call has answered. Opening a span on it measured the gap between
-  // the count and the end of the stream, a few milliseconds, and wrote it over the real duration.
-  test('a count after the words leaves the span they were timed by', () => {
+  // The server's figure is the one the log stores and the one a reload draws, so the live view
+  // adopts it: the app's own span is a wall clock across a socket, from the frame that opened the
+  // phase to the first prose delta, and the two never agreed (owner, 2026-11-14: "le ms serveur
+  // c'est lui l'important"). A phase that read `12 s` live and `4 s` after a refresh is this.
+  test("a count carries the server's span, and it replaces the one measured here", () => {
     chatStore.startStream(THREAD, 's1');
     chatStore.appendReasoning(THREAD, 's1', 'weighing', false, ago(5_000));
     chatStore.appendDelta(THREAD, 's1', 'answer');
-    const timed = first().reasoningMs;
-    expect(timed).toBeGreaterThanOrEqual(5_000);
-    chatStore.setReasoningTokens(THREAD, 's1', 512, 90);
+    // Sealed locally by the first word, as it always was -- then corrected by the server.
+    expect(first().reasoningMs).toBeGreaterThanOrEqual(5_000);
+    chatStore.setReasoningTokens(THREAD, 's1', 512, 4_100);
     chatStore.endStream(THREAD, 's1');
-    expect(first().reasoningMs).toBe(timed);
+    expect(first().reasoningMs).toBe(4_100);
   });
 
-  test('a count for a thought still open does not stamp its own span on it', () => {
+  test('a count for a thought still open takes the span the server measured', () => {
+    // The call asked for a tool: no prose came, so nothing sealed the span here. The server timed
+    // it where the deltas arrive, which is the figure a reopened thread shows.
     chatStore.startStream(THREAD, 's1');
     chatStore.appendReasoning(THREAD, 's1', 'thought, then a tool', false, ago(5_000));
-    chatStore.setReasoningTokens(THREAD, 's1', 512, 90);
+    chatStore.setReasoningTokens(THREAD, 's1', 512, 4_800);
+    chatStore.endStream(THREAD, 's1');
+    expect(first().reasoningMs).toBe(4_800);
+  });
+
+  test('a count with no span leaves whatever this device measured alone', () => {
+    // An older server sends no `ms`, and a frame without one is not a claim of zero.
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', 'thought, then a tool', false, ago(5_000));
+    chatStore.setReasoningTokens(THREAD, 's1', 512);
     chatStore.endStream(THREAD, 's1');
     expect(first().reasoningMs).toBeGreaterThanOrEqual(5_000);
   });
