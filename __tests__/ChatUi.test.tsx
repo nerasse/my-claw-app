@@ -1264,9 +1264,11 @@ test('a send waits for the server receipt, and one that never got it can be sent
   await ReactTestRenderer.act(async () => {
     chatStore.markUndelivered(THREAD, sent.id);
   });
-  // The wording is composed with the elapsed time, so it is found in the tree rather than among
-  // the plain text nodes.
-  const waitingWords = () => JSON.stringify(tree.toJSON());
+  // The wording is composed with the elapsed time, so it is found by walking the strings rather
+  // than among the plain text nodes. It used to stringify the whole tree, which does not survive a
+  // React element in a prop (the list's header and footer are elements): an element carries its
+  // owner, the owner carries the tree, and JSON.stringify meets its own tail.
+  const waitingWords = () => stringsOf(tree).join('\n');
   await waitFor(() => waitingWords().includes('not sent, trying again'));
   await waitFor(() => waitingWords().includes('tap to send'));
   bridge.sendMessage.mockClear();

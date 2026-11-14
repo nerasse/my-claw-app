@@ -283,6 +283,8 @@ export function ChatScreen({
   const inverted = Platform.OS !== 'web';
   /** The content height last reported, so a page prepended above the reader can be measured. */
   const contentRef = useRef(0);
+  /** The viewport height last measured, so "the end" is a measurement rather than an estimate. */
+  const viewportRef = useRef(0);
   /** A page of older rows asked for on the web, and the viewport to hold while it lands. */
   const prependAnchor = useRef<{ offset: number; content: number } | null>(null);
   const listRef = useRef<FlatList<ChatRow>>(null);
@@ -353,15 +355,21 @@ export function ChatScreen({
   /**
    * Put the newest message back on screen, whichever end of the range it is at.
    *
-   * Inverted, it is offset 0 and the move is exact. The other way round there is no offset to
-   * name -- the rows below are unmeasured and their heights are unknowable -- so the list is asked
-   * for its end and clamps whatever estimate it made: `scrollToEnd` overshooting is harmless, and
-   * the content size it lands on is the one that re-pins it (docs/thread-scroll.md).
+   * Inverted, it is offset 0 and the move is exact. The other way round the end is a number too --
+   * content height minus viewport, both measured -- and it has to be that number rather than
+   * `scrollToEnd`, which aims at an estimate built from the average cell height and stops short of
+   * it: on a thread of two-line turns the last answer stayed clipped under the composer.
    */
   const scrollToNewest = useCallback(
     (animated: boolean) => {
-      if (inverted) listRef.current?.scrollToOffset({ offset: 0, animated });
-      else listRef.current?.scrollToEnd({ animated });
+      if (inverted) {
+        listRef.current?.scrollToOffset({ offset: 0, animated });
+        return;
+      }
+      listRef.current?.scrollToOffset({
+        offset: Math.max(contentRef.current - viewportRef.current, 0),
+        animated,
+      });
     },
     [inverted],
   );
@@ -1499,13 +1507,20 @@ export function ChatScreen({
     [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions, continueOffered, pressContinue, quotaWait, onQuotaCancel, onQuotaRetryNow],
   );
 
+  /**
+   * The older page's spinner, at the older end, and the space it needs is always taken.
+   *
+   * The row used to exist only while a page was in flight, so a page that arrived (or that never
+   * arrived, or that failed) changed the content height above the reader by the spinner's own
+   * height: on the web the thread shifted by ~40 pt the moment the page landed, which is what the
+   * anchor work exists to prevent. A slot of the same size, filled or empty, cannot move anything.
+   */
   const olderEnd = useMemo(
-    () =>
-      loadingOlder ? (
-        <View style={styles.olderSpinner}>
-          <ActivityIndicator size="small" color={palette.textFaint} />
-        </View>
-      ) : null,
+    () => (
+      <View style={styles.olderSpinner}>
+        {loadingOlder ? <ActivityIndicator size="small" color={palette.textFaint} /> : null}
+      </View>
+    ),
     [loadingOlder, palette.textFaint, styles.olderSpinner],
   );
 
@@ -1543,8 +1558,20 @@ export function ChatScreen({
         inverted,
       );
       if (!inverted) {
+        const anchor = prependAnchor.current;
+        if (movedUp) {
+          // A hand on the wheel ends the compensation: the reader has taken the position over, and
+          // what they are looking at now is where they want to be.
+          prependAnchor.current = null;
+          if (!near) followNewest(false);
+        } else if (anchor !== null && !followingRef.current && offset < anchor.offset) {
+          // A prepend is still being measured, and the rows it added above have pushed the text
+          // being read off its line. Hold it, on every scroll event rather than on the content
+          // size alone: the growth arrives in steps hundreds of milliseconds apart, and between two
+          // of them the reader would be left looking at the older page they did not ask to read.
+          listRef.current?.scrollToOffset({ offset: anchor.offset, animated: false });
+        }
         if (near && !followingRef.current) followNewest(true);
-        else if (!near && movedUp && followingRef.current) followNewest(false);
       }
       // A pinned reader is at the newest message even in the frame where the content that arrived
       // below them has not been scrolled to yet, so the pill does not flash under a streaming run.
@@ -1585,23 +1612,31 @@ export function ChatScreen({
    * for the inverted list, and nothing does on the web. Any other growth belongs to a pinned
    * reader, who gets the newest message back under their eyes; while they read history, it is
    * left where it is.
+   *
+   * The anchor is kept across the whole settle, not spent on the first change: a virtualized list
+   * grows in steps as the rows above get measured, and compensating only the first step is what
+   * put the reader two pages away from the paragraph they were reading (the second page landing
+   * on a fresh anchor, itself measured from a half-grown content). Each step absorbs its own
+   * growth, and only a hand on the wheel, or a return to the newest message, ends it.
    */
   const onThreadContentSize = useCallback(
     (_width: number, content: number) => {
       contentRef.current = content;
       if (inverted) return;
       const anchor = prependAnchor.current;
-      if (anchor !== null) {
-        prependAnchor.current = null;
-        listRef.current?.scrollToOffset({
-          offset: anchor.offset + prependShift(anchor.content, content),
-          animated: false,
-        });
+      if (anchor !== null && !followingRef.current) {
+        const shift = prependShift(anchor.content, content);
+        if (shift > 0) {
+          anchor.content = content;
+          anchor.offset += shift;
+          listRef.current?.scrollToOffset({ offset: anchor.offset, animated: false });
+        }
         return;
       }
-      if (followingRef.current) listRef.current?.scrollToEnd({ animated: false });
+      prependAnchor.current = null;
+      if (followingRef.current) scrollToNewest(false);
     },
-    [inverted],
+    [inverted, scrollToNewest],
   );
   /**
    * A page of older rows, whichever end of the range holds them.
@@ -1619,6 +1654,10 @@ export function ChatScreen({
   const pageOlder = useCallback(
     (byList: boolean) => {
       if (!inverted) {
+        // One page at a time: while a prepend is still settling, the rows above are being measured
+        // and the start of the range reads as reached again. A second request there would take a
+        // fresh anchor from a half-grown content and throw the reader two pages away.
+        if (prependAnchor.current !== null) return;
         if (byList && followingRef.current) return;
         if (!followingRef.current) prependAnchor.current = { offset: offsetRef.current, content: contentRef.current };
       }
@@ -1627,12 +1666,19 @@ export function ChatScreen({
     [inverted, onLoadOlder],
   );
   const pageOlderFromList = useCallback(() => pageOlder(true), [pageOlder]);
+  const onListMeasure = useCallback(
+    (measure: { viewport: number; content: number }) => {
+      viewportRef.current = measure.viewport;
+      setListMeasure(measure);
+    },
+    [],
+  );
   const { scrollProps, indicator } = useScrollIndicator({
     onScroll: handleScroll,
     onScrollEndDrag: endGesture,
     onMomentumScrollEnd: endGesture,
     onContentSizeChange: onThreadContentSize,
-    onMeasure: setListMeasure,
+    onMeasure: onListMeasure,
     inverted,
     // The browser draws its own scrollbar, and it is the only one a mouse can drag, click or page
     // with. The system bar everywhere else is an overlay the platform paints over the rows, so
@@ -2208,7 +2254,7 @@ const createStyles = (palette: Palette) => ({
   // the pane; now that a tool card is allowed the full width it has to be asked for, or a card
   // is drawn hard against both edges of the window.
   listContent: { paddingTop: space.sm, paddingBottom: space.md, paddingHorizontal: space.sm },
-  olderSpinner: { paddingVertical: space.md, alignItems: 'center' as const },
+  olderSpinner: { minHeight: 44, justifyContent: 'center' as const, alignItems: 'center' as const },
   hero: {
     flex: 1,
     justifyContent: 'center' as const,

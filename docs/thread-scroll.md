@@ -117,11 +117,12 @@ that; the nesting is the cause.
 
 So on the web the document runs oldest-first and the newest message is the **end** of the range:
 
-- **Pinned to the newest message.** There is no offset to open on, so `onThreadContentSize` asks
-  the list for its end while the reader is following it. `scrollToEnd` on unmeasured rows aims at an
-  estimate and is clamped by the platform, so an overshoot costs nothing: the content size that
-  comes back is what re-pins it, and the loop settles in a few frames. That is also how a thread of
-  forty thousand rows opens on its last message.
+- **Pinned to the newest message.** There is no offset to open on, so `onThreadContentSize` sends
+  the list to its end while the reader is following it -- and that end is a *measurement*
+  (`content` minus `viewport`, both reported by the scroll indicator), not `scrollToEnd`, which aims
+  at an estimate built from the average cell height and stopped a few points short of it: the last
+  answer stayed clipped under the composer on a thread of two-line turns (measured 2026-11-14).
+  That is also how a thread of forty thousand rows opens on its last message.
 - **A hand on the wheel unpins.** A browser reports no end of gesture -- there is no touch responder,
   so a wheel notch and a drag on the scrollbar look like any other scroll. What they do that a
   programmatic scroll never does is move the offset *up* while the reader is away from the newest
@@ -132,9 +133,17 @@ So on the web the document runs oldest-first and the newest message is the **end
   (native keeps `onEndReached`). A page inserted above the reader moves everything on screen down by
   its height, and nothing compensates for that on the web, so `prependAnchor` takes the offset and
   the content size before the request and `onThreadContentSize` adds the difference once it lands --
-  what `maintainVisibleContentPosition` does for free on native. The list's own report of reaching
-  the start is ignored while the reader is pinned: mounting at the top of the document reports it
-  before the pin has moved anything, and paging there would load history nobody asked for.
+  what `maintainVisibleContentPosition` does for free on native. Two details are what make it hold
+  at all: the anchor is kept across the whole settle rather than spent on the first change (a
+  virtualized list grows in steps, and a page spent on the first step left the reader two pages
+  away), and only one page is ever in flight (`pageOlder` refuses while an anchor is live, because
+  the start of the range reads as reached again during the settle). The scroll listener also holds
+  the offset while an anchor is live, so a step of growth cannot be left on screen. The list's own
+  report of reaching the start is ignored while the reader is pinned: mounting at the top of the
+  document reports it before the pin has moved anything, and paging there would load history nobody
+  asked for. What remains is a *transient* -- the reader can sit on the older page for ~1.8 s while
+  the rows above are measured; the end position is exact. docs/ui-browser-check.md has the numbers
+  and the two candidate fixes.
 
 `src/core/threadScroll.ts` holds what both geometries share -- `nearNewest`, `prependShift` -- so
 three handlers cannot drift apart on a sign.
