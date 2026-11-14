@@ -100,7 +100,7 @@ export function CompactionRunning({ since, text, reasoning, stopping }: { since:
           looks at it. The same word as the session menu, so one stop reads the same everywhere.
         */}
         <Text style={styles.label}>
-          {stopping ? 'Stopping…' : `Compacting the context · ${formatSpan(elapsed)}`}
+          {stopping || elapsed === undefined ? (stopping ? 'Stopping…' : 'Compacting the context') : `Compacting the context · ${formatSpan(elapsed)}`}
         </Text>
         <View style={styles.line} />
       </View>

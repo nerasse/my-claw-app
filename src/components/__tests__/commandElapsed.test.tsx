@@ -48,3 +48,44 @@ test('the counter starts at the age of the command and ticks every second', () =
   expect(jest.getTimerCount()).toBe(pending - 1);
   jest.useRealTimers();
 });
+
+/**
+ * The counter reads the clock at every render, not the instant the component happened to mount.
+ *
+ * A `now` captured in state froze the figure for as long as the row stayed mounted: the fold of a
+ * live run, whose first card can land after the row itself, showed `running · 0 ms` and kept
+ * showing it until something else forced a redraw (measured 2026-11-14).
+ */
+test('a counter mounted before its instant existed catches up instead of sitting at 0 ms', () => {
+  jest.useFakeTimers();
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  ReactTestRenderer.act(() => {
+    // `since` is 12 s ahead of the clock this component mounted on: what a device running behind
+    // the server sees when it is handed the server's start instant.
+    tree = ReactTestRenderer.create(<CommandElapsed since={Date.now() + 12_000} />);
+  });
+  expect(textsOf(tree).join('')).toContain('0 ms');
+
+  ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(15_000);
+  });
+  expect(textsOf(tree).join('')).toContain('3 s');
+  jest.useRealTimers();
+});
+
+/**
+ * An instant that cannot be read draws no figure at all. `NaN` reached `formatSpan` from a stamp the
+ * store had copied verbatim off a frame, and the fold's header read `running · NaN h` for as long
+ * as the run lasted.
+ */
+test('an unreadable instant draws no figure rather than NaN', () => {
+  jest.useFakeTimers();
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<CommandElapsed since={'not a date' as unknown as number} />);
+  });
+  const text = textsOf(tree).join('');
+  expect(text).not.toContain('NaN');
+  expect(text.trim()).toBe('');
+  jest.useRealTimers();
+});

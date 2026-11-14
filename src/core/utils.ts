@@ -118,6 +118,28 @@ export function formatBytes(bytes: number): string {
 
 
 /**
+ * An instant as the code does arithmetic on it: milliseconds, or nothing.
+ *
+ * The wire is not one type. A `chat.tool` frame stamps its `ts` as an ISO string, a session entry
+ * arrives with either, and the store copies what it is handed onto fields whose type is `number`.
+ * The result was silent: `now - "2026-11-14T21:27:07.504Z"` is `NaN`, which `formatSpan` drew as
+ * `NaN h`, and `parent.ts + 1` concatenated a `1` onto an ISO string (measured 2026-11-14). One
+ * reader, so a caller that does arithmetic on a stamp parses it the same way everywhere.
+ *
+ * `undefined` is the honest answer for something unparseable: a caller draws no figure, rather
+ * than a number invented from a NaN.
+ */
+export function msOf(value: number | string | undefined | null): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string' || value === '') return undefined;
+  // A bare millisecond count travels as a string in a few old places; `Date.parse` would read it
+  // as a year and answer nonsense, so an all-digit string is taken as the number it is.
+  if (/^\d+$/.test(value)) return Number(value);
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
  * How long something took, for whichever line in the thread says it.
  *
  * The one formater every counter shares: thinking spans, compaction, run spans, command waits,

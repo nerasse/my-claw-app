@@ -4,6 +4,7 @@ import { questionStore } from './questionStore';
 import { rememberReasoning, resetReasoningFetch } from './reasoningFetch';
 import { agentOfCard, indexRoster } from './subagents';
 import { hasNothingToShow, isOwnerMessage } from './runRows';
+import { msOf } from './utils';
 
 export type RunStatus = RunMeta['status'];
 
@@ -1175,8 +1176,7 @@ class ChatStoreImpl {
         const frozen =
           item.reasoningMs === undefined && item.reasoningStartedAt !== undefined
             ? { reasoningMs: Math.max(0, endTs - item.reasoningStartedAt) }
-            : {};
-        return { ...item, run, streaming: false, text: this.streams.get(item.id) ?? item.text, ...frozen };
+            : {};        return { ...item, run, streaming: false, text: this.streams.get(item.id) ?? item.text, ...frozen };
       }),
     );
     // And the stream tables let go of them, so a frame that still turns up cannot reopen a bubble
@@ -2034,7 +2034,10 @@ class ChatStoreImpl {
       attachments: [],
       streaming: true,
       run: this.runForLiveItem(threadId),
-      ts: parent ? parent.ts + 1 : Date.now(),
+      // `msOf`: a parent's stamp is a number on a bubble the store built and an ISO string on a
+      // card a server frame settled, and `"2026-…" + 1` is a concatenation -- a bubble stamped
+      // with garbage, which every clock reading it then drew as `NaN h` (2026-11-14).
+      ts: parent ? (msOf(parent.ts) ?? Date.now()) + 1 : Date.now(),
     });
   }
 
@@ -2132,9 +2135,9 @@ class ChatStoreImpl {
    * a counter of `NaN` for as long as the bubble lives.
    */
   private openReasoningSpan(threadId: string, id: string, since?: string): void {
-    const reported = since === undefined ? undefined : Date.parse(since);
+    const reported = msOf(since);
     const startedAt =
-      reported !== undefined && Number.isFinite(reported)
+      reported !== undefined
         ? reported
         : this.reasoningStart.has(id)
           ? undefined
@@ -2266,10 +2269,21 @@ class ChatStoreImpl {
     // Normalised at the door, once, rather than defended against in every card that reads it.
     // `parseServerFrame` only validates the frame's `type`, so a tool frame that arrived without
     // its args or its output is a shape the whole render path below would have to survive.
+    // `ts` is dropped here, by construction rather than by convention: the frame carries its own
+    // as an ISO string, and spreading it onto the card overwrote the numeric stamp every clock
+    // reads (`RunGroup`'s live segment, the day dividers, a thought's hour) with a string that
+    // `Date.now() - ts` answers `NaN` for -- drawn as `running · NaN h` (2026-11-14). A whitelist,
+    // not a spread with a hole in it: a field kept by omission is exactly how this came in.
     const payload: ToolCallPayload = {
-      ...input,
+      id: input.id,
+      name: input.name,
       args: input.args && typeof input.args === 'object' ? input.args : {},
-      ...(input.output === undefined || input.output === null ? {} : { output: String(input.output) }),
+      ok: input.ok,
+      output: input.output === undefined || input.output === null ? '' : String(input.output),
+      truncated: input.truncated,
+      ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
+      ...(input.running !== undefined ? { running: input.running } : {}),
+      ...(input.spawn !== undefined ? { spawn: input.spawn } : {}),
     };
     // Upsert: a `chat.tool.start` may have opened this card already. The end frame reuses the
     // same id, so we patch it in place (fill output, drop the spinner) instead of stacking a

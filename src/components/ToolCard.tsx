@@ -367,7 +367,7 @@ function QuestionHistoryBody({ args, output, ok }: { args: Record<string, unknow
 function RunningFor({ since }: { since: number }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const elapsed = useElapsed(since);
-  return <Text style={styles.duration}>{formatSpan(elapsed)}</Text>;
+  return <Text style={styles.duration}>{elapsed === undefined ? '' : formatSpan(elapsed)}</Text>;
 }
 
 const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({

@@ -275,7 +275,7 @@ function RunLine({ run }: { run: StatusPayload['runtime']['runs'][number] }): Re
           {run.effort}
         </Text>
       ) : null}
-      <Text style={styles.runElapsed}>{formatSpan(elapsed)}</Text>
+      <Text style={styles.runElapsed}>{elapsed === undefined ? '' : formatSpan(elapsed)}</Text>
     </View>
   );
 }

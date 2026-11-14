@@ -55,6 +55,14 @@ the work you are watching. The chevron becomes a spinner and the header carries 
 `running · 1 m 12 s`, which is the only place a live run can have one. `RunFoot` takes over when it
 ends, so the two are never both on screen.
 
+That chrono is the **segment's** own, dated from its first row's `ts` -- and that stamp is read
+through `msOf` (`core/utils.ts`), never subtracted from directly. A `chat.tool` frame stamps its
+`ts` as an ISO string while an item's is typed `number`, and `Date.now() - "2026-11-14T…"` is `NaN`:
+the header read `running · NaN h` as soon as the first card in the fold settled, and `0 ms` before
+that whenever the counter had mounted ahead of its instant (measured 2026-11-14). The wire is one
+type at the door (`addToolCall` rebuilds its card from a whitelist, so a frame's `ts` cannot land on
+it), and `useElapsed` parses whatever it is given and draws no figure at all rather than a `NaN`.
+
 A live run with no tool yet draws nothing: its waiting bubble is hoisted (see below), so there is
 no group to draw. The wait is the bubble's own `WaitLine`, where it has always been.
 

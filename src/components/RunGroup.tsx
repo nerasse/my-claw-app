@@ -1,7 +1,7 @@
 import { ChevronIcon } from './icons';
 import React from 'react';
 import { ActivityIndicator, LayoutAnimation, Pressable, Text, View } from 'react-native';
-import { formatSpan } from '../core/utils';
+import { formatSpan, msOf } from '../core/utils';
 import { useElapsed } from './CommandElapsed';
 import type { ChatItem, RunInfo, RunSummaryItem } from '../core/chat';
 import { familyOf } from '../core/toolSummary';
@@ -87,9 +87,16 @@ export const RunGroup = React.memo(function RunGroupView({
   // The segment's own bounds, never the run's: a run is folded in one group per burst, and each
   // burst has its own clock -- it starts when its first call does and stops when the message that
   // cut it was written (owner, 2026-11-08). The run's total stays where it belongs, on its foot.
-  const startedAt = items[0]?.ts;
+  //
+  // Read through `msOf`: an item's stamp is a number on what the store built and an ISO string on
+  // a card a server frame settled, and the arithmetic below is what turned a live header into
+  // `running · NaN h` (2026-11-14).
+  const startedAt = msOf(items[0]?.ts);
   const tail = items[items.length - 1];
-  const endedAt = tail === undefined ? undefined : tail.ts + (tail.kind === 'tool' ? tail.durationMs ?? 0 : 0);
+  const tailTs = msOf(tail?.ts);
+  const endedAt = tail === undefined || tailTs === undefined
+    ? undefined
+    : tailTs + (tail.kind === 'tool' ? tail.durationMs ?? 0 : 0);
 
   // The last row that owns a dot: the column stops there, whatever comes after it.
   const lastDot = items.reduce((last, item, index) => (item.kind === 'text' && drawsNothingYet(item) ? last : index), -1);
@@ -330,7 +337,8 @@ function LiveClock({
   since: number;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
-  return <Text style={styles.live}>{`running · ${formatSpan(useElapsed(since))}`}</Text>;
+  const elapsed = useElapsed(since);
+  return <Text style={styles.live}>{elapsed === undefined ? 'running' : `running · ${formatSpan(elapsed)}`}</Text>;
 }
 
 /** Past this many children, an open group also offers a way out at its bottom. */

@@ -61,7 +61,7 @@ export function WaitLine({ since }: { since: number }): React.JSX.Element {
   return (
     <View style={styles.line} accessibilityRole="progressbar" accessibilityLabel="The model is working">
       <Text style={styles.label}>wait</Text>
-      <Text style={styles.elapsed}>{formatSpan(useElapsed(since))}</Text>
+      <Text style={styles.elapsed}>{formatSpan(useElapsed(since) ?? 0)}</Text>
     </View>
   );
 }

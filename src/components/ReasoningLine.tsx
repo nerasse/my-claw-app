@@ -20,9 +20,11 @@ function compactCount(tokens: number): string {
  * inside a bubble that is streaming markdown at the same time, and re-rendering that on every
  * second to move a counter would be paid for by the whole thread.
  */
-function ReasoningElapsed({ since }: { since: number }): React.JSX.Element {
+function ReasoningElapsed({ since }: { since: number }): React.JSX.Element | null {
   const styles = useThemedStyles(createStyles);
-  return <Text style={styles.figure}>{formatSpan(useElapsed(since))}</Text>;
+  const elapsed = useElapsed(since);
+  // No instant to count from: no figure at all, rather than a `0 ms` that never moves.
+  return elapsed === undefined ? null : <Text style={styles.figure}>{formatSpan(elapsed)}</Text>;
 }
 
 /**
