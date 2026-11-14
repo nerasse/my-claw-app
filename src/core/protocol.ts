@@ -402,6 +402,12 @@ export interface RunSummaryEntry {
   run: RunMeta;
   /** Tool calls the row stands for: the header counts them without holding a card. */
   toolCount: number;
+  /**
+   * Every tool the row folds, with how many calls each took: the breakdown the header prints
+   * (`28 shell · 7 web · 20 thoughts`) without the cards. Absent on a server that predates it,
+   * and the header then says only how many steps there are.
+   */
+  toolKinds?: Record<string, number>;
   firstTool?: string;
   /** Rows the fold hides, so the group can draw a skeleton the size of what is coming. */
   itemCount: number;

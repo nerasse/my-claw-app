@@ -9,7 +9,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
-import { RunGroup, composition } from '../RunGroup';
+import { RunGroup, FoldedRunGroup, composition, compositionOf } from '../RunGroup';
 import { spine } from '../spine';
 import type { ChatItem, RunInfo, ToolItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
@@ -103,6 +103,58 @@ describe('the header says what the run touched', () => {
 
   it('reads a lone thought as singular', () => {
     expect(composition([], 1).count).toBe('1 step');
+  });
+
+  it('says the same thing from counts as from cards', () => {
+    // A folded row only has a tally, never the cards: the line must not depend on which it got.
+    expect(compositionOf({ bash: 3, read: 2, apply_patch: 1 }, 0)).toEqual(
+      composition(['bash', 'bash', 'bash', 'read', 'read', 'apply_patch'], 0),
+    );
+    expect(compositionOf({ bash: 1 }, 2).detail).toBe('· 1 shell · 2 thoughts');
+    expect(compositionOf({}, 3)).toEqual({ count: '3 steps', detail: '' });
+  });
+});
+
+describe('the row a reload draws', () => {
+  const summary = (extra: Record<string, unknown> = {}) =>
+    ({
+      kind: 'run',
+      id: 'run-a',
+      run,
+      toolCount: 4,
+      itemCount: 5,
+      lastId: 'z',
+      hydration: 'idle',
+      ts: 1,
+      ...extra,
+    }) as never;
+
+  /** Mounted inside `act`, and unmounted by the suite's `afterEach` like every other tree. */
+  function renderFolded(summaries: never[]): ReactTestRenderer.ReactTestRenderer {
+    let tree!: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      tree = ReactTestRenderer.create(
+        <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
+          <FoldedRunGroup run={run} summaries={summaries} open={false} onToggle={() => {}} onOpen={() => {}} />
+        </ThemeContext.Provider>,
+      );
+    });
+    mounted.push(tree);
+    return tree;
+  }
+
+  it('keeps the breakdown after a reload', () => {
+    // The owner, 2026-11-14: "quand on reload une session on a plus le compte des steps a cote
+    // des x steps dans les groupements". The counts travel with the row now.
+    const tree = renderFolded([summary({ toolKinds: { bash: 3, web_search: 1 } })]);
+    expect(texts(tree).join(' ')).toContain('5 steps');
+    expect(texts(tree).join(' ')).toContain('· 3 shell · 1 web · 1 thought');
+  });
+
+  it('says only how many steps when the server sent no tally', () => {
+    const tree = renderFolded([summary()]);
+    expect(texts(tree).join(' ')).toContain('5 steps');
+    expect(texts(tree).join(' ')).not.toContain('·');
   });
 });
 

@@ -192,20 +192,25 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
 
-  const count = summaries.reduce((n, row) => n + row.toolCount, 0);
+  const toolCount = summaries.reduce((n, row) => n + row.toolCount, 0);
   const itemCount = summaries.reduce((n, row) => n + row.itemCount, 0);
   // What is behind the header that is not a call: the thinking phases, which the server counts in
   // `itemCount` only. `itemCount` is the total, so the difference is the thoughts -- and it is
   // never negative on a row the server wrote, but a page boundary can make the two disagree, so
   // the clamp keeps a bad count from inventing steps.
-  const thoughtCount = Math.max(0, itemCount - count);
-  // The same umbrella as a fold of real items (`composition`): "tool calls" would undercount what
-  // is behind the header, and naming the first tool said nothing about the rest (owner, 2026-11-13).
-  const steps = count + thoughtCount;
-  const label = {
-    count: `${steps} step${steps === 1 ? '' : 's'}`,
-    detail: '',
-  };
+  const thoughtCount = Math.max(0, itemCount - toolCount);
+  // The same label as a fold of real items, from the counts instead of the cards: a run cut by a
+  // page boundary is several rows, and their tallies add up. The server sends the per-tool counts
+  // with the row, so a reload says what the open group said -- `4 steps · 3 shell · 1 thought` --
+  // instead of the bare count it was left with (owner, 2026-11-14).
+  const label = compositionOf(
+    summaries.reduce<Record<string, number>>((all, row) => {
+      for (const [name, n] of Object.entries(row.toolKinds ?? {})) all[name] = (all[name] ?? 0) + n;
+      return all;
+    }, {}),
+    thoughtCount,
+    toolCount,
+  );
   const failed = summaries.some(row => row.hydration === 'failed');
 
   /**
@@ -347,16 +352,36 @@ export function composition(
   names: readonly string[],
   thoughts: number,
 ): { count: string; detail: string } {
-  const steps = names.length + thoughts;
-  const count = `${steps} step${steps === 1 ? '' : 's'}`;
-  if (names.length === 0) {
-    // Nothing but thinking: the breakdown would repeat the count word for word.
-    return { count, detail: '' };
-  }
+  const counts: Record<string, number> = {};
+  for (const name of names) counts[name] = (counts[name] ?? 0) + 1;
+  return compositionOf(counts, thoughts);
+}
+
+/**
+ * The same line, from counts instead of cards: what a table of tool names and their tallies
+ * carries, which is all a folded row has of the work it stands for.
+ *
+ * `calls` is the run's own tool count, and it is passed rather than summed from the tally: a row
+ * from a server that predates `toolKinds` has no breakdown, and the line still has to say how many
+ * steps there were.
+ */
+export function compositionOf(
+  counts: Readonly<Record<string, number>>,
+  thoughts: number,
+  calls?: number,
+): { count: string; detail: string } {
   const tally = new Map<string, number>();
-  for (const name of names) {
+  let counted = 0;
+  for (const [name, n] of Object.entries(counts)) {
+    counted += n;
     const label = labelFor(name);
-    tally.set(label, (tally.get(label) ?? 0) + 1);
+    tally.set(label, (tally.get(label) ?? 0) + n);
+  }
+  const steps = (calls ?? counted) + thoughts;
+  const count = `${steps} step${steps === 1 ? '' : 's'}`;
+  if (counted === 0) {
+    // Nothing but thinking, or no tally at all: the breakdown would repeat the count word for word.
+    return { count, detail: '' };
   }
   const parts = [...tally.entries()].sort((a, b) => b[1] - a[1]).map(([label, n]) => `${n} ${label}`);
   if (thoughts > 0) parts.push(`${thoughts} thought${thoughts === 1 ? '' : 's'}`);

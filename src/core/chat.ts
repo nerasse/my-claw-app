@@ -174,6 +174,11 @@ export interface RunSummaryItem {
   /** Required here, unlike on a bubble: this row *is* its run. */
   run: RunInfo;
   toolCount: number;
+  /**
+   * Every tool the row folds, with how many calls each took. The header's breakdown is built from
+   * it, so the row a reload draws says what the group it stands for said.
+   */
+  toolKinds?: Record<string, number>;
   firstTool?: string;
   /** Rows the fold hides: the size of the skeleton drawn while they load. */
   itemCount: number;
@@ -356,6 +361,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
         id: entry.id,
         run: runInfoOf(entry.run),
         toolCount: entry.toolCount,
+        ...(entry.toolKinds ? { toolKinds: entry.toolKinds } : {}),
         ...(entry.firstTool ? { firstTool: entry.firstTool } : {}),
         itemCount: entry.itemCount,
         lastId: entry.lastId,
