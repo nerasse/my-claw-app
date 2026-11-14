@@ -252,7 +252,7 @@ function RunStrip({ payload }: { payload: StatusPayload }): React.JSX.Element | 
   );
 }
 
-/** One node: who, on what, for how long. The model is the one calling now (docs/status-page.md). */
+/** One node: who, on what, at which effort, for how long. The model is the one calling now. */
 function RunLine({ run }: { run: StatusPayload['runtime']['runs'][number] }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
   const elapsed = useElapsed(new Date(run.startedAt).getTime());
@@ -265,6 +265,14 @@ function RunLine({ run }: { run: StatusPayload['runtime']['runs'][number] }): Re
       {run.model ? (
         <Text style={styles.runModel} numberOfLines={1}>
           {withoutEndpoint(run.model)}
+        </Text>
+      ) : null}
+      {/* The rung this node's request carries. A route walks candidates with different levels, so
+          the conversation's effort above is not the running one's, and the row that named neither
+          let a `xhigh` tag look like it ran `max`. */}
+      {run.effort ? (
+        <Text style={styles.runEffort} numberOfLines={1}>
+          {run.effort}
         </Text>
       ) : null}
       <Text style={styles.runElapsed}>{formatSpan(elapsed)}</Text>
@@ -721,6 +729,9 @@ const createStyles = (palette: Palette) => ({
   runLabel: { fontSize: font.small, fontWeight: '600' as const, color: palette.accent },
   // The model is the reading; the name yields to it and never the other way round.
   runModel: { flexShrink: 1 as const, minWidth: 0, fontSize: font.meta, color: palette.accent },
+  // The rung, beside the model it belongs to: same size, dimmer, fixed so a long model id truncates
+  // first. It never widens the row on its own -- an effort is four characters at most.
+  runEffort: { flexShrink: 0 as const, fontSize: font.meta, color: palette.textMuted },
   runElapsed: { flexShrink: 0 as const, fontVariant: ['tabular-nums' as const], fontSize: font.meta, color: palette.accent },
   card: {
     backgroundColor: palette.surface,

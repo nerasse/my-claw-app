@@ -97,6 +97,17 @@ interface ThreadModel {
    * own model -- and absent too on a server that predates the field.
    */
   live?: string;
+  /**
+   * The rung `live` is asked for, when the server sends one. A route's candidates each carry their
+   * own level, so the conversation's `effort` cannot answer for the model answering now.
+   */
+  liveEffort?: string;
+  /**
+   * The tag this conversation picked, when its model is a `tag:` reference. `model` names what the
+   * API receives and therefore drops it; a header showing `opus-5-5` for a conversation on
+   * `tag:Quota` cannot say whether the pick landed. Absent on a plain pick.
+   */
+  tag?: string;
 }
 
 /**
@@ -244,6 +255,8 @@ class ModelStoreImpl {
       ...(frame.context === undefined ? {} : { context: frame.context }),
       ...(frame.siphon === undefined ? {} : { siphon: frame.siphon }),
       ...(frame.live === undefined ? {} : { live: frame.live }),
+      ...(frame.liveEffort === undefined ? {} : { liveEffort: frame.liveEffort }),
+      ...(frame.tag === undefined ? {} : { tag: frame.tag }),
     });
     this.emit();
   }

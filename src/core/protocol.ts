@@ -1460,6 +1460,16 @@ export interface ModelResultFrame {
    * conversation resolves to. Absent too on a server that predates the field.
    */
   live?: string;
+  /**
+   * The rung `live` is asked for, when the server sends one. A route's candidates each carry their
+   * own level, so the conversation's own `effort` cannot answer for the model answering now.
+   */
+  liveEffort?: string;
+  /**
+   * The tag this conversation picked, when its model is a `tag:` reference. `model` names the model
+   * the API receives and so drops the tag; the header shows this to say which pick is in force.
+   */
+  tag?: string;
 }
 
 /**
@@ -1735,9 +1745,10 @@ export interface StatusPayload {
   runtime: {
     /**
      * The live run tree of this conversation: `main` at depth 0, each sub-agent below it. `model`
-     * is what that node is calling at this second, which is not always the model it started on.
+     * is what that node is calling at this second, which is not always the model it started on, and
+     * `effort` the rung that call carries -- a route's candidates do not all share one.
      */
-    runs: Array<{ label: string; depth: number; startedAt: string; model?: string }>;
+    runs: Array<{ label: string; depth: number; startedAt: string; model?: string; effort?: string }>;
     /** A /compact holds the session: work in progress with no run node of its own. */
     compacting: boolean;
     verbose: boolean;
@@ -2480,6 +2491,11 @@ export interface SubAgentEntry {
    * run walked its route or its provider fell. Absent on a server that predates the field.
    */
   modelLive?: boolean;
+  /**
+   * The rung that model is asked for, when it takes one. A route's candidates each carry their own,
+   * so a sub-agent spawned at `low` and now running on a `xhigh` candidate says both (2026-11-14).
+   */
+  effort?: string;
   /**
    * When the last message reached this agent: what the roster is ordered by. Absent on a server
    * that predates the field, and the list falls back to `createdAt`.

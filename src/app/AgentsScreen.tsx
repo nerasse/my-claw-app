@@ -99,10 +99,12 @@ const AgentRow = React.memo(function AgentRowView({
           {meta.join(' · ')}
         </Text>
         {/* The row is the only place that says which account a delegated run is on: `modelLive` is
-            set when the run walked off its pin, and the name is then what is calling now. */}
+            set when the run walked off its pin, and the name is then what is calling now. The rung
+            rides with it -- a route's candidates do not share one, so the name alone would say
+            which account answers and not how hard it was asked to think. */}
         {entry.model ? (
           <Text style={[styles.model, entry.modelLive ? styles.modelLive : null]} numberOfLines={1}>
-            {entry.model}
+            {entry.effort ? `${entry.model} · ${entry.effort}` : entry.model}
           </Text>
         ) : null}
       </View>

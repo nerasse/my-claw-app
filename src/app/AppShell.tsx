@@ -175,7 +175,7 @@ import {
   useThreadModel,
   withoutEndpoint,
 } from '../core/model';
-import { showsAgentsButton, showsModelButton } from './headerControls';
+import { headerFacts, headerModelOf, showsAgentsButton, showsModelButton } from './headerControls';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
@@ -2965,14 +2965,6 @@ export function AppShell(): React.JSX.Element {
   const currentModelLabel = threadModel
     ? catalog.models.find(model => model.id === threadModel.model)?.label ?? threadModel.model
     : null;
-  /**
-   * What is calling right now, when the run left the model this conversation resolves to: it walked
-   * its route on a wall, or its provider fell. The header names the model that answers, and the
-   * name it replaced follows it so the jump explains itself (docs/provider-failures.md).
-   */
-  const liveModelLabel = threadModel?.live
-    ? catalog.models.find(model => model.id === threadModel.live)?.label ?? threadModel.live
-    : null;
   // A model this chat did not pick is inherited, and from where decides what to go and edit. A
   // row that only named the model could not explain why picking the global default changed
   // nothing: the agent's own pin was answering all along.
@@ -3437,46 +3429,33 @@ export function AppShell(): React.JSX.Element {
   // What runs here, said the way a model is named: provider first, because two providers serve
   // the same id and `opus-5` alone does not say whose. The share closes the line -- it is the one
   // number that moves on its own, and it is what decides when this conversation has to compact.
-  const modelProvider = threadModel
-    ? catalog.models.find(model => model.id === threadModel.model)?.provider
-    : undefined;
-  const effortLabel = threadModel?.effort?.level || null;
-  const subtitle = [
-    offline ? status.state : null,
-    threadModel ? (modelProvider ? `${modelProvider} / ${currentModelLabel}` : currentModelLabel) : null,
-    // A run that walked its route or lost its provider: the name above is the conversation's, and
-    // this is what is answering, marked so a jump on the wire is not read as a wrong header.
-    liveModelLabel ? `running ${liveModelLabel}` : null,
-    effortLabel,
-    // "N items" is gone (owner, 2026-11-04: "le x item dans le header de session est useless").
-    // The count was a size, not a state: the thread is on screen and scrollable, so it never told
-    // anyone anything they could act on, and on a phone it was the last thing pushing the share
-    // out of the one line that can afford it.
-    pending > 0 ? `${pending} pending` : null,
-    // Where the model came from, when this conversation did not choose it. The picker no longer
-    // carries it as a hint -- the menu row that held it is gone wherever the title bar has the
-    // button -- and without it, picking the global default looks like a no-op with no explanation,
-    // which is how the incident hid for two days.
-    currentModelOrigin,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  /**
+   * A model id as a header names it: `claude-2 / Opus 5.5`.
+   *
+   * The provider is not decoration. A route's candidates are the same label on different accounts,
+   * so a name without it cannot tell `anthropic/opus-5-5` from `claude-2/opus-5-5` -- which is
+   * exactly the move the header exists to report (2026-11-14).
+   */
+  const modelName = (id: string): string => {
+    const entry = catalog.models.find(model => model.id === id);
+    const label = entry?.label ?? id;
+    return entry?.provider ? `${entry.provider} / ${label}` : label;
+  };
+  const subtitle = headerFacts(headerModelOf(threadModel), modelName, {
+    offline: offline ? status.state : null,
+    pending,
+    origin: currentModelOrigin,
+  });
   // The share lives in exactly one place. Where the gauge is drawn (560 pt and up) it is already
   // there, three figures wide; repeating it on the facts line put the same number twice in one
   // strip. Below that the gauge is gone and this is the only place left for it -- handed over as
   // its own run so that a long provider id truncates the name and never the figure (2026-11-04).
   /**
-   * The facts line of a sub-agent's header: the same three things a conversation's carries (what it
-   * runs on, what is answering now, the effort), composed here because the header that draws it in a
-   * sub-agent is a different shape -- a back row, not a title bar with controls.
+   * The facts line of a sub-agent's header: the same things a conversation's carries (the tag in
+   * force, what it runs, what is answering now, the effort), composed by the same function because
+   * the shape of the bar is the only thing that differs -- a back row, not a title bar of controls.
    */
-  const subagentFacts = [
-    threadModel ? (modelProvider ? `${modelProvider} / ${currentModelLabel}` : currentModelLabel) : null,
-    liveModelLabel ? `running ${liveModelLabel}` : null,
-    effortLabel,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const subagentFacts = headerFacts(headerModelOf(threadModel), modelName);
   const shareLabel =
     contextShare === null || layout.width >= 560 ? undefined : `${contextShare.toFixed(1)}%`;
   const meter =
