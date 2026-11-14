@@ -63,6 +63,19 @@ already had is never rearranged and a plain fresh frame -- the common case -- st
 
 Everything else inside the range defers to the window. That is the point: it is the truth there.
 
+## The thinking, once
+
+A thought the page carries on one of its own phases is dropped from what the device holds,
+even under another id.
+
+The streamer cuts a turn into one bubble per reasoning block; the log writes the phases the
+*provider* reported. A provider that reports the turn whole leaves one phase holding the thinking
+and the prose while the screen has two bubbles, so no id can pair them -- the recorder pairs the
+tail, which is what lines the answer up, and the thought keeps an id the page does not carry.
+Keeping both drew the reasoning twice: alone in the fold, then again above the answer, and a reload
+(which holds the phase alone) made it go away. The two are matched on the thinking itself, so a
+thought whose words the page does not carry is still the only record of that thinking and stays.
+
 ## The one state a delta cannot infer
 
 `session.sync.result` carries `compacting` -- the compaction running on the thread, if any. The

@@ -490,6 +490,36 @@ function mergeLocalSurvivors(base: ChatItem[], live: ChatItem[]): ChatItem[] {
   return [...insertByTs(base, typed), ...tail];
 }
 
+/**
+ * A live thought whose thinking the page also carries on a phase -- dropped, because it is the same
+ * thinking under a second id.
+ *
+ * The streamer cuts a turn into one bubble per reasoning block, and the log writes the phases the
+ * provider reported. When a provider reports the turn whole, the log has one phase holding the
+ * thinking and the prose while the screen has two bubbles, and the ids cannot be paired
+ * (`run-recorder.ts` pairs the tail, so the answer lines up and the thought does not). Keeping both
+ * drew the reasoning twice -- alone in the fold, then again above the answer -- and only a reload,
+ * which holds the phase alone, made it go away (owner, 2026-11-14: "en live j'ai des
+ * message/reasoning en double").
+ *
+ * Matched on the thinking itself: a thought with the same words as a phase is that phase's, and a
+ * live thought whose words the page does not carry is the only record of that thinking and stays.
+ */
+function withoutRepeatedThoughts(items: ChatItem[], incoming: readonly ChatItem[]): ChatItem[] {
+  const carried = new Set(
+    incoming
+      .filter(item => item.kind === 'text' && item.role === 'agent' && item.reasoning?.trim())
+      .map(item => (item as TextItem).reasoning!.trim()),
+  );
+  if (carried.size === 0) return items;
+  return items.filter(item => {
+    if (item.kind !== 'text' || item.role !== 'agent') return true;
+    if (item.text.trim() !== '' || (item.attachments?.length ?? 0) > 0) return true;
+    const thinking = item.reasoning?.trim();
+    return !thinking || !carried.has(thinking);
+  });
+}
+
 class ChatStoreImpl {
   private threads = new Map<string, ChatItem[]>();
   private streams = new Map<string, string>();
@@ -1377,7 +1407,10 @@ class ChatStoreImpl {
     // Only genuinely local items survive a reset: bubbles still being streamed into.
     // These exist only in memory, the server cannot have them -- and none exist once the server
     // says no run is answering (`survivesPage`).
-    const live = existing.filter(item => !known.has(item.id) && survivesPage(item, activeRun, false));
+    const live = withoutRepeatedThoughts(
+      existing.filter(item => !known.has(item.id) && survivesPage(item, activeRun, false)),
+      base,
+    );
 
     // A send the page does not carry (a command, which is journalled only once it answers) is put
     // back where it was typed; only what the run is still writing stays at the end.
@@ -1423,12 +1456,13 @@ class ChatStoreImpl {
       break;
     }
     const above = existing.slice(0, cut);
-    const live = existing
-      .slice(cut)
-      .filter(item => {
+    const live = withoutRepeatedThoughts(
+      existing.slice(cut).filter(item => {
         if (known.has(item.id) || !windowLacks(item, activeRun)) return false;
         return !(item.run && foldedRuns.has(item.run.id));
-      });
+      }),
+      base,
+    );
 
     this.threads.set(threadId, this.trimToCap(threadId, [...above, ...mergeLocalSurvivors(base, live)]));
     this.pageCursorFollows(threadId);
@@ -1453,11 +1487,14 @@ class ChatStoreImpl {
     const patched = existing.map(item => byId.get(item.id) ?? item);
     const seen = new Set(existing.map(item => item.id));
     const fresh = incoming.filter(item => !seen.has(item.id));
+    // A thought the page carries as a phase now, under another id: the turn was cut on screen and
+    // written whole in the log. It is the same thinking, and both drew it.
+    const living = withoutRepeatedThoughts(patched, incoming);
     // A delta is newer than what is persisted, but NOT newer than the turn in flight: the live
     // items belong to a run the server has not written yet. Appending blind hoists a running tool
     // card above the user bubble it answers.
-    const persisted = withoutOrphanErrors(patched.filter(item => !isLocalLive(item)), fresh);
-    const live = patched.filter(isLocalLive).filter(item => !isSettledByError(item, persisted));
+    const persisted = withoutOrphanErrors(living.filter(item => !isLocalLive(item)), fresh);
+    const live = living.filter(isLocalLive).filter(item => !isSettledByError(item, persisted));
     this.threads.set(threadId, this.trimToCap(threadId, [...insertByTs(persisted, fresh), ...live]));
     this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
