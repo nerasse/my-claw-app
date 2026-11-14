@@ -47,6 +47,19 @@ const history: HistoryEntry[] = [
   { id: 'h-2', role: 'assistant', text: 'the file lists two names', ts: '2026-01-01T10:00:02.000Z' },
 ];
 
+/**
+ * A scroll event as the list emits it. The three fields are not decoration: which end of the range
+ * is the newest message is read from the viewport and the content, so a test event without them is
+ * not a scroll any platform produces.
+ */
+const scrollAt = (y: number) => ({
+  nativeEvent: {
+    contentOffset: { y },
+    contentSize: { height: 4000 },
+    layoutMeasurement: { height: 800 },
+  },
+});
+
 function threadList(tree: Tree): ReactTestRenderer.ReactTestInstance {
   const list = tree.root
     .findAllByType(FlatList)
@@ -98,7 +111,7 @@ test('a compensation does not take the follow away', async () => {
   // What the list emits on its own when an item arrives and the anchor moves. The reader did not
   // touch anything.
   ReactTestRenderer.act(() => {
-    list.props.onScroll({ nativeEvent: { contentOffset: { y: 480 } } });
+    list.props.onScroll(scrollAt(480));
   });
 
   const list2 = threadList(tree);
@@ -110,7 +123,7 @@ test('a gesture that leaves the reader above the newest message takes the thresh
   const list = threadList(tree);
 
   ReactTestRenderer.act(() => {
-    list.props.onScrollEndDrag({ nativeEvent: { contentOffset: { y: 480 } } });
+    list.props.onScrollEndDrag(scrollAt(480));
   });
 
   // No threshold: the prop keeps its other half (the anchor holds still) and stops following.
@@ -122,8 +135,8 @@ test('the jump button brings the follow back', async () => {
   const list = threadList(tree);
 
   ReactTestRenderer.act(() => {
-    list.props.onScroll({ nativeEvent: { contentOffset: { y: 480 } } });
-    list.props.onScrollEndDrag({ nativeEvent: { contentOffset: { y: 480 } } });
+    list.props.onScroll(scrollAt(480));
+    list.props.onScrollEndDrag(scrollAt(480));
   });
   expect(threadList(tree).props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 0 });
 

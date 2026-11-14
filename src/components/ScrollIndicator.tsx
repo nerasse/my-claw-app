@@ -43,6 +43,15 @@ export interface ScrollIndicatorOptions {
    * this it would ride to the top while the reader sits on the newest message.
    */
   inverted?: boolean;
+  /**
+   * Leave the scrollbar to the platform instead.
+   *
+   * True where that bar is a real control -- a browser: it can be dragged, clicked to page, read
+   * by assistive tech, and it costs nothing to maintain. The bar above is for everywhere else,
+   * where the system one is an overlay the platform paints *over* the rows, and for every list
+   * whose surface is narrower than the pane it lives in.
+   */
+  systemBar?: boolean;
 }
 
 export function useScrollIndicator({
@@ -53,6 +62,7 @@ export function useScrollIndicator({
   onLayout,
   onMeasure,
   inverted = false,
+  systemBar = false,
 }: ScrollIndicatorOptions = {}): {
   scrollProps: {
     showsVerticalScrollIndicator: boolean;
@@ -157,7 +167,7 @@ export function useScrollIndicator({
   // data had not moved.
   const scrollProps = useMemo(
     () => ({
-      showsVerticalScrollIndicator: false,
+      showsVerticalScrollIndicator: systemBar,
       scrollEventThrottle: 16,
       onScroll: onScrollEvent,
       onLayout: handleLayout,
@@ -166,12 +176,12 @@ export function useScrollIndicator({
       onScrollEndDrag: handleScrollEndDrag,
       onMomentumScrollEnd: handleMomentumScrollEnd,
     }),
-    [handleContentSize, handleLayout, onScrollEvent, handleScrollEndDrag, handleMomentumScrollEnd, show],
+    [handleContentSize, handleLayout, onScrollEvent, handleScrollEndDrag, handleMomentumScrollEnd, show, systemBar],
   );
 
   return {
     scrollProps,
-    indicator: overflows ? (
+    indicator: !systemBar && overflows ? (
       <Animated.View
         pointerEvents="none"
         accessibilityElementsHidden

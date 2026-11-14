@@ -102,3 +102,51 @@ something that stays simple to deploy: one native prop beats a dependency tree h
 `__tests__/threadScroll.test.tsx` -- the props the list is handed, and folding a row asks for no
 scroll at all (neither `scrollToIndex` nor `scrollToOffset`). Two mutations kill: putting a
 `scrollToIndex` back on the fold, and dropping `maintainVisibleContentPosition`.
+
+## The web is not inverted
+
+Everything above is about the inverted list, and the inversion is a platform decision, not a
+preference: `inverted` in `ChatScreen` is `Platform.OS !== 'web'`.
+
+A browser cannot invert a conversation. Inverting there is a DOM order that runs backwards from
+what the reader sees -- newest first, drawn from the bottom under a `scaleY(-1)` on the scroll view
+and on every cell -- and a browser selects text in DOM order. The owner's report (2026-11-14) is
+exactly that: a drag over several messages began at the bottom of a frame, ran the wrong way, and
+could snap to the whole thread. No `user-select`, `::selection` or `pointer-events` rule reaches
+that; the nesting is the cause.
+
+So on the web the document runs oldest-first and the newest message is the **end** of the range:
+
+- **Pinned to the newest message.** There is no offset to open on, so `onThreadContentSize` asks
+  the list for its end while the reader is following it. `scrollToEnd` on unmeasured rows aims at an
+  estimate and is clamped by the platform, so an overshoot costs nothing: the content size that
+  comes back is what re-pins it, and the loop settles in a few frames. That is also how a thread of
+  forty thousand rows opens on its last message.
+- **A hand on the wheel unpins.** A browser reports no end of gesture -- there is no touch responder,
+  so a wheel notch and a drag on the scrollbar look like any other scroll. What they do that a
+  programmatic scroll never does is move the offset *up* while the reader is away from the newest
+  message, and that is the signal. Content arriving under a pinned reader changes the content height
+  and leaves the offset alone, so it never reads as a hand. Coming back within `NEAR_NEWEST_PX`
+  pins again, which is the same intent as the native `onScrollEndDrag`.
+- **Paging is the other end.** Older rows are at the *top*, so the list pages on `onStartReached`
+  (native keeps `onEndReached`). A page inserted above the reader moves everything on screen down by
+  its height, and nothing compensates for that on the web, so `prependAnchor` takes the offset and
+  the content size before the request and `onThreadContentSize` adds the difference once it lands --
+  what `maintainVisibleContentPosition` does for free on native. The list's own report of reaching
+  the start is ignored while the reader is pinned: mounting at the top of the document reports it
+  before the pin has moved anything, and paging there would load history nobody asked for.
+
+`src/core/threadScroll.ts` holds what both geometries share -- `nearNewest`, `prependShift` -- so
+three handlers cannot drift apart on a sign.
+
+## The scrollbar is the platform's, on the web
+
+`useScrollIndicator` draws a 3pt themed thumb and hides the system bar, because on Android that bar
+is an overlay painted *over* the rows. In a browser that bar is a real control -- draggable,
+clickable to page, readable by assistive tech -- so the thread passes `systemBar` there: nothing is
+hidden and nothing is drawn.
+
+The scroll surface is also the **pane**, not the reading column. The column is capped inside it by
+`contentStyle` (`layout.toolWidth`, centred), which is what puts the bar at the window's right edge
+instead of a few hundred points short of it on a wide screen. Rows already cap themselves, so
+nothing about the reading width changes.

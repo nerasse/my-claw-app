@@ -47,6 +47,7 @@ import { LocationEditor } from '../components/LocationEditor';
 import { locationMapUrl } from '../components/LocationView';
 import type { WsState } from '../core/types';
 import { useScrollIndicator } from '../components/ScrollIndicator';
+import { nearNewest, prependShift } from '../core/threadScroll';
 import { conversationColumn, isDrawerSwipe, useLayout } from '../core/layout';
 import { ContinueButton } from '../components/ContinueButton';
 import { QuotaWaitBar } from '../components/QuotaWaitBar';
@@ -73,12 +74,6 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
   const type: AttachmentMeta['type'] = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'file';
   return { id: uuid(), uri: asset.uri, filename, type, mimeType, sizeBytes: asset.fileSize ?? undefined };
 }
-
-/**
- * How close to the newest message counts as "following it". One number, used twice: the line under
- * which the reader is following, and the line under which the store may drop its oldest items.
- */
-const NEAR_BOTTOM_PX = 120;
 
 /**
  * The list's threshold while the reader follows, and it is not a distance. The native helper reads
@@ -274,6 +269,22 @@ export function ChatScreen({
     () => ({ maxWidth: layout.toolWidth, width: '100%' as const, alignSelf: 'center' as const }),
     [layout.toolWidth],
   );
+  /**
+   * Whether the list runs newest-first, which is a platform decision and not a preference.
+   *
+   * A phone inverts it: offset 0 is the bottom, so a conversation opens on its last message with
+   * no scrolling at all, and the keyboard shrinking the viewport leaves that offset alone. A
+   * browser cannot: there the inversion is a DOM order that runs backwards from the visual one,
+   * and a browser selects text in DOM order -- dragging over several bubbles starts at the wrong
+   * end and can snap to the whole thread (owner, 2026-11-14). The web keeps the document in
+   * reading order and pins itself to the bottom instead. `core/threadScroll.ts` holds the
+   * arithmetic both geometries share; docs/thread-scroll.md says why they differ.
+   */
+  const inverted = Platform.OS !== 'web';
+  /** The content height last reported, so a page prepended above the reader can be measured. */
+  const contentRef = useRef(0);
+  /** A page of older rows asked for on the web, and the viewport to hold while it lands. */
+  const prependAnchor = useRef<{ offset: number; content: number } | null>(null);
   const listRef = useRef<FlatList<ChatRow>>(null);
   // A right swipe opens the list. Bubbling, never capture: a diff or a carousel that scrolls
   // sideways claims the gesture first, and the reader of a wrapped block means the block.
@@ -333,6 +344,27 @@ export function ChatScreen({
   // Whether the reader is following the newest message. Not `atBottom`: that one is re-read on
   // every scroll event, corrections included, so it cannot answer "did a hand put me here".
   const [following, setFollowing] = useState(true);
+  /** The same value, readable from a scroll handler that must not re-subscribe on every change. */
+  const followingRef = useRef(true);
+  const followNewest = useCallback((on: boolean) => {
+    followingRef.current = on;
+    setFollowing(on);
+  }, []);
+  /**
+   * Put the newest message back on screen, whichever end of the range it is at.
+   *
+   * Inverted, it is offset 0 and the move is exact. The other way round there is no offset to
+   * name -- the rows below are unmeasured and their heights are unknowable -- so the list is asked
+   * for its end and clamps whatever estimate it made: `scrollToEnd` overshooting is harmless, and
+   * the content size it lands on is the one that re-pins it (docs/thread-scroll.md).
+   */
+  const scrollToNewest = useCallback(
+    (animated: boolean) => {
+      if (inverted) listRef.current?.scrollToOffset({ offset: 0, animated });
+      else listRef.current?.scrollToEnd({ animated });
+    },
+    [inverted],
+  );
   /** Where the list is, because the reveal has to know what it is lifting from. */
   const offsetRef = useRef(0);
   /**
@@ -389,9 +421,14 @@ export function ChatScreen({
     // whatever the previous thread left, which showed the jump pill on a thread already at its
     // end and, worse, withheld the trim permission from a thread that had earned it.
     setAtBottom(true);
-    setFollowing(true);
+    followNewest(true);
+    // The pinned state is what opens the thread on its last message on the web, where the list
+    // starts at the top of the document: the first content size to arrive is followed to the end.
+    offsetRef.current = 0;
+    contentRef.current = 0;
+    prependAnchor.current = null;
     chatStore.setTrimAllowed(threadId, true);
-  }, [threadId]);
+  }, [followNewest, threadId]);
 
   /**
    * A draft belongs to its conversation, not to this component. The cleanup runs both when the
@@ -414,8 +451,8 @@ export function ChatScreen({
     const grew = composerHeight > composerWasRef.current;
     composerWasRef.current = composerHeight;
     if (!grew || !following) return;
-    listRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [composerHeight, following]);
+    scrollToNewest(false);
+  }, [composerHeight, following, scrollToNewest]);
   useEffect(() => {
     const scope = draftScope();
     setDraft(draftTextOf(threadId));
@@ -1052,7 +1089,9 @@ export function ChatScreen({
     () => withDaySeparators(pinnedSends(buildRows(items, ruleBefore))),
     [items, ruleBefore],
   );
-  const reversedRows = useMemo(() => [...rows].reverse(), [rows]);
+  // Oldest first on the web, newest first on a phone: see `inverted`. Reversing the data rather
+  // than the reading of it keeps every index the list hands back pointing at the right bubble.
+  const listRows = useMemo(() => (inverted ? [...rows].reverse() : rows), [inverted, rows]);
 
   // Nothing here moves the list when a row folds. It used to, to put the opened row at the top of
   // the reading area, and it fought `maintainVisibleContentPosition` for the same offset: the two
@@ -1141,9 +1180,9 @@ export function ChatScreen({
     }
     probedRef.current = false;
     setAtBottom(true);
-    setFollowing(true);
-    listRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, [applyPad]);
+    followNewest(true);
+    scrollToNewest(true);
+  }, [applyPad, followNewest, scrollToNewest]);
 
   useEffect(() => {
     // The measurement half. Android announces the keyboard once it is up, and only then is there
@@ -1408,26 +1447,31 @@ export function ChatScreen({
   const renderListItem = useCallback(({ item }: { item: ChatRow }) => renderRow(item), [renderRow]);
 
   /**
-   * The content's padding, plus the space a covered field needed.
+   * The content's padding and its column, plus the space a covered field needed.
    *
-   * `paddingTop` of an inverted list's *content container* is the bottom of the screen: the
-   * container is not flipped, the scroll view is -- the same reason the list header is the bottom
-   * of the thread. So this space lands where the field is and pushes the thread up by exactly what
-   * the scroll could not deliver. Memoised for the reason below: the list compares its props by
-   * identity, and a fresh array on every keystroke is a re-render of every visible row.
+   * The cap lives here rather than on the wrapper: the scroll surface now spans the whole pane, so
+   * that the scrollbar sits at the pane's right edge instead of being glued to a centred column,
+   * and the reading column rides inside it (`layout.toolWidth`, centred). An inverted content
+   * container pads at the *top* for the bottom edge, because the container is not flipped, the
+   * scroll view is -- the same reason the list header is the bottom of the thread. On the web the
+   * pad goes where the field is instead, at the bottom. Memoised for the reason below: the list
+   * compares its props by identity, and a fresh array on every keystroke is a re-render of every
+   * visible row.
    */
   const contentStyle = useMemo(
     () =>
-      keyboardPad > 0
-        ? [styles.listContent, { paddingTop: styles.listContent.paddingTop + keyboardPad }]
-        : styles.listContent,
-    [keyboardPad, styles.listContent],
+      inverted
+        ? [styles.listContent, toolColumn, keyboardPad > 0 && { paddingTop: styles.listContent.paddingTop + keyboardPad }]
+        : [styles.listContent, toolColumn, keyboardPad > 0 && { paddingBottom: styles.listContent.paddingBottom + keyboardPad }],
+    [inverted, keyboardPad, styles.listContent, toolColumn],
   );
 
-  // The list is inverted, so its header is the bottom of the screen: the loose questions sit under
-  // the newest message, where the thread actually stops, and so does the compaction rule as long as
-  // no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
-  const listHeader = useMemo(
+  // Which end of the list carries what, in the order the reader gets. The loose questions sit
+  // under the newest message, where the thread actually stops, and so does the compaction rule as
+  // long as no send is parked behind it (a parked one takes the rule above itself, `renderRow`).
+  // On a phone the newest message is the list header, because the list is inverted; on the web it
+  // is the footer, and the older-page spinner takes the header.
+  const newestEnd = useMemo(
     () =>
       (compacting !== undefined && ruleBefore === undefined) || questionsLoose.length > 0 || continueOffered || quotaWait !== undefined ? (
         <View style={styles.looseQuestions}>
@@ -1455,7 +1499,7 @@ export function ChatScreen({
     [compacting, stopping, ruleBefore, questionsLoose, onQuestionReply, revealQuestionField, styles.looseQuestions, continueOffered, pressContinue, quotaWait, onQuotaCancel, onQuotaRetryNow],
   );
 
-  const listFooter = useMemo(
+  const olderEnd = useMemo(
     () =>
       loadingOlder ? (
         <View style={styles.olderSpinner}>
@@ -1471,31 +1515,129 @@ export function ChatScreen({
       : location.address?.formatted ?? 'Resolving address…'
     : undefined;
 
-  // Offset 0 is the newest message: the list is inverted, so the bottom is the start of the
-  // scroll range. That is the whole point of inverting it — no scrollToEnd on open, no content
-  // height to estimate, and the keyboard shrinking the viewport leaves offset 0 where it was.
-  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-    offsetRef.current = event.nativeEvent.contentOffset.y;
-    const nearBottom = event.nativeEvent.contentOffset.y <= NEAR_BOTTOM_PX;
-    if (nearBottom !== atBottom) setAtBottom(nearBottom);
-    // Only while the reader is on the newest message may the store drop its oldest items:
-    // that is what keeps a long session light without ever taking a visible bubble away.
-    chatStore.setTrimAllowed(threadId, nearBottom);
-  }, [atBottom, threadId]);
+  /**
+   * Where the reader is, and whether that counts as following the newest message.
+   *
+   * The predicate is `core/threadScroll.ts`'s, so the two geometries cannot drift apart: on a
+   * phone the newest message is offset 0, on the web it is the end of the range. The one thing a
+   * browser cannot report is the end of a gesture -- there is no touch responder, so a wheel notch
+   * and a drag on the scrollbar look like any other scroll. What they do that a programmatic
+   * scroll never does is move the offset *up* while the reader is away from the bottom, and that
+   * is what unpins the list. Content arriving under a pinned reader changes the content height and
+   * leaves the offset alone; it must not read as "a hand put me here".
+   */
+  const handleScroll = useCallback(
+    (event: {
+      nativeEvent: {
+        contentOffset: { y: number };
+        contentSize: { height: number };
+        layoutMeasurement: { height: number };
+      };
+    }) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const offset = contentOffset.y;
+      const movedUp = offset < offsetRef.current;
+      offsetRef.current = offset;
+      const near = nearNewest(
+        { offset, viewport: layoutMeasurement.height, content: contentSize.height },
+        inverted,
+      );
+      if (!inverted) {
+        if (near && !followingRef.current) followNewest(true);
+        else if (!near && movedUp && followingRef.current) followNewest(false);
+      }
+      // A pinned reader is at the newest message even in the frame where the content that arrived
+      // below them has not been scrolled to yet, so the pill does not flash under a streaming run.
+      const atEnd = near || (!inverted && followingRef.current);
+      if (atEnd !== atBottom) setAtBottom(atEnd);
+      // Only while the reader is on the newest message may the store drop its oldest items:
+      // that is what keeps a long session light without ever taking a visible bubble away.
+      chatStore.setTrimAllowed(threadId, atEnd);
+    },
+    [atBottom, followNewest, inverted, threadId],
+  );
   /**
    * A hand left the screen, and that is the only thing that decides whether the reader follows.
    * Reading it from `handleScroll` instead would cut the follow on the first item the list drew:
    * the list corrects its own offset when content arrives, and a correction emits a scroll.
    */
-  const endGesture = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-    setFollowing(event.nativeEvent.contentOffset.y <= NEAR_BOTTOM_PX);
-  }, []);
+  const endGesture = useCallback(
+    (event: {
+      nativeEvent: {
+        contentOffset: { y: number };
+        contentSize: { height: number };
+        layoutMeasurement: { height: number };
+      };
+    }) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      followNewest(
+        nearNewest(
+          { offset: contentOffset.y, viewport: layoutMeasurement.height, content: contentSize.height },
+          inverted,
+        ),
+      );
+    },
+    [followNewest, inverted],
+  );
+  /**
+   * The content grew. A page of older rows landing above the reader moves everything on screen
+   * down by its height, and the offset absorbs it -- what `maintainVisibleContentPosition` does
+   * for the inverted list, and nothing does on the web. Any other growth belongs to a pinned
+   * reader, who gets the newest message back under their eyes; while they read history, it is
+   * left where it is.
+   */
+  const onThreadContentSize = useCallback(
+    (_width: number, content: number) => {
+      contentRef.current = content;
+      if (inverted) return;
+      const anchor = prependAnchor.current;
+      if (anchor !== null) {
+        prependAnchor.current = null;
+        listRef.current?.scrollToOffset({
+          offset: anchor.offset + prependShift(anchor.content, content),
+          animated: false,
+        });
+        return;
+      }
+      if (followingRef.current) listRef.current?.scrollToEnd({ animated: false });
+    },
+    [inverted],
+  );
+  /**
+   * A page of older rows, whichever end of the range holds them.
+   *
+   * On the web that page is inserted *above* the reader, so the anchor is taken before the request
+   * and `onThreadContentSize` compensates once the height is known. The inverted list needs none of
+   * it: `maintainVisibleContentPosition` keeps the reader where they are.
+   *
+   * `byList` is the guard only the list's own report needs: mounting in reading order, it starts at
+   * the top of the document and reports the start of its range as reached before the pin has moved
+   * it, which would page in history nobody asked for and fight the pin itself. A pinned reader is
+   * not reading history. The screen's own ask -- a thread shorter than the viewport -- is not that
+   * case, and a pinned reader there has no anchor to take: the pin re-applies instead.
+   */
+  const pageOlder = useCallback(
+    (byList: boolean) => {
+      if (!inverted) {
+        if (byList && followingRef.current) return;
+        if (!followingRef.current) prependAnchor.current = { offset: offsetRef.current, content: contentRef.current };
+      }
+      onLoadOlder();
+    },
+    [inverted, onLoadOlder],
+  );
+  const pageOlderFromList = useCallback(() => pageOlder(true), [pageOlder]);
   const { scrollProps, indicator } = useScrollIndicator({
     onScroll: handleScroll,
     onScrollEndDrag: endGesture,
     onMomentumScrollEnd: endGesture,
+    onContentSizeChange: onThreadContentSize,
     onMeasure: setListMeasure,
-    inverted: true,
+    inverted,
+    // The browser draws its own scrollbar, and it is the only one a mouse can drag, click or page
+    // with. The system bar everywhere else is an overlay the platform paints over the rows, so
+    // those hide it and get the themed one the hook returns.
+    systemBar: !inverted,
   });
 
   /**
@@ -1518,8 +1660,8 @@ export function ChatScreen({
     if (listMeasure.content > listMeasure.viewport + 1) return;
     if (askedToFill.current === historyPage.nextBefore) return;
     askedToFill.current = historyPage.nextBefore;
-    onLoadOlder();
-  }, [historyPage.hasMore, historyPage.nextBefore, listMeasure, loadingOlder, onLoadOlder]);
+    pageOlder(false);
+  }, [historyPage.hasMore, historyPage.nextBefore, listMeasure, loadingOlder, pageOlder]);
 
   return (
     <View style={styles.screen}>
@@ -1715,15 +1857,27 @@ export function ChatScreen({
         </View>
       ) : (
         <>
-          {/* The list itself fills the pane: each row caps its own width above, because a bubble
-              and a tool card do not want the same one. */}
-          <View style={[styles.listWrap, toolColumn]} {...selectableProps()} {...drawerSwipe.panHandlers}>
-            {/* Inverted: the newest message is index 0 and sits at offset 0, so opening a
-                conversation lands on it with no scrolling at all. scrollToEnd on a list of
-                unmeasured rows aims at an estimated content height and stops short of the last
-                message, which is exactly the bug this replaces. Scrolling up towards older
-                messages is then the list's own end, so paging back is onEndReached and the
-                arriving page is appended — no scroll position to preserve, on either platform. */}
+          {/* The scroll surface is the pane, not the reading column: the platform scrollbar rides
+              its right edge, where a mouse expects it, and the column is capped inside by
+              `contentStyle`. A capped scroll surface put the bar against the column, a few hundred
+              points short of the window on a wide screen (owner, 2026-11-14). */}
+          <View style={styles.listWrap} {...selectableProps()} {...drawerSwipe.panHandlers}>
+            {/* Which end is the newest message is a platform decision (`inverted`), and the two
+                geometries only share the arithmetic in `core/threadScroll.ts`.
+
+                On a phone the list is inverted: index 0 is the newest and sits at offset 0, so a
+                conversation lands on it with no scrolling at all, `scrollToEnd` never has to
+                estimate an unmeasurable content height, and the keyboard shrinking the viewport
+                leaves the offset where it was. Paging back is `onEndReached`, and the arriving
+                page is appended behind the reader with nothing to preserve.
+
+                On the web it cannot be inverted: the DOM order would run backwards from what the
+                reader sees, and a browser selects text in DOM order -- which is the owner's
+                report of a drag that starts at the bottom of a frame and ends up selecting the
+                whole thread. So the document runs oldest-first, the newest message is the end of
+                the range, and the list is pinned there: `onThreadContentSize` follows it while
+                the reader stays at the bottom, `onStartReached` pages back, and `prependAnchor`
+                absorbs the height of a page landing above. */}
             {/* Keyed by thread, like the hero composer above and for a harder reason: a list kept
                 across a swap keeps its scroll offset, and offset 3000 of the conversation just
                 left is the middle of nowhere in the one arriving. It also fired onEndReached at
@@ -1733,7 +1887,7 @@ export function ChatScreen({
               key={threadId}
               ref={listRef}
               {...scrollProps}
-              inverted
+              inverted={inverted}
               // Android scrolls a scroll view to a child that takes focus on its own. That is fine
               // for a form, and wrong here: this list is inverted, and the native delta is computed
               // in layout coordinates, which the inversion mirrors. Two writers on one offset, one
@@ -1743,21 +1897,30 @@ export function ChatScreen({
               // The whole fix for "the page moves while I read": the list adjusts its own offset so
               // the first thing the reader can see keeps its place. The threshold is the other half,
               // and it means "the reader follows", not "how far": carried while a hand last left the
-              // list at the bottom, taken away the moment a hand leaves it anywhere else.
+              // list at the bottom, taken away the moment a hand leaves it anywhere else. Native
+              // only -- the web pins to the end and anchors its prepends instead.
               // docs/thread-scroll.md
-              maintainVisibleContentPosition={{
-                minIndexForVisible: 0,
-                ...(following ? { autoscrollToTopThreshold: FOLLOW_THRESHOLD } : {}),
-              }}
-              data={reversedRows}
+              maintainVisibleContentPosition={
+                inverted
+                  ? {
+                      minIndexForVisible: 0,
+                      ...(following ? { autoscrollToTopThreshold: FOLLOW_THRESHOLD } : {}),
+                    }
+                  : undefined
+              }
+              data={listRows}
               keyExtractor={keyOfRow}
               contentContainerStyle={contentStyle}
               keyboardShouldPersistTaps="handled"
               renderItem={renderListItem}
-              ListHeaderComponent={listHeader}
-              onEndReached={onLoadOlder}
+              ListHeaderComponent={inverted ? newestEnd : olderEnd}
+              ListFooterComponent={inverted ? olderEnd : newestEnd}
+              // The end that holds the older messages is the end that pages, and it is the other
+              // one once the list stops being inverted.
+              onEndReached={inverted ? onLoadOlder : undefined}
               onEndReachedThreshold={0.4}
-              ListFooterComponent={listFooter}
+              onStartReached={inverted ? undefined : pageOlderFromList}
+              onStartReachedThreshold={0.4}
               // Bubbles have no knowable height (markdown, images, tool output), so getItemLayout
               // is out and these numbers are the only handle on how much is mounted at once.
               initialNumToRender={12}
@@ -1806,8 +1969,8 @@ export function ChatScreen({
             style={styles.jump}
             onPress={() => {
               setAtBottom(true);
-              setFollowing(true);
-              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+              followNewest(true);
+              scrollToNewest(true);
             }}
             accessibilityRole="button"
             accessibilityLabel="Jump to latest message">
@@ -1828,8 +1991,8 @@ export function ChatScreen({
             style={styles.questionPill}
             onPress={() => {
               setAtBottom(true);
-              setFollowing(true);
-              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+              followNewest(true);
+              scrollToNewest(true);
             }}
             accessibilityRole="button"
             accessibilityLabel="Go to the pending question">

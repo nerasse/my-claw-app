@@ -785,7 +785,9 @@ describe('reading a conversation from its newest message', () => {
     ReactTestRenderer.act(() => {
       list.props.onLayout({ nativeEvent: { layout: { height: 400 } } });
       list.props.onContentSizeChange(100, 2000);
-      list.props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } });
+      list.props.onScroll({
+        nativeEvent: { contentOffset: { y: 0 }, contentSize: { height: 2000 }, layoutMeasurement: { height: 400 } },
+      });
     });
     const thumb = tree.root.find(node => node.props.testID === 'scroll-indicator-thumb');
     const translateY = (thumb.props.style as unknown[]).reduce((acc: number, entry: unknown) => {
@@ -810,7 +812,9 @@ describe('reading a conversation from its newest message', () => {
     ReactTestRenderer.act(() => {
       list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
       // Reading somewhere above the newest message.
-      list.props.onScroll({ nativeEvent: { contentOffset: { y: 600 } } });
+      list.props.onScroll({
+        nativeEvent: { contentOffset: { y: 600 }, contentSize: { height: 2000 }, layoutMeasurement: { height: 700 } },
+      });
     });
     spy.mockClear();
 

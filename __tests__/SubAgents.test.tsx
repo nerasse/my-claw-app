@@ -270,7 +270,9 @@ describe('inside a sub-agent', () => {
     const list = (): ReactTestRenderer.ReactTestInstance =>
       tree.root.find(node => node.props.data && Array.isArray(node.props.data) && node.props.inverted);
     await ReactTestRenderer.act(async () => {
-      list().props.onScroll({ nativeEvent: { contentOffset: { y: 900 } } });
+      list().props.onScroll({
+        nativeEvent: { contentOffset: { y: 900 }, contentSize: { height: 4000 }, layoutMeasurement: { height: 800 } },
+      });
     });
     await waitFor(() => labelsOf(tree).includes('Jump to latest message'));
 

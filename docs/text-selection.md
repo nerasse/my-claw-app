@@ -74,8 +74,12 @@ those screens are ordinary scroll views, and their text is one node per field.
 ## The highlight itself, on the web
 
 A browser selects across nodes on its own, so the chat list opts back into `user-select`
-(`webTheme.web.ts`, `[data-claw-select="text"]`) and a drag over several bubbles works. What it
-does *not* do is guarantee the highlight is visible:
+(`webTheme.web.ts`, `[data-claw-select="text"]`) and a drag over several bubbles works. That is
+only half of it, and the other half is the list's shape: a browser selects in **DOM order**, so an
+inverted thread -- newest first in the document, drawn from the bottom under a `scaleY(-1)` -- makes
+a drag start at the bottom of a frame, run the wrong way, and sometimes snap to the whole thread.
+The web list is therefore not inverted (`docs/thread-scroll.md`), which is what makes the highlight
+match the gesture. What the browser still does *not* do is guarantee the highlight is visible:
 
 ```
 ::selection                   background: accent      color: accentText
