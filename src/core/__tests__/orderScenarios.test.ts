@@ -30,10 +30,10 @@ test('a live run and its own history read in the same order', () => {
   expect(onScreen).toEqual([
     'day',
     'user: read the file',
-    'agent: (no words) (thinking) …',
-    // The thinking between the two calls is inside the burst, and so are both calls: three rows
-    // under one header, and the answer that closes the run stays a message of its own.
-    'group:3',
+    // The thinking that lost its run joins the run being written, not a row of its own -- the two
+    // calls and both thoughts are one burst under one header, and the answer that closes the run
+    // stays a message of its own (owner, 2026-11-15: a thought is always a grouping item).
+    'group:4',
     'agent: two names …',
   ]);
 
@@ -45,8 +45,7 @@ test('a live run and its own history read in the same order', () => {
   expect(visible(replayed)).toEqual([
     'day',
     'user: read the file',
-    'agent: (no words) (thinking)',
-    'group:3',
+    'group:4',
     'agent: two names',
   ]);
 });

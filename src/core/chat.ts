@@ -15,6 +15,13 @@ export interface RunInfo {
   status: RunStatus;
   startTs: number;
   endTs?: number;
+  /**
+   * A group the client invented around a thought no run claims, not a run the server reported.
+   *
+   * It has no span and no status to sign, so `markRunFeet` leaves it alone; everything else -- the
+   * header, the dots, the fold -- is a group's (`core/runRows.ts`).
+   */
+  invented?: true;
 }
 
 /**

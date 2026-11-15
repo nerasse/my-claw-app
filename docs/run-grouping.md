@@ -87,15 +87,26 @@ follows opens another. Only the work after the last boundary can be the segment 
 
 ## A thought never stands outside
 
-A thought the store holds **without a run** -- a live bubble whose start frame was missed, a run the
-server folded as no longer running -- joins the fold being written instead of drawing between it and
-the message it produced. The owner photographed exactly that on 2026-11-13: four blocks reading
-`55 steps · 28 shell · 7 web · 20 thoughts`, a bare `Reasoning` line, then the message, while a
-reasoning that *did* carry its run sat in the fold like every other step.
+A reasoning is **always** a row of a fold. It used to be a narrow rule: a thought the store held
+without a run joined the fold being written, and only while that run was `running`. Everything else
+stayed a row -- a bare `Reasoning` line under a header that had already counted it, which is the
+shape the owner photographed twice (`4 steps · 3 shell · 1 thought`, then a loose line, then the
+message; 2026-11-13 and again 2026-11-15).
 
-The rule is narrow on purpose: a phase that only thought (no words, no file), only while the run is
-still `running`. A message keeps its place whatever run it wears -- hoisting is what makes the answer
-readable, and a stray thought with nothing being written around it stays a row of its own.
+Three layers, because the value here is the guarantee more than the mechanism:
+
+1. `adoptRuns` gives every thought that arrived without one the run it belongs to: the message it
+   was split from (`reasoningOf`, exact), else the nearest item carrying a run, earlier first.
+2. `rowsOf` takes a thought into the fold whatever that run's status is -- one that landed after
+   its run was sealed is still the thinking of that work -- and opens a group of its own when
+   nothing around it carries a run.
+3. `groupLooseThoughts` is the last word, after the walk: any thought that is somehow still a row
+   joins the fold beside it (same run first), or becomes one. It runs before the feet are marked,
+   since merging moves where a run's last row is.
+
+A thread that knows no runs at all -- a session written before the server marked them -- keeps its
+plain rows. There is nothing to inherit, and a fold invented around each thought would hide it
+behind a header saying what the row already said.
 
 ## An opened row
 

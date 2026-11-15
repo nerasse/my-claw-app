@@ -1,5 +1,6 @@
 import { isSubAgentTool, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from './chat';
 import { dayOf } from './day';
+import { msOf } from './utils';
 
 /**
  * One row of the chat list. A finished run's work collapses into a group row (its header), the
@@ -398,23 +399,84 @@ function withoutReasoning(item: Extract<ChatItem, { kind: 'text' }>): ChatItem {
 }
 
 export function buildRows(items: ChatItem[], compactionBefore?: string): ChatRow[] {
-  return rowsOf(splitReasoning(items), compactionBefore);
+  return rowsOf(adoptRuns(splitReasoning(items)), compactionBefore);
 }
 
 /**
- * A phase the model only thought in: reasoning, no words, no file -- the bubble `ReasoningLine` is
- * the whole of. It has nothing to stand outside a fold with, so a run being written takes it.
+ * A phase the model only thought in: no words, no file, no place -- the bubble `ReasoningLine` is
+ * the whole of it. It has nothing to stand outside a fold with, so a run takes it.
  */
-function isThoughtOnly(item: ChatItem): boolean {
+function isThoughtOnly(item: ChatItem): item is Extract<ChatItem, { kind: 'text' }> {
   if (item.kind !== 'text' || item.role !== 'agent') return false;
   if (item.text.trim() !== '' || (item.attachments?.length ?? 0) > 0) return false;
   if (item.command || item.notice || item.error !== undefined || item.summaryOf !== undefined) return false;
+  if (item.location !== undefined || item.details !== undefined) return false;
   return (
     Boolean(item.reasoning?.trim()) ||
     (item.reasoningChars ?? 0) > 0 ||
     item.reasoningTokens !== undefined ||
     item.reasoningMs !== undefined
   );
+}
+
+/**
+ * The id a group invented around a thought nothing else claims wears, and the flag that says the
+ * group is that invention rather than a run the server reported.
+ */
+const LONE_THOUGHTS = 'thoughts:';
+
+/**
+ * A thought belongs to a run even when it did not arrive wearing one.
+ *
+ * A split thought copies its message's run, and a live one is opened by `runForLiveItem`, so this
+ * is about the other arrivals: a page whose entries predate run markers, a bubble whose start frame
+ * was missed, a run the server folded as no longer running. Those thoughts drew as bare rows -- a
+ * `Reasoning` line between two folds, wearing no dot, saying nothing about what it belonged to
+ * (owner, 2026-11-15: "il doit être un item de groupement toujours").
+ *
+ * Two sources, in order: the message it was split from (`reasoningOf`, exact), then the nearest
+ * item carrying a run -- the one before it, which is the work it was written between.
+ */
+function adoptRuns(items: ChatItem[]): ChatItem[] {
+  if (!items.some(item => item.run === undefined && isThoughtOnly(item))) return items;
+  const runOfItem = new Map<string, RunInfo>();
+  for (const item of items) if (item.run) runOfItem.set(item.id, item.run);
+  return items.map((item, index) => {
+    if (item.run !== undefined || !isThoughtOnly(item)) return item;
+    const split = item.reasoningOf !== undefined ? runOfItem.get(item.reasoningOf) : undefined;
+    const run = split ?? nearestRun(items, index);
+    return run ? { ...item, run } : item;
+  });
+}
+
+/** The run of the closest item that wears one, earlier first: the work the thought sits between. */
+function nearestRun(items: ChatItem[], index: number): RunInfo | undefined {
+  for (let at = index - 1; at >= 0; at -= 1) {
+    const run = items[at]?.run;
+    if (run) return run;
+  }
+  for (let at = index + 1; at < items.length; at += 1) {
+    const run = items[at]?.run;
+    if (run) return run;
+  }
+  return undefined;
+}
+
+/**
+ * The run a group of thoughts nothing else claims wears.
+ *
+ * A thread whose entries carry no run at all -- a session written before the server marked them --
+ * has nothing to inherit, and a fold invented around one thought is still the shape the owner asked
+ * for. It signs nothing (`markRunFeet` skips it): a span from an invented start to an invented end
+ * would print a `run · 0 ms` under a line that never ran.
+ */
+function loneThoughts(item: ChatItem): RunInfo {
+  return {
+    id: `${LONE_THOUGHTS}${item.id}`,
+    status: 'done',
+    startTs: msOf(item.ts) ?? Date.now(),
+    invented: true,
+  };
 }
 
 /** The rows of an already-split thread: `buildRows` is this, behind `splitReasoning`. */
@@ -430,6 +492,15 @@ function rowsOf(items: ChatItem[], compactionBefore?: string): ChatRow[] {
   // of the run, rows so far -- `markRunFeet` drops these for runs that do have rows.
   const ghosts: { run: RunInfo; at: number }[] = [];
   const ghostSeen = new Set<string>();
+  /**
+   * Whether this thread knows runs at all.
+   *
+   * A session written before the server marked them has nothing to inherit and nothing to compare
+   * against: inventing a fold around each of its thoughts would hide them behind a header saying
+   * what the row already said. Those threads keep their plain rows; every thread that does carry
+   * runs -- which is every thread this server writes -- groups its thoughts, always.
+   */
+  const hasRuns = items.some(item => item.run !== undefined);
 
   const closeRun = () => {
     if (!run) return;
@@ -482,15 +553,20 @@ function rowsOf(items: ChatItem[], compactionBefore?: string): ChatRow[] {
     }
     // Anything else ends the folding run: an item outside any run, or a new one.
     //
-    // A thought the store holds without a run still belongs to the work it was written into. A live
-    // bubble that lost its run -- a start frame missed on a reconnect, a session list that sealed
-    // the run a beat early -- left its reasoning standing between the fold and the message it
-    // produced, which the reader saw as a reasoning that had escaped the group (owner, 2026-11-13).
-    // Only a bare thought joins, only into a run still being written, and only when it is not itself
-    // a row: a message keeps its place whatever run it wears.
-    if (!itemRun && run && run.status === 'running' && !stays && isThoughtOnly(item)) {
-      current.push(item);
-      continue;
+    // A thought never stands outside a group (owner, 2026-11-15). `adoptRuns` has already given it
+    // the run it belongs to when one was near, so this is the rest: it joins the fold being written
+    // whatever that run's status is -- a thought that arrived after its run was sealed is still the
+    // thinking of that work, and a bare `Reasoning` line between two folds is what the owner saw --
+    // and, with no run anywhere around it, it opens a group of its own rather than a row.
+    if (!itemRun && isThoughtOnly(item)) {
+      if (!run && hasRuns) {
+        run = loneThoughts(item);
+        current = [];
+      }
+      if (run) {
+        current.push(item);
+        continue;
+      }
     }
     closeRun();
     if (!itemRun) {
@@ -505,7 +581,41 @@ function rowsOf(items: ChatItem[], compactionBefore?: string): ChatRow[] {
     }
   }
   closeRun();
-  return markRunFeet(markLiveSegment(rows), ghosts);
+  return markRunFeet(markLiveSegment(groupLooseThoughts(rows, hasRuns)), ghosts);
+}
+
+/**
+ * The last word on a thought: it never stands as a row of its own.
+ *
+ * Everything above decides what joins a fold as it walks the thread, and every path it knows lands
+ * a thought inside one. This is the guarantee rather than the deduction (owner, 2026-11-15: "ça doit
+ * être un item de groupement toujours"): whatever route put a thought between two rows -- a run id
+ * that split it from the work it belongs to, a page that named no run, a shape nobody anticipated --
+ * it joins the fold next to it, same run first, and opens one of its own when there is none.
+ *
+ * It runs before the feet are marked, because merging moves where a run's last row is.
+ *
+ * A thread that knows no runs keeps its plain rows, as everywhere else: see `hasRuns`.
+ */
+function groupLooseThoughts(rows: ChatRow[], hasRuns: boolean): ChatRow[] {
+  if (!hasRuns) return rows;
+  const out: ChatRow[] = [];
+  const isThought = (row: ChatRow | undefined): row is Extract<ChatRow, { kind: 'item' }> =>
+    row?.kind === 'item' && isThoughtOnly(row.item);
+  for (const row of rows) {
+    if (!isThought(row)) {
+      out.push(row);
+      continue;
+    }
+    const previous = out[out.length - 1];
+    const run = row.item.run;
+    if (previous?.kind === 'group' && (run === undefined || previous.run.id === run.id)) {
+      out[out.length - 1] = { ...previous, items: [...previous.items, row.item] };
+      continue;
+    }
+    out.push({ kind: 'group', run: run ?? loneThoughts(row.item), items: [row.item] });
+  }
+  return out;
 }
 
 /**
@@ -576,7 +686,7 @@ function markRunFeet(rows: ChatRow[], ghosts: readonly { run: RunInfo; at: numbe
   const last = new Map<string, number>();
   rows.forEach((row, index) => {
     const run = row.kind === 'item' ? row.item.run : row.kind === 'group' || row.kind === 'folded' ? row.run : undefined;
-    if (!run || run.status === 'running') return;
+    if (!run || run.status === 'running' || run.invented) return;
     last.set(run.id, index);
   });
   if (last.size === 0 && ghosts.length === 0) return rows;

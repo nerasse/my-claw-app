@@ -75,15 +75,32 @@ describe('a thought without a run joins the run being written', () => {
   });
 
   test('a thought alone, with no run at all before it, stays where it is', () => {
-    // Nothing is being written here: a stray thought is a row, not a fold invented around it.
+    // Nothing is being written here and the thread knows no runs: a row, not a fold invented
+    // around it.
     const rows = buildRows([message('a1'), thought('stray')]);
     expect(rows.map(labelOfRow)).toEqual(['i:a1', 'i:stray']);
   });
 
-  test('the thought is taken only while the run is still writing', () => {
+  test('the thought is taken whatever the run is doing', () => {
+    // A thought that landed after its run was sealed is still the thinking of that work: a bare
+    // `Reasoning` line under a header that had already counted it is the screenshot (owner,
+    // 2026-11-15).
     const rows = buildRows([tool('c1', run('r1', 'done')), thought('stray')]);
-    expect(rows.map(labelOfRow)).toEqual(['g:r1[c1]', 'i:stray']);
+    expect(rows.map(labelOfRow)).toEqual(['g:r1[c1,stray]']);
   });
+
+  test('a thread with no runs at all keeps its plain rows', () => {
+    // A session written before the server marked runs: there is nothing to inherit, and inventing
+    // a fold around each thought would hide it behind a header saying what the row already said.
+    const rows = buildRows([message('a1'), thought('stray')]);
+    expect(rows.map(labelOfRow)).toEqual(['i:a1', 'i:stray']);
+  });
+
+  test('a thought nothing around it carries a run for still gets a group of its own', () => {
+    const rows = buildRows([message('a1', run('r1', 'done')), thought('stray')]);
+    expect(rows.map(labelOfRow)).toEqual(['i:a1', 'g:r1[stray]']);
+  });
+
 });
 
 describe('a page re-keys the synthetic run it names', () => {
