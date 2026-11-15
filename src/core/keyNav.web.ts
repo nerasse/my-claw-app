@@ -210,11 +210,17 @@ export function useKeyNav(): void {
       const active = document.activeElement as HTMLElement | null;
       returnTo.set(top, active && active !== document.body ? active : document.body);
       if (keyboardLast && !(active && top.contains(active))) {
-        // A search row first (typing filters at once), else the option in effect, else the first.
-        const items = itemsOf(top);
-        const first = items[0];
-        const selected = items.find(el => el.getAttribute('aria-selected') === 'true');
-        focus(first && editable(first) ? first : selected ?? first);
+        // A menu opened from the keyboard takes the focus, so its rows are immediately walkable.
+        // A field that already has it keeps it: a prompt can land while the owner is typing -- an
+        // approval raised by a run -- and taking the caret away mid-sentence was worse than a
+        // menu one Tab away (owner, 2026-11-15: "il faut nous laisser le focus sur le chat").
+        if (!editable(active)) {
+          // A search row first (typing filters at once), else the option in effect, else the first.
+          const items = itemsOf(top);
+          const first = items[0];
+          const selected = items.find(el => el.getAttribute('aria-selected') === 'true');
+          focus(first && editable(first) ? first : selected ?? first);
+        }
       }
     };
     const observer = new MutationObserver(() => {

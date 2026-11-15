@@ -4,6 +4,21 @@ Every prompt of the install, in one place. The drawer's `More` sheet has an `App
 badged with the number of prompts waiting; Settings → Tools keeps the per-tool switches and links
 here for the history it used to own.
 
+## The sheet never cuts its own buttons
+
+The sheet is a bottom sheet on a phone and a dialog on a desktop, and what it asks for can be
+arbitrarily long: a shell command with ten arguments, a JSON body. The decisions are pinned.
+`pinOptions` on `ActionSheet` keeps the option list at its full height and gives the scrolling to
+the content above it (`ApprovalSheet` wraps the command and the body in one `ScrollView`). Without
+it, a short screen or a landscape window pushed `Allow` and `Deny` past the bottom edge, where they
+could not be reached at all (owner, 2026-11-15).
+
+On a desktop the dialog is also `wide` (620 instead of the menu's 320): an approval carries data,
+and at 320 it read as a thin strip in the middle of an empty window.
+
+The keyboard is not touched on the way in on the web: `useDismissKeyboard` is a no-op there, so a
+prompt landing while the owner types leaves the caret in the composer (`docs/keyboard.md`).
+
 ## Why a page
 
 The sheet only exists while a prompt is raised, and it is broadcast to every window -- but the

@@ -157,9 +157,14 @@ export function useSheetBottomInset(extra: number): number {
  * that is mounted only while it shows, where mounting is the opening.
  *
  * Never use this on a surface that owns a focused field: it would fight its own autofocus.
+ *
+ * A browser has no keyboard to drop, and there `Keyboard.dismiss()` blurs the focused field
+ * instead -- so a menu opening while the owner was typing took the caret out of the composer, and
+ * an approval raised by a run interrupted a sentence nobody had finished (owner, 2026-11-15). On
+ * the web this is a no-op.
  */
 export function useDismissKeyboard(open = true): void {
   useEffect(() => {
-    if (open) Keyboard.dismiss();
+    if (open && Platform.OS !== 'web') Keyboard.dismiss();
   }, [open]);
 }

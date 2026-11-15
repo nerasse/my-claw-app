@@ -214,7 +214,24 @@ wss.on('connection', socket => {
         socket.send(JSON.stringify({ type: 'jobs.list.result', jobs: [] }));
         return;
       case 'subagents.list':
-        socket.send(JSON.stringify({ type: 'subagents.list.result', threadId: frame.threadId, agents: [] }));
+        socket.send(JSON.stringify({
+          type: 'subagents.list.result',
+          threadId: frame.threadId,
+          // One agent, so the badge, the roster and the door into its conversation can be walked.
+          agents: process.env.MOCK_AGENTS === '1'
+            ? [{
+                id: 'subagent/demo-s01-4f08',
+                threadId: 'subagent-thread-demo',
+                type: 'general',
+                status: 'idle',
+                displayName: 'demo-s01',
+                visibility: 'private',
+                mode: 'run',
+                messageCount: 12,
+                lastMessageAt: iso(STAMP + 3000),
+              }]
+            : [],
+        }));
         return;
       // The newest page: replaces the thread, and carries the cursor that reaches the one before.
       case 'session.sync': {
@@ -228,6 +245,34 @@ wss.on('connection', socket => {
           hasMore: threadId === LONG,
           nextBefore: threadId === LONG ? messages.length - PAGE : undefined,
         }));
+        // A pending approval, so the sheet can be looked at: `MOCK_APPROVAL=1` on the server asks
+        // for one with a long command, which is the shape that used to run off the screen.
+        // `MOCK_APPROVAL_DELAY` (ms) makes it land after the page is up, which is how the
+        // "it arrived while I was typing" case is checked.
+        if (process.env.MOCK_APPROVAL === '1') {
+          const delay = Number(process.env.MOCK_APPROVAL_DELAY ?? 0);
+          setTimeout(() => {
+          socket.send(JSON.stringify({
+            type: 'approval.request',
+            id: 'mock-approval',
+            threadId,
+            toolName: 'bash',
+            args: {
+              command:
+                "cd /home/neras/cf/worktrees/lead && git status --short && git log --oneline -12 && git diff --stat HEAD~3 && for f in $(git ls-files 'docs/*.md'); do echo \"$f\"; wc -l \"$f\"; done | head -40 && make check",
+              timeoutMs: 120000,
+              cwd: '/home/neras/cf/worktrees/lead',
+              env: { CI: '1', RUST_LOG: 'info', CARGO_TERM_COLOR: 'never' },
+              note: 'A long argument object is the shape that used to push the buttons off the screen.',
+            },
+            expiresAt: Date.now() + 300000,
+            allowSessionOffered: false,
+            allowAlwaysOffered: true,
+            origin: { kind: 'local' },
+            requestedAt: Date.now(),
+          }));
+          }, delay);
+        }
         return;
       }
       // An older page: `before` counts back from the newest message, so the page is the window

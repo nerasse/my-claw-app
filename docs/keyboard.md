@@ -12,7 +12,7 @@ of layer it is, with `keyLayerProps(kind)` on its root:
 
 | layer | where | keys |
 |---|---|---|
-| `menu` | ActionSheet, the anchored menus, PromptSheet, the update dialog | ↑ ↓ wrap around, Home/End, Tab stays inside, a letter jumps to the row it starts. Opened from the keyboard it takes the focus (its search field, else the option in effect, else the first row) and gives it back to what opened it when it closes. |
+| `menu` | ActionSheet, the anchored menus, PromptSheet, the update dialog | ↑ ↓ wrap around, Home/End, Tab stays inside, a letter jumps to the row it starts. Opened from the keyboard it takes the focus (its search field, else the option in effect, else the first row) and gives it back to what opened it when it closes — **unless a text field already had it**: a prompt can land while the owner is typing (an approval raised by a run), and taking the caret out of the composer mid-sentence is worse than a menu one Tab away. |
 | `page` | the page pane, the jobs, roster and skill layers | ↑ ↓ (no wrap), Home/End, ← → along a row (a header, a grid of tiles). With nothing focused, the first arrow enters the topmost page. |
 | `list` | the conversation list | as a page |
 | `off` | the live browser picture | nothing: every key is the web page's, Escape and the shortcuts included (`keysOwnedByPage`), until a click outside it |
@@ -23,6 +23,9 @@ listener is in the capture phase: react-native-web's TextInput stops every key e
 
 Focus is drawn by `:focus-visible` (keyboard only, `webTheme.web.ts`); a menu row is tinted
 instead, because its scroller clips an outline drawn outside it.
+
+A browser has no keyboard to drop, so `useDismissKeyboard` is a no-op there: `Keyboard.dismiss()`
+blurs the focused field, and a sheet opening above a composer being typed into emptied it.
 
 The settings index has a search field on top: the arrows reach it like any row, typing lists what
 matches (`docs/settings.md`), and Enter opens the first result.

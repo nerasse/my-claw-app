@@ -118,8 +118,11 @@ export function ApprovalSheet({
     <ActionSheet
       preview={request.headline ?? `${request.toolName} wants to run`}
       options={options}
-      onClose={onDismiss}>
+      onClose={onDismiss}
+      wide
+      pinOptions>
       <View style={styles.body}>
+        <ScrollView style={styles.bodyScroll} contentContainerStyle={styles.bodyContent} nestedScrollEnabled>
         <View style={styles.metaRow}>
           {request.waitForever ? (
             <Text style={styles.timer}>waiting for you (no timeout)</Text>
@@ -145,11 +148,9 @@ export function ApprovalSheet({
         ) : null}
 
         {showDetails ? (
-          <ScrollView style={styles.detailsBox} nestedScrollEnabled>
-            <Text style={styles.details} selectable>
-              {details}
-            </Text>
-          </ScrollView>
+          <Text style={styles.details} selectable>
+            {details}
+          </Text>
         ) : null}
 
         {!request.allowSessionOffered ? (
@@ -157,6 +158,7 @@ export function ApprovalSheet({
             Every {request.toolName} call is asked separately.
           </Text>
         ) : null}
+        </ScrollView>
       </View>
     </ActionSheet>
   );
@@ -164,7 +166,19 @@ export function ApprovalSheet({
 
 const createStyles = (palette: Palette) =>
   StyleSheet.create({
-    body: { gap: space.sm },
+    body: { gap: space.sm, flexShrink: 1, minHeight: 0 },
+    /**
+     * The part that gives way when the prompt is taller than the screen.
+     *
+     * The buttons are the point of the sheet and must never be pushed off it: they stay pinned
+     * under this scroller. It used to be the other way round -- the body took its full height and
+     * the options followed it -- so on a short phone, or a landscape window, a long command pushed
+     * `Allow` and `Deny` past the bottom edge, where they could not be reached at all (owner,
+     * 2026-11-15). One scroller for the reading, never two: a small nested one inside this one is
+     * a trap for the finger.
+     */
+    bodyScroll: { flexShrink: 1, minHeight: 0 },
+    bodyContent: { gap: space.sm },
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     timer: { fontSize: font.small, color: palette.textMuted },
     timerUrgent: { color: palette.danger },
@@ -178,7 +192,6 @@ const createStyles = (palette: Palette) =>
       borderRadius: radius.sm,
       padding: space.sm,
     },
-    detailsBox: { maxHeight: 160 },
     details: {
       fontSize: font.small,
       fontFamily: 'monospace' as const,

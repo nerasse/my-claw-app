@@ -94,6 +94,8 @@ export function ActionSheet({
   options,
   search,
   children,
+  wide = false,
+  pinOptions = false,
   onClose,
 }: {
   preview?: string;
@@ -109,6 +111,24 @@ export function ActionSheet({
   } | null;
   /** Custom content above the options (submenu headers, chips). */
   children?: React.ReactNode;
+  /**
+   * A dialog that shows data rather than a list of verbs, so it gets the room for it.
+   *
+   * 320 is a menu: five short labels, read down the left edge. An approval is a tool name, a
+   * command and a JSON body — at 320 on a 1440 window it read as a thin strip in the middle of
+   * an empty screen (owner, 2026-11-15). Only affects the desktop dialog; a phone sheet is the
+   * width of the phone whatever this says.
+   */
+  wide?: boolean;
+  /**
+   * The options are the point of the sheet and must never be the part that is cut.
+   *
+   * A menu scrolls its list, which is right for a catalogue. An approval is not a menu: its rows
+   * are three decisions, and a reader who has to scroll to find `Deny` on a short screen is a
+   * reader who cannot answer. With this, the list keeps its full height and the content above it
+   * takes the scrolling instead.
+   */
+  pinOptions?: boolean;
   onClose: () => void;
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
@@ -189,6 +209,7 @@ export function ActionSheet({
           keyboard > 0 ? styles.sheetOverKeyboard : styles.sheetCapped,
           { paddingBottom: dialogs ? space.lg : bottomInset },
           dialogs && styles.dialog,
+          dialogs && wide && styles.dialogWide,
         ]}>
         {/* The grabber says "drag me down": a dialog is not dragged anywhere. */}
         {dialogs ? null : <View style={styles.grabber} />}
@@ -215,7 +236,7 @@ export function ActionSheet({
         ) : null}
         {children}
         {options && options.length > 0 ? (
-          <View style={styles.scrollWrap}>
+          <View style={[styles.scrollWrap, pinOptions && styles.scrollWrapPinned]}>
             {/* Virtualized. Browsing a provider group in a catalogue of hundreds used to mount
                 every row of it at once, inside a sheet capped at 70% of the screen. */}
             <FlatList
@@ -272,6 +293,8 @@ const createStyles = (palette: Palette) => ({
     borderColor: palette.border,
     paddingTop: space.lg,
   },
+  /** A dialog that carries data (`wide`): wide enough for a command and a JSON body. */
+  dialogWide: { width: 620 },
   // A long option list (every model) must scroll without leaving the screen.
   sheetCapped: { maxHeight: '70%' as const },
   sheetOverKeyboard: { maxHeight: '92%' as const },
@@ -305,6 +328,8 @@ const createStyles = (palette: Palette) => ({
     marginBottom: space.xs,
   },
   scrollWrap: { flexShrink: 1, minHeight: 0 },
+  /** `pinOptions`: the list keeps its height, the content above it scrolls (`ApprovalSheet`). */
+  scrollWrapPinned: { flexShrink: 0 } as const,
   scroll: { flexGrow: 1 },
   /**
    * One metric per rank: a phone row is 46 (a thumb), a desktop dialog row is 34 (a mouse). No
