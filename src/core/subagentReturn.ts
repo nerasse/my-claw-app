@@ -27,6 +27,20 @@ export function isSubAgentReturn(item: ChatItem): boolean {
 }
 
 /**
+ * Whether this turn is a scheduled job's delivery rather than something a person wrote.
+ *
+ * It arrives as `role: 'user'` for the same reason a sub-agent's return does -- the prompt needs a
+ * turn in that role for the conversation's agent to have read the report. Drawn as one, it read as
+ * the owner talking to himself (owner, 2026-11-15); the card is `CronDelivery`.
+ *
+ * Matched on the marker alone, like `isSubAgentReturn`: a delivery written before the server sent
+ * `kind: 'cron'` keeps the plain bubble it has always been.
+ */
+export function isCronDelivery(item: ChatItem): boolean {
+  return item.kind === 'text' && item.from?.kind === 'cron';
+}
+
+/**
  * What became of the run that reported, in one word.
  *
  * `returned` rather than `complete`: the card is signed by an agent handing something back, which

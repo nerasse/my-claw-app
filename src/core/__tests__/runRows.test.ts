@@ -542,9 +542,25 @@ describe('a send that never made it out', () => {
     expect(labelOf(pinned[pinned.length - 1]!)).toBe('lost');
   });
 
-  test('a send the server holds keeps its place: it has a turn coming', () => {
+  test('a send the server holds for the next turn is stuck at the bottom too', () => {
+    // The run it waits on keeps appending steps, so a bubble left in reading order slid up above
+    // the work it was queued behind (owner, 2026-11-15: "la queue doit être stuck en bas ... tant
+    // qu'elle est pas injectée réellement").
     const rows = buildRows([
       user('parked', { queuedReason: 'injection', queuedSince: 5 }),
+      tool('t1'),
+      { kind: 'text', id: 'answer', role: 'agent', text: 'voila', attachments: [], streaming: false, ts: 9 } as ChatItem,
+    ]);
+    const pinned = pinnedSends(rows);
+    expect(labelOf(pinned[pinned.length - 1]!)).toBe('parked');
+  });
+
+  test('a send held behind a compaction keeps its place: the rule under it is its own', () => {
+    // Nothing is appended below while a compaction rewrites the history, and the boundary the send
+    // waits behind is drawn right under it -- its position is already the bottom of the thread.
+    const rows = buildRows([
+      user('rewrite', { queuedReason: 'compaction', queuedSince: 5 }),
+      tool('t1'),
       { kind: 'text', id: 'answer', role: 'agent', text: 'voila', attachments: [], streaming: false, ts: 9 } as ChatItem,
     ]);
     expect(pinnedSends(rows)).toEqual(rows);

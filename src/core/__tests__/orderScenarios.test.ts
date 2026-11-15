@@ -90,6 +90,25 @@ test('a send held behind a compaction is not swallowed by the fold in front of i
   ]);
 });
 
+test('a send parked for the next turn is stuck at the bottom until the run takes it', () => {
+  const injected = [
+    ask('u1', 'first'),
+    call('t1', 'bash', { run: run('r1') }),
+    ask('u2', 'c est ton compte', { queuedReason: 'injection', queuedSince: 1 }),
+    call('t2', 'read', { run: run('r1') }),
+  ];
+
+  // A queued send is not part of the work in progress: it waits for the next turn boundary, and the
+  // run keeps appending steps. Left in reading order it slid up above the group it was queued
+  // behind (owner, 2026-11-15). It goes where the thread stops.
+  expect(visible(injected)).toEqual([
+    'day',
+    'user: first',
+    'group:2',
+    'user: c est ton compte',
+  ]);
+});
+
 test('an undelivered send is pinned under the newest work, never left behind in reading order', () => {
   const undelivered = [
     ask('u1', 'first'),

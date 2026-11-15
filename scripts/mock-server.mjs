@@ -98,6 +98,15 @@ function scriptedHistory() {
       run: 'run-0',
       ts: iso(STAMP + 1000),
     },
+    // A scheduled job's delivery: `role: 'user'` on the wire (the prompt needs a turn in that role
+    // for the conversation's agent to have read the report), drawn as a card of its own.
+    {
+      id: 's-cron',
+      role: 'user',
+      text: '3286 success 2026-11-15T15:27:07+01:00\n\nThe forge run finished and left one failing job behind it, which the report below describes at length because a run id is not a summary.',
+      ts: iso(STAMP + 2000),
+      from: { label: 'cf-forge-run-3286', kind: 'cron', cadence: 'every 30m' },
+    },
   ];
 }
 

@@ -11,13 +11,14 @@ import { RunFoot } from '../components/RunFoot';
 import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { SubAgentReturn } from '../components/SubAgentReturn';
+import { CronDelivery } from '../components/CronDelivery';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
 import type { MediaItem } from '../components/MediaCarousel';
 import { chatStore, isSubAgentTool, useActiveRun, useChatItems, useCompacting, useHistoryPage, useStopping, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from '../core/chat';
 import { buildRows, compactionRuleBefore, continueTarget, foldKeyOf, pinnedSends, withDaySeparators, type ChatRow } from '../core/runRows';
-import { isSubAgentReturn } from '../core/subagentReturn';
+import { isSubAgentReturn, isCronDelivery } from '../core/subagentReturn';
 import { newerLine, olderLine, recallLines, recallsDraft } from '../core/recall';
 import { historyPillVisible } from '../core/historyPill';
 import { pointerFine } from '../core/platform';
@@ -1346,6 +1347,19 @@ export function ChatScreen({
         return (
           <View style={toolColumn}>
             <SubAgentReturn
+              item={item}
+              mediaBase={mediaBase}
+              deviceInfo={deviceInfo}
+              onOpenAttachment={openAttachment}
+              onOpenMedia={openMedia}
+            />
+          </View>
+        );
+      }
+      if (item.kind === 'text' && isCronDelivery(item)) {
+        return (
+          <View style={toolColumn}>
+            <CronDelivery
               item={item}
               mediaBase={mediaBase}
               deviceInfo={deviceInfo}

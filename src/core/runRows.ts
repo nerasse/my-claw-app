@@ -158,19 +158,56 @@ export function compactionRuleBefore(items: ChatItem[]): string | undefined {
  *   renders as plain bubbles, never as an empty header.
  */
 /**
- * The sends that never made it out, taken to the bottom of the thread.
+ * The sends that have not started yet, taken to the bottom of the thread.
  *
- * They wait for a connection, not for a turn: the run keeps writing while they wait, so a bubble
- * left in its reading order scrolls away from the only place the owner looks. Every other wait
- * keeps its place -- a send the server holds has a turn coming, which is a fact about the thread,
- * and its bubble belongs where it was typed.
+ * Two waits, and both are the same complaint: the reader looks for a message where the thread
+ * stops. An `undelivered` send waits for a connection while the run keeps writing above it. An
+ * `injection` is parked in the run's mailbox for the next turn boundary, and the run it is waiting
+ * on keeps appending steps -- so a bubble left in its reading order slid up under the work in
+ * progress, and the owner saw his own message queued *above* the group it was queued behind
+ * (2026-11-15: "la queue doit être stuck en bas ... tant qu'elle est pas injectée réellement").
+ *
+ * A `compaction` hold keeps its place: the boundary it waits behind is a rule drawn right under it,
+ * the run that will read it has not started, and nothing is appended below -- its own position is
+ * already the bottom of the thread.
  */
 export function pinnedSends(rows: ChatRow[]): ChatRow[] {
   const pinned = rows.filter(
-    row => row.kind === 'item' && row.item.kind === 'text' && row.item.queuedReason === 'undelivered',
+    row =>
+      row.kind === 'item' &&
+      row.item.kind === 'text' &&
+      (row.item.queuedReason === 'undelivered' || row.item.queuedReason === 'injection'),
   );
   if (pinned.length === 0) return rows;
-  return [...rows.filter(row => !pinned.includes(row)), ...pinned];
+  return joined([...rows.filter(row => !pinned.includes(row)), ...pinned]);
+}
+
+/**
+ * Two folds of one run that became neighbours are one fold.
+ *
+ * Taking a row out of the middle (a queued send, pinned to the bottom) leaves the work it stood
+ * between as two groups of the same run, side by side -- `13 steps` then `4 steps` where a single
+ * `17 steps` was true. Only the same run joins: a different id is a different piece of work, and a
+ * rule or a separator between them means they were never one.
+ */
+function joined(rows: ChatRow[]): ChatRow[] {
+  const out: ChatRow[] = [];
+  for (const row of rows) {
+    const previous = out[out.length - 1];
+    if (row.kind === 'group' && previous?.kind === 'group' && previous.run.id === row.run.id) {
+      out[out.length - 1] = {
+        ...row,
+        items: [...previous.items, ...row.items],
+        // The signature and the live flag belong to the later half: it is the one the run's own
+        // end marked, and the one still being written.
+        ...(row.foot ?? previous.foot ? { foot: row.foot ?? previous.foot } : {}),
+        ...(row.live || previous.live ? { live: true } : {}),
+      };
+      continue;
+    }
+    out.push(row);
+  }
+  return out;
 }
 
 /**

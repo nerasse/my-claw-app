@@ -46,10 +46,11 @@ export interface TextItem {
   /** What the server heard, per recording id, rendered inside each recording's own bubble. */
   transcripts?: Record<string, string>;
   /**
-   * Another agent wrote this turn rather than the owner: a background sub-agent's return. The
+   * Another agent wrote this turn rather than the owner: a background sub-agent's return
+   * (`kind: 'return'`) or a scheduled job's delivery (`kind: 'cron'`, with the job's cadence). The
    * bubble says so in a header and never claims the owner's voice.
    */
-  from?: { label: string; kind?: 'send' | 'return'; status?: string };
+  from?: { label: string; kind?: 'send' | 'return' | 'cron'; status?: string; cadence?: string };
   /** What the model thought before answering, shown collapsed. */
   reasoning?: string;
   /** A history bubble whose reasoning stayed on the server, this long: `reasoningFetch.ts`. */
@@ -386,7 +387,16 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       streaming: false,
       ...(entry.location ? { location: entry.location } : {}),
       ...(entry.transcripts ? { transcripts: entry.transcripts } : {}),
-      ...(entry.from ? { from: { label: entry.from.label, ...(entry.from.kind ? { kind: entry.from.kind } : {}), ...(entry.from.status ? { status: entry.from.status } : {}) } } : {}),
+      ...(entry.from
+        ? {
+            from: {
+              label: entry.from.label,
+              ...(entry.from.kind ? { kind: entry.from.kind } : {}),
+              ...(entry.from.status ? { status: entry.from.status } : {}),
+              ...(entry.from.cadence ? { cadence: entry.from.cadence } : {}),
+            },
+          }
+        : {}),
       ...(entry.reasoning ? { reasoning: entry.reasoning } : {}),
       ...(entry.reasoningChars ? { reasoningChars: entry.reasoningChars } : {}),
       ...(entry.reasoningTokens ? { reasoningTokens: entry.reasoningTokens } : {}),

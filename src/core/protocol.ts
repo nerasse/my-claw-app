@@ -468,10 +468,17 @@ export type HistoryEntry =
        */
       compactionStopped?: boolean;
       /**
-       * Another agent wrote this turn, not the owner: a background sub-agent's return, or a report
-       * it handed back. Drawn as an agent card, never as the owner's own words.
+       * Another agent wrote this turn, not the owner: a background sub-agent's return, a report it
+       * handed back, or a scheduled job's delivery (`kind: 'cron'`, with the job's cadence). Drawn
+       * as a card of its own, never as the owner's own words.
        */
-      from?: { sessionId: string; label: string; kind?: 'send' | 'return'; status?: string };
+      from?: {
+        sessionId?: string;
+        label: string;
+        kind?: 'send' | 'return' | 'cron';
+        status?: string;
+        cadence?: string;
+      };
       /** The run this entry belongs to, when it sits inside one. */
       run?: RunMeta;
     }
