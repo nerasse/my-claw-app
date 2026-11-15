@@ -85,6 +85,15 @@ function pickAssetToPending(asset: { uri?: string; fileName?: string | null; typ
  */
 const FOLLOW_THRESHOLD = 2_147_483_647;
 
+/**
+ * How many rows the web's thread mounts in its first commit.
+ *
+ * The page the server hands a conversation is 50 messages; this covers it with room for a couple of
+ * prepends, and stops there. Past it the list is a list again: nothing is watched on screen at the
+ * size where that matters.
+ */
+const WEB_FIRST_BATCH = 80;
+
 const keyOfRow = (row: ChatRow): string => {
   if (row.kind === 'item') return row.item.id;
   // The rule has no id of its own: one compaction runs at a time on a thread, so one rule.
@@ -389,6 +398,27 @@ export function ChatScreen({
    * A thread that does not fill the viewport has nothing to scroll and no end to reach.
    */
   const [listMeasure, setListMeasure] = useState<{ viewport: number; content: number }>();
+  /**
+   * Whether the web's thread is still finding its end, and must not be drawn yet.
+   *
+   * The list is pinned to the last message rather than starting there, so it grows its content in
+   * batches and re-pins after each one: the reader watched the thread sweep past in five steps
+   * before it settled (owner, 2026-11-15). The first page is mounted in one commit now
+   * (`WEB_FIRST_BATCH`), and this hides what the commits that remain would show: nothing paints
+   * until the content has stopped changing for longer than the batching period.
+   *
+   * True from the first frame everywhere but the web, and latched, so a later content-size change
+   * -- a streaming answer, a page landing above -- never hides anything. It is a one-shot for the
+   * opening, not a gate on the list.
+   */
+  const [endSettled, setEndSettled] = useState(inverted);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearSettleTimer = useCallback(() => {
+    if (settleTimer.current === null) return;
+    clearTimeout(settleTimer.current);
+    settleTimer.current = null;
+  }, []);
+  useEffect(() => clearSettleTimer, [clearSettleTimer]);
   const commands = useCommands();
   const inCommandRef = useRef(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>(() => draftAttachmentsOf(threadId));
@@ -435,8 +465,11 @@ export function ChatScreen({
     offsetRef.current = 0;
     contentRef.current = 0;
     prependAnchor.current = null;
+    // A fresh conversation has to find its end again: the flag is the opening's, not the screen's.
+    clearSettleTimer();
+    setEndSettled(inverted);
     chatStore.setTrimAllowed(threadId, true);
-  }, [followNewest, threadId]);
+  }, [clearSettleTimer, followNewest, inverted, threadId]);
 
   /**
    * A draft belongs to its conversation, not to this component. The cleanup runs both when the
@@ -1622,6 +1655,12 @@ export function ChatScreen({
   const onThreadContentSize = useCallback(
     (_width: number, content: number) => {
       contentRef.current = content;
+      // The opening's mask: unmask once the height stops moving. A batch step lands within a frame
+      // or two of the last one, and 120 ms is well under a beat the eye reads as a blank screen.
+      if (!endSettled) {
+        clearSettleTimer();
+        settleTimer.current = setTimeout(() => setEndSettled(true), 120);
+      }
       if (inverted) return;
       const anchor = prependAnchor.current;
       if (anchor !== null && !followingRef.current) {
@@ -1636,8 +1675,9 @@ export function ChatScreen({
       prependAnchor.current = null;
       if (followingRef.current) scrollToNewest(false);
     },
-    [inverted, scrollToNewest],
+    [clearSettleTimer, endSettled, inverted, scrollToNewest],
   );
+
   /**
    * A page of older rows, whichever end of the range holds them.
    *
@@ -1669,7 +1709,8 @@ export function ChatScreen({
   const onListMeasure = useCallback(
     (measure: { viewport: number; content: number }) => {
       viewportRef.current = measure.viewport;
-      setListMeasure(measure);
+      setListMeasure({ viewport: measure.viewport, content: measure.content });
+      setEndSettled(true);
     },
     [],
   );
@@ -1933,6 +1974,11 @@ export function ChatScreen({
               key={threadId}
               ref={listRef}
               {...scrollProps}
+              // The opening's one blind frame: the list is pinned to its last message, so the first
+              // frame it can paint is the top of the conversation. Opacity, never a size or a
+              // presence, so it lays out and measures exactly as it will once shown -- see
+              // `endSettled`, which is true from the first frame everywhere but the web.
+              style={endSettled ? undefined : styles.listUnsettled}
               inverted={inverted}
               // Android scrolls a scroll view to a child that takes focus on its own. That is fine
               // for a form, and wrong here: this list is inverted, and the native delta is computed
@@ -1969,9 +2015,17 @@ export function ChatScreen({
               onStartReachedThreshold={0.4}
               // Bubbles have no knowable height (markdown, images, tool output), so getItemLayout
               // is out and these numbers are the only handle on how much is mounted at once.
-              initialNumToRender={12}
-              maxToRenderPerBatch={8}
-              updateCellsBatchingPeriod={50}
+              //
+              // On the web the first page is mounted whole, and that is not a performance choice:
+              // the list is pinned to the end, and a virtualized list grows its content in batches
+              // -- each one fires a content-size change, each change re-pins, and the reader watched
+              // the thread fill upward in five jumps for a quarter of a second (owner, 2026-11-15).
+              // One commit means one height, one pin, and a conversation that is simply already at
+              // its last message. A phone has nothing to fix: it is inverted, offset 0 is the newest
+              // message, and rows arriving above it move nothing.
+              initialNumToRender={inverted ? 12 : Math.min(listRows.length, WEB_FIRST_BATCH)}
+              maxToRenderPerBatch={inverted ? 8 : 16}
+              updateCellsBatchingPeriod={inverted ? 50 : 16}
               windowSize={11}
               // removeClippedSubviews is deliberately off: the ⋯ menu sits absolutely positioned
               // outside its bubble, and Android clips exactly that away.
@@ -1979,50 +2033,69 @@ export function ChatScreen({
 
         {indicator}
 
-        {/* The keyboard's Up and Down, for a phone whose keyboard has neither (owner, 2026-11-07):
-            the same pill as the jump arrow, mirrored. It floats over the thread, so it goes the
-            moment it has nothing to walk or nothing to type into -- including a keyboard that was
-            dismissed while the caret stayed in the field. `historyPillVisible` is that list. */}
-        {historyPillVisible({
-          focused: composerFocused,
-          keyboardUp,
-          draft,
-          recallArmed,
-          hasHistory: recallLinesOfThread.length > 0,
-          pointerFine,
-        }) ? (
-          <View style={styles.history}>
-            <Pressable
-              style={styles.historyStep}
-              onPress={recallLast}
-              accessibilityRole="button"
-              accessibilityLabel="Previous message">
-              <ArrowIcon direction="up" size={18} tone="text" />
-            </Pressable>
-            <View style={styles.historyRule} />
-            <Pressable
-              style={styles.historyStep}
-              onPress={recallNewer}
-              accessibilityRole="button"
-              accessibilityLabel="Next message">
-              <ArrowIcon direction="down" size={18} tone="text" />
-            </Pressable>
-          </View>
-        ) : null}
+        {/* The floating controls ride the reading column, not the pane.
 
-        {!atBottom && items.length > 0 ? (
-          <Pressable
-            style={styles.jump}
-            onPress={() => {
-              setAtBottom(true);
-              followNewest(true);
-              scrollToNewest(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Jump to latest message">
-            <ArrowIcon size={18} tone="text" />
-          </Pressable>
-        ) : null}
+            They used to sit on the scroll surface's own edges: 6 pt from the window on one side,
+            flush against the scrollbar on the other. On a phone that put the stepper a good 130 pt
+            left of the bubbles it steps through, and on a desktop it drew the jump arrow in the
+            gutter beside the column, past the bubble edge it belongs to (owner, 2026-11-15). One
+            rail, the column's width and the thread's own inset, and both ends land where a row
+            ends.
+
+            `box-none`, because the rail spans the whole thread: a reader scrolling under it still
+            hits the list, and only the two controls take the touch. */}
+        <View pointerEvents="box-none" style={styles.floatRail}>
+          <View pointerEvents="box-none" style={[styles.floatRow, toolColumn]}>
+          {/* The keyboard's Up and Down, for a phone whose keyboard has neither (owner, 2026-11-07):
+              the same shape as the jump arrow, stepped. It floats over the thread, so it goes the
+              moment it has nothing to walk or nothing to type into -- including a keyboard that
+              was dismissed while the caret stayed in the field. `historyPillVisible` is that list. */}
+          {historyPillVisible({
+            focused: composerFocused,
+            keyboardUp,
+            draft,
+            recallArmed,
+            hasHistory: recallLinesOfThread.length > 0,
+            pointerFine,
+          }) ? (
+            <View style={styles.history}>
+              <Pressable
+                style={styles.historyStep}
+                onPress={recallLast}
+                accessibilityRole="button"
+                accessibilityLabel="Previous message">
+                <ArrowIcon direction="up" size={12} tone="text" />
+              </Pressable>
+              <View style={styles.historyRule} />
+              <Pressable
+                style={styles.historyStep}
+                onPress={recallNewer}
+                accessibilityRole="button"
+                accessibilityLabel="Next message">
+                <ArrowIcon direction="down" size={12} tone="text" />
+              </Pressable>
+            </View>
+          ) : (
+            // The rail keeps its two ends whatever is drawn on them, so the jump arrow does not
+            // slide to the left edge the moment the stepper goes.
+            <View />
+          )}
+
+          {!atBottom && items.length > 0 ? (
+            <Pressable
+              style={styles.jump}
+              onPress={() => {
+                setAtBottom(true);
+                followNewest(true);
+                scrollToNewest(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to latest message">
+              <ArrowIcon size={13} tone="text" />
+            </Pressable>
+          ) : null}
+          </View>
+        </View>
         </View>
 
         {/* Measured, because the list above it takes whatever this leaves: see `composerHeight`. */}
@@ -2248,6 +2321,11 @@ const createStyles = (palette: Palette) => ({
   connWarn: { color: palette.warn, backgroundColor: palette.surfaceAlt },
   connBad: { color: palette.danger, backgroundColor: palette.surfaceAlt },
   listWrap: { flex: 1 },
+  /**
+   * A thread that has not found its end yet is laid out but not shown: it costs the layout either
+   * way, and the reader sees the conversation arrive whole instead of sweeping past.
+   */
+  listUnsettled: { opacity: 0 },
   // The list is inverted, so its content box is upside down too: what is written as the top
   // padding is drawn under the newest message.
   // The horizontal padding used to come free with the reading column, which was narrower than
@@ -2278,41 +2356,59 @@ const createStyles = (palette: Palette) => ({
   },
   questionPillText: { fontSize: font.small, color: palette.accent },
   questionPillGlyph: { fontSize: font.small, color: palette.accent },
+  // One geometry for both floating controls: a 34 pt rounded square on the surface, the same
+  // border and the same radius the chrome's own boxes use. They are two ends of one rail, so they
+  // cannot be a circle and a pill -- that read as two unrelated things that happened to land on
+  // the same line.
   jump: {
-    position: 'absolute' as const,
-    right: 0,
-    bottom: space.md,
-    width: 38,
-    height: 38,
-    borderRadius: radius.pill,
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
     backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: palette.border,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  // The pair at the bottom left: the jump arrow read the other way, so it keeps that shape and
-  // only its edge moves. Two steps in one column, the older one on top.
-  //
-  // Inset from the edge rather than flush against it: the drawer's swipe starts at that edge, and
-  // a control sitting on it is a control the gesture has to fight for. The divider is inset too,
-  // because a hairline meeting the border reads as two boxes rather than one pill.
-  history: {
+  /**
+   * Where the floating controls sit: over the thread, at the bottom of the list's own surface.
+   *
+   * Two boxes because the outer one is absolute and an absolute child cannot be centred by
+   * `alignSelf`: the rail spans the pane and centres the row, the row is the reading column with
+   * the thread's own inset. Without that the controls landed on the pane's edges, which on a wide
+   * window is a hundred points out from the bubbles they belong to (owner, 2026-11-15).
+   */
+  floatRail: {
     position: 'absolute' as const,
-    left: space.sm,
+    left: 0,
+    right: 0,
     bottom: space.md,
+    alignItems: 'center' as const,
+  },
+  floatRow: {
+    paddingHorizontal: space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'space-between' as const,
+  },
+  // Two steps in one column, the older one on top. The divider is inset on both sides because a
+  // hairline meeting the border reads as two boxes rather than one stepper (owner, 2026-11-08),
+  // and the steps are a square each so the group is exactly as tall as the jump arrow beside it.
+  history: {
+    height: 36,
+    justifyContent: 'space-between' as const,
     flexDirection: 'column' as const,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: palette.border,
     overflow: 'hidden' as const,
   },
   historyStep: {
-    width: 40,
-    height: 34,
+    width: 36,
+    height: 17,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  historyRule: { height: 1, marginHorizontal: space.sm, backgroundColor: palette.border },
+  historyRule: { height: 1, marginHorizontal: 9, backgroundColor: palette.border },
 });
