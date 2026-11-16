@@ -44,6 +44,32 @@ export function showsAgentsButton(width: number): boolean {
 }
 
 /**
+ * What a tap on that badge opens.
+ *
+ * One agent goes straight to its conversation: a one-row list is a door in front of a door, and the
+ * badge already names the count, so the tap has nothing left to choose (owner, 2026-11-15: "quand
+ * y a qu'un seul agent, tu le regroupes … tu le déplies comme les autres" was about the thread, the
+ * same reading one level up). The roster itself is not lost: below `AGENTS_BUTTON_MIN_WIDTH` the
+ * badge is not drawn and the session menu carries the list, so the only window where this matters
+ * is one wide enough to show a badge and one agent behind it.
+ */
+export function badgeOpensAgent(rosterSize: number): boolean {
+  return rosterSize === 1;
+}
+
+/**
+ * Where the roster lives, of the two places that can hold it.
+ *
+ * The badge and the session-menu row are alternatives, never both: the badge costs the facts line
+ * twice, the row costs a tap, so a window that can afford the badge drops the row. One exception,
+ * the same one `badgeOpensAgent` names: when the badge goes straight to the only agent, the menu
+ * keeps the row, because otherwise the list would have no door left on that window.
+ */
+export function rosterInMenu(width: number, rosterSize: number): boolean {
+  return !showsAgentsButton(width) || badgeOpensAgent(rosterSize);
+}
+
+/**
  * What a header needs to know about the model of the conversation it names.
  *
  * The shape is `ThreadModel`'s, narrowed to the five fields the line reads, so the composer is a

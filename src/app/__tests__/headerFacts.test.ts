@@ -1,4 +1,11 @@
-import { headerFacts, headerModelOf } from '../headerControls';
+import {
+  AGENTS_BUTTON_MIN_WIDTH,
+  badgeOpensAgent,
+  headerFacts,
+  headerModelOf,
+  rosterInMenu,
+  showsAgentsButton,
+} from '../headerControls';
 
 /**
  * What the header's facts line says, and why each part of it exists.
@@ -89,4 +96,36 @@ test('the wire shape is translated once: a level is read, an absent pin is dropp
   });
   // A model that takes no effort at all has an empty level, which is an absence and not a label.
   expect(headerModelOf({ model: 'x', effort: { level: '' } })).toEqual({ model: 'x' });
+});
+
+/**
+ * Where the roster lives, and what the badge opens.
+ *
+ * Two doors onto one list is the failure this pins: the badge on a wide window, the session-menu
+ * row on a narrow one, and exactly one of them, never both and never neither. The third case is the
+ * one the owner asked for on 2026-11-15: with a single agent the badge goes straight to its
+ * conversation, so the row comes back on that window to keep the list itself reachable.
+ */
+describe('the roster door', () => {
+  test('the badge is drawn only where the facts line can afford it', () => {
+    expect(showsAgentsButton(AGENTS_BUTTON_MIN_WIDTH - 1)).toBe(false);
+    expect(showsAgentsButton(AGENTS_BUTTON_MIN_WIDTH)).toBe(true);
+  });
+
+  test('one agent is one tap, several are a list', () => {
+    expect(badgeOpensAgent(1)).toBe(true);
+    expect(badgeOpensAgent(0)).toBe(false);
+    expect(badgeOpensAgent(2)).toBe(false);
+  });
+
+  test('the menu holds the roster exactly when the badge does not reach it', () => {
+    // Narrow: no badge, so the menu is the door.
+    expect(rosterInMenu(400, 3)).toBe(true);
+    // Wide with several agents: the badge opens the list, the menu stays out of it.
+    expect(rosterInMenu(900, 3)).toBe(false);
+    // Wide with one: the badge bypasses the list, so the menu carries it.
+    expect(rosterInMenu(900, 1)).toBe(true);
+    // Narrow with one: unchanged, the badge does not exist there at all.
+    expect(rosterInMenu(400, 1)).toBe(true);
+  });
 });

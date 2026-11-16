@@ -98,6 +98,34 @@ function scriptedHistory() {
       run: 'run-0',
       ts: iso(STAMP + 1000),
     },
+    // Two launch cards, because a `send` and a browser task resolve their agent differently from a
+    // `spawn`: the send addresses it by id and the browser by the runtime id, neither claims a name.
+    // A door drawn by one resolution and tapped by another looked alive and did nothing
+    // (owner, 2026-11-15), so both shapes are on the page a browser check looks at.
+    {
+      id: 's-t-send',
+      role: 'tool',
+      name: 'send',
+      args: { id: 'subagent/demo-s01-4f08', message: 'carry on with the second half' },
+      ok: true,
+      output: 'sent',
+      truncated: false,
+      durationMs: 24,
+      ts: iso(STAMP + 1500),
+      spawn: { callId: 's-t-send', action: 'send', subagentId: 'subagent/demo-s01-4f08', status: 'running', agentType: 'general', mode: 'run' },
+    },
+    {
+      id: 's-t-browser',
+      role: 'tool',
+      name: 'delegate_browser_task',
+      args: { url: 'https://shop.example.com/cart', instructions: 'Check the cart total' },
+      ok: true,
+      output: 'started',
+      truncated: false,
+      durationMs: 31,
+      ts: iso(STAMP + 1700),
+      spawn: { callId: 's-t-browser', action: 'spawn', subagentId: 'subagent/browser-demo-7c11', status: 'complete', agentType: 'browser', mode: 'run' },
+    },
     // A scheduled job's delivery: `role: 'user'` on the wire (the prompt needs a turn in that role
     // for the conversation's agent to have read the report), drawn as a card of its own.
     {
@@ -219,17 +247,30 @@ wss.on('connection', socket => {
           threadId: frame.threadId,
           // One agent, so the badge, the roster and the door into its conversation can be walked.
           agents: process.env.MOCK_AGENTS === '1'
-            ? [{
-                id: 'subagent/demo-s01-4f08',
-                threadId: 'subagent-thread-demo',
-                type: 'general',
-                status: 'idle',
-                displayName: 'demo-s01',
-                visibility: 'private',
-                mode: 'run',
-                messageCount: 12,
-                lastMessageAt: iso(STAMP + 3000),
-              }]
+            ? [
+                {
+                  id: 'subagent/demo-s01-4f08',
+                  threadId: 'subagent-thread-demo',
+                  type: 'general',
+                  status: 'idle',
+                  displayName: 'demo-s01',
+                  visibility: 'private',
+                  mode: 'run',
+                  messageCount: 12,
+                  lastMessageAt: iso(STAMP + 3000),
+                },
+                {
+                  id: 'subagent/browser-demo-7c11',
+                  threadId: 'subagent-thread-browser',
+                  type: 'browser',
+                  status: 'idle',
+                  displayName: 'browser',
+                  visibility: 'private',
+                  mode: 'run',
+                  messageCount: 4,
+                  lastMessageAt: iso(STAMP + 2600),
+                },
+              ]
             : [],
         }));
         return;

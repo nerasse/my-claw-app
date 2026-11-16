@@ -26,7 +26,7 @@ import { retryDelayAfter, sendsToRetry } from '../core/sendRetry';
 import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPick, useUndoPrompts, undoStore } from '../core/undoStore';
 import { bootFrames, resumeFrames } from '../core/resume';
-import { rosterRows, sharedRosterRows, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
+import { agentOfCard, indexRoster, rosterRows, sharedRosterRows, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
 import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn } from '../core/subagentStack';
 import { sessionStore, useArchivedSessions, useFolders, useSessions } from '../core/sessions';
 import { workspaceOptions } from '../core/workspaceFilter';
@@ -175,7 +175,7 @@ import {
   useThreadModel,
   withoutEndpoint,
 } from '../core/model';
-import { headerFacts, headerModelOf, showsAgentsButton, showsModelButton } from './headerControls';
+import { headerFacts, headerModelOf, rosterInMenu, showsModelButton } from './headerControls';
 import { jobsStore } from '../core/jobs';
 import { agentsStore, useAgentsConfig } from '../core/agents';
 import { tagsStore, useTags } from '../core/tags';
@@ -2119,19 +2119,38 @@ export function AppShell(): React.JSX.Element {
     [rosterList, roster.agents],
   );
 
+  /**
+   * What the badge opens: the only agent when there is exactly one, the roster otherwise.
+   *
+   * A one-row list is a door in front of a door. `rosterInMenu` keeps the list reachable in the
+   * session menu on exactly that window, so nothing is lost (owner asked for the one-tap entry on
+   * 2026-11-15; `app/headerControls.ts` holds both predicates).
+   */
+  const openAgentsDoor = useCallback(() => {
+    const only = rosterList.length === 1 ? rosterList[0] : undefined;
+    if (only && rosterThread) openSubAgent(only.entry, rosterThread);
+    else setAgentsOpen(true);
+  }, [rosterList, rosterThread, openSubAgent]);
+
   // Both derivations live in core/subagents.ts, both pure. Only the door needs the roster: the
   // lifecycle state is already on the card, put there by the server's replay or by
   // `reconcileSpawnRoster`, so re-deriving it here was a second copy of the same match.
   const subagentDoors = useMemo(() => spawnDoorsOf(spawnCards, cardAgents), [spawnCards, cardAgents]);
   const spawnLive = useMemo(() => spawnLiveOf(spawnCards), [spawnCards]);
 
+  /**
+   * The door on a launch card, by the card's own id.
+   *
+   * The same resolution the door was drawn with: `agentOfCard` reads the id the server pushed, the
+   * `args.id` a `send` addresses, then the name a `spawn` claimed. This used to resolve a second
+   * way, by `subagentId` and `args.name` only, so a `send` card -- which carries neither, only
+   * `args.id` -- drew a door that did nothing when tapped (owner, 2026-11-15).
+   */
   const openSubAgentFromCard = useCallback(
     (toolItemId: string) => {
       const card = spawnCards.find(entry => entry.id === toolItemId);
-      const claimed = card && typeof card.args.name === 'string' ? card.args.name : '';
-      const agent =
-        (card?.subagentId ? cardAgents.find(entry => entry.id === card.subagentId) : undefined) ??
-        cardAgents.find(entry => entry.displayName === claimed);
+      const { byId, byName } = indexRoster(cardAgents);
+      const agent = card ? agentOfCard(card, byId, byName) : undefined;
       if (!agent || !activeThread) {
         // Not in a roster yet (a task started a moment ago): ask again, the next tap opens it.
         if (activeThread) connection.send(encodeSubAgentsList(activeThread)).catch(() => {});
@@ -3385,11 +3404,13 @@ export function AppShell(): React.JSX.Element {
       return [...(showsModelButton(layout.width) ? [] : [shared.model]), shared.tune];
     })(),
     // The roster, where the title bar dropped its badge. Same rule as the model picker one line up:
-    // `showsAgentsButton` admits the counter, and this entry exists on exactly the windows that
-    // said no. A phone header cannot afford a 50 pt badge that also costs the model name its tail,
-    // and the owner never reached for the counter there anyway (2026-11-05: "c'est useless d'avoir
-    // le bouton de la liste des sous-agents tout en haut sur mobile, je l'utilise jamais").
-    ...(activeThread && !showsAgentsButton(layout.width) && subagentCount.total > 0
+    // one predicate decides, `rosterInMenu`, so the list is never in both places and never in
+    // neither. It admits two windows: the ones too narrow for the badge, and the one where the badge
+    // jumps straight to the only agent, since that tap no longer reaches the list. A phone header
+    // cannot afford a 50 pt badge that also costs the model name its tail, and the owner never
+    // reached for the counter there anyway (2026-11-05: "c'est useless d'avoir le bouton de la
+    // liste des sous-agents tout en haut sur mobile, je l'utilise jamais").
+    ...(activeThread && rosterInMenu(layout.width, subagentCount.total) && subagentCount.total > 0
       ? [
           {
             label: 'Sub-agents',
@@ -4222,7 +4243,7 @@ export function AppShell(): React.JSX.Element {
             onStatusPress={openSettings}
             onSend={sendChat}
             subagentCount={subagentCount}
-            onAgentsPress={() => setAgentsOpen(true)}
+            onAgentsPress={openAgentsDoor}
             subagentDoors={subagentDoors}
             spawnLive={spawnLive}
             onOpenSubAgent={openSubAgentFromCard}

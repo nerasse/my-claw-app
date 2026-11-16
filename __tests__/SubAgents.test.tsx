@@ -140,6 +140,41 @@ async function pressRow(tree: Tree, id: string): Promise<void> {
   await pressLabel(tree, label);
 }
 
+/**
+ * Opens the roster list itself, wherever that window keeps it.
+ *
+ * With several agents the badge is the door. With exactly one the badge goes straight to that
+ * agent, so the list moves into the session menu for that window -- a test that wants the list
+ * asks for it by name instead of assuming which door it came from.
+ */
+async function openRoster(tree: Tree): Promise<void> {
+  // The badge's own label carries its counters: `2 sub-agents, 1 running`, `1 sub-agent`.
+  const badge = labelsOf(tree).find(label => /^\d+ sub-agents?(,|$)/.test(label));
+  if (badge && !/^1 sub-agent(,|$)/.test(badge)) {
+    await pressLabel(tree, badge);
+    return;
+  }
+  await pressLabel(tree, 'Commands');
+  await waitFor(() => labelsOf(tree).includes('Sub-agents'));
+  await pressLabel(tree, 'Sub-agents');
+}
+
+/**
+ * Gets into one agent's own chat.
+ *
+ * With a single agent the badge is the door itself, so there is no list to press through; with
+ * several it opens the roster first (`app/headerControls.ts` holds the rule).
+ */
+async function enterAgent(tree: Tree, id: string): Promise<void> {
+  const only = labelsOf(tree).find(label => /^1 sub-agent(,|$)/.test(label));
+  if (only) {
+    await pressLabel(tree, only);
+    return;
+  }
+  await openRoster(tree);
+  await pressRow(tree, id);
+}
+
 describe('the header counter', () => {
   it('is absent when the conversation has no sub-agent', async () => {
     const tree = await seed([]);
@@ -191,8 +226,7 @@ describe('the roster', () => {
 
   it('opens a kept one-shot as a chat, naming the parent on the way back', async () => {
     const tree = await seed([agent({ id: 'subagent/run-7d21a04c', visibility: 'private' })]);
-    await pressLabel(tree, '1 sub-agent');
-    await pressRow(tree, 'subagent/run-7d21a04c');
+    await enterAgent(tree, 'subagent/run-7d21a04c');
     expect(textsOf(tree)).toContain('run-7d21a04c · research');
     expect(labelsOf(tree).some(label => label.startsWith('Back to '))).toBe(true);
     await settleAndUnmount(tree);
@@ -200,7 +234,7 @@ describe('the roster', () => {
 
   it('says so when the server does not know about sub-agents at all', async () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
-    await pressLabel(tree, '1 sub-agent');
+    await openRoster(tree);
     await ReactTestRenderer.act(async () => {
       subAgentStore.receive({ type: 'subagents.list.result', threadId: THREAD, agents: [] });
       subAgentStore.markUnsupported();
@@ -213,8 +247,7 @@ describe('the roster', () => {
 
 describe('inside a sub-agent', () => {
   async function enter(tree: Tree): Promise<void> {
-    await pressLabel(tree, '1 sub-agent');
-    await pressRow(tree, 'subagent/digger-a1b2');
+    await enterAgent(tree, 'subagent/digger-a1b2');
   }
 
   it('the header names the parent conversation, not just "back"', async () => {
@@ -396,8 +429,7 @@ describe('inside a sub-agent', () => {
 describe('handing an answer back to a caller', () => {
   /** Opens the hand-back sheet on the sub-agent's own answer. */
   async function openHandoff(tree: Tree): Promise<void> {
-    await pressLabel(tree, '1 sub-agent');
-    await pressRow(tree, 'subagent/digger-a1b2');
+    await enterAgent(tree, 'subagent/digger-a1b2');
     await ReactTestRenderer.act(async () => {
       chatStore.seedHistory(handleFor('subagent/digger-a1b2'), [
         { id: 'h-a', role: 'assistant', text: 'the cause is the token cache', ts: '2026-01-01T10:00:02.000Z' },
@@ -575,6 +607,81 @@ describe('handing an answer back to a caller', () => {
   });
 });
 
+describe('the door on a launch card', () => {
+  /** Every card of a run is one card: the door is drawn from the roster and must reach it. */
+  async function doorOpens(tree: Tree): Promise<boolean> {
+    const door = tree.root.findAll(
+      node =>
+        typeof node.props.accessibilityLabel === 'string' &&
+        node.props.accessibilityLabel.startsWith('Open sub-agent ') &&
+        typeof node.props.onPress === 'function',
+      { deep: true },
+    )[0];
+    if (!door) return false;
+    await ReactTestRenderer.act(async () => door.props.onPress());
+    return labelsOf(tree).some(label => label.startsWith('Back to '));
+  }
+
+  const card = (over: Partial<ToolCallPayload> & { id: string }): ToolCallPayload => ({
+    name: 'spawn',
+    args: { name: 'digger', type: 'research', mode: 'session', task: 'go' },
+    ok: true,
+    output: 'started',
+    truncated: false,
+    durationMs: 40,
+    ...over,
+  });
+
+  /**
+   * The bug this pins: a `send` addresses its target by `args.id` and carries no `subagentId` and no
+   * `name`, so the card drew a door -- `spawnDoorsOf` resolves through `agentOfCard`, which reads all
+   * three -- while the tap resolved a second way, by id-then-name only, found nothing and did
+   * nothing at all (owner, 2026-11-15: "on peut pas cliquer sur le bouton pour accéder au sous
+   * agent"). Two resolutions for one door is the whole defect; there is one now.
+   */
+  it('a send card reaches the agent it addresses by id', async () => {
+    const tree = await seed(
+      [agent({ id: 'subagent/digger-a1b2' })],
+      [card({ id: 'tc-send-1', name: 'send', args: { id: 'subagent/digger-a1b2', message: 'continue' } })],
+    );
+    expect(await doorOpens(tree)).toBe(true);
+    expect(textsOf(tree)).toContain('digger-a1b2 · research');
+    await settleAndUnmount(tree);
+  });
+
+  it('a browser task card opens its own run, one-shot handle and all', async () => {
+    const tree = await seed(
+      [agent({ id: 'subagent/run-br000002', type: 'browser', displayName: 'browser' })],
+      [
+        card({
+          id: 'tc-br-2',
+          name: 'delegate_browser_task',
+          args: { url: 'https://x.test/', instructions: 'read the cart' },
+          spawn: {
+            callId: 'tc-br-2',
+            action: 'spawn',
+            subagentId: 'subagent/run-br000002',
+            status: 'complete',
+            agentType: 'browser',
+            mode: 'run',
+          } as never,
+        }),
+      ],
+    );
+    expect(await doorOpens(tree)).toBe(true);
+    await settleAndUnmount(tree);
+  });
+
+  it('a spawn card still finds its agent by the name it claimed', async () => {
+    const tree = await seed(
+      [agent({ id: 'subagent/digger-a1b2' })],
+      [card({ id: 'tc-spawn-1', args: { name: 'digger', type: 'research', mode: 'session', task: 'go' } })],
+    );
+    expect(await doorOpens(tree)).toBe(true);
+    await settleAndUnmount(tree);
+  });
+});
+
 describe('the drawer Sub-Agents entry', () => {
   it('is one pinned button with the count, not an inline list', async () => {
     const tree = await seed([
@@ -653,8 +760,7 @@ describe('the drawer Sub-Agents entry', () => {
 describe('a sub-agent is not a conversation', () => {
   it('writing in one does not list it in the drawer, and does not become the thread reopened at boot', async () => {
     const tree = await seed([agent({ id: 'subagent/digger-a1b2' })]);
-    await pressLabel(tree, '1 sub-agent');
-    await pressRow(tree, 'subagent/digger-a1b2');
+    await enterAgent(tree, 'subagent/digger-a1b2');
 
     const composer = tree.root.findAll(
       node => node.props.accessibilityLabel === 'Message to send' && typeof node.props.onChangeText === 'function',
