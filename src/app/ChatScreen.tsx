@@ -38,7 +38,7 @@ import { useCommands } from '../core/commands';
 import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
-import { announceDraftFile, clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, forgetDraftFile, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
+import { announceDraftFile, clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, forgetDraftFile, markDraftUploaded, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid, viewerFor, type ViewerKind } from '../core/utils';
@@ -621,6 +621,7 @@ export function ChatScreen({
           // send already took this chip: the message carries the id, and the pending list must
           // not grow it back.
           if (!consumedRef.current.has(pending.id)) {
+            markDraftUploaded(threadId, pending.id, uploaded.id);
             announceDraftFile(threadId, uploaded.id, {
               ...(pending.audioAsVoice ? { audioAsVoice: true } : {}),
               ...(pending.durationMs === undefined ? {} : { durationMs: pending.durationMs }),

@@ -204,6 +204,22 @@ export function applyServerFiles(threadId: string, files: PendingFileFrame[], mo
   for (const listener of listeners) listener(threadId);
 }
 
+/**
+ * The upload of a chip this composer already holds has finished.
+ *
+ * Written here, synchronously, before the announce leaves: the server answers an announce with
+ * the authoritative list of the composer's files, and that list is applied by matching the server
+ * id. A store that had not heard the id yet recognised nothing, so the broadcast arrived as "one
+ * file you do not have" and the chip was rebuilt beside the local one -- the copy the owner then
+ * deleted with its cross (2026-11-17).
+ */
+export function markDraftUploaded(threadId: string, chipId: string, mediaId: string): void {
+  const current = drafts.get(threadId)?.attachments ?? [];
+  if (!current.some(chip => chip.id === chipId && chip.mediaId !== mediaId)) return;
+  const next = current.map(chip => (chip.id === chipId ? { ...chip, mediaId } : chip));
+  drafts.set(threadId, { text: drafts.get(threadId)?.text ?? '', attachments: next });
+}
+
 /** Stages an uploaded file on the server, so the chip follows the owner to another device. */
 export function announceDraftFile(threadId: string, mediaId: string, voice?: { audioAsVoice?: boolean; durationMs?: number }): void {
   connection.send(encodeDraftFileAdd(threadId, mediaId, voice)).catch(() => {});

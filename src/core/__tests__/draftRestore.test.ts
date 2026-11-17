@@ -1,6 +1,6 @@
 import { routeServerFrame, type ServerFrameHandlers } from '../frameRouter';
 import { parseServerFrame } from '../protocol';
-import { applyServerDraft, clearAllDrafts, clearDraft, draftAttachmentsOf, draftTextOf, queueDraftSync } from '../drafts';
+import { applyServerDraft, clearAllDrafts, clearDraft, draftAttachmentsOf, draftTextOf, markDraftUploaded, queueDraftSync, saveDraft } from '../drafts';
 import { sessionStore } from '../sessions';
 
 /**
@@ -113,4 +113,28 @@ test('a clear does not take text typed after the last sync', () => {
   queueDraftSync(THREAD, 'la question, encore');
   route({ type: 'draft.changed', threadId: THREAD, text: '', ts: 4 });
   expect(draftTextOf(THREAD)).toBe('la question, encore');
+});
+
+test('a chip whose upload just finished is not rebuilt beside itself by the server list', () => {
+  // The composer's chip, then the upload lands. The store must know the server id *before* the
+  // announce comes back as a list, or the match finds nothing and the chip is duplicated: one
+  // local copy with its thumbnail, one rebuilt from the server (owner, 2026-11-17, "une copie qui
+  // reste dans mon chat et je la supprime en cliquant sur la croix").
+  saveDraft(THREAD, '', [
+    { id: 'voice-1', uri: 'file:///take.m4a', filename: 'take.m4a', type: 'audio', mimeType: 'audio/mp4', audioAsVoice: true },
+  ]);
+  markDraftUploaded(THREAD, 'voice-1', 'media-9');
+  expect(draftAttachmentsOf(THREAD).map(chip => [chip.id, chip.mediaId])).toEqual([['voice-1', 'media-9']]);
+
+  route({
+    type: 'draft.files.changed',
+    threadId: THREAD,
+    files: [{ id: 'media-9', filename: 'take.m4a', type: 'audio', mimeType: 'audio/mp4', sizeBytes: 9, ts: '2026-01-01T00:00:00.000Z', audioAsVoice: true }],
+    ts: 2,
+  });
+  const chips = draftAttachmentsOf(THREAD);
+  expect(chips).toHaveLength(1);
+  // The local one, kept whole: its uri is what draws the thumbnail and plays it before the server
+  // copy is reachable, and its voice flag survives the round trip.
+  expect(chips[0]).toMatchObject({ id: 'voice-1', mediaId: 'media-9', uri: 'file:///take.m4a', audioAsVoice: true });
 });

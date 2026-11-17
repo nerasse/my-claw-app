@@ -927,6 +927,9 @@ export const deviceBridge: DeviceBridgeNative = {
       {
         'Content-Type': type || 'application/octet-stream',
         'X-Filename': encodeURIComponent(filename),
+        // The media kind, not the MIME: the Android bridge sends the same header, and a claim the
+        // server cannot read as one of its four kinds is a claim it has to throw away.
+        'X-Type': type.split('/')[0] || 'file',
         'X-Thread-Id': threadId,
       },
       transferId,
