@@ -545,6 +545,8 @@ export interface ChatCronDeliveryFrame {
   threadId: string;
   id: string;
   text: string;
+  /** What the run attached: the same shapes a `chat.message` carries. */
+  attachments?: AttachmentMeta[];
   ts: string;
   job: string;
   cadence: string;

@@ -268,6 +268,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         ts: frame.ts,
         job: frame.job,
         cadence: frame.cadence,
+        ...(frame.attachments ? { attachments: frame.attachments } : {}),
         ...(frame.status ? { status: frame.status } : {}),
         ...(frame.runId ? { runId: frame.runId } : {}),
       });

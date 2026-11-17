@@ -1737,7 +1737,16 @@ class ChatStoreImpl {
    */
   addCronDelivery(
     threadId: string,
-    delivery: { id: string; text: string; ts?: string; job: string; cadence: string; status?: 'ok' | 'error'; runId?: string },
+    delivery: {
+      id: string;
+      text: string;
+      ts?: string;
+      job: string;
+      cadence: string;
+      status?: 'ok' | 'error';
+      runId?: string;
+      attachments?: TextItem['attachments'];
+    },
   ): void {
     if (this.getItems(threadId).some(item => item.id === delivery.id)) return;
     this.append(threadId, {
@@ -1745,7 +1754,7 @@ class ChatStoreImpl {
       id: delivery.id,
       role: 'user',
       text: delivery.text,
-      attachments: [],
+      attachments: delivery.attachments ?? [],
       streaming: false,
       from: {
         label: delivery.job,
