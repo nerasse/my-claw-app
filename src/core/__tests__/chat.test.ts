@@ -603,6 +603,29 @@ describe('chatStore.seedHistory', () => {
     expect(card).toMatchObject({ kind: 'tool', id: 't-call-1', running: true });
   });
 
+  // The replay is the only place a card written by someone other than the owner is rebuilt, and a
+  // field the mapping forgets is a field the card loses on every reload: the run a scheduled job's
+  // delivery opens went missing exactly that way, and the card drew without its door.
+  test('a replayed delivery keeps the run it came from', () => {
+    chatStore.seedHistory(THREAD, [
+      {
+        id: 'h-cron',
+        role: 'user',
+        text: '[Cron: veille]\n\n3 offres',
+        ts: '2026-11-17T08:00:00.000Z',
+        from: { label: 'veille', kind: 'cron', cadence: 'every 1h', runId: 'cron-0123456789ab-1794938597013' },
+      } as never,
+    ]);
+    const [item] = chatStore.getItems(THREAD);
+    expect(item.kind).toBe('text');
+    expect(item.kind === 'text' ? item.from : undefined).toEqual({
+      label: 'veille',
+      kind: 'cron',
+      cadence: 'every 1h',
+      runId: 'cron-0123456789ab-1794938597013',
+    });
+  });
+
   test('a settled tool is not marked running', () => {
     chatStore.seedHistory(THREAD, [toolEntry]);
     const card = chatStore.getItems(THREAD)[0];

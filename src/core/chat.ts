@@ -401,6 +401,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
               ...(entry.from.kind ? { kind: entry.from.kind } : {}),
               ...(entry.from.status ? { status: entry.from.status } : {}),
               ...(entry.from.cadence ? { cadence: entry.from.cadence } : {}),
+              ...(entry.from.runId ? { runId: entry.from.runId } : {}),
             },
           }
         : {}),

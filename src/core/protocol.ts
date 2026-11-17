@@ -478,6 +478,8 @@ export type HistoryEntry =
         kind?: 'send' | 'return' | 'cron';
         status?: string;
         cadence?: string;
+        /** A cron delivery's run, as a thread id the card opens. */
+        runId?: string;
       };
       /** The run this entry belongs to, when it sits inside one. */
       run?: RunMeta;
