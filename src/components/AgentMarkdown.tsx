@@ -82,7 +82,7 @@ export function markedStyles(palette: Palette, prose = '', tone: MarkdownTone = 
     h2: { fontSize: size + 2, ...lineBoxFor(size + 2, prose), fontWeight: '700', color, marginTop: space.sm, marginBottom: space.xs },
     h3: { fontSize: size + 1, ...lineBoxFor(size + 1, prose), fontWeight: '600', color, marginTop: space.sm, marginBottom: 2 },
     h4: { fontSize: size, ...lineBoxFor(size, prose), fontWeight: '600', color, marginTop: space.xs, marginBottom: 2 },
-    link: { ...bodyStyle, color: palette.accent, textDecorationLine: 'underline' },
+    link: { ...bodyStyle, color: palette.link, textDecorationLine: 'underline' },
     // An inline run is measured inside the line its prose builds, and Android gives that line
     // the metrics of whichever span states them. A codespan at its own size, with padding and
     // `overflow: hidden` to clip a rounded box, therefore shrank the line it landed in: rows

@@ -155,7 +155,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
               accessibilityRole="button"
               accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}
               hitSlop={8}>
-              <OpenInNewIcon size={13} tone="accent" />
+              <OpenInNewIcon size={13} tone="link" />
             </Pressable>
           ) : null}
           {what ? (

@@ -17,7 +17,7 @@ interface IconProps {
   /** A literal colour, for an icon drawn over a picture. Prefer `tone` everywhere else. */
   color?: string;
   /** Which ink of the theme to draw with. Resolved here, so no page needs the palette in scope. */
-  tone?: 'text' | 'muted' | 'faint' | 'accent' | 'danger';
+  tone?: 'text' | 'muted' | 'faint' | 'accent' | 'link' | 'danger';
 }
 
 /**
@@ -32,6 +32,7 @@ function useInk(color: string | undefined, tone: IconProps['tone']): string {
   if (color) return color;
   if (tone === 'text') return palette.text;
   if (tone === 'accent') return palette.accent;
+  if (tone === 'link') return palette.link;
   if (tone === 'danger') return palette.danger;
   if (tone === 'muted') return palette.textMuted;
   return palette.textFaint;

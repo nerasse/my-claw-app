@@ -241,6 +241,11 @@ def build(t, bg=None, surface=None):
         muted = push(mix(muted, "#ffffff" if dark else "#000000", 0.25), bg, ratio(meta, bg) + 1.2)
 
     accent = push(t["accent"], bg, 4.5)
+    # An affordance that opens something -- a door on a card, a link in prose -- takes one blue in
+    # every theme. It is not the accent: the accent is the theme's identity, and on a warm theme it
+    # is terracotta, which reads as decoration rather than as "this is clickable" (owner, 2026-11-17:
+    # "tu peux l'unifier bleu un peu partout pour qu'on montre qu'il est cliquable").
+    link = push("#2f6fdd" if not dark else "#7aa7ff", bg, 4.5)
     accent_ink = "#ffffff" if ratio("#ffffff", accent) >= 3.4 else "#100f0f"
     accent_ink = push(accent_ink, accent, 4.5)
     accent_soft = mix(surface, accent, 0.09 if not dark else 0.13)
@@ -280,6 +285,7 @@ def build(t, bg=None, surface=None):
         "textMeta": meta,
         "textFaint": faint,
         "accent": accent,
+        "link": link,
         "accentText": accent_ink,
         "accentSoft": accent_soft,
         "bubbleUserBg": bubble,
@@ -344,6 +350,7 @@ def amoled(t):
     out["surfaceRaised"] = "#212121"
     out["focus"] = out["accent"]
     out["selection"] = out["accent"]
+    out["link"] = push("#7aa7ff", out["bg"], 4.5)
     return out
 
 
@@ -380,7 +387,7 @@ def main():
         dark = build(by_theme[name]["dark"])
         black = amoled(by_theme[name]["dark"])
         for mode, p in (("light", light), ("dark", dark), ("amoled", black)):
-            for field in ("text", "textMuted", "textMeta", "textFaint", "accent", "ok", "warn", "danger"):
+            for field in ("text", "textMuted", "textMeta", "textFaint", "accent", "link", "ok", "warn", "danger"):
                 if ratio(p[field], p["bg"]) < 4.5 and field != "textFaint":
                     problems.append(f"{name}/{mode}: {field} {p[field]} on {p['bg']} = {ratio(p[field], p['bg']):.2f}")
             if ratio(p["accentText"], p["accent"]) < 4.5:

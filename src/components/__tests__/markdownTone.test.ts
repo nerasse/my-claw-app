@@ -24,7 +24,8 @@ test.each(PALETTES)('an aside reads one step under the body, in muted ink (%s)',
     expect(aside[key]?.color).toBe(palette.textMuted);
   }
   // A link stays the accent in both: it is an affordance, not prose.
-  expect(aside.link?.color).toBe(palette.accent);
+  // A link is a door: one blue in every theme, on any surface (owner, 2026-11-17).
+  expect(aside.link?.color).toBe(palette.link);
 });
 
 test('headings scale with the prose they title instead of sitting at fixed points', () => {
@@ -108,6 +109,6 @@ test.each(PALETTES)('a user turn keeps the bubble ink and its own plates (%s)', 
   expect(user.code?.backgroundColor).toBe(palette.surfaceRaised);
   expect(user.codespan?.color).toBe(palette.bubbleUserText);
   expect(body.codespan?.backgroundColor).toBe(palette.codeBg);
-  // A link stays the accent: an affordance keeps its colour on any surface.
-  expect(user.link?.color).toBe(palette.accent);
+  // A link stays the link ink on any surface: an affordance keeps its colour inside a bubble too.
+  expect(user.link?.color).toBe(palette.link);
 });

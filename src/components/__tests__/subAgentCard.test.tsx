@@ -72,6 +72,10 @@ it('offers the door without unfolding anything, and hands back the card id', () 
   const tree = render(makeItem(), { ...DOOR, onOpen });
   const [button] = door(tree);
   expect(button).toBeDefined();
+  // The door is drawn in the link ink -- one blue in every theme -- so "this opens something" reads
+  // the same on a spawn card, a send card and a scheduled job's delivery (owner, 2026-11-17).
+  const icon = button!.findAll(node => typeof node.props.d === 'string' && typeof node.props.fill === 'string')[0];
+  expect(icon?.props.fill).toBe(lightPalette.link);
   ReactTestRenderer.act(() => button!.props.onPress());
   expect(onOpen).toHaveBeenCalledWith('tool-1');
   // Folded: the result is not on screen yet.

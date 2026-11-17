@@ -29,6 +29,12 @@ export interface Palette {
   /** Decoration only: a hairline glyph, a disabled mark, a separator. Never below 3:1. */
   textFaint: string;
   accent: string;
+  /**
+   * The ink of an affordance that opens something: a door on a card, a link in prose. One blue in
+   * every theme on purpose -- "clickable" must not depend on a theme whose accent is terracotta or
+   * violet, where an accent mark reads as decoration (owner, 2026-11-17).
+   */
+  link: string;
   accentText: string;
   accentSoft: string;
   /** The focus ring. Its own field: on a theme whose accent is also its warning, a ring in accent reads as an alert. */

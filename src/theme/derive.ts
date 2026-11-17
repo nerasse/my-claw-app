@@ -125,6 +125,7 @@ function amoledOf(source: PaletteSource): Palette {
     surfaceRaised: '#212121',
     focus: out.accent,
     selection: out.accent,
+    link: push('#7aa7ff', out.bg, 4.5),
     diffAdd: push(out.ok, mix('#000000', out.ok, 0.13), 4.5),
     diffDel: push(out.danger, mix('#000000', out.danger, 0.13), 4.5),
   };
@@ -160,6 +161,8 @@ export function build(source: PaletteSource): Palette {
   }
 
   const accent = push(source.accent, bg, 4.5);
+  // One blue in every theme: the ink of a door or a link, never the accent (see palettes.ts).
+  const link = push(dark ? '#7aa7ff' : '#2f6fdd', bg, 4.5);
   const accentInk = push(contrast('#ffffff', accent) >= 3.4 ? '#ffffff' : '#100f0f', accent, 4.5);
   const accentSoft = mix(surface, accent, dark ? 0.13 : 0.09);
 
@@ -190,6 +193,7 @@ export function build(source: PaletteSource): Palette {
     textMeta: meta,
     textFaint: faint,
     accent,
+    link,
     accentText: accentInk,
     accentSoft,
     focus: accent,
