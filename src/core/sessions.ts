@@ -91,6 +91,26 @@ class SessionStoreImpl {
     this.emit();
   }
 
+  /**
+   * Names a thread the server never lists: a scheduled job's run, which the door on its delivery
+   * card opens. The server names it from the run's timestamp; the card names it from the job, so
+   * the header reads as the job that reported instead of "new conversation".
+   */
+  setTitle(threadId: string, title: string): void {
+    const existing = this.list.find(summary => summary.threadId === threadId);
+    if (existing) {
+      if (existing.title === title) return;
+      this.list = this.list.map(summary => (summary.threadId === threadId ? { ...summary, title } : summary));
+    } else {
+      const now = new Date().toISOString();
+      this.list = [
+        { threadId, title, messageCount: 0, createdAt: now, lastActiveAt: now },
+        ...this.list,
+      ];
+    }
+    this.emit();
+  }
+
   remove(threadId: string): void {
     const next = this.list.filter(summary => summary.threadId !== threadId);
     if (next.length === this.list.length) return;

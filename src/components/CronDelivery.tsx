@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { returnPreview } from '../core/subagentReturn';
 import { AgentMarkdown } from './AgentMarkdown';
+import { OpenInNewIcon } from './icons';
 import { AttachmentList } from './AttachmentList';
 import { BlockActions } from './BlockActions';
 import { ROW_GAP, spine } from './spine';
@@ -35,10 +36,16 @@ export function CronDelivery({
   deviceInfo,
   onOpenAttachment,
   onOpenMedia,
+  onOpenRun,
 }: {
   item: TextItem;
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
+  /**
+   * Opens the run that reported: its own thread, exactly like a launch card's door opens the agent
+   * it started. Absent on a delivery written before the run was recorded on the card.
+   */
+  onOpenRun?: (threadId: string) => void;
   onOpenAttachment?: (
     kind: ViewerKind,
     target: { url: string; filename: string; sizeBytes?: number; kind?: FileKind },
@@ -51,6 +58,7 @@ export function CronDelivery({
 
   const label = item.from?.label ?? 'scheduled job';
   const cadence = item.from?.cadence ?? '';
+  const runId = item.from?.runId;
   const failed = item.from?.status === 'error';
   const preview = returnPreview(item.text);
   const showText = !hasFiles || open;
@@ -67,6 +75,19 @@ export function CronDelivery({
         <Text style={styles.name} numberOfLines={1}>
           {label}
         </Text>
+        {/* The door, right after the name it opens, in the launch card's own blue: the same
+            gesture a sub-agent's card offers on the agent it started. Outside the toggle's press
+            target, so a screen reader announces it as the one control it is. */}
+        {runId && onOpenRun ? (
+          <Pressable
+            style={styles.door}
+            onPress={() => onOpenRun(runId)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open the run of ${label}`}
+            hitSlop={8}>
+            <OpenInNewIcon size={13} tone="link" />
+          </Pressable>
+        ) : null}
         {cadence ? (
           <Text style={styles.cadence} numberOfLines={1}>
             {cadence}
@@ -129,6 +150,7 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /** How often it runs: the second fact, one step quieter than the name. */
   cadence: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, flexShrink: 0 },
   spacer: { flex: 1 },
+  door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   stateBad: { color: palette.danger },
   preview: {

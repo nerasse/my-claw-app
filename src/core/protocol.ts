@@ -530,6 +530,26 @@ export interface ChatSubAgentReturnFrame {
   status: 'complete' | 'error' | 'stopped';
 }
 
+/**
+ * A scheduled job's report, delivered into this conversation.
+ *
+ * Its own frame rather than `chat.user` for the reason a sub-agent's return has one, and the server
+ * sends it for the same reason: a delivery drawn as a message read as the owner talking to himself
+ * until the thread was reloaded (owner, 2026-11-17). `runId` is the run's own thread, which the
+ * card opens -- the same door a launch card gives on the agent it started.
+ */
+export interface ChatCronDeliveryFrame {
+  type: 'chat.cron.delivery';
+  threadId: string;
+  id: string;
+  text: string;
+  ts: string;
+  job: string;
+  cadence: string;
+  status?: 'ok' | 'error';
+  runId?: string;
+}
+
 export interface ChatCompactionFrame {
   type: 'chat.compaction';
   threadId: string;
@@ -3135,6 +3155,7 @@ export type ServerFrame =
   | ChatMessageFrame
   | ChatUserFrame
   | ChatSubAgentReturnFrame
+  | ChatCronDeliveryFrame
   | ChatCompactionFrame
   | ChatCompactingFrame
   | ChatCompactingDeltaFrame
@@ -3275,6 +3296,7 @@ const FRAME_TYPES: Record<ServerFrame['type'], true> = objectOf([
   'chat.message',
   'chat.user',
   'chat.subagent.return',
+  'chat.cron.delivery',
   'chat.compaction',
   'chat.compacting',
   'chat.compacting.delta',

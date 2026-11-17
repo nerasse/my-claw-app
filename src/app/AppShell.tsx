@@ -2161,6 +2161,20 @@ export function AppShell(): React.JSX.Element {
     [spawnCards, cardAgents, activeThread, openSubAgent],
   );
 
+  /**
+   * Opens the run a scheduled job's delivery came from, from the card that reported it.
+   *
+   * The run is a thread of its own (`cron-<job>-<startedAt>`), never listed in the drawer: the
+   * card names it, and the header would otherwise read "new conversation" over a history it holds.
+   */
+  const openCronRun = useCallback(
+    (threadId: string, title: string) => {
+      sessionStore.setTitle(threadId, title);
+      openThread(threadId);
+    },
+    [openThread],
+  );
+
   // A fresh install: the server answered and has no model that runs. The assistant takes the whole
   // app, once per launch, until it is finished or skipped; a skip is kept on this device. A second
   // device of a configured server never sees it: its server has a model.
@@ -4247,6 +4261,7 @@ export function AppShell(): React.JSX.Element {
             subagentDoors={subagentDoors}
             spawnLive={spawnLive}
             onOpenSubAgent={openSubAgentFromCard}
+            onOpenCronRun={openCronRun}
             {...(subagentView
               ? {
                   subagent: {

@@ -56,6 +56,7 @@ origin, and a stale bundle explains every "it did not change".
 | scrollbar | the thumb is at the window's right edge, and dragging / clicking it scrolls |
 | pinning while streaming | text follows the answer while at the bottom, stops when the reader scrolls up, resumes on return |
 | paging | an older page lands above without moving the paragraph being read |
+| a card's door | the send card and the scheduled job's delivery both show one blue open-in-new icon (the link ink, not the theme accent), and tapping it opens the agent / the run |
 
 ## Known gap, measured 2026-11-14
 

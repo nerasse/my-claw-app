@@ -50,7 +50,14 @@ export interface TextItem {
    * (`kind: 'return'`) or a scheduled job's delivery (`kind: 'cron'`, with the job's cadence). The
    * bubble says so in a header and never claims the owner's voice.
    */
-  from?: { label: string; kind?: 'send' | 'return' | 'cron'; status?: string; cadence?: string };
+  from?: {
+    label: string;
+    kind?: 'send' | 'return' | 'cron';
+    status?: string;
+    cadence?: string;
+    /** A cron delivery's run, as a thread id the card opens. */
+    runId?: string;
+  };
   /** What the model thought before answering, shown collapsed. */
   reasoning?: string;
   /** A history bubble whose reasoning stayed on the server, this long: `reasoningFetch.ts`. */
@@ -1718,6 +1725,35 @@ class ChatStoreImpl {
       streaming: false,
       from: { label, kind: 'return', status },
       ts: Date.now(),
+    });
+  }
+
+  /**
+   * A scheduled job's report arriving live, drawn as the delivery card a reload replays.
+   *
+   * Idempotent on the frame id, like a return: the same delivery reaches a device twice when the
+   * thread is reopened behind it, and two cards for one report is the failure that matters.
+   */
+  addCronDelivery(
+    threadId: string,
+    delivery: { id: string; text: string; ts?: string; job: string; cadence: string; status?: 'ok' | 'error'; runId?: string },
+  ): void {
+    if (this.getItems(threadId).some(item => item.id === delivery.id)) return;
+    this.append(threadId, {
+      kind: 'text',
+      id: delivery.id,
+      role: 'user',
+      text: delivery.text,
+      attachments: [],
+      streaming: false,
+      from: {
+        label: delivery.job,
+        kind: 'cron',
+        cadence: delivery.cadence,
+        ...(delivery.status ? { status: delivery.status } : {}),
+        ...(delivery.runId ? { runId: delivery.runId } : {}),
+      },
+      ...(delivery.ts ? { ts: Date.parse(delivery.ts) || Date.now() } : { ts: Date.now() }),
     });
   }
 

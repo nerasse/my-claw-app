@@ -133,7 +133,9 @@ function scriptedHistory() {
       role: 'user',
       text: '3286 success 2026-11-15T15:27:07+01:00\n\nThe forge run finished and left one failing job behind it, which the report below describes at length because a run id is not a summary.',
       ts: iso(STAMP + 2000),
-      from: { label: 'cf-forge-run-3286', kind: 'cron', cadence: 'every 30m' },
+      // `runId` is the door: the card opens the run's own thread, the way a launch card opens the
+      // agent it started.
+      from: { label: 'cf-forge-run-3286', kind: 'cron', cadence: 'every 30m', runId: 'cron-0123456789ab-1763200000000' },
     },
   ];
 }

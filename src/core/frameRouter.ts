@@ -261,6 +261,21 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       noteActivity(frame.threadId, frame.text);
       if (!isSubAgentThread(frame.threadId)) sessionStore.touch(frame.threadId, frame.text);
       break;
+    case 'chat.cron.delivery':
+      chatStore.addCronDelivery(frame.threadId, {
+        id: frame.id,
+        text: frame.text,
+        ts: frame.ts,
+        job: frame.job,
+        cadence: frame.cadence,
+        ...(frame.status ? { status: frame.status } : {}),
+        ...(frame.runId ? { runId: frame.runId } : {}),
+      });
+      // A delivery wakes the thread and orders it in the drawer, exactly like a sub-agent's return:
+      // the conversation's agent is expected to answer it.
+      noteActivity(frame.threadId, frame.text);
+      if (!isSubAgentThread(frame.threadId)) sessionStore.touch(frame.threadId, frame.text);
+      break;
     case 'chat.compaction':
       // No ring, no unread mark, and deliberately no `noteActivity`: a compaction is not a
       // message and the owner never asked for this one, so bumping the thread in the drawer for

@@ -12,6 +12,7 @@ import { ToolCard } from '../components/ToolCard';
 import { SubAgentCard } from '../components/SubAgentCard';
 import { SubAgentReturn } from '../components/SubAgentReturn';
 import { CronDelivery } from '../components/CronDelivery';
+import { dayAndTime } from '../core/clock';
 import { QuestionCard } from '../components/QuestionCard';
 import { Composer } from '../components/Composer';
 import { ActionSheet } from '../components/ActionSheet';
@@ -155,6 +156,7 @@ export function ChatScreen({
   subagentDoors,
   spawnLive,
   onOpenSubAgent,
+  onOpenCronRun,
   onSubAgentMenu,
   onLoadOlder,
   loadingOlder,
@@ -249,6 +251,11 @@ export function ChatScreen({
   /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
   spawnLive?: Map<string, { subagentId: string; displayName: string; status: SpawnStatus }>;
   onOpenSubAgent?: (toolItemId: string) => void;
+  /**
+   * Opens the run a scheduled job's delivery came from: its own thread, named after the job, the
+   * way the runs page opens one.
+   */
+  onOpenCronRun?: (threadId: string, title: string) => void;
   onSubAgentMenu?: () => void;
   /** Asks for the page of history just older than what is on screen. */
   onLoadOlder: () => void;
@@ -1365,6 +1372,12 @@ export function ChatScreen({
               deviceInfo={deviceInfo}
               onOpenAttachment={openAttachment}
               onOpenMedia={openMedia}
+              {...(onOpenCronRun
+                ? {
+                    onOpenRun: (runThreadId: string) =>
+                      onOpenCronRun(runThreadId, `${item.from?.label ?? 'scheduled job'} · ${dayAndTime(item.ts)}`),
+                  }
+                : {})}
             />
           </View>
         );
@@ -1406,7 +1419,7 @@ export function ChatScreen({
         </View>
       );
     },
-    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onBubbleCopy, subagent, onResend, onOpenSubAgent, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onBubbleCopy, subagent, onResend, onOpenSubAgent, onOpenCronRun, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
   );
 
   const renderRowContent = useCallback(
