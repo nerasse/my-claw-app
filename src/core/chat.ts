@@ -517,8 +517,7 @@ function mergeLocalSurvivors(base: ChatItem[], live: ChatItem[]): ChatItem[] {
 }
 
 /**
- * A live thought whose thinking the page also carries on a phase -- dropped, because it is the same
- * thinking under a second id.
+ * A live bubble the page also carries -- dropped, because it is the same turn under a second id.
  *
  * The streamer cuts a turn into one bubble per reasoning block, and the log writes the phases the
  * provider reported. When a provider reports the turn whole, the log has one phase holding the
@@ -528,21 +527,36 @@ function mergeLocalSurvivors(base: ChatItem[], live: ChatItem[]): ChatItem[] {
  * which holds the phase alone, made it go away (owner, 2026-11-14: "en live j'ai des
  * message/reasoning en double").
  *
- * Matched on the thinking itself: a thought with the same words as a phase is that phase's, and a
- * live thought whose words the page does not carry is the only record of that thinking and stays.
+ * The same shows up one step later, on a turn the streamer did cut in two and the page wrote whole:
+ * a bubble holding the thinking *and* the prose, under an id the page does not carry. Reopening the
+ * thread mid-run from a notification then drew the last reasoning and message twice (owner,
+ * 2026-11-18, CubeFlow Desk 2).
+ *
+ * Matched on the words themselves: a bubble that says what a phase says is that phase's, and a
+ * live bubble whose words the page does not carry is the only record of that turn and stays. The
+ * thinking alone is enough only for a bubble that has nothing else to say -- prose still growing on
+ * screen never matches a phase verbatim, so a turn in flight is never mistaken for a copy.
  */
-function withoutRepeatedThoughts(items: ChatItem[], incoming: readonly ChatItem[]): ChatItem[] {
-  const carried = new Set(
-    incoming
-      .filter(item => item.kind === 'text' && item.role === 'agent' && item.reasoning?.trim())
-      .map(item => (item as TextItem).reasoning!.trim()),
+function withoutRepeatedPhases(items: ChatItem[], incoming: readonly ChatItem[]): ChatItem[] {
+  const phases = incoming.filter(
+    (item): item is TextItem => item.kind === 'text' && item.role === 'agent' && Boolean(item.reasoning?.trim()),
   );
-  if (carried.size === 0) return items;
+  if (phases.length === 0) return items;
+  const carriedIds = new Set(incoming.map(phase => phase.id));
+  const thinking = new Set(phases.map(phase => phase.reasoning!.trim()));
+  const whole = new Set(
+    phases
+      .filter(phase => phase.text.trim() !== '')
+      .map(phase => `${phase.reasoning!.trim()}\u0000${phase.text.trim()}`),
+  );
   return items.filter(item => {
     if (item.kind !== 'text' || item.role !== 'agent') return true;
-    if (item.text.trim() !== '' || (item.attachments?.length ?? 0) > 0) return true;
-    const thinking = item.reasoning?.trim();
-    return !thinking || !carried.has(thinking);
+    if (carriedIds.has(item.id)) return true;
+    const thought = item.reasoning?.trim();
+    if (!thought) return true;
+    const prose = item.text.trim();
+    if (prose === '') return (item.attachments?.length ?? 0) > 0 || !thinking.has(thought);
+    return !whole.has(`${thought}\u0000${prose}`);
   });
 }
 
@@ -1432,7 +1446,7 @@ class ChatStoreImpl {
     // Only genuinely local items survive a reset: bubbles still being streamed into.
     // These exist only in memory, the server cannot have them -- and none exist once the server
     // says no run is answering (`survivesPage`).
-    const live = withoutRepeatedThoughts(
+    const live = withoutRepeatedPhases(
       existing.filter(item => !known.has(item.id) && survivesPage(item, activeRun, false)),
       base,
     );
@@ -1481,7 +1495,7 @@ class ChatStoreImpl {
       break;
     }
     const above = existing.slice(0, cut);
-    const live = withoutRepeatedThoughts(
+    const live = withoutRepeatedPhases(
       existing.slice(cut).filter(item => {
         if (known.has(item.id) || !windowLacks(item, activeRun)) return false;
         return !(item.run && foldedRuns.has(item.run.id));
@@ -1514,7 +1528,7 @@ class ChatStoreImpl {
     const fresh = incoming.filter(item => !seen.has(item.id));
     // A thought the page carries as a phase now, under another id: the turn was cut on screen and
     // written whole in the log. It is the same thinking, and both drew it.
-    const living = withoutRepeatedThoughts(patched, incoming);
+    const living = withoutRepeatedPhases(patched, incoming);
     // A delta is newer than what is persisted, but NOT newer than the turn in flight: the live
     // items belong to a run the server has not written yet. Appending blind hoists a running tool
     // card above the user bubble it answers.

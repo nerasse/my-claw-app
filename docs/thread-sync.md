@@ -65,16 +65,23 @@ Everything else inside the range defers to the window. That is the point: it is 
 
 ## The thinking, once
 
-A thought the page carries on one of its own phases is dropped from what the device holds,
-even under another id.
+A bubble the page carries on one of its own phases is dropped from what the device holds, even
+under another id.
 
 The streamer cuts a turn into one bubble per reasoning block; the log writes the phases the
 *provider* reported. A provider that reports the turn whole leaves one phase holding the thinking
 and the prose while the screen has two bubbles, so no id can pair them -- the recorder pairs the
 tail, which is what lines the answer up, and the thought keeps an id the page does not carry.
 Keeping both drew the reasoning twice: alone in the fold, then again above the answer, and a reload
-(which holds the phase alone) made it go away. The two are matched on the thinking itself, so a
-thought whose words the page does not carry is still the only record of that thinking and stays.
+(which holds the phase alone) made it go away.
+
+The same shows one step later on a bubble that says both: reopening a thread mid-run from a
+notification drew the last reasoning and its message twice (owner, 2026-11-18).
+
+The two are matched on the words themselves -- the same thinking, plus the same prose when the
+bubble has any -- so a bubble whose words the page does not carry is still the only record of that
+turn and stays. A bubble the page carries by id is never touched, and prose still growing never
+matches a phase verbatim, so a turn in flight is never mistaken for a copy.
 
 ## The one state a delta cannot infer
 

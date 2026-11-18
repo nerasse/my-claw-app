@@ -1,5 +1,5 @@
 /**
- * The same thinking is drawn once, live as well as after a reload.
+ * A turn is drawn once, live as well as after a reload.
  *
  * The streamer cuts a turn into one bubble per reasoning block; the log writes the phases the
  * provider reported. A provider that reports the turn whole leaves one phase holding the thinking
@@ -9,8 +9,11 @@
  * above the answer. A reload, which holds the phase alone, made it go away (owner, 2026-11-14:
  * "en live et refresh j'ai des message/reasoning en double").
  *
- * What the page carries in its own words is dropped; a thought whose words the page does not carry
- * is the only record of that thinking and stays.
+ * Same fault on a bubble that says both: reopening a thread mid-run from a notification drew the
+ * last reasoning and message twice (owner, 2026-11-18, CubeFlow Desk 2).
+ *
+ * What the page carries in its own words is dropped; a bubble whose words the page does not carry
+ * is the only record of that turn and stays, which is why prose still growing never matches.
  */
 
 import { chatStore } from '../chat';
@@ -46,6 +49,21 @@ function streamed(): void {
   chatStore.appendDelta(T, 'answer', 'la reponse');
 }
 
+/** One bubble says both on screen: the thinking, then the prose, under an id of its own. */
+function streamedTogether(): void {
+  chatStore.addUserMessage(T, 'u1', 'go');
+  chatStore.startRun(T, 'r1');
+  chatStore.startStream(T, 'live-answer');
+  chatStore.appendReasoning(T, 'live-answer', 'et le raisonnement');
+  chatStore.appendDelta(T, 'live-answer', 'la reponse');
+}
+
+/** The same turn, as the page writes it, under an id the screen never used. */
+const pageUnderOtherId: HistoryEntry[] = [
+  { role: 'user', id: 'u1', ts: '2026-01-01T00:00:00.000Z', text: 'go', run: runMeta },
+  { role: 'assistant', id: 'page-answer', ts: '2026-01-01T00:00:01.000Z', text: 'la reponse', reasoning: 'et le raisonnement', run: runMeta },
+] as HistoryEntry[];
+
 const thoughts = (): ChatItem[] =>
   buildRows(chatStore.getItems(T)).flatMap(row => (row.kind === 'group' ? row.items : []));
 
@@ -63,6 +81,38 @@ test('a window that carries it leaves one copy too', () => {
   chatStore.handleSyncResult(T, pageOf('et le raisonnement'), 'head', 'head', true, undefined, false, true, 10);
 
   expect(thoughts().filter(item => item.kind === 'text' && item.reasoning)).toHaveLength(1);
+});
+
+test('a window landing mid-run leaves the bubble it carries once', () => {
+  streamedTogether();
+  chatStore.handleSyncResult(T, pageUnderOtherId, 'head', 'head', true, undefined, false, true, 10);
+
+  expect(buildRows(chatStore.getItems(T)).map(labelOfRow)).toEqual(['i:u1', 'g[page-answer~reasoning]', 'i:page-answer']);
+});
+
+test('a delta landing mid-run leaves the bubble it carries once', () => {
+  streamedTogether();
+  chatStore.handleSyncResult(T, pageUnderOtherId, 'head', 'head', true);
+
+  expect(buildRows(chatStore.getItems(T)).map(labelOfRow)).toEqual(['i:u1', 'g[page-answer~reasoning]', 'i:page-answer']);
+});
+
+test('prose still growing is not a copy of the page', () => {
+  streamedTogether();
+  chatStore.handleSyncResult(
+    T,
+    [
+      pageUnderOtherId[0]!,
+      { role: 'assistant', id: 'page-answer', ts: '2026-01-01T00:00:01.000Z', text: 'la reponse, encore', reasoning: 'et le raisonnement', run: runMeta },
+    ] as HistoryEntry[],
+    'head',
+    'head',
+    true,
+  );
+
+  const labels = buildRows(chatStore.getItems(T)).map(labelOfRow);
+  expect(labels).toContain('i:live-answer');
+  expect(labels).toContain('i:page-answer');
 });
 
 test('a thought the page does not carry is the only record of it, and stays', () => {
