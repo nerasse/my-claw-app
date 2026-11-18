@@ -20,7 +20,7 @@ beforeEach(() => {
 describe('prefs.hydrate', () => {
   test('falls back to defaults when nothing is stored: a new install has no address', async () => {
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeId: 'sable', customTheme: { light: {}, dark: {} }, themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, docFontScale: 1, panes: '', rightPane: '' });
+    expect(loaded).toEqual({ themeId: 'sable', customTheme: { light: {}, dark: {} }, themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], dismissKeyboardOnSend: true, playbackRate: 1, docFontScale: 1, panes: '', rightPane: '' });
     expect(DEFAULT_SERVER_URL).toBe('');
     expect(bridge.prefsSet).not.toHaveBeenCalled();
     expect(prefs.isHydrated()).toBe(true);
@@ -29,8 +29,16 @@ describe('prefs.hydrate', () => {
   test('ignores a corrupted theme mode and a blank url', async () => {
     bridge.prefsGetAll.mockResolvedValueOnce({ themeMode: 'neon', themeId: 'not-a-theme', serverUrl: '   ', lastThreadId: '' });
     const loaded = await prefs.hydrate();
-    expect(loaded).toEqual({ themeId: 'sable', customTheme: { light: {}, dark: {} }, themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], playbackRate: 1, docFontScale: 1, panes: '', rightPane: '' });
+    expect(loaded).toEqual({ themeId: 'sable', customTheme: { light: {}, dark: {} }, themeMode: 'system', serverUrl: '', lastThreadId: null, updateOnMobileData: false, chatFontScale: 1, collapsedFolders: [], setupSkipped: [], dismissKeyboardOnSend: true, playbackRate: 1, docFontScale: 1, panes: '', rightPane: '' });
     expect(bridge.prefsSet).not.toHaveBeenCalled();
+  });
+
+  test('the keyboard closes on send unless the device said otherwise', async () => {
+    // The setting arrived with the behaviour: a device that never stored it gets the behaviour,
+    // and only an explicit "false" takes it away.
+    await expect(prefs.hydrate()).resolves.toMatchObject({ dismissKeyboardOnSend: true });
+    bridge.prefsGetAll.mockResolvedValueOnce({ dismissKeyboardOnSend: 'false' });
+    await expect(prefs.hydrate()).resolves.toMatchObject({ dismissKeyboardOnSend: false });
   });
 
   test('reads back the folders that were folded away', async () => {

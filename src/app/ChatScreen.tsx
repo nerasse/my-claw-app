@@ -38,6 +38,7 @@ import { useCommands } from '../core/commands';
 import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
+import { prefs } from '../core/prefs';
 import { announceDraftFile, clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, forgetDraftFile, markDraftUploaded, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
@@ -954,6 +955,7 @@ export function ChatScreen({
       setAddressOverride(null);
       onSend(text, undefined, locationToSend);
     }
+    if (Platform.OS !== 'web' && prefs.get().dismissKeyboardOnSend) Keyboard.dismiss();
     consumeDraft();
   }, [attachments, consumeDraft, deviceInfo, discardComposer, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
 

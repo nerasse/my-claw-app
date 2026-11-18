@@ -31,6 +31,11 @@ export interface Prefs {
   collapsedFolders: string[];
   /** Setup steps the owner skipped on this device, by key: the assistant stops asking about them. */
   setupSkipped: string[];
+  /**
+   * Close the keyboard once a message is sent, so the answer gets the room it was covering.
+   * Mobile only, on by default: the composer is the last thing touched before reading.
+   */
+  dismissKeyboardOnSend: boolean;
   /** Audio playback speed, one of PLAYBACK_RATES: kept from one note to the next, like a podcast app. */
   playbackRate: number;
   /**
@@ -64,6 +69,7 @@ const DEFAULTS: Prefs = {
   chatFontScale: 1,
   collapsedFolders: [],
   setupSkipped: [],
+  dismissKeyboardOnSend: true,
   playbackRate: 1,
   docFontScale: 1,
   panes: '',
@@ -186,6 +192,9 @@ class PrefsStore {
         chatFontScale: clampChatScale(Number(raw.chatFontScale)),
         collapsedFolders: parseCollapsedFolders(raw.collapsedFolders),
         setupSkipped: parseCollapsedFolders(raw.setupSkipped),
+        // Absent means on: the setting arrived with the behaviour, and a device that never saw it
+        // must still get what its owner asked for.
+        dismissKeyboardOnSend: raw.dismissKeyboardOnSend !== 'false',
         playbackRate: parsePlaybackRate(raw.playbackRate),
         docFontScale: parseDocScale(raw.docFontScale),
         panes: raw.panes ?? '',

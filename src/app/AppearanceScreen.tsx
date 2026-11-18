@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Switch, Text, View } from 'react-native';
+import { Platform, Pressable, Switch, Text, View } from 'react-native';
 import type { UiPrefsResultFrame } from '../core/protocol';
 import type { ThemeMode } from '../core/prefs';
 import { CheckIcon } from '../components/icons';
@@ -71,6 +71,8 @@ export function AppearanceScreen({
   onThemeModeChange,
   chatFontScale,
   onChatFontScaleChange,
+  dismissKeyboardOnSend,
+  onDismissKeyboardOnSendChange,
   uiPrefs,
   onUiPrefsChange,
   onBack,
@@ -85,6 +87,9 @@ export function AppearanceScreen({
   /** Thread typography scale: 1 = the design sizes. Live, so the picker shows the current one. */
   chatFontScale: number;
   onChatFontScaleChange: (scale: number) => void;
+  /** Close the keyboard once a message is sent: the answer gets the room it was covering. */
+  dismissKeyboardOnSend: boolean;
+  onDismissKeyboardOnSendChange: (on: boolean) => void;
   /** Server-owned display prefs; null until uiPrefs.get is answered. */
   uiPrefs: UiPrefsResultFrame | null;
   onUiPrefsChange: (prefs: { expandTools?: boolean; expandReasoning?: boolean }) => void;
@@ -200,6 +205,25 @@ export function AppearanceScreen({
           {`messages, tools and reasoning · ${Math.round(scaleFont(font.body, chatFontScale))}pt body`}
         </Text>
       </Section>
+
+      {/* A phone's keyboard covers half the answer it was used to ask for. A keyboard has no
+          meaning on the web, so the switch is not drawn there. */}
+      {Platform.OS !== 'web' ? (
+        <Section title="composer">
+          <View style={styles.switchRow}>
+            <View style={styles.switchLabel}>
+              <Text style={styles.switchTitle}>Close the keyboard on send</Text>
+              <Text style={styles.hint}>off: the field keeps the caret for the next message</Text>
+            </View>
+            <Switch
+              value={dismissKeyboardOnSend}
+              onValueChange={onDismissKeyboardOnSendChange}
+              accessibilityLabel="Close the keyboard on send"
+              accessibilityRole="switch"
+            />
+          </View>
+        </Section>
+      ) : null}
 
       <Section title="folding">
         <View style={styles.switchRow}>

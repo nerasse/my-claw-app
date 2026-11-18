@@ -785,6 +785,13 @@ export function AppShell(): React.JSX.Element {
     prefs.set('chatFontScale', scale);
     setChatFontScale(scale);
   }, []);
+  /** Whether the keyboard closes on send; read here so the switch shows what the composer does. */
+  const [dismissKeyboardOnSend, setDismissKeyboardOnSend] = useState(prefs.get().dismissKeyboardOnSend);
+  useEffect(() => {
+    const apply = () => setDismissKeyboardOnSend(prefs.get().dismissKeyboardOnSend);
+    apply();
+    return prefs.subscribe(apply);
+  }, []);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<SessionFileMeta | null>(null);
@@ -4604,6 +4611,11 @@ export function AppShell(): React.JSX.Element {
                 onThemeModeChange={themeControl.setMode}
                 chatFontScale={chatFontScale}
                 onChatFontScaleChange={changeChatFontScale}
+                dismissKeyboardOnSend={dismissKeyboardOnSend}
+                onDismissKeyboardOnSendChange={value => {
+                  prefs.set('dismissKeyboardOnSend', value);
+                  setDismissKeyboardOnSend(value);
+                }}
                 uiPrefs={uiPrefs}
                 onUiPrefsChange={changeUiPrefs}
                 onBack={() => setSettingsPage(parentOf('appearance'))}
