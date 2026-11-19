@@ -388,18 +388,30 @@ export function ChatScreen({
    * `scrollToEnd`, which aims at an estimate built from the average cell height and stops short of
    * it: on a thread of two-line turns the last answer stayed clipped under the composer.
    */
+  /**
+   * Positions we asked the list for, whose own scroll event has not arrived yet.
+   *
+   * On the web "the reader moved up" is inferred from the offset: there is no gesture to listen to
+   * on a scrollbar (`threadScroll.ts`). A list still measuring its rows shrinks the content under a
+   * scroll we asked for, the browser clamps the target, and the event that follows reads as a hand
+   * that never touched anything -- the pin was dropped while the thread was opening, and it stayed
+   * short of its last message (owner, 2026-11-19: "quand j'ouvre la session je suis pas tout en
+   * bas"). Counting our own scrolls is what tells the two apart.
+   */
+  const ownScrolls = useRef(0);
+  const scrollTo = useCallback((offset: number, animated: boolean) => {
+    ownScrolls.current += 1;
+    listRef.current?.scrollToOffset({ offset, animated });
+  }, []);
   const scrollToNewest = useCallback(
     (animated: boolean) => {
       if (inverted) {
-        listRef.current?.scrollToOffset({ offset: 0, animated });
+        scrollTo(0, animated);
         return;
       }
-      listRef.current?.scrollToOffset({
-        offset: Math.max(contentRef.current - viewportRef.current, 0),
-        animated,
-      });
+      scrollTo(Math.max(contentRef.current - viewportRef.current, 0), animated);
     },
-    [inverted],
+    [inverted, scrollTo],
   );
   /** Where the list is, because the reveal has to know what it is lifting from. */
   const offsetRef = useRef(0);
@@ -1631,13 +1643,17 @@ export function ChatScreen({
       const offset = contentOffset.y;
       const movedUp = offset < offsetRef.current;
       offsetRef.current = offset;
+      // One of our own scrolls answering with an upward offset is the list shrinking under us.
+      // Only a move nobody asked for is a hand.
+      const ours = ownScrolls.current > 0;
+      if (ours) ownScrolls.current -= 1;
       const near = nearNewest(
         { offset, viewport: layoutMeasurement.height, content: contentSize.height },
         inverted,
       );
       if (!inverted) {
         const anchor = prependAnchor.current;
-        if (movedUp) {
+        if (movedUp && !ours) {
           // A hand on the wheel ends the compensation: the reader has taken the position over, and
           // what they are looking at now is where they want to be.
           prependAnchor.current = null;
@@ -1647,7 +1663,7 @@ export function ChatScreen({
           // being read off its line. Hold it, on every scroll event rather than on the content
           // size alone: the growth arrives in steps hundreds of milliseconds apart, and between two
           // of them the reader would be left looking at the older page they did not ask to read.
-          listRef.current?.scrollToOffset({ offset: anchor.offset, animated: false });
+          scrollTo(anchor.offset, false);
         }
         if (near && !followingRef.current) followNewest(true);
       }
@@ -1659,7 +1675,7 @@ export function ChatScreen({
       // that is what keeps a long session light without ever taking a visible bubble away.
       chatStore.setTrimAllowed(threadId, atEnd);
     },
-    [atBottom, followNewest, inverted, threadId],
+    [atBottom, followNewest, inverted, scrollTo, threadId],
   );
   /**
    * A hand left the screen, and that is the only thing that decides whether the reader follows.
@@ -1713,14 +1729,14 @@ export function ChatScreen({
         if (shift > 0) {
           anchor.content = content;
           anchor.offset += shift;
-          listRef.current?.scrollToOffset({ offset: anchor.offset, animated: false });
+          scrollTo(anchor.offset, false);
         }
         return;
       }
       prependAnchor.current = null;
       if (followingRef.current) scrollToNewest(false);
     },
-    [clearSettleTimer, endSettled, inverted, scrollToNewest],
+    [clearSettleTimer, endSettled, inverted, scrollTo, scrollToNewest],
   );
 
   /**
