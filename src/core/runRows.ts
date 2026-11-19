@@ -637,20 +637,39 @@ function rowsOf(items: ChatItem[], compactionBefore?: string): ChatRow[] {
 function groupLooseThoughts(rows: ChatRow[], hasRuns: boolean): ChatRow[] {
   if (!hasRuns) return rows;
   const out: ChatRow[] = [];
-  const isThought = (row: ChatRow | undefined): row is Extract<ChatRow, { kind: 'item' }> =>
-    row?.kind === 'item' && isThoughtOnly(row.item);
+  /**
+   * The thinking a row stands for, when a thought is all it holds.
+   *
+   * Two shapes reach here: a bare thought row, and the group `rowsOf` opened around one when no
+   * fold was open to take it. A group of one thought is not a group -- it draws a header for a
+   * single line -- so both are decided the same way.
+   */
+  const loneThoughtOf = (row: ChatRow | undefined): Extract<ChatItem, { kind: 'text' }> | undefined => {
+    if (row?.kind === 'item' && isThoughtOnly(row.item)) return row.item;
+    if (row?.kind === 'group' && row.items.length === 1 && isThoughtOnly(row.items[0]!)) {
+      return row.items[0] as Extract<ChatItem, { kind: 'text' }>;
+    }
+    return undefined;
+  };
   for (const row of rows) {
-    if (!isThought(row)) {
+    const thought = loneThoughtOf(row);
+    if (!thought) {
       out.push(row);
       continue;
     }
     const previous = out[out.length - 1];
-    const run = row.item.run;
+    const run = thought.run;
     if (previous?.kind === 'group' && (run === undefined || previous.run.id === run.id)) {
-      out[out.length - 1] = { ...previous, items: [...previous.items, row.item] };
+      out[out.length - 1] = { ...previous, items: [...previous.items, thought] };
       continue;
     }
-    out.push({ kind: 'group', run: run ?? loneThoughts(row.item), items: [row.item] });
+    // A run that travelled folded already holds this thought: the folded row *is* that run's work,
+    // and expanding it hands the thought back with the rest. Drawn beside it instead, the answer's
+    // thinking stood as a bare Reasoning line between the fold and the answer, on no spine and with
+    // no dot (owner, 2026-11-19: "il y a encore les reasoning qui ne se groupe pas et qui n'ont pas
+    // de dot").
+    if (previous?.kind === 'folded' && run !== undefined && previous.run.id === run.id) continue;
+    out.push({ kind: 'group', run: run ?? loneThoughts(thought), items: [thought] });
   }
   return out;
 }

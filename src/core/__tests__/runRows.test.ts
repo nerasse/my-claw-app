@@ -62,6 +62,26 @@ const labelOfRow = (row: ChatRow): string => {
   return `${row.item.id}${row.foot ? '+foot' : ''}`;
 };
 
+describe('a thought whose run travelled folded', () => {
+  /**
+   * The owner, 2026-11-19, mid-run: `10 steps · 8 shell · 2 thoughts`, then a bare `Reasoning` line,
+   * then the answer -- the thought of the answer, drawn beside the fold instead of inside it. The
+   * page folded that run, so its work (this thought included) comes back when the row is expanded;
+   * the split thinking of the answer has no business standing there alone, on no spine and with no
+   * dot of its own.
+   */
+  test('is not drawn beside the fold: the fold already holds it', () => {
+    const rows = buildRows([userText('u'), folded('f1', 'r1'), agentText('a1', 'Tout est vert.', 'r1', { reasoning: 'je regarde' })]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12', 'a1+foot']);
+  });
+
+  test('a thought of another run still opens its own fold', () => {
+    // The rule is about *that* run being folded, not about any folded row above.
+    const rows = buildRows([userText('u'), folded('f1', 'r1'), agentText('th2', '', 'r2', { reasoning: 'autre pensee' })]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12+foot', 'g:r2+foot']);
+  });
+});
+
 describe('buildRows', () => {
   test('every message stays, and the work folds between two of them', () => {
     // The owner's rule (2026-09-17): a message is what the reader follows, and what lies between
