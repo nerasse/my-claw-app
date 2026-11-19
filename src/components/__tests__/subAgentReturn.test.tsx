@@ -13,6 +13,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import { ThemeContext } from '../../theme';
 import { darkPalette } from '../../theme/palettes';
 import { SubAgentReturn } from '../SubAgentReturn';
+import { AgentIcon, BrowserIcon } from '../icons';
 import { chatStore, type TextItem } from '../../core/chat';
 import { isOwnerMessage } from '../../core/runRows';
 import { returnPreview, returnWord } from '../../core/subagentReturn';
@@ -129,6 +130,47 @@ test('the door into the child is drawn, in the launch card\'s blue, and opens it
   expect(icon?.props.fill).toBe(darkPalette.link);
   await ReactTestRenderer.act(async () => button!.props.onPress());
   expect(onOpenAgent).toHaveBeenCalled();
+});
+
+/**
+ * Every outcome the child can hand back, in every mark: returned, failed, stopped. The door and
+ * the mark are about *which* agent wrote it, never about *how* it went -- only the word at the end
+ * of the line moves with the outcome, and a failed one takes the danger ink (owner, 2026-11-19:
+ * "tu as check aussi les retour normaux et les retour en erreur ???").
+ */
+it.each([
+  ['complete' as const, 'returned', false],
+  ['error' as const, 'failed', true],
+  ['stopped' as const, 'stopped', false],
+])('a %s return keeps its door and its mark', async (status, word, bad) => {
+  const onOpenAgent = jest.fn();
+  const tree = await render(
+    returnItem({ from: { id: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status } }),
+    { onOpenAgent },
+  );
+  expect(textsOf(tree)).toContain(word);
+  expect(tree.root.findAllByType(AgentIcon)).toHaveLength(1);
+  const [button] = tree.root.findAll(
+    node => node.props.accessibilityLabel === 'Open sub-agent eyes' && typeof node.props.onPress === 'function',
+    { deep: true },
+  );
+  expect(button).toBeDefined();
+  await ReactTestRenderer.act(async () => button!.props.onPress());
+  expect(onOpenAgent).toHaveBeenCalled();
+
+  const stateText = tree.root.findAllByType(Text).find(node => node.props.children === word);
+  const style = Array.isArray(stateText?.props.style) ? Object.assign({}, ...stateText!.props.style) : stateText?.props.style;
+  expect((style as { color?: string } | undefined)?.color).toBe(bad ? darkPalette.danger : darkPalette.textMeta);
+});
+
+test('a browser task reports under the web ring, whatever its outcome', async () => {
+  const tree = await render(
+    returnItem({ from: { id: 'subagent/browser-3f2a', label: 'browser-3f2a', kind: 'return', status: 'error' } }),
+    { mark: 'browser' as const },
+  );
+  expect(tree.root.findAllByType(BrowserIcon)).toHaveLength(1);
+  expect(tree.root.findAllByType(AgentIcon)).toHaveLength(0);
+  expect(textsOf(tree)).toContain('failed');
 });
 
 test('no door when the child has nowhere to go', async () => {
