@@ -1,4 +1,5 @@
-import { AgentIcon, BrowserIcon, OpenInNewIcon } from '../components/icons';
+import { AgentIcon, BrowserIcon } from '../components/icons';
+import { CardDoor } from './CardDoor';
 import React, { useState, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
@@ -154,14 +155,7 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
               the toggle's own press target, so a screen reader announces it as the one control it
               is and it cannot steal the toggle's touch. */}
           {subagent && onOpen ? (
-            <Pressable
-              style={styles.door}
-              onPress={() => onOpen(item.id)}
-              accessibilityRole="button"
-              accessibilityLabel={`Open sub-agent ${subagent.label}, ${subagent.status}`}
-              hitSlop={8}>
-              <OpenInNewIcon size={13} tone="link" />
-            </Pressable>
+            <CardDoor label={`Open sub-agent ${subagent.label}, ${subagent.status}`} onPress={() => onOpen(item.id)} />
           ) : null}
           {what ? (
             <Text style={styles.kind} numberOfLines={1}>
@@ -265,12 +259,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /** A word, not a verdict: grey says the launch happened, danger says it did not. */
   state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   stateBad: { color: palette.danger },
-  /**
-   * The way in: an icon beside the name it opens, inside the head row, not a line of its own and
-   * not a slot at the end -- there it moved the word that closes the line off the column every
-   * duration above it stops on.
-   */
-  door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   body: { gap: 3, paddingBottom: space.xxs, paddingLeft: 0 },
   label: {
     fontSize: scaleFont(font.micro, scale),

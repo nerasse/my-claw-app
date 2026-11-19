@@ -255,12 +255,11 @@ it('closes itself from the child lifecycle when its own frame never arrives', ()
 
 /** The mark says what kind of card this is, before the name says which agent it is. */
 it.each([
-  ['started', makeItem(), AgentIcon],
-  ['stopped', makeItem({ interrupted: true }), AgentIcon],
-  ['refused', makeItem({ ok: false }), AgentIcon],
-])('a %s card wears the suitcase', (_label, item, icon) => {
-  const tree = render(item, DOOR);
-  expect(tree.root.findAllByType(icon as typeof AgentIcon).length).toBeGreaterThan(0);
+  ['started', makeItem()],
+  ['stopped', makeItem({ interrupted: true })],
+  ['refused', makeItem({ ok: false })],
+])('a %s card wears the suitcase', (_label, item) => {
+  expect(render(item, DOOR).root.findAllByType(AgentIcon)).toHaveLength(1);
 });
 
 it('a delegated browser task wears the web ring instead', () => {

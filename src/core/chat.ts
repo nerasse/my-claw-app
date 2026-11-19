@@ -51,8 +51,8 @@ export interface TextItem {
    * bubble says so in a header and never claims the owner's voice.
    */
   from?: {
-    /** The child that wrote it, for a sub-agent's return: what its card's door opens. */
-    id?: string;
+    /** The child that wrote it, on a sub-agent's return: the agent its card's door opens. */
+    agentId?: string;
     label: string;
     kind?: 'send' | 'return' | 'cron';
     status?: string;
@@ -399,7 +399,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.from
         ? {
             from: {
-              ...(entry.from.sessionId ? { id: entry.from.sessionId } : {}),
+              ...(entry.from.sessionId ? { agentId: entry.from.sessionId } : {}),
               label: entry.from.label,
               ...(entry.from.kind ? { kind: entry.from.kind } : {}),
               ...(entry.from.status ? { status: entry.from.status } : {}),
@@ -541,25 +541,26 @@ function mergeLocalSurvivors(base: ChatItem[], live: ChatItem[]): ChatItem[] {
  * screen never matches a phase verbatim, so a turn in flight is never mistaken for a copy.
  */
 function withoutRepeatedPhases(items: ChatItem[], incoming: readonly ChatItem[]): ChatItem[] {
-  const phases = incoming.filter(
-    (item): item is TextItem => item.kind === 'text' && item.role === 'agent' && Boolean(item.reasoning?.trim()),
-  );
+  const phases = incoming
+    .filter((item): item is TextItem => item.kind === 'text' && item.role === 'agent' && Boolean(item.reasoning?.trim()))
+    .map(phase => ({ thinking: phase.reasoning!.trim(), prose: phase.text.trim() }));
   if (phases.length === 0) return items;
-  const carriedIds = new Set(incoming.map(phase => phase.id));
-  const thinking = new Set(phases.map(phase => phase.reasoning!.trim()));
-  const whole = new Set(
-    phases
-      .filter(phase => phase.text.trim() !== '')
-      .map(phase => `${phase.reasoning!.trim()}\u0000${phase.text.trim()}`),
-  );
+  const carriedIds = new Set(incoming.map(item => item.id));
+
+  const saysWhatAPhaseSays = (thinking: string, prose: string): boolean =>
+    phases.some(phase =>
+      phase.thinking === thinking && (prose === '' || phase.prose === prose),
+    );
+
   return items.filter(item => {
     if (item.kind !== 'text' || item.role !== 'agent') return true;
     if (carriedIds.has(item.id)) return true;
-    const thought = item.reasoning?.trim();
-    if (!thought) return true;
-    const prose = item.text.trim();
-    if (prose === '') return (item.attachments?.length ?? 0) > 0 || !thinking.has(thought);
-    return !whole.has(`${thought}\u0000${prose}`);
+    const thinking = item.reasoning?.trim();
+    if (!thinking) return true;
+    // A bubble with pictures says more than a phase holding only thinking: it stays whatever the
+    // words are.
+    if (item.text.trim() === '' && (item.attachments?.length ?? 0) > 0) return true;
+    return !saysWhatAPhaseSays(thinking, item.text.trim());
   });
 }
 
@@ -1741,7 +1742,7 @@ class ChatStoreImpl {
       text,
       attachments: [],
       streaming: false,
-      from: { ...(subagentId ? { id: subagentId } : {}), label, kind: 'return', status },
+      from: { ...(subagentId ? { agentId: subagentId } : {}), label, kind: 'return', status },
       ts: Date.now(),
     });
   }

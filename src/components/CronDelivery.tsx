@@ -3,7 +3,8 @@ import { Pressable, Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { returnPreview } from '../core/subagentReturn';
 import { AgentMarkdown } from './AgentMarkdown';
-import { CalendarIcon, OpenInNewIcon } from './icons';
+import { CalendarIcon } from './icons';
+import { CardDoor } from './CardDoor';
 import { AttachmentList } from './AttachmentList';
 import { BlockActions } from './BlockActions';
 import { ROW_GAP, spine } from './spine';
@@ -83,14 +84,7 @@ export function CronDelivery({
             gesture a sub-agent's card offers on the agent it started. Outside the toggle's press
             target, so a screen reader announces it as the one control it is. */}
         {runId && onOpenRun ? (
-          <Pressable
-            style={styles.door}
-            onPress={() => onOpenRun(runId)}
-            accessibilityRole="button"
-            accessibilityLabel={`Open the run of ${label}`}
-            hitSlop={8}>
-            <OpenInNewIcon size={13} tone="link" />
-          </Pressable>
+          <CardDoor label={`Open the run of ${label}`} onPress={() => onOpenRun(runId)} />
         ) : null}
         {cadence ? (
           <Text style={styles.cadence} numberOfLines={1}>
@@ -154,7 +148,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   /** How often it runs: the second fact, one step quieter than the name. */
   cadence: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, flexShrink: 0 },
   spacer: { flex: 1 },
-  door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   stateBad: { color: palette.danger },
   preview: {

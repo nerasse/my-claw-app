@@ -118,7 +118,7 @@ test('the door into the child is drawn, in the launch card\'s blue, and opens it
   // A stopped card was the one the owner came back to, and it offered no way in at all
   // (2026-11-19): the report carries the child's id now, so the same door a launch has is drawn.
   const onOpenAgent = jest.fn();
-  const tree = await render(returnItem({ from: { id: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status: 'stopped' } }), {
+  const tree = await render(returnItem({ from: { agentId: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status: 'stopped' } }), {
     onOpenAgent,
   });
   const [button] = tree.root.findAll(
@@ -145,7 +145,7 @@ it.each([
 ])('a %s return keeps its door and its mark', async (status, word, bad) => {
   const onOpenAgent = jest.fn();
   const tree = await render(
-    returnItem({ from: { id: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status } }),
+    returnItem({ from: { agentId: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status } }),
     { onOpenAgent },
   );
   expect(textsOf(tree)).toContain(word);
@@ -159,13 +159,15 @@ it.each([
   expect(onOpenAgent).toHaveBeenCalled();
 
   const stateText = tree.root.findAllByType(Text).find(node => node.props.children === word);
-  const style = Array.isArray(stateText?.props.style) ? Object.assign({}, ...stateText!.props.style) : stateText?.props.style;
+  const style = Array.isArray(stateText?.props.style)
+    ? Object.assign({}, ...stateText?.props.style)
+    : stateText?.props.style;
   expect((style as { color?: string } | undefined)?.color).toBe(bad ? darkPalette.danger : darkPalette.textMeta);
 });
 
 test('a browser task reports under the web ring, whatever its outcome', async () => {
   const tree = await render(
-    returnItem({ from: { id: 'subagent/browser-3f2a', label: 'browser-3f2a', kind: 'return', status: 'error' } }),
+    returnItem({ from: { agentId: 'subagent/browser-3f2a', label: 'browser-3f2a', kind: 'return', status: 'error' } }),
     { mark: 'browser' as const },
   );
   expect(tree.root.findAllByType(BrowserIcon)).toHaveLength(1);
@@ -198,7 +200,7 @@ test('the store draws a live return as a turn of its own, once', () => {
   const item = items[0]!;
   expect(item.kind).toBe('text');
   if (item.kind !== 'text') throw new Error('expected a text item');
-  expect(item.from).toEqual({ id: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status: 'complete' });
+  expect(item.from).toEqual({ agentId: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status: 'complete' });
   expect(item.text).toBe('the report');
 });
 
@@ -217,5 +219,5 @@ test('a return replayed from history keeps the child it came from', () => {
   const item = chatStore.getItems('t2')[0]!;
   expect(item.kind).toBe('text');
   if (item.kind !== 'text') throw new Error('expected a text item');
-  expect(item.from?.id).toBe('subagent/eyes-1a2b');
+  expect(item.from?.agentId).toBe('subagent/eyes-1a2b');
 });

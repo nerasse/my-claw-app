@@ -1364,16 +1364,17 @@ export function ChatScreen({
         );
       }
       if (item.kind === 'text' && isSubAgentReturn(item)) {
+        // The child this report came from, when the roster still reaches it: it decides both the
+        // door and the mark, and it is one lookup so the two can never disagree.
+        const child = item.from?.agentId ? subagentsById?.get(item.from.agentId) : undefined;
         return (
           <View style={toolColumn}>
             <SubAgentReturn
               item={item}
               mediaBase={mediaBase}
               deviceInfo={deviceInfo}
-              {...(item.from?.id && subagentsById?.has(item.from.id) && onOpenSubAgentById
-                ? { onOpenAgent: () => onOpenSubAgentById(item.from!.id!) }
-                : {})}
-              {...(item.from?.id && subagentsById?.get(item.from.id)?.type === 'browser' ? { mark: 'browser' as const } : {})}
+              {...(child && onOpenSubAgentById ? { onOpenAgent: () => onOpenSubAgentById(child.id) } : {})}
+              {...(child?.type === 'browser' ? { mark: 'browser' as const } : {})}
               onOpenAttachment={openAttachment}
               onOpenMedia={openMedia}
             />

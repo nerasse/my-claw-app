@@ -273,15 +273,16 @@ export function agentOfCard(
   // `send` names its target by id, `spawn` by display name: a send card has no `name` argument at
   // all, so without the id lookup it would never find its door.
   const addressed = typeof card.args.id === 'string' ? card.args.id : '';
+  // The lifecycle's name comes last, and it is the one that saves a one-shot: it is spawned with no
+  // `name` argument (the server generates `run-<uuid>`), and the `subagentId` it was given lives
+  // only in the card's live state, which no page carries -- so after a reload every lookup above
+  // missed and the stopped card had no door at all, which is exactly the card the owner reopens
+  // (2026-11-19).
   return (
-    (card.subagentId ? byId.get(card.subagentId) : undefined) ??
-    (addressed ? byId.get(addressed) : undefined) ??
-    (claimed ? byName.get(claimed) : undefined) ??
-    // The lifecycle's own name, last. A one-shot is spawned with no `name` argument -- the server
-    // generates `run-<uuid>` -- and the `subagentId` it was given lives only in the card's live
-    // state, which no page carries. After a reload the three lookups above all missed and the
-    // stopped card had no door at all, which is exactly the card the owner goes back to (2026-11-19).
-    (card.displayName ? byName.get(card.displayName) : undefined)
+    byId.get(card.subagentId ?? '') ??
+    byId.get(addressed) ??
+    byName.get(claimed) ??
+    byName.get(card.displayName ?? '')
   );
 }
 

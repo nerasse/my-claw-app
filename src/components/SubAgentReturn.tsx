@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { returnPreview, returnWord } from '../core/subagentReturn';
-import { AgentIcon, BrowserIcon, OpenInNewIcon } from './icons';
+import { AgentIcon, BrowserIcon } from './icons';
+import { CardDoor } from './CardDoor';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentList } from './AttachmentList';
 import { BlockActions } from './BlockActions';
@@ -84,16 +85,7 @@ export function SubAgentReturn({
         </Text>
         {/* The door, right after the name it opens, in the launch card's own blue. Outside the
             toggle's press target, so a screen reader announces it as the one control it is. */}
-        {onOpenAgent ? (
-          <Pressable
-            style={styles.door}
-            onPress={onOpenAgent}
-            accessibilityRole="button"
-            accessibilityLabel={`Open sub-agent ${label || 'sub-agent'}`}
-            hitSlop={8}>
-            <OpenInNewIcon size={13} tone="link" />
-          </Pressable>
-        ) : null}
+        {onOpenAgent ? <CardDoor label={`Open sub-agent ${label || 'sub-agent'}`} onPress={onOpenAgent} /> : null}
         <View style={styles.spacer} />
         <Text style={[styles.state, failed ? styles.stateBad : null]} numberOfLines={1}>
           {word}
@@ -158,8 +150,6 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
   /** Who reported, in the launch card's own face: an agent has a name, a command has a typeface. */
   name: { fontSize: scaleFont(font.meta, scale), fontWeight: '700' as const, color: palette.text, flexShrink: 1 },
-  /** The way in: the launch card's own slot and metrics, right after the name it opens. */
-  door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   spacer: { flex: 1 },
   state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   stateBad: { color: palette.danger },
