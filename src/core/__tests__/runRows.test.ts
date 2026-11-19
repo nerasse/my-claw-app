@@ -65,20 +65,27 @@ const labelOfRow = (row: ChatRow): string => {
 describe('a thought whose run travelled folded', () => {
   /**
    * The owner, 2026-11-19, mid-run: `10 steps · 8 shell · 2 thoughts`, then a bare `Reasoning` line,
-   * then the answer -- the thought of the answer, drawn beside the fold instead of inside it. The
-   * page folded that run, so its work (this thought included) comes back when the row is expanded;
-   * the split thinking of the answer has no business standing there alone, on no spine and with no
-   * dot of its own.
+   * then the answer. The thought is the answer's own, and the answer is what cut the fold, so the
+   * fold does not carry it. It goes back onto the message it thinks for, where the owner asked for
+   * it in the first place (2026-11-13: "on laisse le dernier reasoning avec le message").
    */
-  test('is not drawn beside the fold: the fold already holds it', () => {
+  test('goes back onto the message it thinks for, instead of standing beside the fold', () => {
     const rows = buildRows([userText('u'), folded('f1', 'r1'), agentText('a1', 'Tout est vert.', 'r1', { reasoning: 'je regarde' })]);
     expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12', 'a1+foot']);
+    const answer = rows[2]!.kind === 'item' ? (rows[2] as { item: ChatItem }).item : undefined;
+    expect(answer?.kind === 'text' ? answer.reasoning : undefined).toBe('je regarde');
   });
 
   test('a thought of another run still opens its own fold', () => {
     // The rule is about *that* run being folded, not about any folded row above.
     const rows = buildRows([userText('u'), folded('f1', 'r1'), agentText('th2', '', 'r2', { reasoning: 'autre pensee' })]);
     expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12+foot', 'g:r2+foot']);
+  });
+
+  test('a thought with no message at its heels is not left as a bare line either', () => {
+    // Nothing to hand it back to: it is the fold's, and the fold is what draws it.
+    const rows = buildRows([userText('u'), folded('f1', 'r1'), agentText('th1', '', 'r1', { reasoning: 'orpheline' })]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12+foot']);
   });
 });
 

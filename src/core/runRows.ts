@@ -651,7 +651,8 @@ function groupLooseThoughts(rows: ChatRow[], hasRuns: boolean): ChatRow[] {
     }
     return undefined;
   };
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
     const thought = loneThoughtOf(row);
     if (!thought) {
       out.push(row);
@@ -663,15 +664,38 @@ function groupLooseThoughts(rows: ChatRow[], hasRuns: boolean): ChatRow[] {
       out[out.length - 1] = { ...previous, items: [...previous.items, thought] };
       continue;
     }
-    // A run that travelled folded already holds this thought: the folded row *is* that run's work,
-    // and expanding it hands the thought back with the rest. Drawn beside it instead, the answer's
-    // thinking stood as a bare Reasoning line between the fold and the answer, on no spine and with
-    // no dot (owner, 2026-11-19: "il y a encore les reasoning qui ne se groupe pas et qui n'ont pas
-    // de dot").
-    if (previous?.kind === 'folded' && run !== undefined && previous.run.id === run.id) continue;
+    // A run that travelled folded cannot take it: the row stands for the run's work and holds no
+    // items, and the thought is the *answer's* -- the answer is what cut the fold, so the fold does
+    // not carry it either. Drawn beside the fold it was a bare `Reasoning` line, on no spine and
+    // with no dot (owner, 2026-11-19: "il y a encore les reasoning qui ne se groupe pas et qui
+    // n'ont pas de dot"), so it goes back onto the message it thinks for: the bubble draws its own
+    // reasoning, which is where the owner asked for it in the first place ("on laisse le dernier
+    // reasoning avec le message", 2026-11-13).
+    if (previous?.kind === 'folded' && run !== undefined && previous.run.id === run.id) {
+      const next = rows[i + 1];
+      const message = next?.kind === 'item' && thought.reasoningOf === next.item.id ? next.item : undefined;
+      if (message?.kind === 'text') {
+        out.push({ kind: 'item', item: { ...message, ...reasoningFieldsOf(thought) } });
+        i += 1;
+      }
+      continue;
+    }
     out.push({ kind: 'group', run: run ?? loneThoughts(thought), items: [thought] });
   }
   return out;
+}
+
+/** What a split thought took off its message, handed back: `splitReasoning` is the one that took it. */
+function reasoningFieldsOf(thought: Extract<ChatItem, { kind: 'text' }>): Partial<Extract<ChatItem, { kind: 'text' }>> {
+  const fields: Partial<Extract<ChatItem, { kind: 'text' }>> = {};
+  if (thought.reasoning !== undefined) fields.reasoning = thought.reasoning;
+  if (thought.reasoningChars !== undefined) fields.reasoningChars = thought.reasoningChars;
+  if (thought.reasoningTokens !== undefined) fields.reasoningTokens = thought.reasoningTokens;
+  if (thought.reasoningStartedAt !== undefined) fields.reasoningStartedAt = thought.reasoningStartedAt;
+  if (thought.reasoningMs !== undefined) fields.reasoningMs = thought.reasoningMs;
+  if (thought.waitMs !== undefined) fields.waitMs = thought.waitMs;
+  if (thought.waitingSince !== undefined) fields.waitingSince = thought.waitingSince;
+  return fields;
 }
 
 /**
