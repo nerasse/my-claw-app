@@ -51,6 +51,8 @@ export interface TextItem {
    * bubble says so in a header and never claims the owner's voice.
    */
   from?: {
+    /** The child that wrote it, for a sub-agent's return: what its card's door opens. */
+    id?: string;
     label: string;
     kind?: 'send' | 'return' | 'cron';
     status?: string;
@@ -397,6 +399,7 @@ function itemsOf(entries: HistoryEntry[]): ChatItem[] {
       ...(entry.from
         ? {
             from: {
+              ...(entry.from.sessionId ? { id: entry.from.sessionId } : {}),
               label: entry.from.label,
               ...(entry.from.kind ? { kind: entry.from.kind } : {}),
               ...(entry.from.status ? { status: entry.from.status } : {}),
@@ -1738,7 +1741,7 @@ class ChatStoreImpl {
       text,
       attachments: [],
       streaming: false,
-      from: { label, kind: 'return', status },
+      from: { ...(subagentId ? { id: subagentId } : {}), label, kind: 'return', status },
       ts: Date.now(),
     });
   }

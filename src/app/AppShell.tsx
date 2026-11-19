@@ -2143,6 +2143,22 @@ export function AppShell(): React.JSX.Element {
   // lifecycle state is already on the card, put there by the server's replay or by
   // `reconcileSpawnRoster`, so re-deriving it here was a second copy of the same match.
   const subagentDoors = useMemo(() => spawnDoorsOf(spawnCards, cardAgents), [spawnCards, cardAgents]);
+  /**
+   * The same roster, keyed by the child's own id: what a report card's door opens.
+   *
+   * A return carries the id of the agent that wrote it now (`from.id`), so the door no longer has
+   * to guess from a label. Built from the reachable agents, so a killed child offers nothing --
+   * the same rule as a launch card -- while a stopped one keeps its way in (owner, 2026-11-19).
+   */
+  const subagentsById = useMemo(() => new Map(cardAgents.map(agent => [agent.id, agent])), [cardAgents]);
+  const openSubAgentById = useCallback(
+    (subagentId: string) => {
+      const agent = subagentsById.get(subagentId);
+      if (!agent || !activeThread) return;
+      openSubAgent(agent, activeThread);
+    },
+    [subagentsById, activeThread, openSubAgent],
+  );
   const spawnLive = useMemo(() => spawnLiveOf(spawnCards), [spawnCards]);
 
   /**
@@ -4266,8 +4282,10 @@ export function AppShell(): React.JSX.Element {
             subagentCount={subagentCount}
             onAgentsPress={openAgentsDoor}
             subagentDoors={subagentDoors}
+            subagentsById={subagentsById}
             spawnLive={spawnLive}
             onOpenSubAgent={openSubAgentFromCard}
+            onOpenSubAgentById={openSubAgentById}
             onOpenCronRun={openCronRun}
             {...(subagentView
               ? {

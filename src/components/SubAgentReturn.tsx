@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { returnPreview, returnWord } from '../core/subagentReturn';
+import { OpenInNewIcon } from './icons';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentList } from './AttachmentList';
 import { BlockActions } from './BlockActions';
@@ -32,12 +33,21 @@ export function SubAgentReturn({
   item,
   mediaBase,
   deviceInfo,
+  onOpenAgent,
   onOpenAttachment,
   onOpenMedia,
 }: {
   item: TextItem;
   mediaBase: string;
   deviceInfo: DeviceInfo | null;
+  /**
+   * The way back into the child's own chat, when it still has one.
+   *
+   * Absent when the roster no longer lists it: a door that opens nothing is worse than no door.
+   * The same gesture, in the same blue, as the launch card that started it -- a report and its
+   * launch are one thing read at two moments (owner, 2026-11-19: a stopped card offered no way in).
+   */
+  onOpenAgent?: () => void;
   onOpenAttachment?: (
     kind: ViewerKind,
     target: { url: string; filename: string; sizeBytes?: number; kind?: FileKind },
@@ -68,6 +78,18 @@ export function SubAgentReturn({
         <Text style={styles.name} numberOfLines={1}>
           {label || 'sub-agent'}
         </Text>
+        {/* The door, right after the name it opens, in the launch card's own blue. Outside the
+            toggle's press target, so a screen reader announces it as the one control it is. */}
+        {onOpenAgent ? (
+          <Pressable
+            style={styles.door}
+            onPress={onOpenAgent}
+            accessibilityRole="button"
+            accessibilityLabel={`Open sub-agent ${label || 'sub-agent'}`}
+            hitSlop={8}>
+            <OpenInNewIcon size={13} tone="link" />
+          </Pressable>
+        ) : null}
         <View style={styles.spacer} />
         <Text style={[styles.state, failed ? styles.stateBad : null]} numberOfLines={1}>
           {word}
@@ -132,6 +154,8 @@ const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
   head: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP },
   /** Who reported, in the launch card's own face: an agent has a name, a command has a typeface. */
   name: { fontSize: scaleFont(font.meta, scale), fontWeight: '700' as const, color: palette.text, flexShrink: 1 },
+  /** The way in: the launch card's own slot and metrics, right after the name it opens. */
+  door: { paddingHorizontal: 2, alignItems: 'center' as const, justifyContent: 'center' as const },
   spacer: { flex: 1 },
   state: { flexShrink: 0, fontSize: scaleFont(font.micro, scale), color: palette.textMeta },
   stateBad: { color: palette.danger },

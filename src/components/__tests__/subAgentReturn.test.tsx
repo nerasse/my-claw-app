@@ -40,12 +40,12 @@ function returnItem(over: Partial<TextItem> = {}): TextItem {
   };
 }
 
-async function render(item: TextItem): Promise<ReactTestRenderer.ReactTestRenderer> {
+async function render(item: TextItem, props: Record<string, unknown> = {}): Promise<ReactTestRenderer.ReactTestRenderer> {
   let tree!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
     tree = ReactTestRenderer.create(
       <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
-        <SubAgentReturn item={item} mediaBase="" deviceInfo={null} />
+        <SubAgentReturn item={item} mediaBase="" deviceInfo={null} {...props} />
       </ThemeContext.Provider>,
     );
   });
@@ -113,6 +113,31 @@ test('a return is not something the owner typed', () => {
   expect(isOwnerMessage({ ...returnItem(), from: undefined } as TextItem)).toBe(true);
 });
 
+test('the door into the child is drawn, in the launch card\'s blue, and opens it', async () => {
+  // A stopped card was the one the owner came back to, and it offered no way in at all
+  // (2026-11-19): the report carries the child's id now, so the same door a launch has is drawn.
+  const onOpenAgent = jest.fn();
+  const tree = await render(returnItem({ from: { id: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status: 'stopped' } }), {
+    onOpenAgent,
+  });
+  const [button] = tree.root.findAll(
+    node => node.props.accessibilityLabel === 'Open sub-agent eyes' && typeof node.props.onPress === 'function',
+    { deep: true },
+  );
+  expect(button).toBeDefined();
+  const icon = button!.findAll(node => typeof node.props.d === 'string' && typeof node.props.fill === 'string')[0];
+  expect(icon?.props.fill).toBe(darkPalette.link);
+  await ReactTestRenderer.act(async () => button!.props.onPress());
+  expect(onOpenAgent).toHaveBeenCalled();
+});
+
+test('no door when the child has nowhere to go', async () => {
+  const tree = await render(returnItem());
+  expect(
+    tree.root.findAll(node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Open sub-agent ')),
+  ).toHaveLength(0);
+});
+
 test('the vocabulary is one word per outcome, and a preview is one line', () => {
   expect(returnWord('complete')).toBe('returned');
   expect(returnWord('error')).toBe('failed');
@@ -131,6 +156,24 @@ test('the store draws a live return as a turn of its own, once', () => {
   const item = items[0]!;
   expect(item.kind).toBe('text');
   if (item.kind !== 'text') throw new Error('expected a text item');
-  expect(item.from).toEqual({ label: 'eyes', kind: 'return', status: 'complete' });
+  expect(item.from).toEqual({ id: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status: 'complete' });
   expect(item.text).toBe('the report');
+});
+
+test('a return replayed from history keeps the child it came from', () => {
+  // The entry carries `from.sessionId`; dropping it on the way in left the replayed card with no
+  // door while the live one had one.
+  chatStore.seedHistory('t2', [
+    {
+      role: 'user',
+      id: 'ret-2',
+      ts: '2026-01-01T00:00:00.000Z',
+      text: 'the report',
+      from: { sessionId: 'subagent/eyes-1a2b', label: 'eyes', kind: 'return', status: 'stopped' },
+    },
+  ] as never);
+  const item = chatStore.getItems('t2')[0]!;
+  expect(item.kind).toBe('text');
+  if (item.kind !== 'text') throw new Error('expected a text item');
+  expect(item.from?.id).toBe('subagent/eyes-1a2b');
 });

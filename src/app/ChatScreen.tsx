@@ -155,8 +155,10 @@ export function ChatScreen({
   onAgentsPress,
   subagent,
   subagentDoors,
+  subagentsById,
   spawnLive,
   onOpenSubAgent,
+  onOpenSubAgentById,
   onOpenCronRun,
   onSubAgentMenu,
   onLoadOlder,
@@ -249,6 +251,14 @@ export function ChatScreen({
    * the roster, so a killed sub-agent stops offering a door instead of opening a dead thread.
    */
   subagentDoors: Map<string, { label: string; status: 'idle' | 'running'; model?: string; modelLive?: boolean }>;
+  /**
+   * The agents a report card can open, keyed by the child's own id (`from.id`). Built from the
+   * same roster as `subagentDoors`: a killed child stops offering a door rather than opening a
+   * dead thread, and a stopped one keeps it, which is the card the owner comes back to.
+   */
+  subagentsById?: Map<string, unknown>;
+  /** Opens a child by id, from a report card. */
+  onOpenSubAgentById?: (subagentId: string) => void;
   /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
   spawnLive?: Map<string, { subagentId: string; displayName: string; status: SpawnStatus }>;
   onOpenSubAgent?: (toolItemId: string) => void;
@@ -1360,6 +1370,9 @@ export function ChatScreen({
               item={item}
               mediaBase={mediaBase}
               deviceInfo={deviceInfo}
+              {...(item.from?.id && subagentsById?.has(item.from.id) && onOpenSubAgentById
+                ? { onOpenAgent: () => onOpenSubAgentById(item.from!.id!) }
+                : {})}
               onOpenAttachment={openAttachment}
               onOpenMedia={openMedia}
             />
@@ -1422,7 +1435,7 @@ export function ChatScreen({
         </View>
       );
     },
-    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onBubbleCopy, subagent, onResend, onOpenSubAgent, onOpenCronRun, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, spawnLive, threadId, uiPrefs],
+    [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onBubbleCopy, subagent, onResend, onOpenSubAgent, onOpenCronRun, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, subagentsById, onOpenSubAgentById, spawnLive, threadId, uiPrefs],
   );
 
   const renderRowContent = useCallback(

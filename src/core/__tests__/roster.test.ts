@@ -158,6 +158,18 @@ describe('spawnDoorsOf', () => {
     const doors = spawnDoorsOf([card({ subagentId: 'subagent/run-abcd' })], agents);
     expect(doors.get('t-call-1')?.label).toBe('run-abcd');
   });
+
+  it('finds a one-shot by the name its lifecycle carries when nothing else matches', () => {
+    // A one-shot is spawned with no `name` argument, and its `subagentId` lives only in the live
+    // state no page carries: after a reload the card had no door at all, and a stopped card is
+    // exactly the one the owner goes back to (2026-11-19).
+    const agents = [entry({ id: 'subagent/run-1a2b', displayName: 'run-1a2b' })];
+    const named = card({ args: { type: 'research', mode: 'run', task: 'creuse' }, displayName: 'run-1a2b' });
+    expect(spawnDoorsOf([named], agents).get('t-call-1')?.label).toBe('run-1a2b');
+    // Without it there is still nothing to open.
+    const anonymous = card({ args: { type: 'research', mode: 'run', task: 'creuse' } });
+    expect(spawnDoorsOf([anonymous], agents).size).toBe(0);
+  });
 });
 
 describe('spawnLiveOf', () => {
