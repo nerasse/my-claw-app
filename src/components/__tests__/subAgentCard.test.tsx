@@ -9,6 +9,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { SubAgentCard } from '../SubAgentCard';
+import { AgentIcon, BrowserIcon } from '../icons';
 import type { ToolItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
@@ -250,4 +251,20 @@ it('closes itself from the child lifecycle when its own frame never arrives', ()
   // `startToolCall` writes, and the outcome the call never got is not the launch's verdict.
   expect(texts(tree)).toContain('started');
   expect(texts(tree)).not.toContain('refused');
+});
+
+/** The mark says what kind of card this is, before the name says which agent it is. */
+it.each([
+  ['started', makeItem(), AgentIcon],
+  ['stopped', makeItem({ interrupted: true }), AgentIcon],
+  ['refused', makeItem({ ok: false }), AgentIcon],
+])('a %s card wears the suitcase', (_label, item, icon) => {
+  const tree = render(item, DOOR);
+  expect(tree.root.findAllByType(icon as typeof AgentIcon).length).toBeGreaterThan(0);
+});
+
+it('a delegated browser task wears the web ring instead', () => {
+  const tree = render(makeItem({ name: 'delegate_browser_task', args: { url: 'https://shop.example.com', instructions: 'x' } }), DOOR);
+  expect(tree.root.findAllByType(BrowserIcon)).toHaveLength(1);
+  expect(tree.root.findAllByType(AgentIcon)).toHaveLength(0);
 });

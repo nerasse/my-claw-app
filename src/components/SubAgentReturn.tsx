@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { returnPreview, returnWord } from '../core/subagentReturn';
-import { OpenInNewIcon } from './icons';
+import { AgentIcon, BrowserIcon, OpenInNewIcon } from './icons';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentList } from './AttachmentList';
 import { BlockActions } from './BlockActions';
@@ -34,6 +34,7 @@ export function SubAgentReturn({
   mediaBase,
   deviceInfo,
   onOpenAgent,
+  mark = 'agent',
   onOpenAttachment,
   onOpenMedia,
 }: {
@@ -48,6 +49,8 @@ export function SubAgentReturn({
    * launch are one thing read at two moments (owner, 2026-11-19: a stopped card offered no way in).
    */
   onOpenAgent?: () => void;
+  /** Which agent reported: the browser wears the web's ring, everything else the suitcase. */
+  mark?: 'agent' | 'browser';
   onOpenAttachment?: (
     kind: ViewerKind,
     target: { url: string; filename: string; sizeBytes?: number; kind?: FileKind },
@@ -75,6 +78,7 @@ export function SubAgentReturn({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`${label || 'a sub-agent'}, ${word}`}
         accessibilityHint={open ? 'Collapse the report' : 'Show the report'}>
+        {mark === 'browser' ? <BrowserIcon size={13} tone="muted" /> : <AgentIcon size={13} tone="muted" />}
         <Text style={styles.name} numberOfLines={1}>
           {label || 'sub-agent'}
         </Text>

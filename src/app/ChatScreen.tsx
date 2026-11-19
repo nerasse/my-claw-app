@@ -35,7 +35,7 @@ import { probeText, revealFieldAboveKeyboard } from '../core/revealField';
 import { keyboardResumeMismatch, onKeyboardResume, RESUME_CHECKS_MS } from '../core/keyboard';
 import { deviceBridge, deviceEvents } from '../core/nativeBridge';
 import { useCommands } from '../core/commands';
-import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus } from '../core/protocol';
+import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type LocationData, type LocationInput, type SpawnStatus, type SubAgentEntry } from '../core/protocol';
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
 import { prefs } from '../core/prefs';
@@ -256,7 +256,7 @@ export function ChatScreen({
    * same roster as `subagentDoors`: a killed child stops offering a door rather than opening a
    * dead thread, and a stopped one keeps it, which is the card the owner comes back to.
    */
-  subagentsById?: Map<string, unknown>;
+  subagentsById?: Map<string, SubAgentEntry>;
   /** Opens a child by id, from a report card. */
   onOpenSubAgentById?: (subagentId: string) => void;
   /** Live sub-agent lifecycle state per spawn card, pushed by `chat.spawn.start/end` frames. */
@@ -1373,6 +1373,7 @@ export function ChatScreen({
               {...(item.from?.id && subagentsById?.has(item.from.id) && onOpenSubAgentById
                 ? { onOpenAgent: () => onOpenSubAgentById(item.from!.id!) }
                 : {})}
+              {...(item.from?.id && subagentsById?.get(item.from.id)?.type === 'browser' ? { mark: 'browser' as const } : {})}
               onOpenAttachment={openAttachment}
               onOpenMedia={openMedia}
             />

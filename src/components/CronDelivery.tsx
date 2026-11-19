@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
 import { returnPreview } from '../core/subagentReturn';
 import { AgentMarkdown } from './AgentMarkdown';
-import { OpenInNewIcon } from './icons';
+import { CalendarIcon, OpenInNewIcon } from './icons';
 import { AttachmentList } from './AttachmentList';
 import { BlockActions } from './BlockActions';
 import { ROW_GAP, spine } from './spine';
@@ -72,6 +72,10 @@ export function CronDelivery({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`${label}${cadence ? `, ${cadence}` : ''}, cron delivery`}
         accessibilityHint={open ? 'Collapse the report' : 'Show the report'}>
+        {/* A scheduled job's own mark, before its name: a delivery reads as a job at a glance, in
+            every state -- delivered or failed, the line still starts the same way
+            (owner, 2026-11-19). */}
+        <CalendarIcon size={13} tone="muted" />
         <Text style={styles.name} numberOfLines={1}>
           {label}
         </Text>

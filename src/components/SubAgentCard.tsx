@@ -1,4 +1,4 @@
-import { OpenInNewIcon } from '../components/icons';
+import { AgentIcon, BrowserIcon, OpenInNewIcon } from '../components/icons';
 import React, { useState, useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { ToolItem } from '../core/chat';
@@ -136,6 +136,11 @@ export const SubAgentCard = React.memo(function SubAgentCardView({
           accessibilityState={{ expanded: open }}
           accessibilityLabel={`Sub-agent ${label || id || action}, ${word}`}
           accessibilityHint={open ? 'Collapse details' : 'Show the task and the result'}>
+          {/* What kind of card this is, before its name: the agent's own mark, or the web's for a
+              delegated browser task. Every state wears it -- a stopped or refused card is still a
+              sub-agent, and the word at the end of the line is what says how it went
+              (owner, 2026-11-19: "et où sont les icons ???"). */}
+          {action === 'browser' ? <BrowserIcon size={13} tone="muted" /> : <AgentIcon size={13} tone="muted" />}
           {/* Who, first and always: an agent with no name still reads as an agent (`spawn`), and
               the brief never takes the line, so a named call can never look like an anonymous
               one (owner, 2026-11-08: "on dirait pas un sous agent"). No fold mark: a row of the

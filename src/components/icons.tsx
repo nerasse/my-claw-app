@@ -450,6 +450,23 @@ export function CalendarIcon(props: IconProps): React.JSX.Element {
   );
 }
 
+/**
+ * The web, as a ring with a compass needle: the browser agent's mark.
+ *
+ * A ring, not a rounded rectangle: the sub-agent already wears that silhouette (`AgentIcon`), and
+ * two cards of one thread wearing one shape is one more thing the reader tells apart by its words
+ * alone (owner, 2026-11-19: "et où sont les icons ???"). The hole is a second subpath wound the
+ * other way; the needle sits inside it, where the nonzero rule fills it again.
+ */
+export function BrowserIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m0 2.2a7.8 7.8 0 1 1 0 15.6 7.8 7.8 0 0 1 0-15.6M15.9 8.1l-2.4 5.4-5.4 2.4 2.4-5.4z"
+    />
+  );
+}
+
 /** Three bars on a baseline: a figure read over time, not a dial read now. */
 export function ChartIcon(props: IconProps): React.JSX.Element {
   return <Icon {...props} d="M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7zM2 21h20v2H2z" />;

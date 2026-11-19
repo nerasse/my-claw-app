@@ -11,6 +11,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import { CronDelivery } from '../CronDelivery';
+import { CalendarIcon } from '../icons';
 import type { TextItem } from '../../core/chat';
 import { ThemeContext } from '../../theme';
 import { lightPalette } from '../../theme/palettes';
@@ -43,6 +44,13 @@ function render(item: TextItem, props: Record<string, unknown> = {}) {
 }
 
 let lastTree: ReactTestRenderer.ReactTestRenderer | undefined;
+
+test("the card wears the job's own mark, in every state", () => {
+  // One shape at the head of the line, so a delivery reads as a job before its name does -- and it
+  // does not change with the outcome: only the word at the end does (owner, 2026-11-19).
+  expect(render(makeItem()).root.findAllByType(CalendarIcon)).toHaveLength(1);
+  expect(render(makeItem({ from: { label: 'veille', kind: 'cron', cadence: 'every 1h', status: 'error' } })).root.findAllByType(CalendarIcon)).toHaveLength(1);
+});
 afterEach(() => {
   if (!lastTree) return;
   const tree = lastTree;
