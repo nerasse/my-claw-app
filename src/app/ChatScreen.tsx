@@ -444,6 +444,16 @@ export function ChatScreen({
    */
   const [endSettled, setEndSettled] = useState(inverted);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Whether the thread is still opening: rows measuring, the content height moving in steps.
+   *
+   * The web list is pinned by following every growth, and during the opening that is a scroll per
+   * measurement burst -- the offset jumps, and the scrollbar's thumb flashes as it goes (owner,
+   * 2026-11-19: "ca veut scroll vers le bas en spam et la bar grossit et reduit en spam"). The
+   * opening follows once, when the height stops moving; a live run after it still follows every
+   * growth, because there the text is arriving on purpose.
+   */
+  const openingRef = useRef(true);
   const clearSettleTimer = useCallback(() => {
     if (settleTimer.current === null) return;
     clearTimeout(settleTimer.current);
@@ -498,6 +508,7 @@ export function ChatScreen({
     prependAnchor.current = null;
     // A fresh conversation has to find its end again: the flag is the opening's, not the screen's.
     clearSettleTimer();
+    openingRef.current = true;
     setEndSettled(inverted);
     chatStore.setTrimAllowed(threadId, true);
   }, [clearSettleTimer, followNewest, inverted, threadId]);
@@ -1721,6 +1732,16 @@ export function ChatScreen({
       if (!endSettled) {
         clearSettleTimer();
         settleTimer.current = setTimeout(() => setEndSettled(true), 120);
+      }
+      if (openingRef.current) {
+        // Still measuring: the pin follows once the height stops moving, not on every step.
+        clearSettleTimer();
+        settleTimer.current = setTimeout(() => {
+          openingRef.current = false;
+          setEndSettled(true);
+          if (!inverted && followingRef.current) scrollToNewest(false);
+        }, 120);
+        if (!inverted) return;
       }
       if (inverted) return;
       const anchor = prependAnchor.current;

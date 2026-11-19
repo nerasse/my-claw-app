@@ -62,6 +62,46 @@ const labelOfRow = (row: ChatRow): string => {
   return `${row.item.id}${row.foot ? '+foot' : ''}`;
 };
 
+describe('model changes in a row', () => {
+  const noticeOfItem = (id: string, body: string): ChatItem =>
+    ({ kind: 'text', id, role: 'agent', text: `[fallback] ${body}`, attachments: [], streaming: false, notice: true, ts: 5 }) as ChatItem;
+
+  /**
+   * A chain of fallbacks arrives one notice per step, and four of them filled the thread with four
+   * paragraphs to say one thing (owner, 2026-11-19: "les model changes qui se suivent peuvent être
+   * regroupés"). The log keeps each step; the card says the chain.
+   */
+  test('consecutive changes are one card, in the place and clock of the first', () => {
+    const merged = buildRows([
+      noticeOfItem('n1', 'opus is out of its week allowance → switched to openrouter/a · effort high'),
+      noticeOfItem('n2', 'a via openrouter is unavailable → switched to openrouter/b · 700k context'),
+    ]);
+    expect(merged).toHaveLength(1);
+    const row = merged[0]!;
+    if (row.kind !== 'item' || row.item.kind !== 'text') throw new Error('expected a notice row');
+    expect(row.item.id).toBe('n1');
+    expect(row.item.text).toBe(
+      '[fallback] opus is out of its week allowance → switched to openrouter/a · effort high\n' +
+        'a via openrouter is unavailable → switched to openrouter/b · 700k context',
+    );
+  });
+
+  test('a message between two changes keeps them apart', () => {
+    const merged = buildRows([
+      noticeOfItem('n1', 'one → switched to p/a'),
+      agentText('a1', 'la reponse'),
+      noticeOfItem('n2', 'two → switched to p/b'),
+    ]);
+    expect(merged.map(labelOfRow)).toEqual(['n1', 'a1', 'n2']);
+  });
+
+  test('a retry is not a model change, and is never merged into one', () => {
+    const retry = { kind: 'text', id: 'r1', role: 'agent', text: '[retry] p/a failed on the provider\'s side; trying again in 30s.', attachments: [], streaming: false, notice: true, ts: 5 } as ChatItem;
+    const merged = buildRows([retry, noticeOfItem('n1', 'one → switched to p/a'), noticeOfItem('n2', 'two → switched to p/b')]);
+    expect(merged.map(labelOfRow)).toEqual(['r1', 'n1']);
+  });
+});
+
 describe('a thought whose run travelled folded', () => {
   /**
    * The owner, 2026-11-19, mid-run: `10 steps · 8 shell · 2 thoughts`, then a bare `Reasoning` line,

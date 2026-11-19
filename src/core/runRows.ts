@@ -1,5 +1,6 @@
 import { isSubAgentTool, type ChatItem, type RunInfo, type RunSummaryItem, type TextItem } from './chat';
 import { dayOf } from './day';
+import { noticeOf } from './notice';
 import { msOf } from './utils';
 
 /**
@@ -435,8 +436,44 @@ function withoutReasoning(item: Extract<ChatItem, { kind: 'text' }>): ChatItem {
   return rest;
 }
 
+/**
+ * Two model changes in a row are one card.
+ *
+ * A chain of fallbacks arrives as one notice per step, and a run that walked four candidates put
+ * four paragraphs in the thread to say one thing: the run is not on the model it started on
+ * (owner, 2026-11-19: "les model changes qui se suivent peuvent être regroupés"). They are merged
+ * here, on the way to the rows, so the log keeps every step it was told and the reader gets the
+ * chain in one place.
+ *
+ * Only the changes merge. A retry is a different event -- it waits, and stays on the same model --
+ * and a note before a message is about a different moment.
+ */
+export function mergeModelChanges(items: ChatItem[]): ChatItem[] {
+  const out: ChatItem[] = [];
+  for (const item of items) {
+    const previous = out[out.length - 1];
+    if (isModelChange(previous) && isModelChange(item)) {
+      // The card keeps the first step's place and clock, and says the rest under it: the chain
+      // happened where it started, before the answer it produced.
+      out[out.length - 1] = { ...previous, text: `${previous.text}\n${bodyOf(item)}` };
+      continue;
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+function isModelChange(item: ChatItem | undefined): item is Extract<ChatItem, { kind: 'text' }> {
+  return item?.kind === 'text' && item.notice === true && noticeOf(item.text).kind === 'fallback';
+}
+
+function bodyOf(item: ChatItem): string {
+  if (item.kind !== 'text') return '';
+  return noticeOf(item.text).body;
+}
+
 export function buildRows(items: ChatItem[], compactionBefore?: string): ChatRow[] {
-  return rowsOf(adoptRuns(splitReasoning(items)), compactionBefore);
+  return rowsOf(adoptRuns(splitReasoning(mergeModelChanges(items))), compactionBefore);
 }
 
 /**
