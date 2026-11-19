@@ -1092,11 +1092,18 @@ export function AppShell(): React.JSX.Element {
        * looked like it did nothing.
        */
       if (layout.pinnedDrawer || layout.sidePane) {
-        if (filesOpen) openFilesInner(threadId);
-        else if (statusOpen) {
+        // From the store, never from the render: these three flags are what a page being open
+        // means, so reading them here as props made this callback change identity every time one
+        // opened -- and everything depending on `openThread` (the boot effect among them) replayed,
+        // reopened the route and closed the very page just opened (owner, 2026-11-16: "la page
+        // status ne fonctionne plus sur mobile"). The page is closed and reopened 19 ms later on
+        // a phone; the desktop kept it only because the branch above re-reads instead of closing.
+        const page = rightPane.get().page;
+        if (page === 'files') openFilesInner(threadId);
+        else if (page === 'status') {
           statusStore.open(threadId);
           connection.send(encodeStatusWatch(threadId)).catch(() => {});
-        } else if (instructionsPageOpen) openInstructionsInner(threadId);
+        } else if (page === 'instructions') openInstructionsInner(threadId);
       } else {
         rightPane.close();
         statsStore.close();
@@ -1123,7 +1130,7 @@ export function AppShell(): React.JSX.Element {
       // the picker never shows the previous conversation's choice.
       connection.send(encodeModelGet(threadId));
     },
-    [selectThread, filesOpen, instructionsPageOpen, layout.pinnedDrawer, layout.sidePane, openFilesInner, openInstructionsInner, statusOpen],
+    [selectThread, layout.pinnedDrawer, layout.sidePane, openFilesInner, openInstructionsInner],
   );
 
   const openThread = useCallback((threadId: string) => enterThread(threadId, null), [enterThread]);

@@ -10,11 +10,20 @@ import ReactTestRenderer from 'react-test-renderer';
 import { DeviceEventEmitter, useWindowDimensions } from 'react-native';
 import { deviceBridge } from '../src/core/nativeBridge';
 import { chatStore } from '../src/core/chat';
+import { rightPane } from '../src/core/rightPane';
 import { statusStore } from '../src/core/status';
 import { labelsOf, press, renderApp, textsOf, unmount, waitFor, type Tree } from '../test-utils/render';
 
 // Auto-mocked so the test states the window it is talking about.
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions');
+// The browser router, which is the only place this regression exists: `route.ts` (Android) has no
+// address, so `initialRoute()` answers null there and the boot replay below has nothing to reopen.
+// An address that already names the thread on screen is exactly what `showThread` leaves behind.
+jest.mock('../src/core/route', () => ({
+  initialRoute: () => ({ threadId: 't-default' }),
+  showThread: () => {},
+  watchBack: () => () => {},
+}));
 
 const bridge = deviceBridge as jest.Mocked<typeof deviceBridge>;
 const THREAD = 't-default';
@@ -101,4 +110,43 @@ test('a report pushed while the page is beside the conversation lands in it', as
   await waitFor(() => textsOf(tree).some(text => text.includes('10.0%')));
   expect(textsOf(tree)).toContain('nothing has been called here yet.');
   await unmount(tree);
+});
+
+/**
+ * A phone has no column to share, so the page takes the conversation's place. It used to open
+ * and close 19 ms later (owner, 2026-11-16: "la page status ne fonctionne plus sur mobile").
+ *
+ * The cause was an identity, not a phone: `enterThread` read `filesOpen`/`statusOpen`/
+ * `instructionsPageOpen` from the render, so opening a page rebuilt `openThread`, the boot effect
+ * that lists `openThread` among its dependencies replayed, re-read the address -- the thread
+ * being on screen already -- and called `openThread` again, which closed the column. It is the
+ * `rightPane.get().page` read that breaks the loop, and it is what this test holds.
+ */
+test('the page stays open on a phone, where nothing else is drawn to take the tap', async () => {
+  (useWindowDimensions as unknown as jest.Mock).mockReturnValue({ width: 400, height: 900, scale: 2, fontScale: 1 });
+  rightPane.reset();
+  const tree = await renderApp();
+  try {
+    await waitFor(() => labelsOf(tree).includes('Add attachment'));
+    await openThreadActions(tree);
+    await press(tree, 'Status');
+    await waitFor(() => labelsOf(tree).includes('Close status'));
+    // A full turn of the loop is milliseconds; the report itself is the proof it survived them.
+    await emit({
+      type: 'status.result',
+      threadId: THREAD,
+      status: {
+        session: { id: 's', createdAt: '2026-08-08T10:00:00.000Z', lastActiveAt: '2026-08-08T10:05:00.000Z', turns: 1 },
+        model: { current: 'claude-opus-5', selfHosted: false, contextLimit: 512000, contextNotes: ['declared'], timeout: '120s (default)' },
+        context: { estimated: 100, occupied: 51200, autoCompactOn: true, autoCompactThresholdPct: 80, autoCompactThresholdTokens: 409600 },
+        usage: null,
+        runtime: { runs: [], compacting: false, verbose: true, approvedTools: [] },
+      },
+    });
+    await waitFor(() => textsOf(tree).some(text => text.includes('10.0%')));
+    expect(rightPane.get().page).toBe('status');
+  } finally {
+    rightPane.reset();
+    await unmount(tree);
+  }
 });

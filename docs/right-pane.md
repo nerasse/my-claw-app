@@ -44,6 +44,22 @@ stale, and -- the reason it matters -- `openThread` does not change identity whe
 Adding the store's `window` to `enterThread`'s dependency list did exactly that, re-ran the boot
 effect, and closed the page that had just been opened.
 
+### The same trap, twice
+
+The rule was written down after the `window` half and the `page` half was left in place: `enterThread`
+still read `filesOpen`, `statusOpen` and `instructionsPageOpen` out of the render, so opening any of
+those three rebuilt `openThread`, replayed the boot effect, re-read the address (`/t/<thread>`, the
+conversation already on screen) and called `openThread` again -- which, on a phone, is the branch that
+closes the column. The page opened and vanished 19 ms later; the desktop survived it only because its
+branch re-reads the page for the thread instead of closing it (owner, 2026-11-16: "la page status ne
+fonctionne plus sur mobile").
+
+So `enterThread` reads `rightPane.get().page`, never a flag from the render, and its dependency list
+holds only the store's setters and the layout. Nothing that a page can change may appear in it. The
+regression is held by the phone case of `__tests__/StatusPane.test.tsx`, which stands in for the
+browser router: on Android `initialRoute()` is always null, so the replay has nothing to reopen and
+the bug cannot show there.
+
 ## What survives a conversation switch
 
 `enterThread` is the one door into a conversation, and it decides per page:
