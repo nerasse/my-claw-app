@@ -1664,7 +1664,11 @@ export function ChatScreen({
       );
       if (!inverted) {
         const anchor = prependAnchor.current;
-        if (movedUp && !ours) {
+        // While the thread is opening, an upward move is the list measuring itself: rows arrive
+        // shorter than the estimate, the browser clamps the offset we asked for, and the event
+        // that follows would end the pin before the last message is ever reached (owner,
+        // 2026-11-19 and 2026-11-20: "quand j'ouvre la session je suis pas tout en bas").
+        if (movedUp && !ours && !openingRef.current) {
           // A hand on the wheel ends the compensation: the reader has taken the position over, and
           // what they are looking at now is where they want to be.
           prependAnchor.current = null;
@@ -1724,6 +1728,31 @@ export function ChatScreen({
    * on a fresh anchor, itself measured from a half-grown content). Each step absorbs its own
    * growth, and only a hand on the wheel, or a return to the newest message, ends it.
    */
+  /**
+   * Takes the list to its end, in a few passes, while the thread is still measuring.
+   *
+   * One scroll is not enough on a long thread: the list reports an estimated height, the scroll
+   * lands in it, the rows around it then measure and the content shrinks under the offset, so the
+   * end is missed by a fraction of a screen and the jump pill appears on a thread that was never
+   * scrolled by hand (owner, 2026-11-20: "quand j'ouvre la session je suis pas tout en bas"). Each
+   * pass uses the height as it is now, and the pin stays protected from the "a hand moved up"
+   * reading until they are done.
+   */
+  const settlePasses = useRef(0);
+  const settleToNewest = useCallback(() => {
+    settlePasses.current = 0;
+    const pass = (): void => {
+      if (inverted || !followingRef.current || settlePasses.current >= 4) {
+        openingRef.current = false;
+        return;
+      }
+      settlePasses.current += 1;
+      scrollToNewest(false);
+      setTimeout(pass, 100);
+    };
+    pass();
+  }, [inverted, scrollToNewest]);
+
   const onThreadContentSize = useCallback(
     (_width: number, content: number) => {
       contentRef.current = content;
@@ -1734,12 +1763,14 @@ export function ChatScreen({
         settleTimer.current = setTimeout(() => setEndSettled(true), 120);
       }
       if (openingRef.current) {
-        // Still measuring: the pin follows once the height stops moving, not on every step.
+        // Still measuring: the pin follows once the height stops moving, not on every step, and it
+        // takes a few passes -- a row that measures taller after the scroll lands leaves the end
+        // short, and the opening is exactly where that happens. The pin stays protected from
+        // `handleScroll`'s "a hand moved up" until the last pass.
         clearSettleTimer();
         settleTimer.current = setTimeout(() => {
-          openingRef.current = false;
           setEndSettled(true);
-          if (!inverted && followingRef.current) scrollToNewest(false);
+          settleToNewest();
         }, 120);
         if (!inverted) return;
       }
@@ -1757,7 +1788,7 @@ export function ChatScreen({
       prependAnchor.current = null;
       if (followingRef.current) scrollToNewest(false);
     },
-    [clearSettleTimer, endSettled, inverted, scrollTo, scrollToNewest],
+    [clearSettleTimer, endSettled, inverted, scrollTo, scrollToNewest, settleToNewest],
   );
 
   /**
