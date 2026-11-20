@@ -68,6 +68,7 @@ origin, and a stale bundle explains every "it did not change".
 
 | check | what must happen |
 |---|---|
+| centred column | on a wide window the thread column has the same gap left and right, and its left edge lines up with the composer's |
 | opens on the newest message | the last answer is fully visible above the composer, not clipped |
 | selection across messages | drag down from a question into its answer: one contiguous highlight, no whole-thread selection, no scroll |
 | scrollbar | the thumb is at the window's right edge, and dragging / clicking it scrolls |

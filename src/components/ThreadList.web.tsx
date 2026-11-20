@@ -9,9 +9,11 @@ import type { ThreadListProps } from './threadListTypes';
 const AT_END_PX = 2;
 const FOOTER_KEY = 'thread:footer';
 const estimateSize = () => 96;
+// A flex column, like the content box of a ScrollView: the reading column centres itself with
+// `alignSelf`, which a block parent ignores.
 const surface: React.CSSProperties = {
-  position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden',
-  overflowAnchor: 'none', overscrollBehaviorY: 'contain',
+  position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+  overflowY: 'auto', overflowX: 'hidden', overflowAnchor: 'none', overscrollBehaviorY: 'contain',
 };
 const hiddenSurface: React.CSSProperties = { ...surface, visibility: 'hidden' };
 const unpaddedColumn = { paddingTop: 0, paddingBottom: 0 };
