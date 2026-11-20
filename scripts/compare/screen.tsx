@@ -171,7 +171,6 @@ function Root(): React.JSX.Element {
         onAgentsPress={() => {}}
         subagentDoors={new Map()}
         onLoadOlder={() => {}}
-        loadingOlder={false}
         uiPrefs={{ expandTools: true, expandReasoning: false }}
       />
     </ThemeProvider>

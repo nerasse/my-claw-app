@@ -1,6 +1,7 @@
 # The thread does not move while it is being read
 
-A conversation is an inverted `FlatList`: the newest item is index 0 and sits at offset 0, so a
+On native, a conversation is an inverted `FlatList` (`ThreadList.tsx`; the web list is described
+below): the newest item is index 0 and sits at offset 0, so a
 thread opens on its last message with no scrolling, no content height to estimate, and the keyboard
 shrinking the viewport leaves the offset where it was. That is the whole reason for inverting it.
 
@@ -67,27 +68,27 @@ zero. On an inverted list offset zero is the **newest** message, so its worst ca
 bottom of the thread -- where a reader near the end already is -- not the jump away from the tapped
 row that was reported. Worth knowing, not worth a workaround.
 
-## A thread shorter than the screen
+## Older pages
 
-`onEndReached` is what pages a conversation, and an inverted list only has an end when its content
-is taller than the viewport. A thread of two or three turns has no scroll range at all, so the
-callback fires once at mount -- before the page frame that carries `hasMore` has landed -- and then
-never again: there is no gesture left to make. The owner opened a conversation, saw three turns,
-and could not reach anything older (2026-11-05).
+`src/core/historyPaging.ts` is the one pager, for both lists. It holds at most one request per
+thread, sends the oldest held id with the count cursor, and accepts an answer only for the request
+it sent (`beforeId` when the server echoes it, `before` otherwise). A page that never comes back is
+dropped after 15 s and shows "Retry older messages"; the retry sends the same cursor again.
 
-So the screen asks by itself. `useScrollIndicator` already measured both figures for its thumb and
-now reports them (`onMeasure`); when the content does not fill the viewport, the list sends the
-same `onLoadOlder` the gesture would have. Two details are the whole fix:
+The edge of the thread can move while a page is out. A fresh window (a reconnect, a reset) or a
+`chat.cleared` replaces the oldest item or the count the request was made from, and the request is
+cancelled rather than allowed to prepend the wrong range. A window that keeps the same edge leaves
+the request alone and only puts the spinner back.
 
-- The ask is keyed on the **cursor**, not on the content height. The page that says `hasMore`
-  arrives after the first measure, and a flag latched on the height would treat that as "already
-  asked" and never send.
-- The guards stay the store's (`hasMore`, `loading`). The screen is not a second pager; it is the
-  one reach the list cannot make itself. A page arriving makes the content taller, the measure
-  changes, and the next ask is refused by nothing older.
+A page can be empty on screen and still move: the server pages over journal entries, some of which
+draw no row. The count cursor moves, the oldest displayed id does not, so the next request is sent
+with the count alone (`countOnly`) and is made without a new gesture while the reader is still at
+the top. A page that adds nothing and does not move the count stops with the retry, instead of
+asking for the same page forever.
 
-`__tests__/olderPageReach.test.tsx` pins the three cases: a short thread with older work asks once,
-an exhausted history asks nothing, and a page already in flight is not asked for again.
+The list asks by itself in one more case: content shorter than the screen has no scroll range,
+so no gesture can reach the top (owner, 2026-11-05: three turns, nothing older reachable). Both
+lists ask while the content fits the viewport, and the store's guards keep that to one request.
 
 ## What was not taken
 
@@ -99,63 +100,53 @@ something that stays simple to deploy: one native prop beats a dependency tree h
 
 ## Tests
 
-`__tests__/threadScroll.test.tsx` -- the props the list is handed, and folding a row asks for no
-scroll at all (neither `scrollToIndex` nor `scrollToOffset`). Two mutations kill: putting a
+`__tests__/threadScroll.test.tsx` -- the props the native list is handed, and folding a row asks
+for no scroll at all (neither `scrollToIndex` nor `scrollToOffset`). Two mutations kill: putting a
 `scrollToIndex` back on the fold, and dropping `maintainVisibleContentPosition`.
+
+`src/core/__tests__/historyPaging.test.ts` -- one request at a time, an answer for another cursor
+ignored, a timeout that can be retried, `countOnly` pages, and a request cancelled when a window
+moves the edge. `src/core/__tests__/threadScroll.test.ts` -- a day divider keeps its key across a
+prepend, and a folded run is one cell. The web list's geometry is checked in a browser
+(docs/ui-browser-check.md).
 
 ## The web is not inverted
 
-Everything above is about the inverted list, and the inversion is a platform decision, not a
-preference: `inverted` in `ChatScreen` is `Platform.OS !== 'web'`.
+The inversion is a platform decision. A browser selects text in DOM order, and an inverted list
+puts the DOM in the opposite order from what the reader sees: a drag over several messages started
+at the bottom of a frame and could snap to the whole thread (owner, 2026-11-14). So the web list is
+`ThreadList.web.tsx` and the document runs oldest first. Native keeps `ThreadList.tsx`.
 
-A browser cannot invert a conversation. Inverting there is a DOM order that runs backwards from
-what the reader sees -- newest first, drawn from the bottom under a `scaleY(-1)` on the scroll view
-and on every cell -- and a browser selects text in DOM order. The owner's report (2026-11-14) is
-exactly that: a drag over several messages began at the bottom of a frame, ran the wrong way, and
-could snap to the whole thread. No `user-select`, `::selection` or `pointer-events` rule reaches
-that; the nesting is the cause.
+The web list is `@tanstack/react-virtual` with `anchorTo: 'end'` and `followOnAppend`, the setup its
+docs give for a chat, and the same direction OpenCode takes. The earlier version kept its own
+offsets: a pin computed from content size, an anchor saved before a prepend and applied after, and
+several handlers trying to tell a hand from a layout change. Each correction ran one step behind
+the virtualized rows it was correcting, which is how a long thread opened in several visible
+descents and paging stopped after two pages (measured on 0.6.232: up to 8,332 px above the bottom
+on open, and a 20-message hole at a page seam).
 
-So on the web the document runs oldest-first and the newest message is the **end** of the range:
+What each part does now:
 
-- **Pinned to the newest message.** There is no offset to open on, so `onThreadContentSize` sends
-  the list to its end while the reader is following it -- and that end is a *measurement*
-  (`content` minus `viewport`, both reported by the scroll indicator), not `scrollToEnd`, which aims
-  at an estimate built from the average cell height and stopped a few points short of it: the last
-  answer stayed clipped under the composer on a thread of two-line turns (measured 2026-11-14).
-  That is also how a thread of forty thousand rows opens on its last message.
-- **A hand on the wheel unpins.** A browser reports no end of gesture -- there is no touch responder,
-  so a wheel notch and a drag on the scrollbar look like any other scroll. What they do that a
-  programmatic scroll never does is move the offset *up* while the reader is away from the newest
-  message, and that is the signal. Content arriving under a pinned reader changes the content height
-  and leaves the offset alone, so it never reads as a hand. Coming back within `NEAR_NEWEST_PX`
-  pins again, which is the same intent as the native `onScrollEndDrag`.
-- **Paging is the other end.** Older rows are at the *top*, so the list pages on `onStartReached`
-  (native keeps `onEndReached`). A page inserted above the reader moves everything on screen down by
-  its height, and nothing compensates for that on the web, so `prependAnchor` takes the offset and
-  the content size before the request and `onThreadContentSize` adds the difference once it lands --
-  what `maintainVisibleContentPosition` does for free on native. Two details are what make it hold
-  at all: the anchor is kept across the whole settle rather than spent on the first change (a
-  virtualized list grows in steps, and a page spent on the first step left the reader two pages
-  away), and only one page is ever in flight (`pageOlder` refuses while an anchor is live, because
-  the start of the range reads as reached again during the settle). The scroll listener also holds
-  the offset while an anchor is live, so a step of growth cannot be left on screen. The list's own
-  report of reaching the start is ignored while the reader is pinned: mounting at the top of the
-  document reports it before the pin has moved anything, and paging there would load history nobody
-  asked for. What remains is a *transient* -- the reader can sit on the older page for ~1.8 s while
-  the rows above are measured; the end position is exact. docs/ui-browser-check.md has the numbers
-  and the two candidate fixes.
-
-`src/core/threadScroll.ts` holds what both geometries share -- `nearNewest`, `prependShift` -- so
-three handlers cannot drift apart on a sign.
+- **Opening.** The scroller is laid out hidden, with a small spinner in its place, until the last
+  row is mounted and the element is at its real end. The reader sees one frame: the newest
+  message above the composer. Rows that grow later (an image, a code block) are measured by the
+  virtualizer, which keeps the end in place while the reader is there.
+- **Following.** `followOnAppend` follows a growing answer only while the view is at the end. A
+  reader who scrolled up stays where they are. A shrinking viewport (keyboard, window resize) puts
+  a reader who was at the end back there.
+- **Paging.** Older rows go in front, and the virtualizer keeps the first visible row where it was.
+  A request leaves when the reader scrolls up within one screen of the top, or uses the wheel,
+  Home, PageUp or ArrowUp at the top. Stopping at the top does not make a request; only `countOnly`,
+  above, continues without a new gesture.
+- **Folded runs.** A collapsed run is one cell. Neither scrolling nor paging opens it, so
+  `session.run.items` is only sent when the reader expands it, once per range. Opening it changes
+  that cell's height and nothing else.
+- **Day dividers** are drawn in the same cell as the row that opens the day
+  (`threadCells`), so a prepend within one day does not give a different row the divider's key.
 
 ## The scrollbar is the platform's, on the web
 
-`useScrollIndicator` draws a 3pt themed thumb and hides the system bar, because on Android that bar
-is an overlay painted *over* the rows. In a browser that bar is a real control -- draggable,
-clickable to page, readable by assistive tech -- so the thread passes `systemBar` there: nothing is
-hidden and nothing is drawn.
-
-The scroll surface is also the **pane**, not the reading column. The column is capped inside it by
-`contentStyle` (`layout.toolWidth`, centred), which is what puts the bar at the window's right edge
-instead of a few hundred points short of it on a wide screen. Rows already cap themselves, so
-nothing about the reading width changes.
+`useScrollIndicator` draws a 3 pt themed thumb on native, because Android paints its own bar over
+the rows. In a browser the system bar is a real control (drag, click to page, assistive tech), so
+the web list draws none of its own. The scroller is the whole pane and the reading column is
+centred inside it, which puts that bar at the window's right edge.

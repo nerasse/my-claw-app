@@ -87,7 +87,6 @@ import {
   encodeFolderRename,
   encodeFolderOrder,
   FOLDER_NAME_LIMIT,
-  encodeSessionHistory,
   encodeSessionSync,
   encodeSessionList,
   encodeSessionRename,
@@ -201,6 +200,7 @@ import { resetToolOutputAsks } from '../core/toolOutput';
 import { dropReasoningAsks, knownReasoning } from '../core/reasoningFetch';
 import { httpOrigin, uuid, withView } from '../core/utils';
 import { ChatScreen } from './ChatScreen';
+import { cancelOlderHistory, dropInflightHistory, requestOlderHistory } from '../core/historyPaging';
 import { ContextMeter } from '../components/ContextMeter';
 import {
   AgentIcon,
@@ -357,8 +357,6 @@ import { AgentModelPickerPage } from './AgentModelPickerPage';
 import { TagEditorPage } from './TagEditorPage';
 import { setPageTitle } from '../core/pageTitle';
 
-/** One page of replayed history, not a ceiling: scrolling past the oldest asks for the next. */
-const HISTORY_LIMIT = 50;
 /**
  * How long a send waits for its receipt before reading as undelivered. The receipt is sent before
  * the server does anything with the message, so a healthy link answers in milliseconds; the margin
@@ -1315,28 +1313,9 @@ export function AppShell(): React.JSX.Element {
     connection.send(encodeJobsList()).catch(() => {});
   }, []);
 
-  /**
-   * Asks for the page just older than what is on screen. The guard is the store's, not a ref
-   * here: the list fires this from a scroll handler, so it arrives repeatedly while one request
-   * is still out.
-   */
-  const loadOlderHistory = useCallback(() => {
-    const threadId = activeThreadRef.current;
-    if (!threadId) return;
-    const page = chatStore.getPage(threadId);
-    if (!page.hasMore || page.loading) return;
-    chatStore.setPageLoading(threadId, true);
-    // The id cursor is preferred: the count drifts when the session grows between two loads,
-    // and the client trims its oldest items past its cap -- the id names the oldest held item
-    // and the page is the one before it. Both are sent; old servers use the count, new ones
-    // answer the id. Resolved false, never rejected: a `.catch` here never ran, and the
-    // pagination stayed locked on a spinner that nothing could clear.
-    connection
-      .send(encodeSessionHistory(threadId, HISTORY_LIMIT, page.nextBefore, page.oldestId ?? undefined))
-      .then((delivered) => {
-        if (!delivered) chatStore.setPageLoading(threadId, false);
-      });
-  }, []);
+  const loadOlderHistory = useCallback((retry = false) => {
+    if (activeThread) requestOlderHistory(activeThread, retry);
+  }, [activeThread]);
 
   const editJob = useCallback((job: JobEntry) => {
     setJobsError(null);
@@ -1483,6 +1462,7 @@ export function AppShell(): React.JSX.Element {
         // So are the reads it carried: an ask for a folded run's work or a clipped tool output
         // that left on this socket will never be answered, and the guards against asking twice
         // would otherwise refuse to ask again -- a skeleton, or a "Show more", stuck for good.
+        dropInflightHistory();
         chatStore.dropInflightHydration();
         resetToolOutputAsks();
         dropReasoningAsks();
@@ -1517,6 +1497,7 @@ export function AppShell(): React.JSX.Element {
     const offPending = connection.onPending(setPending);
     const instance = Platform.OS === 'ios' ? deviceEvents.addListener('claw:instance', ({ origin }: { origin: string }) => {
       setDraftScope(origin);
+      dropInflightHistory();
       chatStore.clearAll(); sessionStore.replace([]); modelStore.reset(); questionStore.clear();
       activeThreadRef.current = null;
       setActiveThread(null); setApprovals([]); setApprovalHistory(null); setServerVersion(null);
@@ -2981,6 +2962,7 @@ export function AppShell(): React.JSX.Element {
   const deleteThread = useCallback(
     (threadId: string) => {
       connection.send(encodeSessionDelete(threadId));
+      cancelOlderHistory(threadId);
       chatStore.clearThread(threadId);
       modelStore.dropThread(threadId);
       sessionStore.remove(threadId);
@@ -4349,7 +4331,10 @@ export function AppShell(): React.JSX.Element {
             }}
             onNewThread={newThread}
             onLoadOlder={loadOlderHistory}
-            loadingOlder={historyPage.loading}
+            historyPending={
+              status.state === 'connected' && !historyPage.loaded &&
+              sessions.some(session => session.threadId === activeThread && session.messageCount > 0)
+            }
             uiPrefs={uiPrefs}
           />
   );

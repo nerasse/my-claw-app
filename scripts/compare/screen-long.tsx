@@ -207,7 +207,6 @@ function Root(): React.JSX.Element {
           chatStore.prependHistory(THREAD, older);
           chatStore.setPage(THREAD, { nextBefore: page.nextBefore + 20, hasMore: page.nextBefore + 20 < 120 });
         }}
-        loadingOlder={false}
         uiPrefs={{ expandTools: true, expandReasoning: false }}
       />
       </Shell>

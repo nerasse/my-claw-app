@@ -62,7 +62,6 @@ function mount(over: Record<string, unknown> = {}): ReactTestRenderer.ReactTestR
           onAgentsPress={noop}
           subagentDoors={new Map()}
           onLoadOlder={noop}
-          loadingOlder={false}
           uiPrefs={{ expandTools: false, expandReasoning: false }}
           {...over}
         />

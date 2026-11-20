@@ -848,8 +848,34 @@ describe('paging back through a long conversation', () => {
   function sentHistoryRequests(): Array<{ before?: number; limit?: number }> {
     return bridge.sendMessage.mock.calls
       .map(([raw]) => JSON.parse(raw as string))
-      .filter((frame: { type: string }) => frame.type === 'session.sync' || frame.type === 'session.history' || frame.type === 'session.history');
+      .filter((frame: { type: string }) => frame.type === 'session.sync' || frame.type === 'session.history');
   }
+
+  test('an id-only older page does not replace the newest messages', async () => {
+    const tree = await renderWithHistory();
+    ReactTestRenderer.act(() => chatStore.setPage(THREAD, { nextBefore: 0, hasMore: true }));
+    bridge.sendMessage.mockClear();
+    await ReactTestRenderer.act(async () => {
+      chatList(tree).props.onEndReached({ distanceFromEnd: 0 });
+    });
+    expect(sentHistoryRequests()).toEqual([
+      { type: 'session.history', threadId: THREAD, limit: 50, beforeId: 'h-0', fold: true, lazyReasoning: true },
+    ]);
+    await ReactTestRenderer.act(async () => {
+      DeviceEventEmitter.emit('claw:ws:message', {
+        text: JSON.stringify({
+          type: 'chat.history',
+          threadId: THREAD,
+          beforeId: 'h-0',
+          nextBefore: 4,
+          hasMore: false,
+          messages: [{ id: 'older-id-only', role: 'user', text: 'still older', ts: '2025-12-31T22:00:00.000Z' }],
+        }),
+      });
+    });
+    expect(chatStore.getItems(THREAD).map(item => item.id)).toEqual(['older-id-only', 'h-0', 'h-1', 'h-2']);
+    await unmount(tree);
+  });
 
   test('reaching the far end asks for the page before it, once, and prepends it', async () => {
     const tree = await renderWithHistory();

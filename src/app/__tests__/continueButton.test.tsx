@@ -115,7 +115,7 @@ describe('the Continue button', () => {
       deviceInfo: null, autoFocusHero: false, onOpenDrawer: noop, onStatusPress: noop, onSend: noop, locationEnabled: false,
       onBubbleMenu: noop, onOpenImage: noop, onOpenText: noop, onOpenVideo: noop, onOpenFile: noop, onOpenMenu: noop,
       onCommandEntered: () => false, streaming, onStop: noop, onContinue, onQuestionReply: noop, onNewThread: noop,
-      subagentDoors: new Map(), onLoadOlder: noop, loadingOlder: false,
+      subagentDoors: new Map(), onLoadOlder: noop,
     } as unknown as React.ComponentProps<typeof ChatScreen>;
     act(() => {
       mounted = TestRenderer.create(

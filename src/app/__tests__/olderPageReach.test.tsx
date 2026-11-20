@@ -29,7 +29,7 @@ function seed(): void {
   ] as never);
 }
 
-function render(onLoadOlder: () => void, loadingOlder = false) {
+function render(onLoadOlder: () => void) {
   let tree!: TestRenderer.ReactTestRenderer;
   act(() => {
     tree = TestRenderer.create(
@@ -65,7 +65,6 @@ function render(onLoadOlder: () => void, loadingOlder = false) {
           onNewThread={noop}
           subagentDoors={new Map()}
           onLoadOlder={onLoadOlder}
-          loadingOlder={loadingOlder}
         />
       </ThemeContext.Provider>,
     );
@@ -99,7 +98,7 @@ test('a thread shorter than the screen asks for its older page', () => {
   measureShort(tree);
 
   // Once: the ask is the list's, and a store guard would be no help if the screen asked per frame.
-  expect(asked).toBeLessThanOrEqual(1);
+  expect(asked).toBe(1);
   act(() => tree.unmount());
 });
 
@@ -123,7 +122,7 @@ test('a page already in flight is not asked for twice', () => {
   // The screen reads the prop AppShell hands it, which mirrors the store's own latch.
   const tree = render(() => {
     asked += 1;
-  }, true);
+  });
 
   measureShort(tree);
 

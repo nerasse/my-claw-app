@@ -1,6 +1,7 @@
 import { connection } from './connection';
 import { refusalText } from './refusal';
 import { chatStore } from './chat';
+import { cancelOlderHistory, receiveOlderHistory, syncOlderHistory } from './historyPaging';
 import { rememberReasoning } from './reasoningFetch';
 import { rostersFor } from './subagentStack';
 import { subAgentCallersStore, subAgentStore } from './subagents';
@@ -560,10 +561,12 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       setFilesError(null);
       break;
     case 'chat.history':
-      // The same frame carries both the newest page, which replaces the thread, and an
-      // older one, which goes in front of it. `before` is what tells them apart.
-      if (frame.before) chatStore.prependHistory(frame.threadId, frame.messages);
-      else chatStore.seedHistory(frame.threadId, frame.messages, frame.activeRun);
+      if (frame.beforeId !== undefined || (frame.before ?? 0) > 0) {
+        receiveOlderHistory(frame);
+        break;
+      }
+      cancelOlderHistory(frame.threadId);
+      chatStore.seedHistory(frame.threadId, frame.messages, frame.activeRun);
       const roster = subAgentStore.get(frame.threadId);
       if (roster.status === 'ready') chatStore.reconcileSpawnRoster(frame.threadId, roster.agents);
       chatStore.setPage(frame.threadId, {
@@ -575,12 +578,13 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       // Only a draft the server actually holds is applied. An absent one means "no draft there",
       // which must not wipe text typed here and not yet synced: losing what is written is worse
       // than keeping a draft one beat longer than the device that cleared it.
-      if (!frame.before && frame.draft) applyServerDraft(frame.threadId, frame.draft);
+      if (frame.draft) applyServerDraft(frame.threadId, frame.draft);
       // A page adds the chips this device did not know; the server's own broadcast is what removes.
-      if (!frame.before && frame.files) applyServerFiles(frame.threadId, frame.files, 'merge');
-      if (!frame.before) chatStore.markRead(frame.threadId);
+      if (frame.files) applyServerFiles(frame.threadId, frame.files, 'merge');
+      chatStore.markRead(frame.threadId);
       break;
     case 'session.sync.result': {
+      if (frame.reset) cancelOlderHistory(frame.threadId);
       // Delta sync: three cases by reset flag.
       // - absent: delta to append (same branch)
       // - "unknown-cursor": cursor not found, full page, replace thread
@@ -597,6 +601,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
         frame.nextBefore,
         frame.lastRun,
       );
+      if (!frame.reset && frame.nextBefore !== undefined) syncOlderHistory(frame.threadId);
       // The thread's compaction state, in both directions: the operation if one runs, and its
       // absence otherwise. Only the first travels as an event, so a window that was not connected
       // when the compaction ended hears it here or nowhere -- and the rule it drew would stay up.
@@ -884,6 +889,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       setMediaTicket?.(frame.ticket);
       break;
     case 'chat.cleared':
+      cancelOlderHistory(frame.threadId);
       chatStore.clearThread(frame.threadId);
       break;
     case 'chat.transcript':

@@ -46,7 +46,6 @@ function props() {
     onNewThread: noop,
     subagentDoors: new Map(),
     onLoadOlder: noop,
-    loadingOlder: false,
   } as unknown as React.ComponentProps<typeof ChatScreen>;
 }
 

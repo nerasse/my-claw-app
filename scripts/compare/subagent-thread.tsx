@@ -134,7 +134,6 @@ function Root(): React.JSX.Element {
           subagentDoors={new Map([['t2', { label: 'digger', status: 'idle' as const }]])}
           onOpenSubAgent={() => {}}
           onLoadOlder={() => {}}
-          loadingOlder={false}
           uiPrefs={{ expandTools: true, expandReasoning: false }}
         />
       </View>

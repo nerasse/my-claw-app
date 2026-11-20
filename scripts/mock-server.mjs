@@ -28,10 +28,16 @@ import ws from 'ws';
 // `ws` is CommonJS: the named export does not exist under ESM, only the default one.
 const { Server: WebSocketServer } = ws;
 
-const ROOT = fileURLToPath(new URL('../dist-web/', import.meta.url));
 const args = process.argv.slice(2);
-const portFlag = args.indexOf('--port');
-const PORT = portFlag === -1 ? 8099 : Number(args[portFlag + 1]);
+function option(name) {
+  const index = args.indexOf(name);
+  return index < 0 ? undefined : args[index + 1];
+}
+const ROOT = option('--bundle') ?? fileURLToPath(new URL('../dist-web/', import.meta.url));
+const PORT = Number(option('--port') ?? 8099);
+const TURNS = Number(process.env.MOCK_LONG_TURNS ?? 120);
+const RICH = process.env.MOCK_RICH_HISTORY === '1';
+const HISTORY_DELAY = Number(process.env.MOCK_HISTORY_DELAY ?? 0);
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -44,6 +50,18 @@ const TYPES = {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`);
+  if (url.pathname === '/__mock/timeline') {
+    const body = req.method === 'POST' ? advanceTimeline(url.searchParams.get('step')) : timelineState();
+    res.writeHead(body.error ? 400 : 200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify(body));
+    return;
+  }
+  if (url.pathname === '/mock-late-image.svg') {
+    setTimeout(() => res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' }).end(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="1000"><rect width="600" height="1000" fill="#527795"/></svg>',
+    ), 650);
+    return;
+  }
   const wanted = url.pathname === '/' ? '/index.html' : url.pathname;
   // `normalize` before the join: a mock server is still a file server, and `..` is still `..`.
   const path = join(ROOT, normalize(wanted).replace(/^(\.\.[/\\])+/, ''));
@@ -70,16 +88,20 @@ const PAGE = 40;
 
 const iso = ms => new Date(ms).toISOString();
 
-/** 240 turns, one per minute: enough for a scrollbar thumb worth dragging and a page to page in. */
+// Generate the history once. The socket only sends bounded pages of it.
 function longHistory() {
   const messages = [];
-  for (let i = 0; i < 120; i += 1) {
+  for (let i = 0; i < TURNS; i += 1) {
     const ts = iso(STAMP + i * 60_000);
     messages.push({ id: `long-u${i}`, role: 'user', text: `Question ${i}: what does line ${i} say?`, ts });
     messages.push({
       id: `long-a${i}`,
       role: 'assistant',
-      text: `Answer ${i}. `.repeat(6).trim(),
+      text: RICH ? [
+        `Answer ${i}.`,
+        ...Array.from({ length: i % 6 }, (_, n) => `Report paragraph ${n}. `.repeat(8)),
+        ...(i === TURNS - 1 ? ['![Late image](/mock-late-image.svg)', 'Newest history tail.'] : []),
+      ].join('\n\n') : `Answer ${i}. `.repeat(6).trim(),
       reasoning: i % 5 === 0 ? `Thinking about question ${i}: the sheet rolls up from its children.` : undefined,
       ts,
     });
@@ -140,14 +162,16 @@ function scriptedHistory() {
   ];
 }
 
+const long = longHistory();
+const scripted = scriptedHistory();
 const sessions = [
   {
     threadId: LONG,
     title: 'Long history',
-    messageCount: 240,
+    messageCount: long.length,
     createdAt: iso(STAMP),
-    lastActiveAt: iso(STAMP + 120 * 60_000),
-    lastMessageAt: iso(STAMP + 120 * 60_000),
+    lastActiveAt: iso(STAMP + TURNS * 60_000),
+    lastMessageAt: iso(STAMP + TURNS * 60_000),
   },
   {
     threadId: SCRIPTED,
@@ -187,14 +211,87 @@ const RUN_SCRIPT = [
 
 const wss = new WebSocketServer({ server, path: '/my-claw-app' });
 
+const timeline = { step: 'history', frames: [], history: [], hydrations: new Map() };
+const requests = [];
+const RUN = 'mock-rich-run';
+const PROMPT = 'Check the synthetic planning sheet.';
+const LIVE_TEXT = 'Live answer begins here.';
+const FINAL = 'Finished timeline answer.';
+const TOOL = 't-example-read';
+const ANSWER = 'timeline-a';
+const questionTime = iso(Date.now());
+const task = { id: 'timeline-u', role: 'user', text: PROMPT, ts: questionTime };
+const run = { id: RUN, status: 'running', startTs: questionTime };
+const thinking = { id: 'timeline-thinking', role: 'assistant', text: '', reasoning: 'Checking the fixture headings.', run, ts: questionTime };
+const tool = { id: TOOL, role: 'tool', name: 'read', args: { path: 'fixture-sheet.txt' }, output: 'Fixture totals: 5, 12, 17.', ok: true, truncated: false, durationMs: 12, run, ts: questionTime };
+let answerText = '';
+
+function timelineState() {
+  return { step: timeline.step, requests: requests.slice(-300) };
+}
+
+function advanceTimeline(step) {
+  const send = (type, fields = {}) => {
+    const frame = { type, threadId: LONG, ts: iso(Date.now()), ...fields };
+    for (const socket of wss.clients) if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
+    return frame;
+  };
+  if (step === 'start' && timeline.step === 'history') {
+    timeline.step = 'live';
+    timeline.history = [task, thinking, tool];
+    send('chat.user', task);
+    send('chat.run.start', { run: RUN });
+    send('chat.reasoning.delta', { id: thinking.id, text: thinking.reasoning });
+    send('chat.stream.done', { id: thinking.id });
+    send('chat.tool.start', { id: TOOL, turnId: thinking.id, name: tool.name, args: tool.args });
+    send('chat.tool', { ...tool, turnId: thinking.id });
+    answerText = LIVE_TEXT;
+    timeline.frames = [send('chat.stream.start', { id: ANSWER }), send('chat.stream.delta', { id: ANSWER, text: answerText })];
+  } else if (step === 'grow' && timeline.step === 'live') {
+    const delta = `\n\n${'A live paragraph of results. '.repeat(12)}\n\nLive growth tail.`;
+    answerText += delta;
+    const frame = send('chat.stream.delta', { id: ANSWER, text: delta });
+    timeline.frames = [timeline.frames[0], { ...frame, text: answerText, replay: true }];
+  } else if (step === 'finish' && timeline.step === 'live') {
+    timeline.step = 'finished';
+    const delta = `\n\n${FINAL}`;
+    answerText += delta;
+    send('chat.stream.delta', { id: ANSWER, text: delta });
+    send('chat.stream.done', { id: ANSWER });
+    send('chat.run.end', { run: RUN, reason: 'done' });
+    const done = { ...run, status: 'done', endTs: iso(Date.now()) };
+    const folded = {
+      id: `run-${thinking.id}`, role: 'run', run: done, ts: thinking.ts,
+      toolCount: 1, toolKinds: { read: 1 }, itemCount: 2, lastId: TOOL,
+    };
+    timeline.hydrations.set(folded.id, { untilId: TOOL, messages: [thinking, tool].map(item => ({ ...item, run: done })) });
+    timeline.history = [task, folded, { id: ANSWER, role: 'assistant', text: answerText, run: done, ts: done.endTs }];
+    timeline.frames = [];
+  } else {
+    return { error: `Cannot ${step} from ${timeline.step}` };
+  }
+  return timelineState();
+}
+
+function record(frame) {
+  requests.push(frame);
+  if (requests.length > 300) requests.shift();
+}
+
 wss.on('connection', socket => {
   const send = (type, body = {}) => {
     const threadId = body.threadId ?? SCRIPTED;
     socket.send(JSON.stringify({ type, threadId, ...body }));
   };
 
-  const historyFor = threadId =>
-    threadId === LONG ? longHistory() : scriptedHistory();
+  const historyFor = threadId => threadId === LONG ? long.concat(timeline.history) : scripted;
+  const reply = (frame, delay = 0) => {
+    const sendReply = () => {
+      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
+    };
+    if (delay > 0) setTimeout(sendReply, delay);
+    else sendReply();
+  };
 
   let timers = [];
 
@@ -211,7 +308,9 @@ wss.on('connection', socket => {
         socket.send(JSON.stringify({ type: 'media.ticket', ticket: 'mock', expiresAt: Date.now() + 86_400_000 }));
         return;
       case 'session.list':
-        socket.send(JSON.stringify({ type: 'session.list.result', sessions }));
+        reply({ type: 'session.list.result', sessions: sessions.map(session => ({
+          ...session, activeRun: session.threadId === LONG && timeline.step === 'live',
+        })) });
         return;
       case 'commands.list':
         socket.send(JSON.stringify({
@@ -280,14 +379,18 @@ wss.on('connection', socket => {
       case 'session.sync': {
         const threadId = frame.threadId;
         const messages = historyFor(threadId);
-        const page = threadId === LONG ? messages.slice(-PAGE) : messages;
-        socket.send(JSON.stringify({
-          type: 'chat.history',
-          threadId,
-          messages: page,
-          hasMore: threadId === LONG,
-          nextBefore: threadId === LONG ? messages.length - PAGE : undefined,
-        }));
+        const since = frame.since ? messages.findIndex(item => item.id === frame.since) : -1;
+        const start = since === -1 && threadId === LONG ? Math.max(0, messages.length - PAGE) : since + 1;
+        const activeRun = threadId === LONG && timeline.step === 'live';
+        record({ type: frame.type, threadId, fold: frame.fold, since: frame.since });
+        reply({
+          type: 'session.sync.result', threadId, entries: messages.slice(start), activeRun,
+          head: messages.at(-1)?.id ?? null, leaf: messages.at(-1)?.id ?? null,
+          ...(since === -1 ? { hasMore: start > 0, nextBefore: messages.length - start } : {}),
+          ...(since === -1 && frame.since ? { reset: 'unknown-cursor' } : {}),
+          ...(activeRun ? { lastRun: run } : {}),
+        }, HISTORY_DELAY);
+        if (activeRun) for (const live of timeline.frames) reply(live, HISTORY_DELAY);
         // A pending approval, so the sheet can be looked at: `MOCK_APPROVAL=1` on the server asks
         // for one with a long command, which is the shape that used to run off the screen.
         // `MOCK_APPROVAL_DELAY` (ms) makes it land after the page is up, which is how the
@@ -318,22 +421,25 @@ wss.on('connection', socket => {
         }
         return;
       }
-      // An older page: `before` counts back from the newest message, so the page is the window
-      // that ends there. Paging is what the prepend anchor exists for, so it has to be real.
       case 'session.history': {
-        const threadId = frame.threadId;
+        const { threadId, before, beforeId } = frame;
         const messages = historyFor(threadId);
-        const limit = typeof frame.limit === 'number' ? frame.limit : PAGE;
-        const before = typeof frame.before === 'number' ? frame.before : messages.length;
-        const start = Math.max(0, before - limit);
-        socket.send(JSON.stringify({
-          type: 'chat.history',
-          threadId,
-          messages: messages.slice(start, before),
-          before,
-          hasMore: start > 0,
-          nextBefore: start > 0 ? start : undefined,
-        }));
+        const idIndex = beforeId ? messages.findIndex(item => item.id === beforeId || item.lastId === beforeId || item.id === `run-${beforeId}`) : -1;
+        const end = idIndex < 0 ? Math.max(0, messages.length - (before ?? 0)) : idIndex;
+        const start = Math.max(0, end - (frame.limit ?? PAGE));
+        record({ type: frame.type, threadId, before, beforeId, fold: frame.fold, first: messages[start]?.id });
+        reply({
+          type: 'chat.history', threadId, before, beforeId, messages: messages.slice(start, end),
+          hasMore: start > 0, nextBefore: messages.length - start,
+        }, HISTORY_DELAY);
+        return;
+      }
+      case 'session.run.items': {
+        const { threadId, fromId, untilId } = frame;
+        const held = timeline.hydrations.get(fromId);
+        const found = threadId === LONG && held?.untilId === untilId;
+        record({ type: frame.type, threadId, fromId, untilId });
+        reply({ type: 'chat.run.items', threadId, fromId, found, messages: found ? held.messages : [] }, HISTORY_DELAY);
         return;
       }
       case 'chat.send': {

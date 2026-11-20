@@ -63,6 +63,21 @@ already had is never rearranged and a plain fresh frame -- the common case -- st
 
 Everything else inside the range defers to the window. That is the point: it is the truth there.
 
+## The paging cursor
+
+A window carries `nextBefore` and `hasMore`, the cursor of its own oldest entry. When the reader has
+already paged further back, the window keeps those older items, and its cursor would send the next
+request for a range the thread already holds. So the held cursor stays whenever the window keeps
+older history, and the window's cursor is used when it replaces the thread.
+
+An older page in flight belongs to the edge it was asked from. A reset, a window that changes the
+oldest item, or `chat.cleared` cancels it: its answer would be prepended in front of a different
+range. A window that leaves the edge as it was keeps the request (docs/thread-scroll.md, "Older
+pages").
+
+A sync that holds nothing at all (a conversation that was cleared) still settles the page as
+loaded with nothing older, so the screen does not wait for a cursor that will never come.
+
 ## The thinking, once
 
 A bubble the page carries on one of its own phases is dropped from what the device holds, even

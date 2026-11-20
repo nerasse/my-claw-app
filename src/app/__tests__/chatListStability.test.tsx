@@ -46,7 +46,6 @@ function props() {
     onNewThread: noop,
     subagentDoors: new Map(),
     onLoadOlder: noop,
-    loadingOlder: false,
   } as unknown as React.ComponentProps<typeof ChatScreen>;
 }
 
@@ -102,7 +101,8 @@ describe('the conversation list and the draft', () => {
       questions: [{ header: 'h', question: 'q', options: [{ label: 'a' }] }],
       ts: '2026-01-01T00:00:03.000Z',
     });
-    const tree = render({ loadingOlder: true });
+    chatStore.setPageLoading(THREAD, true);
+    const tree = render();
     const before = listProps(tree);
 
     act(() => {

@@ -612,8 +612,9 @@ export interface ChatHistoryFrame {
   type: 'chat.history';
   threadId: string;
   messages: HistoryEntry[];
-  /** Echo of the request cursor: absent means the newest page, which replaces the thread. */
+  /** The echoed count or id cursor distinguishes an older page from the newest page. */
   before?: number;
+  beforeId?: string;
   /** Whether anything remains before this page, so the list stops asking at the top. */
   hasMore?: boolean;
   /** What to send as `before` to reach the page just older than this one. */

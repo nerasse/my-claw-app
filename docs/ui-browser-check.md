@@ -38,11 +38,28 @@ a list of frames from `core/protocol.ts`.
 ```sh
 bash scripts/build-web.sh
 node scripts/mock-server.mjs --port 8099     # then open http://127.0.0.1:8099/
+# a long thread, rich rows, a late image and a page delay
+MOCK_LONG_TURNS=22000 MOCK_RICH_HISTORY=1 MOCK_HISTORY_DELAY=220 \
+  node scripts/mock-server.mjs --bundle /tmp/build --port 8100
 ```
 
-Two conversations are seeded: **Long history** (240 turns, paged 40 at a time) for the scroll, the
-scrollbar and the anchoring, and **Scripted run** for a live run (reasoning, a tool call, an
-answer, a token count) that a browser can be watched through step by step.
+Two conversations are seeded: **Long history** for the scroll, the scrollbar and paging, and
+**Scripted run** for a live run (reasoning, a tool call, an answer, a token count). Long history
+has 120 turns by default (`MOCK_LONG_TURNS` changes that); `MOCK_RICH_HISTORY=1` gives answers of
+different heights and ends on a 1,000 px image that loads 650 ms late.
+
+`/__mock/timeline` drives Long history through the three states and records what the app asked
+for (the last 300 requests):
+
+| request | effect |
+|---|---|
+| `GET` | `step` and the request log: `session.sync`, `session.history` (`before`, `beforeId`, `first`, `fold`), `session.run.items` |
+| `POST ?step=start` | a run starts live: question, reasoning, a read tool, the start of an answer |
+| `POST ?step=grow` | the answer grows by a paragraph |
+| `POST ?step=finish` | the run ends; a reload now gets it folded, and opening the fold answers `session.run.items` |
+
+So the same run is checked live, reloaded while it runs, and replayed from history. A collapsed
+run must never send `session.run.items` before it is opened, and must send it once when it is.
 
 Serve a fresh bundle on a **fresh port** when re-testing: a service worker caches the old one per
 origin, and a stale bundle explains every "it did not change".
@@ -58,13 +75,21 @@ origin, and a stale bundle explains every "it did not change".
 | paging | an older page lands above without moving the paragraph being read |
 | a card's door | the send card and the scheduled job's delivery both show one blue open-in-new icon (the link ink, not the theme accent), and tapping it opens the agent / the run |
 
-## Known gap, measured 2026-11-14
+## Measured 2026-11-20
 
-Paging on the web **ends** correct but is not continuous: the reader sits on the older page for
-about 1.8 s (2.5 s worst case) before the offset catches up. The end state is exact
-(Question 100 returns to the same y), and the cause is measurement rather than arithmetic: a
-virtualized list realises the prepended rows in steps hundreds of milliseconds apart, so the
-content height grows under the reader faster than `onContentSizeChange` can be compensated. The
-two candidate fixes are an index-based anchor (`scrollToIndex` on the row that was at the top,
-tolerating an estimate for a frame or two) and a non-virtualized window for the rows just above the
-viewport.
+The 0.6.232 web list on 44,000 entries opened with frames up to 8,332 px above the bottom, stopped
+after two older pages, and left a 20-message hole at one seam. The virtualized list that replaced
+it, on the same fixture (desktop 1919x958, and 390x844 for the three states):
+
+- **Open**: the thread stays hidden until it is at its end. First and final visible gaps 0. One
+  rAF read of 970 px when the late 1,000 px image sized in, gone the next frame.
+- **Paging**: four wheel rounds, four requests, four distinct cursors, `fold: true`, nothing while
+  parked. The question being read stayed at the same y on one prepend (0.0 px) and drifted 73 px on
+  another, because a row above it finished measuring 30 ms after the page landed.
+- **Three states**: no jump while reading 400 px up during a stream, follows the answer at the
+  bottom, one copy of the answer after a reload mid-run, zero `session.run.items` before the
+  finished group is opened, one when it is, none on reopen.
+
+A requestAnimationFrame sampler reads before ResizeObserver corrections, so a one-frame gap it
+reports may never be painted. Count consecutive frames before calling it a jump. The late-measure
+drift on a prepend is the open item: rows above the anchor are estimated (96 px) until they mount.

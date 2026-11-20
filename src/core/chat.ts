@@ -280,10 +280,13 @@ export interface HistoryPage {
   nextBefore: number;
   hasMore: boolean;
   loading: boolean;
+  loaded: boolean;
+  failed?: boolean;
   oldestId: string | null;
+  countOnly?: boolean;
 }
 
-const NO_PAGE: HistoryPage = { nextBefore: 0, hasMore: false, loading: false, oldestId: null };
+const NO_PAGE: HistoryPage = { nextBefore: 0, hasMore: false, loading: false, loaded: false, oldestId: null };
 Object.freeze(NO_PAGE);
 
 /**
@@ -844,10 +847,8 @@ class ChatStoreImpl {
   }
 
   /** Records where the newest page left off, so scrolling up knows what to ask for. */
-  setPage(threadId: string, page: { nextBefore: number; hasMore: boolean; oldestId?: string | null }): void {
-    const held = this.threads.get(threadId);
-    const oldestId = page.oldestId !== undefined ? page.oldestId : (held?.[0]?.id ?? null);
-    this.pages.set(threadId, { ...page, oldestId, loading: false });
+  setPage(threadId: string, page: Pick<HistoryPage, 'nextBefore' | 'hasMore' | 'countOnly'>): void {
+    this.pages.set(threadId, { ...page, oldestId: this.firstItemId(threadId), loading: false, loaded: true });
     this.emit();
   }
 
@@ -860,10 +861,10 @@ class ChatStoreImpl {
   }
 
   /** Latched before the request leaves, cleared when its page lands or the send fails. */
-  setPageLoading(threadId: string, loading: boolean): void {
+  setPageLoading(threadId: string, loading: boolean, failed = false): void {
     const current = this.pages.get(threadId) ?? NO_PAGE;
-    if (current.loading === loading) return;
-    this.pages.set(threadId, { ...current, loading });
+    if (current.loading === loading && Boolean(current.failed) === failed) return;
+    this.pages.set(threadId, { ...current, loading, failed });
     this.emit();
   }
 
@@ -962,7 +963,8 @@ class ChatStoreImpl {
   private pageCursorFollows(threadId: string): void {
     const page = this.pages.get(threadId);
     if (!page) return;
-    this.pages.set(threadId, { ...page, oldestId: this.firstItemId(threadId) });
+    const oldestId = this.firstItemId(threadId);
+    if (page.oldestId !== oldestId) this.pages.set(threadId, { ...page, oldestId });
   }
 
   hasThread(threadId: string): boolean {
@@ -1398,13 +1400,14 @@ class ChatStoreImpl {
     else if (activeRun === false) this.activeRuns.delete(threadId);
     this.refreshRunning();
 
+    let keptHistory = false;
     if (reset) {
       // Reset: replace the thread. Only streaming items survive, because they exist only locally.
       this.resetThread(threadId, entries, activeRun);
     } else if (nextBefore !== undefined) {
       // The newest page of the branch, asked for with a null cursor: what the thread *is* over
       // the range it covers, not something to add to it.
-      this.applyWindow(threadId, entries, activeRun);
+      keptHistory = this.applyWindow(threadId, entries, activeRun);
     } else {
       // Delta: append entries, replacing any with matching ids (live tool cards settling).
       this.appendSyncEntries(threadId, entries);
@@ -1419,14 +1422,12 @@ class ChatStoreImpl {
     // If truncated, we don't have head yet -- keep asking until we do.
     this.setSyncState(threadId, truncated ? this.getSyncState(threadId).since : head, leaf, truncated);
 
-    // A fresh page (open or reset) replaces the held thread, so the paging cursor is whatever
-    // the server serves with it: that is what tells the client there is older work and where
-    // to ask. Without the fields (old server, or a delta), the held cursor stands -- except on
-    // a reset, where the old window is gone and a stale cursor would page from the wrong place.
-    if (nextBefore !== undefined) {
+    // A window only supplies the cursor if it also supplies the oldest held item. An empty
+    // sync can still settle an opening, for example when the listed conversation was cleared.
+    if (nextBefore !== undefined && !keptHistory) {
       this.setPage(threadId, { nextBefore, hasMore: hasMore === true });
-    } else if (reset) {
-      this.pages.delete(threadId);
+    } else if (reset || !this.getPage(threadId).loaded) {
+      this.setPage(threadId, { nextBefore: 0, hasMore: false });
     }
     this.emit();
   }
@@ -1477,10 +1478,10 @@ class ChatStoreImpl {
    * the range defers to the window, except what only this device holds (a bubble being streamed
    * into, a card still running, a send still parked), which belongs after it.
    */
-  private applyWindow(threadId: string, entries: HistoryEntry[], activeRun?: boolean): void {
+  private applyWindow(threadId: string, entries: HistoryEntry[], activeRun?: boolean): boolean {
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const base = this.itemsOfWithSpawnReconcile(threadId, entries);
-    if (base.length === 0) return;
+    if (base.length === 0) return false;
     const known = new Set(base.map(item => item.id));
     const from = base[0]!.ts;
     // What the page carries folded. A run that travelled as a header is one whose entries this
@@ -1510,6 +1511,8 @@ class ChatStoreImpl {
     this.threads.set(threadId, this.trimToCap(threadId, [...above, ...mergeLocalSurvivors(base, live)]));
     this.pageCursorFollows(threadId);
     this.spawnCards.delete(threadId);
+    // The cursor from the new window describes a later edge than the one still held.
+    return above.length > 0 && this.firstItemId(threadId) === above[0]?.id && this.getPage(threadId).loaded;
   }
 
   /**
@@ -1597,15 +1600,16 @@ class ChatStoreImpl {
    * overlap the one before it: the newest page is taken from the tail of a session that keeps
    * growing, so a turn that arrived between two requests would otherwise be replayed twice.
    */
-  prependHistory(threadId: string, entries: HistoryEntry[]): void {
-    if (entries.length === 0) return;
+  prependHistory(threadId: string, entries: HistoryEntry[]): boolean {
+    if (entries.length === 0) return false;
     const existing = this.threads.get(threadId) ?? EMPTY_ITEMS;
     const known = new Set(existing.map(item => item.id));
     const older = itemsOf(entries).filter(item => !known.has(item.id));
-    if (older.length === 0) return;
+    if (older.length === 0) return false;
     this.threads.set(threadId, this.trimToCap(threadId, [...older, ...existing]));
     this.pageCursorFollows(threadId);
     this.emit();
+    return true;
   }
 
   /**
@@ -2443,6 +2447,8 @@ class ChatStoreImpl {
 
   clearThread(threadId: string): void {
     this.threads.delete(threadId);
+    this.pages.delete(threadId);
+    this.trimAllowed.delete(threadId);
     this.hydrated.delete(threadId);
     this.compacting.delete(threadId);
     this.spawnCards.delete(threadId);
