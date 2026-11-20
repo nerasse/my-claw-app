@@ -150,7 +150,11 @@ export function ReasoningLine({
     if (threadId && id) requestReasoning(threadId, id);
   }, [threadId, id]);
 
-  const body = (reasoning?.trim() || known?.trim()) ?? '';
+  // The cache answers a reasoning the bubble says the server holds (`reasoningChars`), never one
+  // it does not claim. A live bubble's thought is cached under its id when it seals, and once that
+  // thought moved into the fold the answer still read it back here: the reasoning was drawn a
+  // second time above the answer, without a dot (owner, 2026-11-20).
+  const body = (reasoning?.trim() || (onDemand ? known?.trim() : '')) ?? '';
   const hasBody = body.length > 0 || onDemand;
   const count = tokens && tokens > 0 ? compactCount(tokens) : '';
   const hasThought = hasBody || count !== '';

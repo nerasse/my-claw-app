@@ -1302,6 +1302,12 @@ export function ChatScreen({
     [toolColumn, deviceInfo, mediaBase, onBubbleMenu, onBubbleCopy, subagent, onResend, onOpenSubAgent, onOpenCronRun, openAttachment, openMedia, questionByCard, onQuestionReply, revealQuestionField, subagentDoors, subagentsById, onOpenSubAgentById, spawnLive, threadId, uiPrefs],
   );
 
+  const renderGroupChild = useCallback(
+    (item: ChatItem, index: number, children: ChatItem[], dense: boolean) =>
+      renderItemContent(item, isGrouped(children, index), !isGrouped(children, index + 1), undefined, dense),
+    [renderItemContent],
+  );
+
   const renderRowContent = useCallback(
     (row: ChatRow) => {
       // The live compaction rule, a row of its own: drawing it inside a cell put it on the wrong
@@ -1334,9 +1340,11 @@ export function ChatScreen({
             run={row.run}
             summaries={row.summaries}
             open={expandedFolds.has(foldKeyOf(row))}
+            thoughts={row.thoughts}
             foot={row.foot}
             onToggle={() => toggleFold(foldKeyOf(row))}
             onOpen={openRun}
+            renderItem={renderGroupChild}
           />
         );
       }
@@ -1352,14 +1360,11 @@ export function ChatScreen({
           open={expandedFolds.has(foldKeyOf(row))}
           foot={row.foot}
           onToggle={() => toggleFold(foldKeyOf(row))}
-          renderItem={(item, index, children, dense) => {
-            const childGrouped = isGrouped(children, index);
-            return renderItemContent(item, childGrouped, !isGrouped(children, index + 1), undefined, dense);
-          }}
+          renderItem={renderGroupChild}
         />
       );
     },
-    [grouped, itemIndexById, renderItemContent, expandedFolds, toggleFold, openRun, compacting, stopping, activeRun],
+    [grouped, itemIndexById, renderItemContent, renderGroupChild, expandedFolds, toggleFold, openRun, compacting, stopping, activeRun],
   );
 
   /**

@@ -219,6 +219,7 @@ const LIVE_TEXT = 'Live answer begins here.';
 const FINAL = 'Finished timeline answer.';
 const TOOL = 't-example-read';
 const ANSWER = 'timeline-a';
+const ANSWER_THOUGHT = 'The totals match the fixture, so I can answer.';
 const questionTime = iso(Date.now());
 const task = { id: 'timeline-u', role: 'user', text: PROMPT, ts: questionTime };
 const run = { id: RUN, status: 'running', startTs: questionTime };
@@ -241,17 +242,24 @@ function advanceTimeline(step) {
     timeline.history = [task, thinking, tool];
     send('chat.user', task);
     send('chat.run.start', { run: RUN });
+    send('chat.stream.start', { id: thinking.id });
     send('chat.reasoning.delta', { id: thinking.id, text: thinking.reasoning });
     send('chat.stream.done', { id: thinking.id });
     send('chat.tool.start', { id: TOOL, turnId: thinking.id, name: tool.name, args: tool.args });
     send('chat.tool', { ...tool, turnId: thinking.id });
     answerText = LIVE_TEXT;
-    timeline.frames = [send('chat.stream.start', { id: ANSWER }), send('chat.stream.delta', { id: ANSWER, text: answerText })];
+    // The answer thinks before it writes, on its own bubble: the shape Opus streams, and the one whose
+    // reasoning has to end up in the fold, live and replayed.
+    timeline.frames = [
+      send('chat.stream.start', { id: ANSWER }),
+      send('chat.reasoning.delta', { id: ANSWER, text: ANSWER_THOUGHT }),
+      send('chat.stream.delta', { id: ANSWER, text: answerText }),
+    ];
   } else if (step === 'grow' && timeline.step === 'live') {
     const delta = `\n\n${'A live paragraph of results. '.repeat(12)}\n\nLive growth tail.`;
     answerText += delta;
     const frame = send('chat.stream.delta', { id: ANSWER, text: delta });
-    timeline.frames = [timeline.frames[0], { ...frame, text: answerText, replay: true }];
+    timeline.frames = [timeline.frames[0], timeline.frames[1], { ...frame, text: answerText, replay: true }];
   } else if (step === 'finish' && timeline.step === 'live') {
     timeline.step = 'finished';
     const delta = `\n\n${FINAL}`;
@@ -265,7 +273,7 @@ function advanceTimeline(step) {
       toolCount: 1, toolKinds: { read: 1 }, itemCount: 2, lastId: TOOL,
     };
     timeline.hydrations.set(folded.id, { untilId: TOOL, messages: [thinking, tool].map(item => ({ ...item, run: done })) });
-    timeline.history = [task, folded, { id: ANSWER, role: 'assistant', text: answerText, run: done, ts: done.endTs }];
+    timeline.history = [task, folded, { id: ANSWER, role: 'assistant', text: answerText, reasoning: ANSWER_THOUGHT, run: done, ts: done.endTs }];
     timeline.frames = [];
   } else {
     return { error: `Cannot ${step} from ${timeline.step}` };

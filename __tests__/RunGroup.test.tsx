@@ -229,7 +229,7 @@ test('the open state is the caller, so it survives the row being replaced', () =
   const onToggle = jest.fn();
   const onOpen = jest.fn();
   const folded = render(
-    <FoldedRunGroup run={RUN} summaries={[summaryRow('run-w1', 8)]} open={false} onToggle={onToggle} onOpen={onOpen} />,
+    <FoldedRunGroup run={RUN} summaries={[summaryRow('run-w1', 8)]} open={false} onToggle={onToggle} onOpen={onOpen} renderItem={() => null} />,
   );
   press(folded, 0);
   // The press reports the toggle and nothing else: the screen is what remembers it, and being
@@ -249,11 +249,11 @@ test('a group drawn open asks for its work, with no press behind it', () => {
   // press again. It sat on a skeleton for good -- a stack of empty bars mid-conversation.
   const onOpen = jest.fn();
   const summaries = [summaryRow('run-w1', 10)];
-  render(<FoldedRunGroup run={RUN} summaries={summaries} open onToggle={jest.fn()} onOpen={onOpen} />);
+  render(<FoldedRunGroup run={RUN} summaries={summaries} open onToggle={jest.fn()} onOpen={onOpen} renderItem={() => null} />);
   expect(onOpen).toHaveBeenCalledWith(summaries);
 
   const closed = jest.fn();
-  render(<FoldedRunGroup run={RUN} summaries={[summaryRow('run-w2', 10)]} open={false} onToggle={jest.fn()} onOpen={closed} />);
+  render(<FoldedRunGroup run={RUN} summaries={[summaryRow('run-w2', 10)]} open={false} onToggle={jest.fn()} onOpen={closed} renderItem={() => null} />);
   expect(closed).not.toHaveBeenCalled();
 });
 
@@ -262,14 +262,14 @@ test('a redraw that hands back a row without its work asks again', () => {
   // a comparison -- and it is the only thing that refills a group without the reader's help.
   const onOpen = jest.fn();
   const loading: RunSummaryItem[] = [{ ...summaryRow('run-w1', 10), hydration: 'loading' }];
-  const tree = render(<FoldedRunGroup run={RUN} summaries={loading} open onToggle={jest.fn()} onOpen={onOpen} />);
+  const tree = render(<FoldedRunGroup run={RUN} summaries={loading} open onToggle={jest.fn()} onOpen={onOpen} renderItem={() => null} />);
   expect(onOpen).toHaveBeenCalledTimes(1);
 
   const refreshed = [summaryRow('run-w1', 10)];
   ReactTestRenderer.act(() => {
     tree.update(
       <ThemeContext.Provider value={{ palette: darkPalette, dark: true, mode: 'dark', themeId: 'sable' }}>
-        <FoldedRunGroup run={RUN} summaries={refreshed} open onToggle={jest.fn()} onOpen={onOpen} />
+        <FoldedRunGroup run={RUN} summaries={refreshed} open onToggle={jest.fn()} onOpen={onOpen} renderItem={() => null} />
       </ThemeContext.Provider>,
     );
   });
@@ -278,7 +278,7 @@ test('a redraw that hands back a row without its work asks again', () => {
 
 test('an opened folded group draws a skeleton the size of what is coming', () => {
   const tree = render(
-    <FoldedRunGroup run={RUN} summaries={[summaryRow('run-w1', 4)]} open onToggle={jest.fn()} onOpen={jest.fn()} />,
+    <FoldedRunGroup run={RUN} summaries={[summaryRow('run-w1', 4)]} open onToggle={jest.fn()} onOpen={jest.fn()} renderItem={() => null} />,
   );
   const loading = tree.root.findAll(
     node => typeof node.type === 'string' && node.props.accessibilityLabel === 'Loading the run work',
@@ -294,7 +294,7 @@ test('a range the branch no longer holds says so instead of opening on nothing',
       summaries={[{ ...summaryRow('run-w1', 4), hydration: 'failed' }]}
       open
       onToggle={jest.fn()}
-      onOpen={jest.fn()}
+      onOpen={jest.fn()} renderItem={() => null}
     />,
   );
   expect(tree.root.findAllByType(Text).map(node => node.props.children)).toContain('work no longer available');
@@ -343,7 +343,7 @@ test('two merged rows of one run read as a single group', () => {
       open={false}
       foot={RUN}
       onToggle={jest.fn()}
-      onOpen={jest.fn()}
+      onOpen={jest.fn()} renderItem={() => null}
     />,
   );
   const texts = tree.root.findAllByType(Text).map(node => node.props.children);

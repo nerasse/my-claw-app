@@ -19,7 +19,12 @@ export type ChatRow =
    */
   | { kind: 'item'; item: ChatItem; foot?: RunInfo }
   | { kind: 'group'; run: RunInfo; items: ChatItem[]; foot?: RunInfo; live?: boolean }
-  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[]; foot?: RunInfo }
+  /**
+   * `thoughts` is what the run thought after the work the summaries stand for: the reasoning of the
+   * answer that closed it. The server keeps it on the answer's entry, outside the range it folded,
+   * and it still belongs to the fold (owner, 2026-11-20: never a reasoning without a dot).
+   */
+  | { kind: 'folded'; run: RunInfo; summaries: RunSummaryItem[]; thoughts?: TextItem[]; foot?: RunInfo }
   /**
    * The live compaction rule, as a row of the list rather than a decoration on a cell.
    *
@@ -701,38 +706,18 @@ function groupLooseThoughts(rows: ChatRow[], hasRuns: boolean): ChatRow[] {
       out[out.length - 1] = { ...previous, items: [...previous.items, thought] };
       continue;
     }
-    // A run that travelled folded cannot take it: the row stands for the run's work and holds no
-    // items, and the thought is the *answer's* -- the answer is what cut the fold, so the fold does
-    // not carry it either. Drawn beside the fold it was a bare `Reasoning` line, on no spine and
-    // with no dot (owner, 2026-11-19: "il y a encore les reasoning qui ne se groupe pas et qui
-    // n'ont pas de dot"), so it goes back onto the message it thinks for: the bubble draws its own
-    // reasoning, which is where the owner asked for it in the first place ("on laisse le dernier
-    // reasoning avec le message", 2026-11-13).
+    // A run that travelled folded holds no items, and the server leaves the answer's reasoning on
+    // the answer, outside the range it folded. The fold carries it all the same: put back on the
+    // message it was a `Reasoning` line above the answer, on no spine and with no dot (owner,
+    // 2026-11-20). Opening the fold fetches the work, and the group that replaces it takes the
+    // thought the ordinary way, so it stays in the same place across the swap.
     if (previous?.kind === 'folded' && run !== undefined && previous.run.id === run.id) {
-      const next = rows[i + 1];
-      const message = next?.kind === 'item' && thought.reasoningOf === next.item.id ? next.item : undefined;
-      if (message?.kind === 'text') {
-        out.push({ kind: 'item', item: { ...message, ...reasoningFieldsOf(thought) } });
-        i += 1;
-      }
+      out[out.length - 1] = { ...previous, thoughts: [...(previous.thoughts ?? []), thought] };
       continue;
     }
     out.push({ kind: 'group', run: run ?? loneThoughts(thought), items: [thought] });
   }
   return out;
-}
-
-/** What a split thought took off its message, handed back: `splitReasoning` is the one that took it. */
-function reasoningFieldsOf(thought: Extract<ChatItem, { kind: 'text' }>): Partial<Extract<ChatItem, { kind: 'text' }>> {
-  const fields: Partial<Extract<ChatItem, { kind: 'text' }>> = {};
-  if (thought.reasoning !== undefined) fields.reasoning = thought.reasoning;
-  if (thought.reasoningChars !== undefined) fields.reasoningChars = thought.reasoningChars;
-  if (thought.reasoningTokens !== undefined) fields.reasoningTokens = thought.reasoningTokens;
-  if (thought.reasoningStartedAt !== undefined) fields.reasoningStartedAt = thought.reasoningStartedAt;
-  if (thought.reasoningMs !== undefined) fields.reasoningMs = thought.reasoningMs;
-  if (thought.waitMs !== undefined) fields.waitMs = thought.waitMs;
-  if (thought.waitingSince !== undefined) fields.waitingSince = thought.waitingSince;
-  return fields;
 }
 
 /**

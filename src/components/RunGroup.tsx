@@ -183,19 +183,24 @@ export const RunGroup = React.memo(function RunGroupView({
  */
 export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   summaries,
+  thoughts = [],
   open,
   foot,
   onToggle,
   onOpen,
+  renderItem,
 }: {
   run: RunInfo;
   summaries: RunSummaryItem[];
+  /** The answer's own reasoning, which the server left outside the range it folded. */
+  thoughts?: ChatItem[];
   open: boolean;
   /** The run's empreinte, when this is the row it signs under -- `markRunFeet`. */
   foot?: RunInfo;
   onToggle: () => void;
   /** Fires when the group is opened: the rows are replaced by their items when the answer lands. */
   onOpen: (summaries: RunSummaryItem[]) => void;
+  renderItem: React.ComponentProps<typeof RunGroup>['renderItem'];
 }): React.JSX.Element {
   const styles = useThemedStyles(createStyles);
 
@@ -205,7 +210,7 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
   // `itemCount` only. `itemCount` is the total, so the difference is the thoughts -- and it is
   // never negative on a row the server wrote, but a page boundary can make the two disagree, so
   // the clamp keeps a bad count from inventing steps.
-  const thoughtCount = Math.max(0, itemCount - toolCount);
+  const thoughtCount = Math.max(0, itemCount - toolCount) + thoughts.length;
   // The same label as a fold of real items, from the counts instead of the cards: a run cut by a
   // page boundary is several rows, and their tallies add up. The server sends the per-tool counts
   // with the row, so a reload says what the open group said -- `4 steps · 3 shell · 1 thought` --
@@ -262,6 +267,12 @@ export const FoldedRunGroup = React.memo(function FoldedRunGroupView({
               ))}
             </View>
           )}
+          {thoughts.map((item, index) => (
+            <View key={item.id} style={styles.child}>
+              <View style={[styles.dot, styles.dotThought]} pointerEvents="none" />
+              {renderItem(item, index, thoughts, true)}
+            </View>
+          ))}
         </View>
       ) : null}
       {foot !== undefined ? <RunFoot run={foot} /> : null}

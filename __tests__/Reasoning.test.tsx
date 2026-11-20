@@ -176,6 +176,25 @@ test('a replayed turn whose thought had no words still says it thought, and for 
   await unmount(tree);
 });
 
+test('once the run ends, the answer does not draw the thought its fold already holds', async () => {
+  // The owner's live screenshot, 2026-11-20: a closed `3 steps` fold, then a bare `Reasoning` above
+  // the answer. The stream caches its thought under the bubble id when it seals, and the answer's
+  // own line read that cache back after the thought had moved into the fold.
+  resetAsideExpansion();
+  const tree = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    chatStore.startRun(THREAD, 'r-live');
+    chatStore.startStream(THREAD, 's1');
+    chatStore.appendReasoning(THREAD, 's1', THOUGHT);
+    chatStore.appendDelta(THREAD, 's1', 'the answer');
+    chatStore.endStream(THREAD, 's1');
+    chatStore.endRun(THREAD, 'done');
+  });
+  await waitFor(() => textsOf(tree).includes('the answer'));
+  expect(textsOf(tree)).not.toContain('Reasoning');
+  await unmount(tree);
+});
+
 test('a reasoning the page left on the server still draws its line, even on a bubble with no text', async () => {
   // `reasoningChars` instead of the text: the server's REASONING_INLINE_LIMIT (docs/run-hydration.md).
   // The earlier cases opened `h-1` and the fold is held per bubble id, outside the tree.

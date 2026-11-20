@@ -104,16 +104,17 @@ describe('model changes in a row', () => {
 
 describe('a thought whose run travelled folded', () => {
   /**
-   * The owner, 2026-11-19, mid-run: `10 steps · 8 shell · 2 thoughts`, then a bare `Reasoning` line,
-   * then the answer. The thought is the answer's own, and the answer is what cut the fold, so the
-   * fold does not carry it. It goes back onto the message it thinks for, where the owner asked for
-   * it in the first place (2026-11-13: "on laisse le dernier reasoning avec le message").
+   * The owner, 2026-11-19 then 2026-11-20: `26 steps · 16 shell · 9 thoughts`, then a `Reasoning`
+   * line above the answer, on no spine and without a dot. The thought is the answer's own, and the
+   * server leaves it on the answer, outside the range it folded. The fold carries it all the same.
    */
-  test('goes back onto the message it thinks for, instead of standing beside the fold', () => {
+  test('joins the fold, which counts it and draws it when opened', () => {
     const rows = buildRows([userText('u'), folded('f1', 'r1'), agentText('a1', 'Tout est vert.', 'r1', { reasoning: 'je regarde' })]);
     expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12', 'a1+foot']);
+    const fold = rows[1] as Extract<ChatRow, { kind: 'folded' }>;
+    expect(fold.thoughts?.map(item => item.id)).toEqual(['a1~reasoning']);
     const answer = rows[2]!.kind === 'item' ? (rows[2] as { item: ChatItem }).item : undefined;
-    expect(answer?.kind === 'text' ? answer.reasoning : undefined).toBe('je regarde');
+    expect(answer?.kind === 'text' ? answer.reasoning : undefined).toBeUndefined();
   });
 
   test('a thought of another run still opens its own fold', () => {
@@ -122,10 +123,17 @@ describe('a thought whose run travelled folded', () => {
     expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12+foot', 'g:r2+foot']);
   });
 
-  test('a thought with no message at its heels is not left as a bare line either', () => {
-    // Nothing to hand it back to: it is the fold's, and the fold is what draws it.
+  test('a thought with no message at its heels is the fold\'s too, not dropped', () => {
     const rows = buildRows([userText('u'), folded('f1', 'r1'), agentText('th1', '', 'r1', { reasoning: 'orpheline' })]);
     expect(rows.map(labelOfRow)).toEqual(['u', 'f:r1:12+foot']);
+    expect((rows[1] as Extract<ChatRow, { kind: 'folded' }>).thoughts?.map(item => item.id)).toEqual(['th1']);
+  });
+
+  test('once the work arrives, the thought is in the group that replaces the fold', () => {
+    const work = [agentText('w1', '', 'r1', { reasoning: 'premiere' }), tool('t1', 'r1')];
+    const rows = buildRows([userText('u'), ...work, agentText('a1', 'Tout est vert.', 'r1', { reasoning: 'je regarde' })]);
+    expect(rows.map(labelOfRow)).toEqual(['u', 'g:r1', 'a1+foot']);
+    expect((rows[1] as Extract<ChatRow, { kind: 'group' }>).items.map(item => item.id)).toEqual(['w1', 't1', 'a1~reasoning']);
   });
 });
 

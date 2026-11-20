@@ -135,7 +135,7 @@ describe('the row a reload draws', () => {
     ReactTestRenderer.act(() => {
       tree = ReactTestRenderer.create(
         <ThemeContext.Provider value={{ palette: lightPalette, dark: false, mode: 'light', themeId: 'sable' }}>
-          <FoldedRunGroup run={run} summaries={summaries} open={false} onToggle={() => {}} onOpen={() => {}} />
+          <FoldedRunGroup run={run} summaries={summaries} open={false} onToggle={() => {}} onOpen={() => {}} renderItem={() => null} />
         </ThemeContext.Provider>,
       );
     });

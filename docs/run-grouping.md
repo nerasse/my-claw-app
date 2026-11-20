@@ -104,6 +104,19 @@ Three layers, because the value here is the guarantee more than the mechanism:
    joins the fold beside it (same run first), or becomes one. It runs before the feet are marked,
    since merging moves where a run's last row is.
 
+Two routes used to draw the answer's own thought outside the fold, and both are closed:
+
+- **A fold the server held.** The server folds a finished run's work and leaves the answer's
+  reasoning on the answer, outside the range it folded. The thought was put back onto the message
+  and drawn above it. The folded row now carries it (`thoughts`): the header counts it, and opening
+  the fold draws it on the spine with a dot, under the skeleton of the work being fetched. Once
+  the work lands, the group that replaces the fold takes it the ordinary way.
+- **The reasoning cache.** A live bubble's thought is cached under the bubble's id when it seals
+  (`reasoningFetch.ts`), so a later page that carries only `reasoningChars` has the text without a
+  round trip. The answer's `ReasoningLine` read that cache even though its thought had moved into
+  the fold, and drew it again above the answer once the run closed (owner, 2026-11-20). The line
+  reads the cache only for a reasoning the bubble claims (`reasoningChars`).
+
 A thread that knows no runs at all -- a session written before the server marked them -- keeps its
 plain rows. There is nothing to inherit, and a fold invented around each thought would hide it
 behind a header saying what the row already said.
