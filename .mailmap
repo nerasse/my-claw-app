@@ -1,0 +1,4 @@
+# One person, two machine names. `claw@` is the agent account that made most commits;
+# `neras@` is the human behind it. Local git shows one author for both.
+Kssimi Claw <claw@kssimi.fr> Yassir EL KSSIMI <neras@kssimi.fr>
+Kssimi Claw <claw@kssimi.fr> <neras@kssimi.fr>

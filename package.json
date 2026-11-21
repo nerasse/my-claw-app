@@ -121,5 +121,19 @@
         "@expo/log-box"
       ]
     }
-  }
+  },
+  "license": "MIT",
+  "description": "Android and web client for my-claw, a self-hosted AI agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nerasse/my-claw-app.git"
+  },
+  "author": "Yassir EL KSSIMI",
+  "keywords": [
+    "ai",
+    "agent",
+    "react-native",
+    "android",
+    "self-hosted"
+  ]
 }

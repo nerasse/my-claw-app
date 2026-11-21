@@ -1,6 +1,6 @@
 # MyClaw App
 
-Android companion app for [my-claw](https://git.kssimi.fr/claw/my-claw), a self-hosted AI agent. First client of the my-claw-app channel: chat + phone control tools.
+Android companion app for [my-claw](https://github.com/nerasse/my-claw), a self-hosted AI agent. First client of the my-claw-app channel: chat + phone control tools.
 
 ## Stack
 
@@ -46,3 +46,12 @@ To connect to the Metro dev server from a remote phone: see the my-claw `docs` (
 - Foreground service + notifications: keeps the connection alive in the background
 
 No action is taken without the user's explicit approval in the app.
+
+## License
+
+MIT. Read it in [LICENSE](LICENSE).
+
+Use it, change it, sell it, ship it closed. The only thing MIT asks is that the copyright notice
+travels with the copy.
+
+Contributions land under the same license.
