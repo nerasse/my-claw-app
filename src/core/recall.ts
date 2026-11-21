@@ -1,24 +1,23 @@
 import type { ChatItem } from './chat';
 import { isOwnerMessage } from './runRows';
-import { messageSelectionBody } from './textSelection';
+import { spokenWords } from './textSelection';
 
 /**
  * Walking back through what was sent, the way a terminal walks its history.
  *
  * The field holds one line of the past at a time; Up asks for the one before it and Down for the
- * one after. What is recalled is the message as text: a voice note comes back as the line it
- * stands for (`audio: "…"`), because the recording itself cannot be typed into a field again.
+ * one after. What comes back is the message's own words. A voice note keeps its prose beside the
+ * file, so its transcript takes that place -- plainly, without the `audio: "…"` marker the
+ * clipboard writes. That marker says what a recording is in a document; in the field it is one
+ * keystroke from being sent as a message, and the turn then hands the model an envelope instead
+ * of the owner's words (measured 2026-11-21, 4d5775e7 seq 55377: Up on a voice note, Enter, and
+ * the log holds a turn whose whole text is `audio: "…"`).
  */
 export function recallLines(items: ChatItem[]): string[] {
   const lines: string[] = [];
   for (const item of items) {
     if (item.kind !== 'text' || !isOwnerMessage(item)) continue;
-    const body = messageSelectionBody({
-      text: item.text,
-      attachments: item.attachments,
-      transcripts: item.transcripts,
-    });
-    const line = body.trim();
+    const line = [item.text.trim(), ...spokenWords(item)].filter(part => part !== '').join('\n\n');
     if (line !== '') lines.push(line);
   }
   return lines;

@@ -19,14 +19,24 @@ test('the history is the owner’s messages, oldest first, and nothing else', ()
   expect(recallLines(thread)).toEqual(['first', 'second', 'third']);
 });
 
-test('a recording comes back as the line it stands for, not as an empty string', () => {
+test('a recording comes back as the words that were heard, not as the line a document writes', () => {
   const lines = recallLines([
     sent('v1', '', {
       attachments: [{ id: 'rec1', type: 'audio' } as never],
       transcripts: { rec1: 'book the table' },
     }),
   ]);
-  expect(lines).toEqual(['audio: "book the table"']);
+  expect(lines).toEqual(['book the table']);
+});
+
+test('a caption and a recording come back in the order the message carried them', () => {
+  const lines = recallLines([
+    sent('v2', 'have a look at this', {
+      attachments: [{ id: 'rec2', type: 'audio' } as never],
+      transcripts: { rec2: ' the second paragraph ' },
+    }),
+  ]);
+  expect(lines).toEqual(['have a look at this\n\nthe second paragraph']);
 });
 
 test('Up walks back one message at a time and stops at the oldest', () => {

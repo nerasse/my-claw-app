@@ -22,26 +22,38 @@ export function useOpenSelection(): (target: SelectionTarget) => void {
   return useContext(TextSelectionContext);
 }
 
+interface CarriesRecordings {
+  attachments?: ReadonlyArray<{ id: string; type: string }>;
+  transcripts?: Record<string, string>;
+}
+
 /**
- * A recording, as the line it stands for in text: `audio: "the words the server heard"`.
+ * What a message's recordings say, in the order it carried its takes.
  *
  * A voice note is a message whose prose lives beside the file rather than in it, so anything that
- * hands a message over as text (the clipboard, the composer's history) has to carry those words
- * itself or it hands over nothing at all (owner, 2026-11-07).
+ * hands a message over as text has to carry those words itself or it hands over nothing at all
+ * (owner, 2026-11-07). This is the words alone; how they are written down is the caller's.
  */
-export function audioLines(
-  item: {
-    attachments?: ReadonlyArray<{ id: string; type: string }>;
-    transcripts?: Record<string, string>;
-  },
-): string[] {
-  const lines: string[] = [];
+export function spokenWords(item: CarriesRecordings): string[] {
+  const words: string[] = [];
   for (const att of item.attachments ?? []) {
     if (att.type !== 'audio') continue;
     const heard = item.transcripts?.[att.id]?.trim();
-    if (heard) lines.push(`audio: "${heard}"`);
+    if (heard) words.push(heard);
   }
-  return lines;
+  return words;
+}
+
+/**
+ * A recording, as the line it stands for in a document: `audio: "the words the server heard"`.
+ *
+ * The clipboard and the selection viewer want that label, because there the words arrive with no
+ * player beside them and a reader has to know they were spoken. The composer does not: it uses
+ * `spokenWords` (see `recall.ts`), since a marker sitting in the field is one keystroke away from
+ * being sent as a message of its own.
+ */
+export function audioLines(item: CarriesRecordings): string[] {
+  return spokenWords(item).map(heard => `audio: "${heard}"`);
 }
 
 /**
