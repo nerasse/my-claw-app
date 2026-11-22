@@ -67,8 +67,15 @@ export function ThreadList({
   useImperativeHandle(ref, () => ({
     getOffset: () => scroller.current?.scrollTop ?? 0,
     scrollTo: offset => virtualizer.scrollToOffset(offset),
-    scrollToNewest: animated => virtualizer.scrollToEnd({ behavior: animated ? 'smooth' : 'auto' }),
-  }), [virtualizer]);
+    scrollToNewest: animated => {
+      // The state follows the intent, not only the scroll event that lands a frame later: a send
+      // that jumps here must keep following the run it just started even if the browser coalesces
+      // the event (owner, 2026-11-22).
+      atNewest.current = true;
+      onAtNewest(true);
+      virtualizer.scrollToEnd({ behavior: animated ? 'smooth' : 'auto' });
+    },
+  }), [onAtNewest, virtualizer]);
 
   useLayoutEffect(() => { virtualizer.scrollToEnd(); }, [virtualizer]);
 
@@ -82,6 +89,24 @@ export function ThreadList({
     setReady(true);
   }, [count, getItemKey, ready, virtualizer]);
   useLayoutEffect(reveal, [reveal, visibleRows]);
+
+  // A running turn appends on every delta, so the list can keep failing `atEnd` on the frame the
+  // reveal happens and stay hidden for ever: the page was there, the spinner never left, and only
+  // switching threads (a quieter run) revealed it (owner, 2026-11-22, on a deep link to an active
+  // conversation). The rows are mounted; after a beat, show them and snap to the end, whatever the
+  // scroll says. The hidden state is an anti-flash, not a gate.
+  useEffect(() => {
+    if (ready || count === 0) return;
+    const timer = setTimeout(() => {
+      const element = scroller.current;
+      if (!element || element.clientHeight === 0) return;
+      if (!virtualizer.elementsCache.has(getItemKey(count - 1))) return;
+      virtualizer.scrollToEnd();
+      lastTop.current = element.scrollTop;
+      setReady(true);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [ready, count, getItemKey, virtualizer]);
 
   const askOlder = useCallback(() => {
     if (ready && page.hasMore && !page.loading && !page.failed) onLoadOlder();
