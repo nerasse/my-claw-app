@@ -55,6 +55,47 @@ export class CodeSpanEmphasisTokenizer extends Tokenizer {
     return undefined;
   }
 
+  /**
+   * A plain `**bold**` (or `*em*`) the library failed to see.
+   *
+   * The Babel-rewritten `\p{P}` / `\p{S}` classes do not only cost the code-span shape: on the
+   * React Native build, a piece of emphasis that opens a paragraph or a list item is sometimes
+   * left as raw text as well, and the thread shows the asterisks (owner, 2026-11-22: "le gras reste
+   * littéral"). The same source tokenizes correctly in Node, so this is the same class of bug as
+   * the one above, and it is claimed the same way: after the library answers nothing.
+   *
+   * CommonMark's spacing rules are kept, because the fallback must not turn prose into emphasis:
+   * the opening delimiter may not be followed by a space, the closing one may not be preceded by
+   * one, and `_` never opens or closes inside a word. A longer run (`***`) and an escaped
+   * delimiter are left to the library.
+   */
+  private delimited(src: string, delimiter: '**' | '__' | '*' | '_', type: 'strong' | 'em', prevChar: string): unknown {
+    if (!src.startsWith(delimiter)) return undefined;
+    // `***both***` is the library's business: nested emphasis has its own rules.
+    if (src[delimiter.length] === delimiter[0]) return undefined;
+    // An underscore inside a word is not emphasis (`snake_case_name`).
+    if (delimiter[0] === '_' && /[\p{L}\p{N}]/u.test(prevChar)) return undefined;
+    const openAt = delimiter.length;
+    if (!src[openAt] || /\s/.test(src[openAt]!)) return undefined;
+    let at = src.indexOf(delimiter, openAt + 1);
+    while (at > 0) {
+      const before = src[at - 1]!;
+      const after = src[at + delimiter.length];
+      const closesInsideWord = delimiter[0] === '_' && after !== undefined && /[\p{L}\p{N}]/u.test(after);
+      if (!/\s/.test(before) && !closesInsideWord && at > openAt) break;
+      at = src.indexOf(delimiter, at + 1);
+    }
+    if (at < 0) return undefined;
+    const span = src.slice(openAt, at);
+    if (!span.trim()) return undefined;
+    return {
+      type,
+      raw: src.slice(0, at + delimiter.length),
+      text: span,
+      tokens: this.lexer.inlineTokens(span),
+    };
+  }
+
   emStrong(src: string, maskedSrc: string, prevChar = ''): ReturnType<Tokenizer['emStrong']> {
     return (
       super.emStrong(src, maskedSrc, prevChar) ??
@@ -63,7 +104,11 @@ export class CodeSpanEmphasisTokenizer extends Tokenizer {
         ['__', 'strong'],
         ['*', 'em'],
         ['_', 'em'],
-      ]) as ReturnType<Tokenizer['emStrong']>)
+      ]) as ReturnType<Tokenizer['emStrong']>) ??
+      (this.delimited(src, '**', 'strong', prevChar) as ReturnType<Tokenizer['emStrong']>) ??
+      (this.delimited(src, '__', 'strong', prevChar) as ReturnType<Tokenizer['emStrong']>) ??
+      (this.delimited(src, '*', 'em', prevChar) as ReturnType<Tokenizer['emStrong']>) ??
+      (this.delimited(src, '_', 'em', prevChar) as ReturnType<Tokenizer['emStrong']>)
     );
   }
 

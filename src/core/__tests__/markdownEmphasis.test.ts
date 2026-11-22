@@ -92,3 +92,39 @@ describe('everything else stays on the library path', () => {
     expect(kinds('\\*\\*`x`\\*\\*', codeSpanEmphasis)).toEqual(kinds('\\*\\*`x`\\*\\*'));
   });
 });
+
+describe('the plain fallback, for what Babel loses at a block start', () => {
+  // `marked` under the RN preset leaves some emphasis as raw text at the start of a paragraph or
+  // a list item (owner, 2026-11-22: "le gras reste littéral"). The fallback only runs when the
+  // library answered nothing, so it is exercised directly here: `marked` in Node parses these and
+  // the override never sees them.
+  const fallback = codeSpanEmphasis as unknown as {
+    lexer: { inlineTokens: (text: string) => Token[] };
+    delimited: (src: string, delimiter: '**' | '__' | '*' | '_', type: 'strong' | 'em', prevChar: string) => { raw: string; type: string; text: string } | undefined;
+  };
+  beforeAll(() => {
+    fallback.lexer = { inlineTokens: (text: string) => [{ type: 'text', raw: text } as Token] };
+  });
+
+  test('claims a spaced-out bold and stops at the closing delimiter', () => {
+    expect(fallback.delimited("**Don't run it as-is** — it fails", '**', 'strong', '')).toMatchObject({
+      type: 'strong',
+      raw: "**Don't run it as-is**",
+      text: "Don't run it as-is",
+    });
+  });
+
+  test('refuses the shapes that are not emphasis', () => {
+    // Prose with spaced asterisks, an underscore inside a word, a longer run, and an unclosed one.
+    expect(fallback.delimited('2 ** 3 ** 4', '**', 'strong', '')).toBeUndefined();
+    expect(fallback.delimited('**  leading space**', '**', 'strong', '')).toBeUndefined();
+    expect(fallback.delimited('snake_case_name', '_', 'em', 'e')).toBeUndefined();
+    expect(fallback.delimited('***both***', '**', 'strong', '')).toBeUndefined();
+    expect(fallback.delimited('**unclosed', '**', 'strong', '')).toBeUndefined();
+  });
+
+  test('a bold that spans a code span keeps the span inside it', () => {
+    const token = fallback.delimited('**`nextCursor` on the last page**', '**', 'strong', '');
+    expect(token).toMatchObject({ type: 'strong', text: '`nextCursor` on the last page' });
+  });
+});
