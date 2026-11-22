@@ -22,6 +22,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Android refuses an update whose versionCode did not move, whatever the versionName says:
+      # 0.6.237 shipped with 0.6.236's code and could not install. The previous tag is the
+      # comparison; a dispatch has no tag, so it skips.
+      - name: Verify versionCode moved
+        if: github.event_name == 'push'
+        run: |
+          previous="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+          if [ -z "$previous" ]; then
+            echo "no previous release tag, nothing to compare"
+            exit 0
+          fi
+          before="$(git show "${previous}:android/app/build.gradle" | sed -n 's/.*versionCode \([0-9][0-9]*\).*/\1/p' | head -1)"
+          now="$(sed -n 's/.*versionCode \([0-9][0-9]*\).*/\1/p' android/app/build.gradle | head -1)"
+          echo "versionCode ${before:-none} -> ${now:-none} (previous tag ${previous})"
+          if [ -z "$before" ] || [ -z "$now" ]; then
+            echo "could not read both versionCodes" >&2
+            exit 1
+          fi
+          if [ "$now" -le "$before" ]; then
+            echo "versionCode must increase: ${now} <= ${before}; Android refuses the update" >&2
+            exit 1
+          fi
 
       - name: Install Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
