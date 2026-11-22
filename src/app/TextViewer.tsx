@@ -68,7 +68,15 @@ export function TextViewer({
   const isTable = kind === 'csv';
   // The code reader is a WebView of its own: it scrolls itself, so it never goes inside the
   // ScrollView the prose needs.
-  const isCode = kind === 'code' || kind === 'json' || kind === 'html';
+  // A file the classification only calls `text` still opens in the editor when its name names a
+  // language: a `.py` attached before the `kind` field existed came out as an uncoloured wall
+  // (owner, 2026-11-22: "le script Python il montre aucune couleur"). The name is the fallback,
+  // never the verdict: markdown and csv keep their own readers above.
+  const isCode =
+    kind === 'code' ||
+    kind === 'json' ||
+    kind === 'html' ||
+    (!isMarkdown && !isTable && languageForFile(filename) !== null);
   // Every kind this viewer draws is text -- markdown, plain text, code, a table, an office
   // document converted to it -- so the whole file is always one tap away (owner, 2026-10-28: a
   // `.sh` wants the same tile a README gets).

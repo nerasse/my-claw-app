@@ -34,6 +34,7 @@ import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../theme';
 import { shouldReplaceDocument } from './codeeditor/document';
 import { DEFAULT_EDITOR_FONT_SIZE } from './codeeditor/protocol';
+import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languageExtension } from './codeeditor/languages';
 import type { CodeEditorHandle, CodeEditorProps } from './CodeEditor';
 
@@ -166,6 +167,10 @@ export function CodeEditor({
       historyCompartment.of(history()),
       keymap.of(historyKeymap),
       languageExtension(editorLanguage),
+      // The grammar tags tokens; this is what turns the tags into colour. The Android page
+      // carries the same line, and without it the web editor drew every file in one ink
+      // (owner, 2026-11-22: "le script Python il montre aucune couleur").
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       // The reader fills the box it was given and scrolls inside it. Without the explicit
       // height the CodeMirror root keeps its natural height, so a long file grew a
       // 6000px-tall element inside an 800px pane: the text then ran off the bottom of the
