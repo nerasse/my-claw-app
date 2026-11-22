@@ -125,6 +125,7 @@ export function AgentsScreen({
   subtitle,
   rows,
   status,
+  emptyText,
   onClose,
   onOpenAgent,
 }: {
@@ -134,6 +135,11 @@ export function AgentsScreen({
   subtitle?: string;
   rows: RosterRow[];
   status: SubAgentsStatus;
+  /**
+   * What to say when there is nothing, and the default would be a lie. The global page opened with
+   * no conversation has no roster to report -- that is not "the agent never spawned one".
+   */
+  emptyText?: string;
   onClose: () => void;
   onOpenAgent: (entry: SubAgentEntry) => void;
 }): React.JSX.Element {
@@ -180,7 +186,7 @@ export function AgentsScreen({
       ) : status === 'unknown' ? (
         <Text style={styles.empty}>loading agents</Text>
       ) : rows.length === 0 ? (
-        <Text style={styles.empty}>no sub-agent yet · the agent creates them when it delegates</Text>
+        <Text style={styles.empty}>{emptyText ?? 'no sub-agent yet · the agent creates them when it delegates'}</Text>
       ) : null}
 
       <View style={styles.listWrap}>

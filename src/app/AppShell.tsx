@@ -1124,6 +1124,17 @@ export function AppShell(): React.JSX.Element {
       // Sync the thread: asks for delta since last known entry, or full page if fresh.
       const { since, leaf } = chatStore.getSyncState(threadId);
       connection.send(encodeSessionSync(threadId, since, leaf ?? undefined));
+      // That frame can leave while the socket is still coming up, and then be lost with the
+      // transport's own reconnect: on a reload addressed at /t/<id>, the conversation spun for
+      // ever until another one was opened and this one reopened (owner, 2026-11-22). One retry
+      // on an empty thread, without a cursor: nothing when the first answer was only late, the
+      // page when it never came.
+      if (chatStore.getItems(threadId).length === 0) {
+        setTimeout(() => {
+          if (chatStore.getItems(threadId).length > 0) return;
+          connection.send(encodeSessionSync(threadId));
+        }, 1200);
+      }
       // The model of a conversation is per session: refresh it when the thread changes, so
       // the picker never shows the previous conversation's choice.
       connection.send(encodeModelGet(threadId));
@@ -6235,9 +6246,13 @@ export function AppShell(): React.JSX.Element {
       {agentsGlobalOpen ? (
         <AgentsScreen
           parentTitle="conversations"
-          subtitle="public and per-workspace"
-          rows={globalList}
-          status={roster.status}
+          subtitle={rosterThread ? 'public and per-workspace' : 'open a conversation first'}
+          rows={rosterThread ? globalList : []}
+          // With no conversation open there is no roster to ask for: the page was stuck on
+          // "loading agents" for ever (owner, 2026-11-22), because the server lists a parent's
+          // children and had no parent to name.
+          status={rosterThread ? roster.status : 'ready'}
+          emptyText={rosterThread ? undefined : 'the roster belongs to a conversation · open one and its sub-agents are listed here'}
           onClose={() => setAgentsGlobalOpen(false)}
           onOpenAgent={openGlobalAgent}
         />
