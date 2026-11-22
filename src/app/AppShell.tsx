@@ -1070,6 +1070,26 @@ export function AppShell(): React.JSX.Element {
    * answered with the parent's model and a banner for the thread being read stayed in the tray.
    * Anything that must happen on the way in is written once, here.
    */
+  /**
+   * Ask for a thread's history until it has something to draw.
+   *
+   * A socket that slept can be several seconds behind the tap, and a sync that left before it
+   * was up is gone with the transport. Four attempts over ten seconds cover a reconnect, and the
+   * thread stops asking the moment the first page lands.
+   */
+  const syncUntilLoaded = useCallback((threadId: string): void => {
+    const delays = [1200, 2500, 5000, 8000];
+    const attempt = (index: number): void => {
+      if (index >= delays.length) return;
+      setTimeout(() => {
+        if (chatStore.getItems(threadId).length > 0) return;
+        connection.send(encodeSessionSync(threadId)).catch(() => {});
+        attempt(index + 1);
+      }, delays[index]);
+    };
+    attempt(0);
+  }, []);
+
   const enterThread = useCallback(
     (threadId: string, view: SubAgentView | null) => {
       subagentRef.current = view;
@@ -1135,7 +1155,7 @@ export function AppShell(): React.JSX.Element {
       // the picker never shows the previous conversation's choice.
       connection.send(encodeModelGet(threadId));
     },
-    [selectThread, layout.pinnedDrawer, layout.sidePane, openFilesInner, openInstructionsInner],
+    [selectThread, layout.pinnedDrawer, layout.sidePane, openFilesInner, openInstructionsInner, syncUntilLoaded],
   );
 
   const openThread = useCallback((threadId: string) => enterThread(threadId, null), [enterThread]);
@@ -2396,26 +2416,6 @@ export function AppShell(): React.JSX.Element {
     if (!key) return;
     resetPushRegistration();
     await registerForPush(key);
-  }, []);
-
-  /**
-   * Ask for a thread's history until it has something to draw.
-   *
-   * A socket that slept can be several seconds behind the tap, and a sync that left before it
-   * was up is gone with the transport. Four attempts over ten seconds cover a reconnect, and the
-   * thread stops asking the moment the first page lands.
-   */
-  const syncUntilLoaded = useCallback((threadId: string): void => {
-    const delays = [1200, 2500, 5000, 8000];
-    const attempt = (index: number): void => {
-      if (index >= delays.length) return;
-      setTimeout(() => {
-        if (chatStore.getItems(threadId).length > 0) return;
-        connection.send(encodeSessionSync(threadId)).catch(() => {});
-        attempt(index + 1);
-      }, delays[index]);
-    };
-    attempt(0);
   }, []);
 
   // The one notification the user asked to never see is the run they are already watching, so
