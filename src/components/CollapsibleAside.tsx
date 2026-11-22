@@ -6,7 +6,7 @@ import { BlockActions } from './BlockActions';
 import { dayAndTime } from '../core/clock';
 import { setAsideExpanded, useStoredAsideExpansion } from '../core/asideExpansion';
 import { font, scaleFont, space, type Palette, useThemedStyles } from '../theme';
-import { ROW_SLOT } from './spine';
+import { ROW_GAP, ROW_SLOT, spine } from './spine';
 
 /**
  * A long aside folded into one muted line, expanded on tap. Two things use it: what the model
@@ -133,13 +133,17 @@ export function CollapsibleAside({
           the block away and fill the clipboard. */}
       <View style={[styles.head, headHeight !== undefined ? { height: headHeight } : null]}>
         <Pressable
-          style={styles.line}
+          style={[styles.line, dense ? null : styles.linePull]}
           onPress={() => setOpen(!open)}
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
           accessibilityLabel={label}
           accessibilityHint={open ? hideHint : showHint}>
-          {dense ? null : <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone={tone === 'danger' ? 'danger' : 'faint'} />}
+          {dense ? null : (
+            <View style={styles.slot}>
+              <ChevronIcon direction={open ? 'down' : 'right'} size={ROW_SLOT} tone={tone === 'danger' ? 'danger' : 'faint'} />
+            </View>
+          )}
           <Text style={[styles.label, tone === 'danger' ? styles.labelDanger : null, tone === 'meta' ? styles.labelMeta : null]}>{label}</Text>
           {trailing}
         </Pressable>
@@ -164,27 +168,37 @@ export function CollapsibleAside({
   );
 }
 
-const createStyles = (palette: Palette, _dark: boolean, scale: number) => ({
-  head: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: space.sm },
-  // The toggle takes the row and yields it: a long label must not push the copy button out.
-  line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs, paddingVertical: 2, flexShrink: 1, flexGrow: 1 },
-  label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
-  labelDanger: { color: palette.danger },
-  labelMeta: { color: palette.textMeta },
-  pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },
-  // No rule: an inset already says this sits under something.
-  //
-  // This body used to carry a 2px left border. Inside a run group the rail already draws a
-  // vertical a few points to the left of this text, and the pair read as one doubled line rather
-  // than as two meanings (owner, 2026-11-13, screenshot of a reasoning body). The indent is the
-  // part the eye actually uses, and dropping the border also stops the rail from being echoed.
-  body: {
-    paddingLeft: space.md,
-    marginTop: 2,
-    marginBottom: space.xs,
-  },
-  /** Under the unfolded text: its buttons on the left, the hour closing the block on the right. */
-  foot: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: 4 },
-  grow: { flex: 1 },
-  clock: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
-});
+const createStyles = (palette: Palette, _dark: boolean, scale: number) => {
+  const g = spine(scale);
+  return {
+    head: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: space.sm },
+    // The toggle takes the row and yields it: a long label must not push the copy button out.
+    line: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: ROW_GAP, paddingVertical: 2, flexShrink: 1, flexGrow: 1 },
+    // The same pull as the group's bar: without it the chevron's ink sits `inset` points right of
+    // the one above it, which is what read as two columns (owner, 2026-11-22). The body keeps its
+    // own indent; only the head moves.
+    linePull: { marginLeft: -g.inset },
+    // The bar's slot, not the bare glyph: the fold mark's centre sits on the rail at every font
+    // scale, and the label lands on the same column as a group's count.
+    slot: { width: g.slot, alignItems: 'center' as const, justifyContent: 'center' as const },
+    label: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, letterSpacing: 0.3 },
+    labelDanger: { color: palette.danger },
+    labelMeta: { color: palette.textMeta },
+    pending: { fontSize: scaleFont(font.micro, scale), color: palette.textFaint, fontStyle: 'italic' as const },
+    // No rule: an inset already says this sits under something.
+    //
+    // This body used to carry a 2px left border. Inside a run group the rail already draws a
+    // vertical a few points to the left of this text, and the pair read as one doubled line rather
+    // than as two meanings (owner, 2026-11-13, screenshot of a reasoning body). The indent is the
+    // part the eye actually uses, and dropping the border also stops the rail from being echoed.
+    body: {
+      paddingLeft: space.md,
+      marginTop: 2,
+      marginBottom: space.xs,
+    },
+    /** Under the unfolded text: its buttons on the left, the hour closing the block on the right. */
+    foot: { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: 4 },
+    grow: { flex: 1 },
+    clock: { fontSize: scaleFont(font.micro, scale), color: palette.textMeta, fontVariant: ['tabular-nums' as const] },
+  };
+};
