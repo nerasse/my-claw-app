@@ -822,6 +822,7 @@ export function ChatScreen({
           setLocation(undefined);
           setAddressOverride(null);
           onSend(text, refs, locationToSend);
+          scrollToNewest(true);
         } catch (err) {
           setUploadError(err instanceof Error ? err.message : 'upload failed');
           // The field is cleared the moment the send is fired, and the upload runs after it: a
@@ -837,10 +838,11 @@ export function ChatScreen({
       setLocation(undefined);
       setAddressOverride(null);
       onSend(text, undefined, locationToSend);
+      scrollToNewest(true);
     }
     if (Platform.OS !== 'web' && prefs.get().dismissKeyboardOnSend) Keyboard.dismiss();
     consumeDraft();
-  }, [attachments, consumeDraft, deviceInfo, discardComposer, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand]);
+  }, [attachments, consumeDraft, deviceInfo, discardComposer, draft, location, addressOverride, mediaBase, onNewThread, onSend, threadId, onTagCommand, scrollToNewest]);
 
   /**
    * The sent history, walked by the arrows the way a terminal walks its own: Up goes back one
