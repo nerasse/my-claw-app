@@ -32,6 +32,19 @@ if [[ "$VERSION" != "v${DECLARED}" ]]; then
   exit 1
 fi
 
+# Android refuses an install whose versionCode is not greater than the installed one, and a moved
+# versionName is not enough: 0.6.237 shipped with 0.6.236's code and could not install. Compare
+# with the previous tag, which is always an ancestor when main is pushed before the release.
+PREV_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+if [[ -n "$PREV_TAG" ]]; then
+  PREV_CODE="$(git show "${PREV_TAG}:android/app/build.gradle" 2>/dev/null | sed -n 's/.*versionCode \([0-9][0-9]*\).*/\1/p' | head -1)"
+  NEW_CODE="$(sed -n 's/.*versionCode \([0-9][0-9]*\).*/\1/p' android/app/build.gradle | head -1)"
+  if [[ -n "$PREV_CODE" && -n "$NEW_CODE" && "$NEW_CODE" -le "$PREV_CODE" ]]; then
+    echo "versionCode must increase: ${NEW_CODE} <= ${PREV_CODE} (${PREV_TAG}); Android refuses the update" >&2
+    exit 1
+  fi
+fi
+
 # fj names the attachment after the file; stage the signed APK under the versioned name.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

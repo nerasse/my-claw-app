@@ -102,7 +102,10 @@ fj release view v<v>                             # APK + dist-web.tar.gz
 
 Traps:
 - **Push main before `release.sh`.** It has no tag step: `--create-tag` tags whatever the remote's main is. On unpushed work the tag points at the previous commit while the APK holds the new one — which breaks "Symbolicating a release stack" above, and only the sha256 check would catch it.
-- `release.sh` refuses a version that disagrees with `versionName`. Nothing else enforces it: no CI job sees this release.
+- Both the tag and the build must move: `release.sh` and the GitHub `verify` job refuse a
+  `versionName` that disagrees with the tag, and a `versionCode` that did not increase over the
+  previous tag. 0.6.237 shipped with 0.6.236's code (415) and Android refused the install; the
+  dry-run dispatch skips the versionCode check, there is no tag to compare against.
 - `release.sh` renames the APK to `my-claw-app-v<v>.apk` and keeps the 5 most recent, and keeps the 5 most recent `dist-web.tar.gz` too (`scripts/cleanup-assets.sh`). Gradle emits `app-release-unsigned.apk` on purpose (the release build declares no `signingConfig`): signing lives in `release.sh` and nowhere else, so an APK that skips the script cannot be installed. Delete a wrongly-named or duplicate asset first via `fj release asset delete`.
 - `fj release view v<v>` works here (release named after the tag). In the **server** repo it does not — the release is named `my-claw <version>`.
 - Release assets answer HEAD (a fresh one can briefly 404 behind the proxy). The server's generic **package** registry does not: it answers 405, use `curl --range 0-0`.
