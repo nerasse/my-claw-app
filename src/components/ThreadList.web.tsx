@@ -93,20 +93,21 @@ export function ThreadList({
   // A running turn appends on every delta, so the list can keep failing `atEnd` on the frame the
   // reveal happens and stay hidden for ever: the page was there, the spinner never left, and only
   // switching threads (a quieter run) revealed it (owner, 2026-11-22, on a deep link to an active
-  // conversation). The rows are mounted; after a beat, show them and snap to the end, whatever the
-  // scroll says. The hidden state is an anti-flash, not a gate.
+  // conversation). The first version still required the last row to be mounted, which a hidden
+  // virtualizer does not guarantee -- the owner reloaded and watched the same spinner. Now the
+  // presence of rows is enough: show them and snap to the end after a beat. The hidden state is an
+  // anti-flash, not a gate.
   useEffect(() => {
     if (ready || count === 0) return;
     const timer = setTimeout(() => {
       const element = scroller.current;
-      if (!element || element.clientHeight === 0) return;
-      if (!virtualizer.elementsCache.has(getItemKey(count - 1))) return;
+      if (!element) return;
       virtualizer.scrollToEnd();
       lastTop.current = element.scrollTop;
       setReady(true);
     }, 1200);
     return () => clearTimeout(timer);
-  }, [ready, count, getItemKey, virtualizer]);
+  }, [ready, count, virtualizer]);
 
   const askOlder = useCallback(() => {
     if (ready && page.hasMore && !page.loading && !page.failed) onLoadOlder();
