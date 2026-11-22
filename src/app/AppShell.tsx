@@ -1127,14 +1127,10 @@ export function AppShell(): React.JSX.Element {
       // That frame can leave while the socket is still coming up, and then be lost with the
       // transport's own reconnect: on a reload addressed at /t/<id>, the conversation spun for
       // ever until another one was opened and this one reopened (owner, 2026-11-22). One retry
-      // on an empty thread, without a cursor: nothing when the first answer was only late, the
-      // page when it never came.
-      if (chatStore.getItems(threadId).length === 0) {
-        setTimeout(() => {
-          if (chatStore.getItems(threadId).length > 0) return;
-          connection.send(encodeSessionSync(threadId));
-        }, 1200);
-      }
+      // was not enough after a long sleep -- the socket can take longer than that to come back,
+      // and the owner was left on the same endless spinner (owner, 2026-11-22, evening). Retry
+      // on a widening delay, without a cursor, until the thread has something to draw.
+      if (chatStore.getItems(threadId).length === 0) syncUntilLoaded(threadId);
       // The model of a conversation is per session: refresh it when the thread changes, so
       // the picker never shows the previous conversation's choice.
       connection.send(encodeModelGet(threadId));
@@ -2402,6 +2398,26 @@ export function AppShell(): React.JSX.Element {
     await registerForPush(key);
   }, []);
 
+  /**
+   * Ask for a thread's history until it has something to draw.
+   *
+   * A socket that slept can be several seconds behind the tap, and a sync that left before it
+   * was up is gone with the transport. Four attempts over ten seconds cover a reconnect, and the
+   * thread stops asking the moment the first page lands.
+   */
+  const syncUntilLoaded = useCallback((threadId: string): void => {
+    const delays = [1200, 2500, 5000, 8000];
+    const attempt = (index: number): void => {
+      if (index >= delays.length) return;
+      setTimeout(() => {
+        if (chatStore.getItems(threadId).length > 0) return;
+        connection.send(encodeSessionSync(threadId)).catch(() => {});
+        attempt(index + 1);
+      }, delays[index]);
+    };
+    attempt(0);
+  }, []);
+
   // The one notification the user asked to never see is the run they are already watching, so
   // the server needs to know what is on screen: app state and active thread, on every change.
   useEffect(() => {
@@ -2422,9 +2438,18 @@ export function AppShell(): React.JSX.Element {
     };
     setVisiblePushThread(AppState.currentState === 'active' ? activeThreadRef.current : null);
     report(AppState.currentState === 'active');
-    const subscription = AppState.addEventListener('change', state => { setVisiblePushThread(state === 'active' ? activeThreadRef.current : null); report(state === 'active'); });
+    const subscription = AppState.addEventListener('change', state => {
+      setVisiblePushThread(state === 'active' ? activeThreadRef.current : null);
+      report(state === 'active');
+      // A phone that comes back from the background can hold a socket that never dropped, so no
+      // `connected` event will fire and the resume it carries never runs. If the conversation on
+      // screen still has nothing, ask again (owner, 2026-11-22: endless spinner after a period
+      // of inactivity).
+      const thread = activeThreadRef.current;
+      if (state === 'active' && thread && chatStore.getItems(thread).length === 0) syncUntilLoaded(thread);
+    });
     return () => subscription.remove();
-  }, [activeThread]);
+  }, [activeThread, syncUntilLoaded]);
 
   /**
    * The channel names the server publishes on follow the sounds picked in Settings, and only the
