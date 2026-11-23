@@ -115,7 +115,7 @@ export function headerModelOf(thread: {
 }
 
 /**
- * The facts line of a header: the tag in force, what runs, what is answering, at which effort.
+ * The facts line of a header: the tag in force, what runs, at which effort.
  *
  * Four decisions, each one a defect that was measured:
  *
@@ -124,8 +124,9 @@ export function headerModelOf(thread: {
  *   fall-through to a default.
  * - **the provider with the model**, from the catalogue, because a route's candidates are the same
  *   label on different accounts -- `opus-5-5` alone cannot say whose.
- * - **`running …` only when the run left the model above**, so a normal run does not draw its own
- *   name twice.
+ * - **the live model replaces the resolved one**, and carries no `running` prefix: once a run left
+ *   the tag's first candidate, that candidate is not what is answering, and the line has room for
+ *   one model only (owner, 2026-11-23).
  * - **the running effort when there is one**, because the candidates of a route do not share a
  *   level: the conversation pins `xhigh` on a tag whose first account answers at `max`.
  *
@@ -142,8 +143,7 @@ export function headerFacts(
   return [
     options.offline ?? null,
     model?.tag ? `tag ${model.tag}` : null,
-    model ? nameOf(model.model) : null,
-    live ? `running ${nameOf(live)}` : null,
+    live ? nameOf(live) : model ? nameOf(model.model) : null,
     effort,
     options.pending && options.pending > 0 ? `${options.pending} pending` : null,
     options.origin ?? null,

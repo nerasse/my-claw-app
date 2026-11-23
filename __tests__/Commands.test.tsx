@@ -918,7 +918,7 @@ test('the model row says when the chat only inherits the model, and from where',
   await settleAndUnmount(tree);
 });
 
-test('the facts line names the model answering now when the run walked off its pick', async () => {
+test('the facts line names the model answering now when the run walked off its pick, without "running"', async () => {
   const tree = await renderApp();
   await ReactTestRenderer.act(async () => {
     chatStore.addUserMessage(THREAD, 'u1', 'go', []);
@@ -941,7 +941,10 @@ test('the facts line names the model answering now when the run walked off its p
     live: 'gpt-6.1-sol',
     effort: { level: '', levels: [], supported: false },
   });
-  await waitFor(() => textsOf(tree).some(t => t.includes('running Sol')), 60);
+  // One model on the line, and no prefix: the first candidate is not what is answering (owner,
+  // 2026-11-23).
+  await waitFor(() => textsOf(tree).some(t => t.includes('Sol')), 60);
+  expect(textsOf(tree).some(t => t.includes('running Sol'))).toBe(false);
   await settleAndUnmount(tree);
 });
 

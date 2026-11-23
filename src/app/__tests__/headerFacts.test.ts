@@ -37,8 +37,10 @@ test('a tag conversation names the tag, the model and its own effort', () => {
   ).toBe('tag Quota · claude-2 / Opus 5.5 · xhigh');
 });
 
-test('a run that walked to another account adds that account and its rung, not its own pin', () => {
+test('a run that walked to another account shows that account in place of the first, without "running"', () => {
   // The route moved to the second candidate, which is asked for `max` while the tag pins `xhigh`.
+  // The first candidate is not answering any more, so it leaves the line: one model, no prefix
+  // (owner, 2026-11-23).
   expect(
     headerFacts(
       {
@@ -50,7 +52,7 @@ test('a run that walked to another account adds that account and its rung, not i
       },
       nameOf,
     ),
-  ).toBe('tag Quota · claude-2 / Opus 5.5 · running anthropic / Opus 5.5 · max');
+  ).toBe('tag Quota · anthropic / Opus 5.5 · max');
 });
 
 test('a run on the conversation\'s own model is not drawn twice', () => {
