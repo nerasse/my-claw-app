@@ -11,6 +11,8 @@ import {
   draftScope,
   setDraftScope,
   onRemoteDraft,
+  markDraftUploaded,
+  stageDraftAttachment,
   queueDraftSync,
   saveDraft,
 } from '../drafts';
@@ -293,5 +295,49 @@ describe('a draft from another window', () => {
     queueDraftSync(THREAD, 'ecrit ici, pas parti');
     applyServerDraft(THREAD, 'la page du serveur');
     expect(draftTextOf(THREAD)).toBe('ecrit ici, pas parti');
+  });
+});
+
+describe('a chip staged on this device', () => {
+  const FILE = { id: 'media-1', filename: 'photo.png', type: 'image' as const, mimeType: 'image/png', sizeBytes: 3, ts: '2026-01-01T00:00:00.000Z' };
+  const CHIP = { id: 'img-1', uri: 'blob:local', filename: 'photo.png', type: 'image' as const, mimeType: 'image/png' };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    clearAllDrafts();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('is in the store before any render, so the upload answer finds it', () => {
+    // Without this the chip only reached the store on the next commit, and the server's answer to
+    // the announce (the list it holds) arrived as "one file you do not have".
+    stageDraftAttachment(THREAD, CHIP);
+    markDraftUploaded(THREAD, CHIP.id, FILE.id);
+    applyServerFiles(THREAD, [FILE], 'replace');
+
+    const chips = draftAttachmentsOf(THREAD);
+    expect(chips).toHaveLength(1);
+    expect(chips[0]).toMatchObject({ id: 'img-1', mediaId: 'media-1', uri: 'blob:local' });
+  });
+
+  test('is written once when staged twice, keeping the newer copy', () => {
+    stageDraftAttachment(THREAD, CHIP);
+    stageDraftAttachment(THREAD, { ...CHIP, mediaId: 'media-1' });
+    expect(draftAttachmentsOf(THREAD)).toHaveLength(1);
+    expect(draftAttachmentsOf(THREAD)[0]?.mediaId).toBe('media-1');
+  });
+
+  test('a text change from another window names no file', () => {
+    // The chip is the screen's while it is open; a text frame is not a description of it.
+    const seen: Array<[string, string]> = [];
+    const stop = onRemoteDraft((threadId, change) => seen.push([threadId, change]));
+    applyRemoteDraft(THREAD, 'ecrit ailleurs');
+    applyServerFiles(THREAD, [FILE], 'replace');
+    stop();
+
+    expect(seen).toEqual([[THREAD, 'text'], [THREAD, 'files']]);
   });
 });

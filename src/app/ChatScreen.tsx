@@ -39,7 +39,7 @@ import { encodeCommandsList, encodeFileDelete, type AttachmentMeta, type Locatio
 import { uploadMedia, type OutgoingAttachment, type PendingAttachment } from '../core/upload';
 import { mediaUrl } from '../core/mediaUrl';
 import { prefs } from '../core/prefs';
-import { announceDraftFile, clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, forgetDraftFile, markDraftUploaded, onRemoteDraft, queueDraftSync, saveDraft } from '../core/drafts';
+import { announceDraftFile, clearDraft, discardDraft, draftAttachmentsOf, draftScope, draftTextOf, forgetDraftFile, markDraftUploaded, onRemoteDraft, queueDraftSync, saveDraft, stageDraftAttachment } from '../core/drafts';
 import type { VoiceRecording } from '../core/nativeBridge';
 import { voiceFilename } from '../core/voice';
 import { uuid, viewerFor, type ViewerKind } from '../core/utils';
@@ -460,14 +460,16 @@ export function ChatScreen({
   }, []);
   useEffect(
     () =>
-      onRemoteDraft(changed => {
+      onRemoteDraft((changed, change) => {
         if (changed !== threadId) return;
         // The store only adopts a remote draft when this composer is not ahead of the server, so
         // what it holds is always what the screen should show -- a clear that follows a send
         // included, even while the field has the caret. The old guard here ("not while focused")
         // kept a sent message on screen and then saved it back, which is how it kept coming back.
         setDraft(draftTextOf(threadId));
-        setAttachments(draftAttachmentsOf(threadId));
+        // Chips follow the file list, never a text change: a text frame names no file, and
+        // repainting from the store then is how a chip staged here disappeared.
+        if (change === 'files') setAttachments(draftAttachmentsOf(threadId));
       }),
     [threadId],
   );
@@ -492,6 +494,8 @@ export function ChatScreen({
   const startUpload = useCallback(
     (pending: PendingAttachment): void => {
       if (!deviceInfo || uploadsRef.current.has(pending.id)) return;
+      // Before the upload, so an answer from the server always finds the chip it is about.
+      stageDraftAttachment(threadId, pending);
       const job = uploadMedia(mediaBase, deviceInfo, threadId, pending, (bytes, total) => {
         setUploadProgress(current => ({ ...current, [pending.id]: Math.round((bytes / total) * 100) }));
       })

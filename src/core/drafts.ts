@@ -26,7 +26,15 @@ const SYNC_TEXT_LIMIT = 64 * 1024;
 /** One frame per pause in the typing, never one per keystroke. */
 const SYNC_DELAY_MS = 500;
 
-type Listener = (threadId: string) => void;
+/**
+ * What changed: the text, or the files staged beside it. A composer's chips are only its business
+ * when the second comes in -- a text sync must not repaint a list it does not describe, from a
+ * store that may be a frame behind the screen (2026-11-25: a chip staged here vanished while
+ * another window was typing in the same conversation).
+ */
+export type DraftChange = 'text' | 'files';
+
+type Listener = (threadId: string, change: DraftChange) => void;
 
 const drafts = new Map<string, Draft>();
 const listeners = new Set<Listener>();
@@ -151,7 +159,7 @@ export function applyRemoteDraft(threadId: string, text: string): void {
   if (!text && !existing?.attachments.length) drafts.delete(threadId);
   else drafts.set(threadId, { text, attachments: existing?.attachments ?? [] });
   sessionStore.setHasDraft(threadId, text !== '' || (existing?.attachments.length ?? 0) > 0);
-  for (const listener of listeners) listener(threadId);
+  for (const listener of listeners) listener(threadId, 'text');
 }
 
 /**
@@ -201,7 +209,7 @@ export function applyServerFiles(threadId: string, files: PendingFileFrame[], mo
   if (!text && next.length === 0) drafts.delete(threadId);
   else drafts.set(threadId, { text, attachments: next });
   sessionStore.setHasDraft(threadId, text !== '' || next.length > 0);
-  for (const listener of listeners) listener(threadId);
+  for (const listener of listeners) listener(threadId, 'files');
 }
 
 /**
@@ -213,6 +221,25 @@ export function applyServerFiles(threadId: string, files: PendingFileFrame[], mo
  * file you do not have" and the chip was rebuilt beside the local one -- the copy the owner then
  * deleted with its cross (2026-11-17).
  */
+/**
+ * The chip is in the store the moment it is staged, not at the next render.
+ *
+ * `startUpload` announces a finished upload at once, and the server answers with the list it holds.
+ * A store that had not heard the chip yet recognised nothing in that answer, which is how the same
+ * chip came back rebuilt beside the local one, or was dropped with the next empty list. The screen
+ * is the author here: nothing is notified back to it.
+ */
+export function stageDraftAttachment(threadId: string, attachment: PendingAttachment): void {
+  if (!threadId) return;
+  const existing = drafts.get(threadId);
+  const current = existing?.attachments ?? [];
+  const next = current.some(chip => chip.id === attachment.id)
+    ? current.map(chip => (chip.id === attachment.id ? attachment : chip))
+    : [...current, attachment];
+  drafts.set(threadId, { text: existing?.text ?? '', attachments: next });
+  sessionStore.setHasDraft(threadId, true);
+}
+
 export function markDraftUploaded(threadId: string, chipId: string, mediaId: string): void {
   const current = drafts.get(threadId)?.attachments ?? [];
   if (!current.some(chip => chip.id === chipId && chip.mediaId !== mediaId)) return;
