@@ -198,6 +198,15 @@ export interface BackLayers {
   setFilesOpen: (value: false) => void;
   subagentRef: Cell<unknown>;
   leaveSubAgent: () => void;
+  /**
+   * The press came from the browser's Back button, where the address is the stack.
+   *
+   * A sub-agent level is addressed (`/t/<conversation>/a/<sub>`), so going back one level is a
+   * history step the browser already took: consuming it here as well both swallowed the step and
+   * restored the entry, which is what made Forward dead. On a phone there is no address, so the
+   * key still closes the level itself.
+   */
+  browserBack?: boolean;
   fromArchivesRef: Cell<boolean>;
   fromJobSessionsRef: Cell<boolean>;
   activeThreadRef: Cell<string | null>;
@@ -339,6 +348,7 @@ export function closeTopLayer(layers: BackLayers): boolean {
     setFilesOpen,
     subagentRef,
     leaveSubAgent,
+    browserBack,
     fromArchivesRef,
     fromJobSessionsRef,
     activeThreadRef,
@@ -680,8 +690,9 @@ export function closeTopLayer(layers: BackLayers): boolean {
   // A conversation opened from the archived list goes back there: backing out of it
   // would otherwise fall through and close the app.
   // A sub-agent chat backs out to the conversation that reached it, which is exactly what its
-  // header says it will do.
-  if (subagentRef.current) {
+  // header says it will do -- except in a browser, where `browserBack` means the address already
+  // walked that level and there is nothing left to close.
+  if (subagentRef.current && !browserBack) {
     leaveSubAgent();
     return true;
   }

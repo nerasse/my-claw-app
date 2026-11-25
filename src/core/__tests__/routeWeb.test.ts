@@ -76,6 +76,30 @@ test('a sub-agent id survives the round trip through the address bar', () => {
   expect(route.initialRoute()).toEqual({ threadId: 'subagent/researcher-a7b3' });
 });
 
+test('a sub-agent chat is addressed as the chain it was opened through', () => {
+  const fake = fakeWindow('/');
+  const route = load(fake);
+  route.showThread('thread-1', false, ['sub-aaaa', 'sub-bbbb']);
+  expect(fake.entries.at(-1)?.path).toBe('/t/thread-1/a/sub-aaaa/a/sub-bbbb');
+  // Both the conversation and every level come back: the reload has to reopen the same depth, and
+  // an id that is not the last one still carries its own encoding.
+  expect(route.initialRoute()).toEqual({ threadId: 'thread-1', agents: ['sub-aaaa', 'sub-bbbb'] });
+});
+
+test('a tail this client does not know still opens the conversation it names', () => {
+  const fake = fakeWindow('/t/thread-1/x/mystery');
+  const route = load(fake);
+  expect(route.initialRoute()).toEqual({ threadId: 'thread-1' });
+});
+
+test('a level id holding a slash keeps its boundary', () => {
+  const fake = fakeWindow('/');
+  const route = load(fake);
+  route.showThread('thread-1', false, ['subagent/a']);
+  expect(fake.entries.at(-1)?.path).toBe('/t/thread-1/a/subagent%2Fa');
+  expect(route.initialRoute()).toEqual({ threadId: 'thread-1', agents: ['subagent/a'] });
+});
+
 test('the first sync replaces, so boot leaves no Back step that unloads the app', () => {
   const fake = fakeWindow('/');
   const route = load(fake);

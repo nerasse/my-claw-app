@@ -5,14 +5,21 @@
 
 export interface Route {
   threadId: string | null;
+  /** The sub-agent chats named after the conversation, outermost first (web only). */
+  agents?: string[];
 }
 
 export function initialRoute(): Route {
   return { threadId: null };
 }
 
-export function showThread(_threadId: string | null, _replace = false): void {
+export function showThread(_threadId: string | null, _replace = false, _agents: readonly string[] = []): void {
   // Android: nothing to address.
+}
+
+/** Android has no history: the caller navigates itself. */
+export function goBack(): boolean {
+  return false;
 }
 
 export function watchBack(_handlers: {

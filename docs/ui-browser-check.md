@@ -48,6 +48,18 @@ Two conversations are seeded: **Long history** for the scroll, the scrollbar and
 has 120 turns by default (`MOCK_LONG_TURNS` changes that); `MOCK_RICH_HISTORY=1` gives answers of
 different heights and ends on a 1,000 px image that loads 650 ms late.
 
+Three scenario flags add the pages only they can check:
+
+| flag | what it seeds |
+|---|---|
+| `MOCK_AGENTS=1` | a `send` card and a `subagents.list` roster, so the badge, the roster sheet and the door into a sub-agent chat can be walked |
+| `MOCK_SUBAGENT=1` | that sub-agent's own thread (`sub-0123456789abcdef`) with a live run behind `/__mock/sub`, and a browser task (`sub-0123456789abcdee`) inside it: the two-level address, its reload and Back/Forward |
+| `MOCK_FILES=1` | a **Files** conversation carrying one attachment of every reader kind (`fixture.pdf`, `fixture.md`, `fixture.ts`, `notes.txt`), served by `/media/<id>` with the real server's inline disposition |
+
+`/__mock/sub` drives the sub-agent's run: `POST ?step=start|grow|finish`, `GET` for its state. It
+answers with what the session log holds while the run is in flight (the question and settled
+cards, never the answer), so a reload mid-run exercises the same journal replay the server does.
+
 `/__mock/timeline` drives Long history through the three states and records what the app asked
 for (the last 300 requests):
 

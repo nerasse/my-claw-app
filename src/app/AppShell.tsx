@@ -27,7 +27,7 @@ import { questionStore, useQuestionThreads } from '../core/questionStore';
 import { useUndoPick, useUndoPrompts, undoStore } from '../core/undoStore';
 import { bootFrames, resumeFrames } from '../core/resume';
 import { agentOfCard, indexRoster, rosterRows, sharedRosterRows, spawnDoorsOf, spawnLiveOf, subAgentCallersStore, useSubAgentCallers, useSubAgents } from '../core/subagents';
-import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn } from '../core/subagentStack';
+import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn, trailOf } from '../core/subagentStack';
 import { sessionStore, useArchivedSessions, useFolders, useSessions } from '../core/sessions';
 import { workspaceOptions } from '../core/workspaceFilter';
 import { isStopCommand, parseTagCommand } from '../core/commands';
@@ -343,7 +343,7 @@ import { copyableText, messageSelectionBody, TextSelectionContext, type Selectio
 import { useLayout } from '../core/layout';
 import { useHardwareBack } from '../core/hardwareBack';
 import { useHotkeys } from '../core/hotkeys';
-import { initialRoute, showThread, watchBack } from '../core/route';
+import { goBack, initialRoute, showThread, watchBack, type Route } from '../core/route';
 import { isSubAgentThread, routeServerFrame, type ServerFrameHandlers } from '../core/frameRouter';
 import {
   parentOf,
@@ -1022,6 +1022,28 @@ export function AppShell(): React.JSX.Element {
   const fromJobSessionsRef = useRef(false);
   /** The address bar has not been written to yet: the first write replaces, it does not push. */
   const firstRouteRef = useRef(true);
+  /**
+   * The sub-agent levels an address named that are not open yet.
+   *
+   * A sub-agent chat is a view of the conversation under it, so its address is the whole chain
+   * (`/t/<conversation>/a/<sub>/a/<sub>`) and the app can only open it one level at a time: each
+   * level's roster is what knows the next one's id and type. This is that queue, and an entry is
+   * dropped from it as its level opens. Empty for every ordinary navigation.
+   */
+  const pendingTrailRef = useRef<string[]>([]);
+  /** A route is being replayed: its levels are opened with `replace`, not pushed again. */
+  const replayingRouteRef = useRef(false);
+  /** Bumped by `startRoute`: what makes the level walk run even when the thread itself did not change. */
+  const [routeTick, setRouteTick] = useState(0);
+  /**
+   * How many levels of the addressed chain are still to open.
+   *
+   * Rendered around: a cold load of `/t/<conversation>/a/<sub>/a/<sub>` opens the conversation
+   * first (that is where every roster comes from), so without this the header of an intermediate
+   * level painted for a frame or two before the deeper one landed. Nothing is drawn until the
+   * chain is at its depth, which is the same single paint a conversation gets.
+   */
+  const [routeTrailDepth, setRouteTrailDepth] = useState(0);
   // Where the thread on screen came from: the hardware back press sends a conversation
   // opened from the archived list back to that list, instead of exiting the app.
   const fromArchivesRef = useRef(false);
@@ -1056,8 +1078,10 @@ export function AppShell(): React.JSX.Element {
     if (threadId === null || !isSubAgentThread(threadId)) {
       prefs.set('lastThreadId', threadId);
       // The first sync is a replace: restoring the addressed thread at boot must not leave a
-      // Back step whose only effect is to unload it.
-      showThread(threadId, firstRouteRef.current);
+      // Back step whose only effect is to unload it. A route being replayed already wrote the
+      // address it is walking (a chain, not just its first thread), and rewriting it here would
+      // erase the levels still to open.
+      if (pendingTrailRef.current.length === 0) showThread(threadId, firstRouteRef.current);
       firstRouteRef.current = false;
     }
   }, []);
@@ -1095,6 +1119,19 @@ export function AppShell(): React.JSX.Element {
       subagentRef.current = view;
       setSubagentView(view);
       selectThread(threadId);
+      // A sub-agent chat is addressed as the chain it was opened through, so a reload lands on the
+      // same level with the same headers behind it. Written here because this is the one door in:
+      // every path that opens a sub-agent (a card, the roster, a route being replayed) comes
+      // through `enterThread`, and an address written anywhere else would drift from this one.
+      if (view) {
+        const trail = trailOf(view);
+        // A route being walked already names the level it will end at: writing each intermediate
+        // address shortened it for a frame, and the address is what a Back press or a copied link
+        // acts on. The last level writes it (a `replace`, identical to what is already there).
+        if (!replayingRouteRef.current || pendingTrailRef.current.length === 0) {
+          showThread(trail.threadId, replayingRouteRef.current, trail.agents);
+        }
+      }
       chatStore.markRead(threadId);
       setAutoFocusHero(false);
       setDrawerOpen(false);
@@ -1189,6 +1226,9 @@ export function AppShell(): React.JSX.Element {
   }, []);
 
   const handleHome = useCallback(() => {
+    // Home is the address `/`, and nothing of a route being walked survives it.
+    pendingTrailRef.current = [];
+    replayingRouteRef.current = false;
     selectThread(null);
     setDrawerOpen(false);
     setAutoFocusHero(false);
@@ -1418,6 +1458,8 @@ export function AppShell(): React.JSX.Element {
     if (!view) return;
     const back = backFrom(view);
     // One level up: the sub-agent this was opened from comes back as itself, header and all.
+    // The address follows through `enterThread` (a chain for a nested level, `/`-rooted for the
+    // conversation), so Back in the browser walks the same levels the chevron just walked.
     if ('view' in back) {
       enterThread(back.view.threadId, back.view);
       return;
@@ -1426,6 +1468,47 @@ export function AppShell(): React.JSX.Element {
     setSubagentView(null);
     openThread(back.threadId);
   }, [enterThread, openThread]);
+
+  /**
+   * The chevron, and the Back button, are the same gesture in a browser.
+   *
+   * A level was pushed as an entry when it opened, so leaving it is a history step: navigating with
+   * a fresh push instead left the page it just dismissed one Back press away (owner, 2026-11-25).
+   * `goBack` answers false on a phone, on a page loaded straight at a level, and on any entry this
+   * app did not push -- and then the plain navigation below is the only way out.
+   */
+  const leaveSubAgentView = useCallback(() => {
+    if (goBack()) return;
+    leaveSubAgent();
+  }, [leaveSubAgent]);
+
+  /**
+   * Follows an address: the conversation it names, then the sub-agent levels after it.
+   *
+   * Only the first level is opened here. A sub-agent's id, type and status live in its parent's
+   * roster, and each level's roster is asked when that level opens, so the rest of the chain is
+   * walked by `openRouteTrail` below as the answers land. Nothing is pushed to the history while a
+   * route is replayed: the address already names the whole chain, and stacking copies of it would
+   * make Back walk the same three entries twice.
+   */
+  const startRoute = useCallback(
+    (route: Route) => {
+      const agents = route.agents ?? [];
+      pendingTrailRef.current = route.threadId && agents.length > 0 ? [...agents] : [];
+      replayingRouteRef.current = pendingTrailRef.current.length > 0;
+      setRouteTrailDepth(pendingTrailRef.current.length);
+      if (!route.threadId) {
+        selectThread(null);
+        return;
+      }
+      openThread(route.threadId);
+      // The walk below is an effect, and opening the thread it starts from can change nothing at all
+      // (Back then Forward lands the same conversation twice): without a value that always moves,
+      // React bails out of the render and the levels named after it would never open.
+      if (pendingTrailRef.current.length > 0) setRouteTick(tick => tick + 1);
+    },
+    [openThread, selectThread],
+  );
 
   const saveJob = useCallback(
     (fields: JobFieldsOut) => {
@@ -1658,9 +1741,10 @@ export function AppShell(): React.JSX.Element {
       }
       // A link wins over everything: the address is what the owner asked for. With none, the
       // app boots on the home screen (the session list) and the owner picks a conversation,
-      // instead of silently reopening the last one. Always null on Android.
-      const target = initialRoute().threadId;
-      if (target) openThread(target);
+      // instead of silently reopening the last one. Always null on Android. A chain
+      // (`/t/<conversation>/a/<sub>`) is walked level by level once its rosters answer.
+      const route = initialRoute();
+      if (route.threadId) startRoute(route);
       // No address yet (a new install: none is built in): ask for one before anything connects.
       if (!stored.serverUrl && Platform.OS !== 'web') {
         unauthorizedHandled.current = true;
@@ -1726,8 +1810,9 @@ export function AppShell(): React.JSX.Element {
    * taken, which is what the dependency list below decides. `docs/back-cascade.md`.
    */
   const handleBack = useCallback(
-    (): boolean =>
+    (browserBack = false): boolean =>
       closeTopLayer({
+        browserBack,
         selection,
         setSelection,
         subagentAction,
@@ -1954,13 +2039,12 @@ export function AppShell(): React.JSX.Element {
   useEffect(
     () =>
       watchBack({
-        closeTopLayer: handleBack,
-        showRoute: route => {
-          if (route.threadId) openThread(route.threadId);
-          else selectThread(null);
-        },
+        // `true`: the address is the stack in a browser, so a sub-agent level is left by the
+        // history step the press already took, not by closing it here as well.
+        closeTopLayer: () => handleBack(true),
+        showRoute: route => startRoute(route),
       }),
-    [handleBack, openThread, selectThread],
+    [handleBack, startRoute],
   );
 
   // Only where there are columns to take the window from, and only while the browser is the page
@@ -2122,6 +2206,37 @@ export function AppShell(): React.JSX.Element {
   const roster = useSubAgents(rosterThread);
   // What the cards on screen can open: this thread's own sub-agents, then its parent's.
   const ownRoster = useSubAgents(activeThread);
+  /**
+   * The sub-agent levels an address named, opened one at a time as each roster answers.
+   *
+   * A reload on `/t/<conversation>/a/<sub>` has the conversation in hand and the agent's thread id,
+   * but a sub-agent chat needs more than a thread id: its name, its type and whether it runs now
+   * come from the roster, and a send names the conversation it is driven from. So each level is
+   * opened through the same door a tap uses, and the level's own roster is what names the next one.
+   * When a level is gone (a killed agent, a parent deleted elsewhere) the rest of the chain is
+   * abandoned and the address is rewritten to what is actually on screen rather than left naming a
+   * chat that cannot open.
+   */
+  useEffect(() => {
+    const queued = pendingTrailRef.current;
+    if (queued.length === 0 || !activeThread || ownRoster.status !== 'ready') return;
+    const next = queued[0]!;
+    const entry = ownRoster.agents.find(agent => agent.threadId === next);
+    if (!entry) {
+      pendingTrailRef.current = [];
+      replayingRouteRef.current = false;
+      setRouteTrailDepth(0);
+      showThread(activeThread, true);
+      return;
+    }
+    pendingTrailRef.current = queued.slice(1);
+    setRouteTrailDepth(pendingTrailRef.current.length);
+    openSubAgent(entry, activeThread);
+    // Cleared only once the last level is on screen: `enterThread` writes that level's address with
+    // `replace` while this is still true, which is what keeps a reload from pushing a second copy
+    // of the chain it is restoring.
+    if (pendingTrailRef.current.length === 0) replayingRouteRef.current = false;
+  }, [ownRoster, activeThread, openSubAgent, routeTick]);
   const cardAgents = useMemo(() => reachableFrom(ownRoster.agents, roster.agents), [ownRoster.agents, roster.agents]);
   const spawnCards = useSpawnCards(activeThread);
   const rosterList = useMemo(() => rosterRows(roster.agents), [roster.agents]);
@@ -2139,6 +2254,19 @@ export function AppShell(): React.JSX.Element {
       running: roster.agents.filter(agent => agent.status === 'running').length,
     }),
     [rosterList, roster.agents],
+  );
+  /**
+   * The sub-agent on screen, as the roster describes it now.
+   *
+   * The view is built from the entry at the instant of the tap, and that snapshot never moves: a
+   * run that ended kept the header on "running" for as long as the chat stayed open, which is the
+   * one fact a sub-agent's header has to get right. The parent's roster is the live answer and it
+   * is already here for the badge, so the header reads from it and keeps the snapshot only for an
+   * agent that has left the roster.
+   */
+  const liveSubagent = useMemo(
+    () => (subagentView ? roster.agents.find(agent => agent.threadId === subagentView.threadId) : undefined),
+    [roster.agents, subagentView],
   );
 
   /**
@@ -3500,7 +3628,9 @@ export function AppShell(): React.JSX.Element {
 
   const title =
     (activeThread ? runTitlesRef.current[activeThread] ?? sessionStore.titleOf(activeThread) : null) ??
-    'new conversation';
+    // A sub-agent has no session title: its handle is its name, and the tab was reading "new
+    // conversation" over a chat that has been going for an hour.
+    (subagentView ? subagentView.id.replace(/^subagent\//, '') : 'new conversation');
   // Looked up rather than stored on the sub-agent view: a conversation renamed while a sub-agent is
   // open must not leave a stale name on the way back.
   const parentTitleOf = (threadId: string): string => sessionStore.titleOf(threadId) ?? 'conversation';
@@ -4287,8 +4417,15 @@ export function AppShell(): React.JSX.Element {
    * The conversation, held as a value rather than written at the end of the page chain: on a
    * wide window it is drawn beside a page instead of being replaced by it, so it has to be
    * placeable in two spots.
+   *
+   * While an addressed chain is still being walked, the column is empty: the levels below the one
+   * the address names are being opened, and painting the intermediate one draws a header and a
+   * back row for a level that is about to be replaced (owner, 2026-11-25: a cold load flashed the
+   * parent sub-agent for a frame). One paint, at the right depth.
    */
-  const chatScreen = (
+  const chatScreen = routeTrailDepth > 0 ? (
+    <View style={styles.routeHold} />
+  ) : (
           <ChatScreen
             threadId={activeThread ?? ''}
             title={title}
@@ -4317,7 +4454,7 @@ export function AppShell(): React.JSX.Element {
                   subagent: {
                     id: subagentView.id,
                     type: subagentView.type,
-                    status: streaming ? ('running' as const) : subagentView.status,
+                    status: streaming ? ('running' as const) : (liveSubagent?.status ?? subagentView.status),
                     parentTitle: backLabel(subagentView, parentTitleOf),
                     // The same facts line the conversation's own header carries: a sub-agent runs a
                     // model too, and it can walk off it exactly like a conversation.
@@ -4325,7 +4462,7 @@ export function AppShell(): React.JSX.Element {
                   },
                   // Its own prop, not the drawer's: the way back used to be the hamburger slot
                   // wearing a chevron, which is why it read as the odd one out of every header.
-                  onBack: leaveSubAgent,
+                  onBack: leaveSubAgentView,
                   onSubAgentMenu: () => setSubagentMenuOpen(true),
                 }
               : {})}
@@ -6410,4 +6547,6 @@ const createStyles = (palette: Palette) => ({
   chatPane: { flex: 1, minWidth: 0, minHeight: 0 },
   chatWrap: { flex: 1, minWidth: 0 },
   pageFull: { flex: 1 },
+  /** The column while an addressed chain is still being walked: the theme's own background. */
+  routeHold: { flex: 1, backgroundColor: palette.bg },
 });

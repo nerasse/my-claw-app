@@ -344,10 +344,19 @@ are not addressed, they are what Back closes first (`route.web.ts`).
 - A reload lands on the conversation you were in, and a link to one can be sent to another window.
 - Back closes the open layer and puts the entry back; with nothing left to close it walks the
   conversations visited, then leaves the page.
+- Sub-agent chats are addressed as the chain they were opened through:
+  `/t/<conversation>/a/<sub>/a/<sub>`. A sub-agent is a view of the conversation under it, so the
+  address names that conversation first; a reload walks the levels back one per roster answer, and
+  the header, the back row and the roster that authorises a send all come back with it. A level
+  that no longer exists (killed, or its parent deleted elsewhere) is dropped and the address is
+  rewritten to what is on screen.
+- Back from a level is the browser's own history step, so the cascade does not close the sub-agent
+  as well (`browserBack` in `backCascade.ts`): closing it there swallowed the step and restored the
+  entry, which made Forward a dead end.
+- Cron runs and job runs are conversations of their own with a readable id, so they stay plain
+  `/t/<threadId>` addresses.
 - The first sync after boot is a `replaceState`: restoring the last conversation must not leave a
   Back step whose only effect is to unload the app.
-- Sub-agent threads are not addressed, for the same reason they are not stored as `lastThreadId`:
-  a sub-agent is a view of its parent, so a reload lands on the parent.
 - The server answers a deep link with `index.html` already, and sends an unpaired one to
   `/pair?next=<path>` so a link survives the pairing it triggers.
 

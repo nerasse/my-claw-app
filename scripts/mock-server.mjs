@@ -56,6 +56,31 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(body));
     return;
   }
+  if (url.pathname === '/__mock/sub') {
+    const body = req.method === 'POST' ? advanceSub(url.searchParams.get('step')) : subState();
+    res.writeHead(body.error ? 400 : 200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify(body));
+    return;
+  }
+  if (url.pathname.startsWith('/media/')) {
+    // The bytes the readers ask for, with the disposition the real server sets: inline for what the
+    // app draws, and Range answered the way a PDF reader asks for it.
+    const fixture = FIXTURES[url.pathname.slice('/media/'.length)];
+    if (!fixture) {
+      res.writeHead(404).end('no such fixture');
+      return;
+    }
+    const body = Buffer.from(fixture.body, 'utf8');
+    res.writeHead(200, {
+      'content-type': fixture.type,
+      'content-disposition': `inline; filename="${fixture.filename}"`,
+      'content-length': String(body.length),
+      'accept-ranges': 'bytes',
+      'cache-control': 'no-store',
+    });
+    res.end(body);
+    return;
+  }
   if (url.pathname === '/mock-late-image.svg') {
     setTimeout(() => res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' }).end(
       '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="1000"><rect width="600" height="1000" fill="#527795"/></svg>',
@@ -85,6 +110,23 @@ const SCRIPTED = 'mock-scripted';
 const STAMP = Date.UTC(2026, 10, 14, 9, 0, 0);
 /** Rows per page, so a test can watch a page land. */
 const PAGE = 40;
+
+/**
+ * The sub-agent scenario, `MOCK_SUBAGENT=1`.
+ *
+ * A sub-agent's thread is a conversation the app opens like any other, and its id has the server's
+ * own shape (`sub-` plus a digest) so the app treats it as one. This scenario exists because the two
+ * things a browser can prove here no unit test can: that a chat opened mid-run streams, and that a
+ * reload lands back on it rather than on its parent.
+ */
+const SUB_AGENT = 'subagent/demo-s01-4f08';
+const SUB_THREAD = 'sub-0123456789abcdef';
+const BROWSER_THREAD = 'sub-0123456789abcdee';
+const SUBAGENT = process.env.MOCK_SUBAGENT === '1';
+const SUB_PROMPT = 'Audit the fixture folder.';
+const SUB_TOOL = 'sub-t-read';
+const SUB_ANSWER = 'sub-a1';
+const sub = { step: 'idle', frames: [], answer: '' };
 
 const iso = ms => new Date(ms).toISOString();
 
@@ -164,6 +206,52 @@ function scriptedHistory() {
 
 const long = longHistory();
 const scripted = scriptedHistory();
+
+/**
+ * The reader scenario, `MOCK_FILES=1`: one message carrying one attachment of every kind a reader
+ * has, served by `/media/<id>` below.
+ *
+ * It exists because "a PDF opens" is not a fact a unit test can hold: the pane, the server's
+ * disposition and the browser's own renderer all have to agree, and each of them has broken this
+ * once (owner, 2026-10-15 and 2026-11-25).
+ */
+const FILES = 'mock-files';
+const FILES_ON = process.env.MOCK_FILES === '1';
+const PDF_BYTES = [
+  '%PDF-1.4',
+  '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
+  '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj',
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj',
+  '4 0 obj<</Length 44>>stream',
+  'BT /F1 18 Tf 20 100 Td (fixture pdf) Tj ET',
+  'endstream endobj',
+  '5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj',
+  'trailer<</Root 1 0 R>>',
+  '%%EOF',
+].join('\n');
+const FIXTURES = {
+  'file-pdf': { type: 'application/pdf', filename: 'fixture.pdf', body: PDF_BYTES },
+  'file-md': { type: 'text/markdown; charset=utf-8', filename: 'fixture.md', body: '# Fixture\n\nOne **bold** line, and a list:\n\n- alpha\n- beta\n' },
+  'file-ts': { type: 'text/typescript; charset=utf-8', filename: 'fixture.ts', body: 'export function fixture(n: number): number {\n  return n * 2;\n}\n' },
+  'file-txt': { type: 'text/plain; charset=utf-8', filename: 'notes.txt', body: 'A plain note.\nSecond line.\n' },
+};
+function filesHistory() {
+  return [
+    {
+      id: 'f-u0',
+      role: 'user',
+      text: 'One of each kind, please.',
+      ts: iso(STAMP),
+      attachments: [
+        { id: 'file-pdf', type: 'file', kind: 'pdf', filename: 'fixture.pdf', mimeType: 'application/pdf', sizeBytes: PDF_BYTES.length },
+        { id: 'file-md', type: 'file', kind: 'markdown', filename: 'fixture.md', mimeType: 'text/markdown', sizeBytes: 76 },
+        { id: 'file-ts', type: 'file', kind: 'code', filename: 'fixture.ts', mimeType: 'text/typescript', sizeBytes: 62 },
+        { id: 'file-txt', type: 'file', kind: 'text', filename: 'notes.txt', mimeType: 'text/plain', sizeBytes: 34 },
+      ],
+    },
+  ];
+}
+
 const sessions = [
   {
     threadId: LONG,
@@ -181,6 +269,16 @@ const sessions = [
     lastActiveAt: iso(STAMP + 5000),
     lastMessageAt: iso(STAMP + 5000),
   },
+  ...(FILES_ON
+    ? [{
+        threadId: FILES,
+        title: 'Files',
+        messageCount: 1,
+        createdAt: iso(STAMP),
+        lastActiveAt: iso(STAMP + 9000),
+        lastMessageAt: iso(STAMP + 9000),
+      }]
+    : []),
 ];
 
 /** The live run, scripted step by step so the reader can watch each stage land. */
@@ -281,6 +379,118 @@ function advanceTimeline(step) {
   return timelineState();
 }
 
+/** One frame to every open tab: the timeline scenarios and the sub-agent one share the socket set. */
+function broadcast(type, threadId, fields = {}) {
+  const frame = { type, threadId, ts: iso(Date.now()), ...fields };
+  for (const socket of wss.clients) if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
+  return frame;
+}
+
+/** The sub-agent thread as history: what a reload mid-run has to find, and what it found before. */
+function subHistory() {
+  const done = { id: 'mock-sub-run-0', status: 'done', startTs: iso(STAMP), endTs: iso(STAMP + 90_000) };
+  const first = [
+    { id: 'sub-u0', role: 'user', text: 'Read the fixture sheet and tell me the totals.', ts: iso(STAMP) },
+    {
+      id: 'sub-a0',
+      role: 'assistant',
+      text: 'Three rows, two of them filled: 5 and 12.',
+      reasoning: 'The sheet has three rows and one of them carries no number.',
+      run: done,
+      ts: iso(STAMP + 90_000),
+    },
+    // What a sub-agent's own conversation holds when it delegated: the browser task is its child,
+    // so its door belongs here and not in the conversation above.
+    {
+      id: 'sub-t-browser',
+      role: 'tool',
+      name: 'delegate_browser_task',
+      args: { url: 'https://shop.example.com/cart', instructions: 'Check the cart total' },
+      ok: true,
+      output: 'started',
+      truncated: false,
+      durationMs: 31,
+      ts: iso(STAMP + 95_000),
+      spawn: { callId: 'sub-t-browser', action: 'spawn', subagentId: 'subagent/browser-demo-7c11', status: 'idle', agentType: 'browser', mode: 'run' },
+    },
+  ];
+  if (sub.step === 'finished') {
+    return [
+      ...first,
+      { id: 'sub-u1', role: 'user', text: SUB_PROMPT, ts: iso(STAMP + 120_000) },
+      { id: SUB_ANSWER, role: 'assistant', text: sub.answer, run: { id: 'mock-sub-run-1', status: 'done', startTs: iso(STAMP + 120_000), endTs: iso(STAMP + 150_000) }, ts: iso(STAMP + 150_000) },
+    ];
+  }
+  if (sub.step === 'live') {
+    // What the session log holds while the run is in flight: the question, and the cards that have
+    // settled. The answer bubble is written when the turn ends, so a page never carries it -- the
+    // live one comes from the journal replay, exactly as the server does it.
+    const running = { id: 'mock-sub-run-1', status: 'running', startTs: iso(STAMP + 120_000) };
+    return [
+      ...first,
+      { id: 'sub-u1', role: 'user', text: SUB_PROMPT, ts: iso(STAMP + 120_000) },
+      { id: SUB_TOOL, role: 'tool', name: 'read', args: { path: 'fixture-sheet.txt' }, output: 'Fixture totals: 5, 12, 17.', ok: true, truncated: false, durationMs: 12, run: running, ts: iso(STAMP + 130_000) },
+    ];
+  }
+  return first;
+}
+
+function subState() {
+  return { step: sub.step, answer: sub.answer };
+}
+
+/** The browser task's own conversation: a page of its own, so a two-level chain is honest. */
+function browserHistory() {
+  return [
+    { id: 'br-u0', role: 'user', text: 'Check the cart total.', ts: iso(STAMP) },
+    { id: 'br-a0', role: 'assistant', text: 'The cart holds two items and totals 42.', ts: iso(STAMP + 40_000) },
+  ];
+}
+
+/**
+ * The sub-agent's own run, step by step: `start` opens it while a window is looking at its chat,
+ * `grow` proves the view follows, `finish` closes it. The frames are kept so a window that syncs
+ * mid-run is replayed them, exactly as the server's live journal does.
+ */
+function advanceSub(step) {
+  if (step === 'start' && sub.step === 'idle') {
+    sub.step = 'live';
+    sub.answer = 'Starting the audit. ';
+    broadcast('chat.run.start', SUB_THREAD, { run: 'mock-sub-run-1' });
+    broadcast('chat.user', SUB_THREAD, { id: 'sub-u1', text: SUB_PROMPT });
+    broadcast('chat.stream.start', SUB_THREAD, { id: SUB_ANSWER });
+    broadcast('chat.reasoning.delta', SUB_THREAD, { id: SUB_ANSWER, text: 'The folder holds one sheet, so read it whole.' });
+    broadcast('chat.stream.delta', SUB_THREAD, { id: SUB_ANSWER, text: sub.answer });
+    broadcast('chat.tool.start', SUB_THREAD, { id: SUB_TOOL, turnId: SUB_ANSWER, name: 'read', args: { path: 'fixture-sheet.txt' } });
+    broadcast('chat.tool', SUB_THREAD, { id: SUB_TOOL, turnId: SUB_ANSWER, name: 'read', args: { path: 'fixture-sheet.txt' }, output: 'Fixture totals: 5, 12, 17.', ok: true, truncated: false, durationMs: 12 });
+    sub.frames = [
+      ['chat.run.start', { run: 'mock-sub-run-1' }],
+      ['chat.user', { id: 'sub-u1', text: SUB_PROMPT }],
+      ['chat.stream.start', { id: SUB_ANSWER }],
+      ['chat.reasoning.delta', { id: SUB_ANSWER, text: 'The folder holds one sheet, so read it whole.', replay: true }],
+      ['chat.stream.delta', { id: SUB_ANSWER, text: sub.answer, replay: true }],
+      ['chat.tool', { id: SUB_TOOL, turnId: SUB_ANSWER, name: 'read', args: { path: 'fixture-sheet.txt' }, output: 'Fixture totals: 5, 12, 17.', ok: true, truncated: false, durationMs: 12 }],
+    ];
+  } else if (step === 'grow' && sub.step === 'live') {
+    const delta = '\n\nA second paragraph of the audit. ';
+    sub.answer += delta;
+    broadcast('chat.stream.delta', SUB_THREAD, { id: SUB_ANSWER, text: delta });
+    sub.frames = sub.frames.map(frame =>
+      frame[0] === 'chat.stream.delta' ? ['chat.stream.delta', { ...frame[1], text: sub.answer }] : frame,
+    );
+  } else if (step === 'finish' && sub.step === 'live') {
+    sub.step = 'finished';
+    broadcast('chat.stream.delta', SUB_THREAD, { id: SUB_ANSWER, text: '\n\nThe audit is done.' });
+    sub.answer += '\n\nThe audit is done.';
+    broadcast('chat.stream.done', SUB_THREAD, { id: SUB_ANSWER });
+    broadcast('chat.run.end', SUB_THREAD, { reason: 'done', run: 'mock-sub-run-1' });
+    sub.frames = [];
+  } else {
+    return { error: `Cannot ${step} from ${sub.step}` };
+  }
+  return subState();
+}
+
 function record(frame) {
   requests.push(frame);
   if (requests.length > 300) requests.shift();
@@ -292,7 +502,7 @@ wss.on('connection', socket => {
     socket.send(JSON.stringify({ type, threadId, ...body }));
   };
 
-  const historyFor = threadId => threadId === LONG ? long.concat(timeline.history) : scripted;
+  const historyFor = threadId => threadId === LONG ? long.concat(timeline.history) : threadId === SUB_THREAD ? subHistory() : threadId === BROWSER_THREAD ? browserHistory() : threadId === FILES ? filesHistory() : scripted;
   const reply = (frame, delay = 0) => {
     const sendReply = () => {
       if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
@@ -354,23 +564,14 @@ wss.on('connection', socket => {
         socket.send(JSON.stringify({
           type: 'subagents.list.result',
           threadId: frame.threadId,
-          // One agent, so the badge, the roster and the door into its conversation can be walked.
-          agents: process.env.MOCK_AGENTS === '1'
-            ? [
-                {
-                  id: 'subagent/demo-s01-4f08',
-                  threadId: 'subagent-thread-demo',
-                  type: 'general',
-                  status: 'idle',
-                  displayName: 'demo-s01',
-                  visibility: 'private',
-                  mode: 'run',
-                  messageCount: 12,
-                  lastMessageAt: iso(STAMP + 3000),
-                },
-                {
+          // The sub-agent's own roster holds the browser task it delegated: two levels, so a chain
+          // address can be walked and reloaded.
+          agents: !SUBAGENT
+            ? []
+            : frame.threadId === SUB_THREAD
+              ? [{
                   id: 'subagent/browser-demo-7c11',
-                  threadId: 'subagent-thread-browser',
+                  threadId: BROWSER_THREAD,
                   type: 'browser',
                   status: 'idle',
                   displayName: 'browser',
@@ -378,9 +579,33 @@ wss.on('connection', socket => {
                   mode: 'run',
                   messageCount: 4,
                   lastMessageAt: iso(STAMP + 2600),
-                },
-              ]
-            : [],
+                }]
+              : process.env.MOCK_AGENTS === '1'
+                ? [
+                    {
+                      id: SUB_AGENT,
+                      threadId: SUB_THREAD,
+                      type: 'general',
+                      status: sub.step === 'live' ? 'running' : 'idle',
+                      displayName: 'demo-s01',
+                      visibility: 'private',
+                      mode: 'run',
+                      messageCount: 12,
+                      lastMessageAt: iso(STAMP + 3000),
+                    },
+                    {
+                      id: 'subagent/browser-demo-7c11',
+                      threadId: BROWSER_THREAD,
+                      type: 'browser',
+                      status: 'idle',
+                      displayName: 'browser',
+                      visibility: 'private',
+                      mode: 'run',
+                      messageCount: 4,
+                      lastMessageAt: iso(STAMP + 2600),
+                    },
+                  ]
+                : [],
         }));
         return;
       // The newest page: replaces the thread, and carries the cursor that reaches the one before.
@@ -389,7 +614,7 @@ wss.on('connection', socket => {
         const messages = historyFor(threadId);
         const since = frame.since ? messages.findIndex(item => item.id === frame.since) : -1;
         const start = since === -1 && threadId === LONG ? Math.max(0, messages.length - PAGE) : since + 1;
-        const activeRun = threadId === LONG && timeline.step === 'live';
+        const activeRun = (threadId === LONG && timeline.step === 'live') || (threadId === SUB_THREAD && sub.step === 'live');
         record({ type: frame.type, threadId, fold: frame.fold, since: frame.since });
         reply({
           type: 'session.sync.result', threadId, entries: messages.slice(start), activeRun,
@@ -399,6 +624,9 @@ wss.on('connection', socket => {
           ...(activeRun ? { lastRun: run } : {}),
         }, HISTORY_DELAY);
         if (activeRun) for (const live of timeline.frames) reply(live, HISTORY_DELAY);
+        if (threadId === SUB_THREAD && sub.step === 'live') {
+          for (const [type, fields] of sub.frames) reply({ type, threadId: SUB_THREAD, ts: iso(Date.now()), ...fields }, HISTORY_DELAY);
+        }
         // A pending approval, so the sheet can be looked at: `MOCK_APPROVAL=1` on the server asks
         // for one with a long command, which is the shape that used to run off the screen.
         // `MOCK_APPROVAL_DELAY` (ms) makes it land after the page is up, which is how the

@@ -2110,6 +2110,22 @@ class ChatStoreImpl {
     this.compacting.delete(threadId);
     this.streams.set(id, '');
     this.lastStream.set(threadId, id);
+    /**
+     * A bubble the thread already carries under this id is the same row, continued.
+     *
+     * The page is normally the last settled call, so a turn in flight has no entry to collide with
+     * -- but a session that wrote its answer before the run ended (a stop, an interrupted turn, a
+     * server that settled a phase) puts one there, and appending a second item with the same id
+     * drew the same words twice under one React key. Seen on a sub-agent chat reopened mid-run
+     * (2026-11-25). Marking it streaming in place is the whole of "continue this bubble": the
+     * store then appends to the text it already holds, and a replay replaces it.
+     */
+    const carried = this.getItems(threadId).find(item => item.id === id && item.kind === 'text');
+    if (carried && carried.kind === 'text') {
+      this.streams.set(id, carried.text);
+      this.patch(threadId, id, { streaming: true, run: this.runForLiveItem(threadId) }, true);
+      return;
+    }
     const parent = replyToId ? this.getItems(threadId).find(item => item.id === replyToId) : undefined;
     this.append(threadId, {
       kind: 'text',

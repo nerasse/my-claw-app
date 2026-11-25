@@ -3,7 +3,7 @@
  * Each level opens from the one on screen, and back returns one level at a time, as what it was.
  */
 
-import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn, type StackedView } from '../subagentStack';
+import { backFrom, backLabel, reachableFrom, rostersFor, stackedOn, trailOf, type StackedView } from '../subagentStack';
 import type { SubAgentEntry } from '../protocol';
 
 const CRON = 'cron-0123456789ab-1790571620919';
@@ -43,5 +43,14 @@ describe('a sub-agent tree, level by level', () => {
     const own = [entry('browser-c3d4', 'private'), entry('shared')];
     const parent = [entry('shared'), entry('veille-4')];
     expect(reachableFrom(own, parent).map(a => a.id)).toEqual(['subagent/browser-c3d4', 'subagent/shared', 'subagent/veille-4']);
+  });
+
+  test('the address of a view is the chain it came through, from the conversation down', () => {
+    // A conversation's sub-agent: the conversation, then it.
+    expect(trailOf(volet)).toEqual({ threadId: CRON, agents: ['sub-volet'] });
+    // One level deeper: the same root, then the two levels in the order they were opened. Written
+    // outermost-first because that is the order a reload has to walk them in.
+    const browser = stackedOn<StackedView>({ threadId: 'sub-browser', id: 'subagent/browser-c3d4', parentThreadId: 'sub-volet' }, volet);
+    expect(trailOf(browser)).toEqual({ threadId: CRON, agents: ['sub-volet', 'sub-browser'] });
   });
 });

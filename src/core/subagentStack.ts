@@ -23,6 +23,27 @@ export function backFrom<V extends StackedView>(view: V): { view: V } | { thread
   return view.parent ? { view: view.parent as V } : { threadId: view.parentThreadId };
 }
 
+/**
+ * The address a sub-agent view belongs at: its conversation, then every level it was opened
+ * through, outermost first.
+ *
+ * The chain and not the last thread alone, because a sub-agent is a view of the one under it: a
+ * reload that kept only `sub-…` came back with no parent to name, no roster that authorises a
+ * send, and no way back (owner, 2026-11-25: "quand on est sur un sous-agent et qu'on refresh la
+ * page, on revient sur le main"). The root is the outermost view's own `parentThreadId`.
+ */
+export function trailOf(view: StackedView): { threadId: string; agents: string[] } {
+  const agents: string[] = [];
+  let level: StackedView | undefined = view;
+  let threadId = view.parentThreadId;
+  while (level) {
+    agents.unshift(level.threadId);
+    threadId = level.parentThreadId;
+    level = level.parent;
+  }
+  return { threadId, agents };
+}
+
 /** What the back row names: the sub-agent one level up, or the conversation's own title. */
 export function backLabel(view: StackedView, titleOf: (threadId: string) => string): string {
   return view.parent ? view.parent.id.replace(/^subagent\//, '') : titleOf(view.parentThreadId);
