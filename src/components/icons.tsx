@@ -259,6 +259,20 @@ export function StopIcon(props: IconProps): React.JSX.Element {
  * The sub-agent mark: a small head with two eyes, the shape the POC used for it. It sits where a
  * bullet would, so it is drawn on the same 24-box as everything else and asked for at 13-16.
  */
+/**
+ * A command prompt: the chevron and the line it precedes. The mark a background job wears, told
+ * apart from the sub-agent's suitcase and the browser's ring by silhouette alone (owner, 2026-11-19:
+ * a card and its kin must be tellable at a glance, not by reading its words).
+ */
+export function JobIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon
+      {...props}
+      d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m3.4 4.9L4.9 12l2.5 3.1 1.5-1.2L7.6 12l1.3-1.9zM12 14.2h6V16h-6z"
+    />
+  );
+}
+
 export function AgentIcon(props: IconProps): React.JSX.Element {
   return (
     <Icon {...props} d="M4.5 8.5A2.5 2.5 0 0 1 7 6h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 18H7a2.5 2.5 0 0 1-2.5-2.5zM9 10.6a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zm6 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zM9.5 4h5v1.6h-5z" />

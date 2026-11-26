@@ -1242,7 +1242,11 @@ export function ChatScreen({
               mediaBase={mediaBase}
               deviceInfo={deviceInfo}
               {...(child && onOpenSubAgentById ? { onOpenAgent: () => onOpenSubAgentById(child.id) } : {})}
-              {...(child?.type === 'browser' ? { mark: 'browser' as const } : {})}
+              {...(item.from?.kind === 'job'
+                ? { mark: 'job' as const }
+                : child?.type === 'browser'
+                  ? { mark: 'browser' as const }
+                  : {})}
               onOpenAttachment={openAttachment}
               onOpenMedia={openMedia}
             />

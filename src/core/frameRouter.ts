@@ -256,7 +256,7 @@ export function routeServerFrame(frame: ServerFrame, handlers: ServerFrameHandle
       if (!isSubAgentThread(frame.threadId)) sessionStore.touch(frame.threadId, frame.text);
       break;
     case 'chat.subagent.return':
-      chatStore.addSubAgentReturn(frame.threadId, frame.id, frame.text, frame.subagentId, frame.label, frame.status);
+      chatStore.addSubAgentReturn(frame.threadId, frame.id, frame.text, frame.subagentId, frame.label, frame.status, frame.kind ?? 'return');
       // A return is a message: it wakes the thread and orders it in the drawer, like an incoming
       // answer. Without this the conversation that a sub-agent just reported into read as idle.
       noteActivity(frame.threadId, frame.text);

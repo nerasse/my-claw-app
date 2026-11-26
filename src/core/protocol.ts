@@ -475,7 +475,7 @@ export type HistoryEntry =
       from?: {
         sessionId?: string;
         label: string;
-        kind?: 'send' | 'return' | 'cron';
+        kind?: 'send' | 'return' | 'cron' | 'job';
         status?: string;
         cadence?: string;
         /** A cron delivery's run, as a thread id the card opens. */
@@ -530,6 +530,8 @@ export interface ChatSubAgentReturnFrame {
   subagentId: string;
   label: string;
   status: 'complete' | 'error' | 'stopped';
+  /** A background job's notice rides the same row; absent is a sub-agent's return. */
+  kind?: 'return' | 'job';
 }
 
 /**

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { TextItem } from '../core/chat';
-import { returnPreview, returnWord } from '../core/subagentReturn';
-import { AgentIcon, BrowserIcon } from './icons';
+import { jobWord, returnPreview, returnWord } from '../core/subagentReturn';
+import { AgentIcon, BrowserIcon, JobIcon } from './icons';
 import { CardDoor } from './CardDoor';
 import { AgentMarkdown } from './AgentMarkdown';
 import { AttachmentList } from './AttachmentList';
@@ -50,8 +50,11 @@ export function SubAgentReturn({
    * launch are one thing read at two moments (owner, 2026-11-19: a stopped card offered no way in).
    */
   onOpenAgent?: () => void;
-  /** Which agent reported: the browser wears the web's ring, everything else the suitcase. */
-  mark?: 'agent' | 'browser';
+  /**
+   * Which agent reported: the browser wears the web's ring, everything else the suitcase, and a
+   * background job wears the prompt's chevron. A job has no chat to open, so it takes no door.
+   */
+  mark?: 'agent' | 'browser' | 'job';
   onOpenAttachment?: (
     kind: ViewerKind,
     target: { url: string; filename: string; sizeBytes?: number; kind?: FileKind },
@@ -63,7 +66,10 @@ export function SubAgentReturn({
   const [open, setOpen] = useState(hasFiles);
 
   const label = item.from?.label ?? '';
-  const word = returnWord(item.from?.status);
+  // A job's label is a command line, and its end is the shell's own event: "returned" would name
+  // something a command does not do.
+  const isJob = item.from?.kind === 'job';
+  const word = isJob ? jobWord(item.from?.status) : returnWord(item.from?.status);
   const failed = item.from?.status === 'error';
   const preview = returnPreview(item.text);
   // The words are what folds. With files on the card, the text starts folded under them: the
@@ -79,13 +85,21 @@ export function SubAgentReturn({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`${label || 'a sub-agent'}, ${word}`}
         accessibilityHint={open ? 'Collapse the report' : 'Show the report'}>
-        {mark === 'browser' ? <BrowserIcon size={13} tone="muted" /> : <AgentIcon size={13} tone="muted" />}
+        {mark === 'browser' ? (
+          <BrowserIcon size={13} tone="muted" />
+        ) : mark === 'job' ? (
+          <JobIcon size={13} tone="muted" />
+        ) : (
+          <AgentIcon size={13} tone="muted" />
+        )}
         <Text style={styles.name} numberOfLines={1}>
           {label || 'sub-agent'}
         </Text>
         {/* The door, right after the name it opens, in the launch card's own blue. Outside the
             toggle's press target, so a screen reader announces it as the one control it is. */}
-        {onOpenAgent ? <CardDoor label={`Open sub-agent ${label || 'sub-agent'}`} onPress={onOpenAgent} /> : null}
+        {onOpenAgent && mark !== 'job' ? (
+          <CardDoor label={`Open sub-agent ${label || 'sub-agent'}`} onPress={onOpenAgent} />
+        ) : null}
         <View style={styles.spacer} />
         <Text style={[styles.state, failed ? styles.stateBad : null]} numberOfLines={1}>
           {word}

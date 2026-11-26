@@ -23,7 +23,9 @@ import type { ChatItem } from './chat';
  * one line to widen.
  */
 export function isSubAgentReturn(item: ChatItem): boolean {
-  return item.kind === 'text' && item.from?.kind === 'return';
+  // A job's notice rides the same card: same shape (an id, a label, how it ended), same question
+  // the reader asks ("what reported, and what became of it"). Only the mark and the word differ.
+  return item.kind === 'text' && (item.from?.kind === 'return' || item.from?.kind === 'job');
 }
 
 /**
@@ -51,6 +53,16 @@ export function returnWord(status: string | undefined): string {
   if (status === 'error') return 'failed';
   if (status === 'stopped') return 'stopped';
   return 'returned';
+}
+
+/**
+ * The same word for a job, whose end is its own event: a command does not "return", so the card
+ * says what the shell did -- `done`, `failed`, `stopped`.
+ */
+export function jobWord(status: string | undefined): string {
+  if (status === 'error') return 'failed';
+  if (status === 'stopped') return 'stopped';
+  return 'done';
 }
 
 /** The one line a folded card shows, out of a report that can be pages long. */

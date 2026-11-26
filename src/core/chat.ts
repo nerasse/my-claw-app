@@ -54,7 +54,7 @@ export interface TextItem {
     /** The child that wrote it, on a sub-agent's return: the agent its card's door opens. */
     agentId?: string;
     label: string;
-    kind?: 'send' | 'return' | 'cron';
+    kind?: 'send' | 'return' | 'cron' | 'job';
     status?: string;
     cadence?: string;
     /** A cron delivery's run, as a thread id the card opens. */
@@ -1737,6 +1737,7 @@ class ChatStoreImpl {
     subagentId: string,
     label: string,
     status: 'complete' | 'error' | 'stopped',
+    kind: 'return' | 'job' = 'return',
   ): void {
     if (this.getItems(threadId).some(item => item.id === id)) return;
     this.append(threadId, {
@@ -1746,7 +1747,7 @@ class ChatStoreImpl {
       text,
       attachments: [],
       streaming: false,
-      from: { ...(subagentId ? { agentId: subagentId } : {}), label, kind: 'return', status },
+      from: { ...(subagentId ? { agentId: subagentId } : {}), label, kind, status },
       ts: Date.now(),
     });
   }
